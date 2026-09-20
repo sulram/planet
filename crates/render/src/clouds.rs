@@ -6,6 +6,8 @@
 
 /// Voxels along each side of the noise texture.
 const NOISE_SIZE: u32 = 64;
+/// Slices along each side of the atlas they are drawn into: 8 x 8 = 64.
+const ATLAS_SIDE: u32 = 8;
 /// The layer, metres above the sea. The atmosphere ends at 3600.
 const BASE_M: f32 = 1100.0;
 const TOP_M: f32 = 3000.0;
@@ -60,8 +62,10 @@ struct Slice {
 }
 
 impl Clouds {
-    /// Draws the noise texture, slice by slice. Once: weather is where and
-    /// when it is sampled, not what it is made of.
+    /// Draws the noise texture. Once: weather is where and when it is sampled,
+    /// not what it is made of. The slices are drawn side by side into a 2D
+    /// atlas and copied into the volume: a browser cannot yet be asked, through
+    /// wgpu, to draw into a slice of a 3D texture.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Clouds {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("cloud noise"),
@@ -74,7 +78,7 @@ impl Clouds {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let noise = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -159,20 +163,37 @@ impl Clouds {
             cache: None,
         });
 
+        let atlas = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("cloud noise atlas"),
+            size: wgpu::Extent3d {
+                width: NOISE_SIZE * ATLAS_SIDE,
+                height: NOISE_SIZE * ATLAS_SIDE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let atlas_view = atlas.create_view(&wgpu::TextureViewDescriptor::default());
+        let tile = |z: u32| [z % ATLAS_SIDE * NOISE_SIZE, z / ATLAS_SIDE * NOISE_SIZE];
+
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("cloud noise"),
         });
-        for z in 0..NOISE_SIZE {
+        {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("cloud noise slice"),
+                label: Some("cloud noise slices"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &noise,
+                    view: &atlas_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
-                    depth_slice: Some(z),
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -180,8 +201,35 @@ impl Clouds {
                 multiview_mask: None,
             });
             pass.set_pipeline(&pipeline);
-            pass.set_bind_group(1, &group, &[z * stride]);
-            pass.draw(0..3, 0..1);
+            for z in 0..NOISE_SIZE {
+                let [x, y] = tile(z);
+                let side = NOISE_SIZE as f32;
+                pass.set_viewport(x as f32, y as f32, side, side, 0.0, 1.0);
+                pass.set_bind_group(1, &group, &[z * stride]);
+                pass.draw(0..3, 0..1);
+            }
+        }
+        for z in 0..NOISE_SIZE {
+            let [x, y] = tile(z);
+            encoder.copy_texture_to_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &atlas,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x, y, z: 0 },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x: 0, y: 0, z },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: NOISE_SIZE,
+                    height: NOISE_SIZE,
+                    depth_or_array_layers: 1,
+                },
+            );
         }
         queue.submit([encoder.finish()]);
 

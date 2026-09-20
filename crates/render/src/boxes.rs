@@ -99,6 +99,9 @@ impl Boxes {
     }
 
     pub fn draw_shadow(&self, pass: &mut wgpu::RenderPass<'_>, instances: &Instances, count: u32) {
+        if count == 0 {
+            return;
+        }
         self.draw_with(pass, instances, count, &self.shadow_pipeline);
     }
 

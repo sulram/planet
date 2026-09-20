@@ -84,7 +84,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `assets/`: the instance's default set (avatars, clips) and its
   `manifest.json`, the config that names them.
 - `scripts/`: every repeated command is a script here. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | assets | desktop | shot | bench | check`.
+  `bun run setup | dev | server | web | wasm | assets | desktop | shot | webshot | bench | check`.
 - `docs/`: see top of this file.
 - `refs/`: gitignored. Reference projects for reading (see below).
 
@@ -144,6 +144,8 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - **Milestones pull features, never speculation.**
 - **Every change ends runnable and visible.** Look at what you built:
   headless render to PNG with a fixed clock and seed, then read the PNG.
+- A change to `render` is also looked at in the browser: `bun run webshot`
+  prints the page's console and saves a PNG. WebGPU rejects what Metal lets by.
 - Each crate stays **LLM-sized**. Too big for one context: split by dependency.
 - ROADMAP is intent, not contract: add wishes freely, reorder, check a box when
   it ships, strike what we drop and log the why in DECISIONS.

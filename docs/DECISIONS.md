@@ -384,7 +384,9 @@ density field in a shell (1100 to 3000 m): a weather noise says where clouds
 may stand, a Perlin-Worley body is cut by a threshold that rises with height,
 so each heap narrows into a dome of its own instead of meeting a ceiling, and
 Worley detail carves the edges. All of it reads one tiling 64^3 texture drawn
-once on the GPU, slice by slice: procedural noise per march sample cost several
+once on the GPU (slices side by side in a 2D atlas, then copied into the
+volume: wgpu 30 does not pass `depth_slice` to a browser, so a 3D slice cannot
+be a render target there): procedural noise per march sample cost several
 times more, and a CPU bake would stall a browser's first frame.
 The same field is sampled once along the sun by every lit surface: cloud
 shadows move over the land for the price of three texture reads.
