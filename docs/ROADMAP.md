@@ -29,6 +29,8 @@ Every milestone ends runnable end to end.
 - [x] Generator v3: the shape is a source; plates for a seed world, a baked field for a real one (DECISIONS 44)
 - [x] "Earth or generated" when a planet is made, in `/play` and in the recipe
 - [x] Params as knobs in the panel, and in the address, so a planet stays shareable
+- [ ] A place in the address, not only a planet: sector and surface coordinates in the URL, written as the avatar settles and read on arrival, in the form `bun run shot --at` already takes
+- [ ] Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out. The whole Atlas waits for M4
 - [x] Third person placeholder avatar (boxes, walk cycle)
 - [x] VRM avatars with shared locomotion clips; random per visitor; `V` for the next
 - [ ] User avatars: `users.avatar` default, own VRM uploads (with M5 assets)
