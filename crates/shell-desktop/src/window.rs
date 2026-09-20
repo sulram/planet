@@ -119,12 +119,16 @@ impl Stage {
         self.renderer.apply_skinned(client.drain_skinned_changes());
         for event in client.drain_events() {
             match event {
-                Event::RecipeChanged { recipe } => {
+                // The title bar is the native HUD until there is a native UI.
+                Event::Stats {
+                    fps, altitude_m, ..
+                } => {
+                    let seed = format_seed(client.recipe().seed);
                     self.window
-                        .set_title(&format!("planet {}", format_seed(recipe.seed)));
+                        .set_title(&format!("planet {seed} | {fps:.0} fps | {altitude_m:.0} m"));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
-                Event::Stats { .. } | Event::Ready { .. } | Event::ModeChanged { .. } => {}
+                Event::RecipeChanged { .. } | Event::Ready { .. } | Event::ModeChanged { .. } => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
         }
