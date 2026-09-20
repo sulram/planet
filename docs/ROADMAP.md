@@ -28,6 +28,10 @@ Every milestone ends runnable end to end.
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [x] Generator v3: the shape is a source; plates for a seed world, a baked field for a real one (DECISIONS 44)
 - [x] "Earth or generated" when a planet is made, in `/play` and in the recipe
+- [ ] Fix the generated shape: only the Earth one reads right today. Three named faults, all in `plates.rs`
+  - [ ] `Plates::shape` takes no footprint at all, so a coarse patch reads the field at full detail and the shore lands somewhere else at every level: from orbit the coastline comes out in straight steps along the patch edges
+  - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
+  - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (DECISIONS 45); this side needs its own answer
 - [x] Params as knobs in the panel, and in the address, so a planet stays shareable
 - [ ] A place in the address, not only a planet: sector and surface coordinates in the URL, written as the avatar settles and read on arrival, in the form `bun run shot --at` already takes
 - [ ] Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out. The whole Atlas waits for M4
