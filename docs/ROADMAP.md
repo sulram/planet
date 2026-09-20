@@ -28,13 +28,16 @@ Every milestone ends runnable end to end.
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [x] Generator v3: the shape is a source; plates for a seed world, a baked field for a real one (DECISIONS 44)
 - [x] "Earth or generated" when a planet is made, in `/play` and in the recipe
-- [ ] Fix the generated shape: only the Earth one reads right today. Three named faults, all in `plates.rs`
-  - [ ] `Plates::shape` takes no footprint at all, so a coarse patch reads the field at full detail and the shore lands somewhere else at every level: from orbit the coastline comes out in straight steps along the patch edges
+- [ ] Fix the generated shape: only the Earth one reads right today. Four named faults, all in `plates.rs`
+  - [ ] **The wall.** `match (near.continental, far.continental)` switches branch on the bisector between two plates, and the two mixed cases are not each other: one adds `0.16 * force` to `land`, the other takes `0.85` away. So `land` steps by about 1 along every ocean to continent boundary, and the ground stands up in a cliff with the patch skirts showing through it as a picket fence. A v3 regression: v2 had no such branch. The asymmetry itself is right (the trench belongs to the ocean side and the arc to the continent side); it has to be a blend on the same `across` the crust level already uses, so both sides weigh a half on the line and nothing steps
+  - [ ] No test caught it. `moon_has_no_cliffs` walks the moon and asserts no jump; the planet has no equivalent, and that is the test that would have failed the day the branch was written
+  - [ ] `Plates::shape` takes no footprint at all, so a coarse patch reads the field at full detail and the shore lands somewhere else at every level: from orbit the coastline comes out in straight steps along the patch edges. A different fault from the wall, and the smaller of the two
   - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
   - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (DECISIONS 45); this side needs its own answer
 - [x] Params as knobs in the panel, and in the address, so a planet stays shareable
 - [ ] A place in the address, not only a planet: sector and surface coordinates in the URL, written as the avatar settles and read on arrival, in the form `bun run shot --at` already takes
 - [ ] Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out. The whole Atlas waits for M4
+- [ ] A coordinate system and a compass on screen, as Cryptovoxels has: the address in words a person can read out, say and paste. Until there is one, nobody can report where anything went wrong, which is how the wall above took three renders to find
 - [x] Third person placeholder avatar (boxes, walk cycle)
 - [x] VRM avatars with shared locomotion clips; random per visitor; `V` for the next
 - [ ] User avatars: `users.avatar` default, own VRM uploads (with M5 assets)
