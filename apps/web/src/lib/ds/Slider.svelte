@@ -10,10 +10,23 @@
 		disabled?: boolean;
 		/** How the value is shown. Default: two decimals. */
 		format?: (value: number) => string;
+		/** While dragging: what it tunes should answer at once. */
 		oninput?: (value: number) => void;
+		/** Once, when the drag ends: for what should not run per frame. */
+		onchange?: (value: number) => void;
 	}
 
-	let { label, value, min, max, step = 0.01, disabled = false, format = (n) => n.toFixed(2), oninput }: Props = $props();
+	let {
+		label,
+		value,
+		min,
+		max,
+		step = 0.01,
+		disabled = false,
+		format = (n) => n.toFixed(2),
+		oninput,
+		onchange
+	}: Props = $props();
 </script>
 
 <label class="slider" class:slider--off={disabled}>
@@ -21,7 +34,16 @@
 		<span>{label}</span>
 		<output>{format(value)}</output>
 	</span>
-	<input type="range" {min} {max} {step} {value} {disabled} oninput={(e) => oninput?.(e.currentTarget.valueAsNumber)} />
+	<input
+		type="range"
+		{min}
+		{max}
+		{step}
+		{value}
+		{disabled}
+		oninput={(e) => oninput?.(e.currentTarget.valueAsNumber)}
+		onchange={(e) => onchange?.(e.currentTarget.valueAsNumber)}
+	/>
 </label>
 
 <style>

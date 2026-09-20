@@ -4,7 +4,18 @@ import { loginPath } from '$lib/server/auth';
 import { visitorAvatar } from '$lib/server/avatar';
 import { pbStatus } from '$lib/server/pb';
 import { createWorld } from '$lib/server/worlds';
-import { isGeneratorVersion, isShape, normalizeSeed, randomSeed, WORLD_NAME_MAX, type Shape } from '$lib/world';
+import {
+	buildParams,
+	clampKnob,
+	isGeneratorVersion,
+	isShape,
+	knobsFor,
+	normalizeSeed,
+	randomSeed,
+	WORLD_NAME_MAX,
+	type Knobs,
+	type Shape
+} from '$lib/world';
 import { readFieldSidecar } from '$lib/server/fields';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -19,8 +30,25 @@ export const load: PageServerLoad = async (event) => {
 	// The sidecar names the ground without anyone downloading it: the page can
 	// build the whole recipe before the engine fetches a single texel.
 	const field = shape === 'generated' ? null : await readFieldSidecar(shape);
-	return { seed, shape: field ? shape : 'generated', field, avatar: await visitorAvatar(event) };
+	const settled: Shape = field ? shape : 'generated';
+	return {
+		seed,
+		shape: settled,
+		field,
+		knobs: readKnobs(settled, (key) => url.searchParams.get(key)),
+		avatar: await visitorAvatar(event)
+	};
 };
+
+/** Every knob of a shape, clamped into its range. Absent is its default. */
+function readKnobs(shape: Shape, get: (key: string) => string | null): Knobs {
+	const knobs: Knobs = {};
+	for (const knob of knobsFor(shape)) {
+		const asked = get(knob.key);
+		knobs[knob.key] = asked === null ? knob.fallback : clampKnob(knob, asked);
+	}
+	return knobs;
+}
 
 export const actions: Actions = {
 	// "Create world" writes one row: the previewed recipe, a name and the owner.
@@ -37,6 +65,8 @@ export const actions: Actions = {
 		// The id is read here, from the file this instance serves, and never
 		// taken from the form: a recipe may only ever name ground we have.
 		const field = shape === 'generated' ? null : await readFieldSidecar(shape);
+		// Clamped here too: the form is a suggestion, the range is the rule.
+		const knobs = readKnobs(shape, (key) => form.get(key) as string | null);
 
 		if (!name) return fail(400, { name, error: translate(locals.locale, 'play.error.nameRequired') });
 		if (name.length > WORLD_NAME_MAX) {
@@ -51,7 +81,7 @@ export const actions: Actions = {
 			({ id } = await createWorld(locals.pb, locals.user.id, name, {
 				seed,
 				generator_version: generatorVersion,
-				params: field ? { source: { field: field.id } } : {}
+				params: buildParams(shape, knobs, field)
 			}));
 		} catch (err) {
 			const key = pbStatus(err) === 0 ? 'error.unreachable' : 'play.error.createFailed';

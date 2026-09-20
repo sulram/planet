@@ -39,6 +39,77 @@ export function fieldId(recipe: Recipe): string | null {
 		: null;
 }
 
+/**
+ * The knobs a person turns when a planet is made, in the order they read.
+ *
+ * One table, because every other place that touches them (the URL, the
+ * sliders, the form, the clamp on the server) has to agree, and agreeing is
+ * cheaper than checking. `shapes` says which sources a knob means anything
+ * for: a field fixes its own coastline, so the two that place one are for
+ * generated worlds, and the two that shape a sea floor out of a real one are
+ * for fields.
+ */
+export type KnobKey =
+	| 'relief_m'
+	| 'ocean_depth_m'
+	| 'continent_scale'
+	| 'sea_share'
+	| 'sea_level_m'
+	| 'sea_curve';
+
+export interface Knob {
+	key: KnobKey;
+	min: number;
+	max: number;
+	step: number;
+	fallback: number;
+	/** Decimals in the URL and on the slider. */
+	places: number;
+	shapes: readonly Shape[];
+}
+
+export const KNOBS: readonly Knob[] = [
+	{ key: 'relief_m', min: 200, max: 4000, step: 50, fallback: 1400, places: 0, shapes: SHAPES },
+	{ key: 'ocean_depth_m', min: 50, max: 2000, step: 25, fallback: 500, places: 0, shapes: SHAPES },
+	{ key: 'continent_scale', min: 0.6, max: 4, step: 0.1, fallback: 1.6, places: 1, shapes: ['generated'] },
+	{ key: 'sea_share', min: 0.2, max: 0.9, step: 0.01, fallback: 0.55, places: 2, shapes: ['generated'] },
+	{ key: 'sea_level_m', min: -400, max: 400, step: 10, fallback: 0, places: 0, shapes: ['earth'] },
+	{ key: 'sea_curve', min: 0.25, max: 1, step: 0.05, fallback: 0.45, places: 2, shapes: ['earth'] }
+];
+
+/** What a shape's knobs are set to. Only its own are present. */
+export type Knobs = Partial<Record<KnobKey, number>>;
+
+/** The knobs that mean something for a shape, in reading order. */
+export function knobsFor(shape: Shape): readonly Knob[] {
+	return KNOBS.filter((knob) => knob.shapes.includes(shape));
+}
+
+/** A value inside the knob's range, rounded to its step. Never NaN. */
+export function clampKnob(knob: Knob, value: unknown): number {
+	const n = Number(value);
+	if (!Number.isFinite(n)) return knob.fallback;
+	const stepped = Math.round(n / knob.step) * knob.step;
+	return Number(Math.min(knob.max, Math.max(knob.min, stepped)).toFixed(knob.places));
+}
+
+/** The params of a recipe: the knobs that this shape uses, and its source. */
+export function buildParams(
+	shape: Shape,
+	values: Knobs,
+	field: Field | null
+): Record<string, unknown> {
+	const params: Record<string, unknown> = {};
+	for (const knob of knobsFor(shape)) {
+		const value = values[knob.key];
+		// A knob left where it was says nothing the generator does not already
+		// know, and a recipe should carry only what someone chose.
+		if (value !== undefined && value !== knob.fallback) params[knob.key] = value;
+	}
+	if (field) params.source = { field: field.id };
+	return params;
+}
+
 /** Seed + params + generator version: enough to regenerate all untouched terrain. */
 export interface Recipe {
 	/** A u64 as 16 lowercase hex digits. */

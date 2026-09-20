@@ -28,6 +28,8 @@
 	// does not go through i18n. Components render with their real strings.
 
 	let shadows = $state(true);
+	let settled = $state(0.5);
+	let settledAt = $state(0.5);
 	let cover = $state(0.5);
 	let curve = $state('aces');
 	const curves = [
@@ -213,6 +215,15 @@
 			</div>
 			<Stack>
 				<Slider label="Cover" value={cover} min={0} max={1} oninput={(value) => (cover = value)} />
+				<Slider
+					label="Settled"
+					value={settled}
+					min={0}
+					max={1}
+					oninput={(value) => (settled = value)}
+					onchange={(value) => (settledAt = value)}
+				/>
+				<p class="note">`onchange` fires once, when the drag ends: last let go at {settledAt.toFixed(2)}.</p>
 				<Slider label="Disabled" value={0.3} min={0} max={1} disabled />
 				<Select label="Tone map" options={curves} value={curve} onselect={(value) => (curve = value)} />
 			</Stack>
