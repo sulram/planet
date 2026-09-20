@@ -32,8 +32,19 @@ pub struct TerrainVertex {
     /// Metres from [`TerrainMesh::origin`].
     pub position: [f32; 3],
     pub normal: [f32; 3],
-    /// sRGB, alpha unused.
+    /// `rgb`: sRGB albedo of the ground cover, before the renderer exposes
+    /// rock on slopes. `a`: gloss, 0 for dry ground up to 255 for a mirror.
     pub color: [u8; 4],
+}
+
+/// The sea over a patch: the same grid at sea level.
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct WaterVertex {
+    /// Metres from [`TerrainMesh::origin`].
+    pub position: [f32; 3],
+    /// Water over the ground here, metres. Negative over dry land.
+    pub depth_m: f32,
 }
 
 /// One terrain patch: [`PATCH_VERTICES`] vertices around an `f64` origin.
@@ -41,6 +52,9 @@ pub struct TerrainVertex {
 pub struct TerrainMesh {
     pub origin: DVec3,
     pub vertices: Vec<TerrainVertex>,
+    /// Present when any of the patch is under the sea. Same layout and index
+    /// buffer as `vertices`.
+    pub water: Option<Vec<WaterVertex>>,
 }
 
 /// The index buffer shared by every patch. Counter clockwise seen from
@@ -173,8 +187,13 @@ pub struct Frame {
     pub camera: Camera,
     /// Unit vector toward the sun.
     pub sun_direction: Vec3,
+    /// Unit vector toward the moon. It is scenery on rails for now: a place
+    /// in the sky that is a function of the clock.
+    pub moon_direction: Vec3,
     /// Radius of the sea level sphere, metres. The atmosphere sits on it.
     pub planet_radius_m: f64,
+    /// World clock, seconds: moves water and wind.
+    pub clock_s: f64,
     /// Patches to draw this frame. All were announced by a [`TerrainChange::Add`].
     pub patches: Vec<PatchId>,
     pub boxes: Vec<BoxPart>,

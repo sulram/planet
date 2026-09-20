@@ -20,15 +20,19 @@ pub enum Gait {
     Jump,
     Fall,
     Fly,
+    /// At the surface or under it. Until a swim clip is in the manifest the
+    /// fly clip stands in.
+    Swim,
 }
 
 impl Gait {
-    /// The ground speed the clip was authored for, metres per second.
-    /// Playback scales with the real speed so feet do not slide much.
+    /// The speed the clip was authored for, metres per second. Playback
+    /// scales with the real speed: feet do not slide, and a sprint looks like one.
     fn authored_mps(self) -> Option<f64> {
         match self {
             Gait::Walk => Some(1.5),
             Gait::Run => Some(3.4),
+            Gait::Swim => Some(2.4),
             _ => None,
         }
     }
@@ -36,6 +40,8 @@ impl Gait {
     fn of(controller: &Controller) -> Gait {
         if controller.mode == Mode::Fly {
             Gait::Fly
+        } else if controller.swimming() {
+            Gait::Swim
         } else if !controller.grounded() {
             if controller.vertical_mps() > 0.0 {
                 Gait::Jump
@@ -52,10 +58,17 @@ impl Gait {
     }
 }
 
+const LEAN_CRUISE: f64 = 0.35;
+const LEAN_SPRINT: f64 = core::f64::consts::FRAC_PI_4;
+const LEAN_SWIM: f64 = 1.25;
+const LEAN_PER_S: f64 = 5.0;
+
 pub struct Body {
     clips: HashMap<Gait, Clip>,
     avatar: Option<(SkinnedMeshId, Avatar)>,
     animator: Animator<Gait>,
+    /// Forward lean in flight, radians, eased toward its target.
+    lean: f64,
     next_mesh: u64,
     changes: Vec<SkinnedChange>,
 }
@@ -66,6 +79,7 @@ impl Default for Body {
             clips: HashMap::new(),
             avatar: None,
             animator: Animator::new(Gait::Idle),
+            lean: 0.0,
             next_mesh: 0,
             changes: Vec::new(),
         }
@@ -100,9 +114,36 @@ impl Body {
     pub fn update(&mut self, dt: f64, controller: &Controller) {
         let gait = Gait::of(controller);
         let speed = gait.authored_mps().map_or(1.0, |authored| {
-            (controller.ground_mps() / authored).clamp(0.6, 2.2)
+            // Swimmers move in three dimensions: a dive is speed too.
+            let real = if gait == Gait::Swim {
+                controller.speed_mps()
+            } else {
+                controller.ground_mps()
+            };
+            (real / authored).clamp(0.6, 2.2)
         });
         self.animator.update(dt as f32, gait, speed as f32);
+
+        // Superman leans into the flight: a little when cruising, 45 degrees
+        // at a sprint, upright when hovering. Eased, so Shift reads as a dive
+        // into speed and not a snap.
+        let target = match (
+            controller.mode,
+            controller.speed_mps() > 0.1,
+            controller.sprinting(),
+        ) {
+            (Mode::Fly, true, true) => LEAN_SPRINT,
+            (Mode::Fly, true, false) => LEAN_CRUISE,
+            // A swim clip lies in the water by itself. The fly clip standing
+            // in for it is upright, so the body leans instead.
+            (Mode::Walk, true, _)
+                if controller.swimming() && !self.clips.contains_key(&Gait::Swim) =>
+            {
+                LEAN_SWIM
+            }
+            _ => 0.0,
+        };
+        self.lean += (target - self.lean) * (1.0 - (-LEAN_PER_S * dt).exp());
     }
 
     /// The posed avatar, when one is worn.
@@ -115,16 +156,19 @@ impl Body {
             DMat3::from_cols(up.cross(back), up, back),
             controller.position(),
         );
-        if controller.mode == Mode::Fly {
-            // Superman: lean into the flight, more with speed.
-            let lean = -1.2 * (controller.speed_mps() / 40.0).min(1.0);
+        if self.lean > 1e-4 {
             let hips = glam::DVec3::new(0.0, 0.9, 0.0);
             transform = transform
                 * DAffine3::from_translation(hips)
-                * DAffine3::from_quat(DQuat::from_rotation_x(lean))
+                * DAffine3::from_quat(DQuat::from_rotation_x(-self.lean))
                 * DAffine3::from_translation(-hips);
         }
-        let pose = self.animator.pose(|gait| self.clips.get(&gait));
+        let pose = self.animator.pose(|gait| {
+            let stand_in = (gait == Gait::Swim)
+                .then(|| self.clips.get(&Gait::Fly))
+                .flatten();
+            self.clips.get(&gait).or(stand_in)
+        });
         // Clips arrive after the avatar over a network: until then, the rest pose.
         let joints = avatar.joint_matrices(&pose.unwrap_or_else(avatar::Pose::rest));
         Some(SkinnedInstance {

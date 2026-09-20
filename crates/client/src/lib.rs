@@ -29,6 +29,8 @@ use terrain::Terrain;
 
 /// Seconds for the sun to go around once.
 const DAY_S: f64 = 1200.0;
+/// Turns of the moon per turn of the sun.
+const MOON_PACE: f64 = 0.93;
 const STATS_EVERY_S: f64 = 0.5;
 
 pub struct Client {
@@ -103,6 +105,14 @@ impl Client {
     /// Pins the clock, for reproducible headless renders.
     pub fn set_clock(&mut self, seconds: f64) {
         self.clock_s = seconds;
+    }
+
+    /// Moves the avatar to a place in sector 0, `u` and `v` in `0..=1`. For
+    /// previews; travel in a world is walking, flying and portals.
+    pub fn teleport(&mut self, u: f64, v: f64) {
+        let side = f64::from(SECTOR_SIDE);
+        let point = SurfacePoint::new(Sector::ALL[0], u * side, v * side);
+        self.controller.teleport(point, &self.generator);
     }
 
     /// Poses the avatar and camera for a preview: see [`Controller::pose`].
@@ -302,10 +312,17 @@ impl Client {
     fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchId>) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
+        // The moon laps the sky a little slower than the sun on a tilted
+        // path, so its phase changes from night to night.
+        let lunar = angle * MOON_PACE + 2.4;
+        let moon =
+            DVec3::new(lunar.cos(), -0.25 + 0.3 * (lunar * 0.37).sin(), lunar.sin()).normalize();
         Frame {
             camera,
             sun_direction: sun.as_vec3(),
+            moon_direction: moon.as_vec3(),
             planet_radius_m: RADIUS_M,
+            clock_s: self.clock_s,
             patches,
             boxes: if self.body.is_worn() {
                 Vec::new()
@@ -378,11 +395,11 @@ fn spawn_point(generator: &Generator) -> SurfacePoint {
     let mut fallback = None;
     for point in candidates {
         let sample = generator.sample(point.direction());
-        let dry = !matches!(sample.material, Material::Water | Material::Snow);
+        let dry = sample.height_m > 1.0 && sample.material != Material::Snow;
         if dry && sample.height_m < 300.0 {
             return point;
         }
-        if sample.material != Material::Water {
+        if sample.height_m > 0.0 {
             fallback.get_or_insert(point);
         }
     }

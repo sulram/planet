@@ -1,4 +1,4 @@
-//! The avatar controller: walk with radial gravity, fly like superman.
+//! The avatar controller: walk with radial gravity, swim, fly like superman.
 //!
 //! State lives in address space (`SurfacePoint` + height), the one place where
 //! blocks are unit cubes and where collision with the build layer will run.
@@ -13,13 +13,26 @@ use worldgen::Generator;
 
 use crate::seam::Mode;
 
-const WALK_MPS: f64 = 3.2;
-const SPRINT_FACTOR: f64 = 4.0;
+const WALK_MPS: f64 = 4.8;
+/// Running is this much faster than walking; flying fast, than cruising.
+const RUN_FACTOR: f64 = 2.5;
+const FLY_SPRINT_FACTOR: f64 = 4.0;
 const JUMP_MPS: f64 = 6.0;
 const GRAVITY_MPS2: f64 = 14.0;
 /// Flight speed grows with altitude so orbit is a short trip.
 const FLY_MIN_MPS: f64 = 12.0;
 const FLY_PER_ALTITUDE: f64 = 0.8;
+const SWIM_MPS: f64 = 2.4;
+const SWIM_SPRINT_FACTOR: f64 = 2.0;
+/// Feet height while floating: the waterline sits at the waist, and a body
+/// lying prone in a swim clip breaks the surface.
+const FLOAT_M: f64 = -0.8;
+/// Below this the swimmer is diving and steers with the camera pitch.
+const DIVING_M: f64 = FLOAT_M - 0.35;
+/// Looking down past this while swimming forward starts a dive, radians.
+const DIVE_PITCH: f64 = -0.5;
+/// Idle swimmers drift back up.
+const BUOYANCY_MPS: f64 = 0.7;
 const EYE_M: f64 = 1.5;
 const LOOK_RAD_PER_PX: f64 = 0.0025;
 const PITCH_LIMIT: f64 = 1.45;
@@ -59,6 +72,9 @@ pub struct Controller {
     ground_mps: f64,
     /// Distance walked, for the walk cycle.
     stride_m: f64,
+    sprinting: bool,
+    /// In water too deep to stand in. Only ever true in [`Mode::Walk`].
+    swimming: bool,
 }
 
 impl Controller {
@@ -69,7 +85,7 @@ impl Controller {
         Controller {
             mode: Mode::Walk,
             point,
-            height_m: generator.sample(point.direction()).surface_m(),
+            height_m: generator.sample(point.direction()).height_m,
             vertical_mps: 0.0,
             grounded: true,
             facing: view,
@@ -79,6 +95,8 @@ impl Controller {
             speed_mps: 0.0,
             ground_mps: 0.0,
             stride_m: 0.0,
+            sprinting: false,
+            swimming: false,
         }
     }
 
@@ -112,6 +130,20 @@ impl Controller {
         self.vertical_mps
     }
 
+    pub fn swimming(&self) -> bool {
+        self.swimming
+    }
+
+    /// Swimming under the surface.
+    pub fn diving(&self) -> bool {
+        self.swimming && self.height_m < DIVING_M
+    }
+
+    /// Sprint is held while moving.
+    pub fn sprinting(&self) -> bool {
+        self.sprinting
+    }
+
     pub fn stride_m(&self) -> f64 {
         self.stride_m
     }
@@ -120,12 +152,23 @@ impl Controller {
         self.grounded
     }
 
+    /// Moves to a point of the surface, standing on the ground there.
+    pub fn teleport(&mut self, point: SurfacePoint, generator: &Generator) {
+        *self = Controller {
+            mode: self.mode,
+            pitch: self.pitch,
+            boom_m: self.boom_m,
+            ..Controller::spawn(point, generator)
+        };
+    }
+
     /// Places the avatar and the camera for a preview shot: `altitude_m` above
     /// the ground (flying when positive), camera `pitch` in radians, `boom_m`
     /// behind the avatar.
     pub fn pose(&mut self, altitude_m: f64, pitch: f64, boom_m: f64, generator: &Generator) {
-        let ground = generator.sample(self.point.direction()).surface_m();
-        self.height_m = ground + altitude_m.max(0.0);
+        let ground = generator.sample(self.point.direction()).height_m;
+        // Negative altitudes are depths under the sea, never under the ground.
+        self.height_m = (ground.max(0.0) + altitude_m).max(ground);
         self.mode = if altitude_m > 0.0 {
             Mode::Fly
         } else {
@@ -136,9 +179,9 @@ impl Controller {
         self.boom_m = boom_m;
     }
 
-    /// Metres above the ground or the sea.
+    /// Metres above the ground or the sea. Negative under water.
     pub fn altitude_m(&self, generator: &Generator) -> f64 {
-        self.height_m - generator.sample(self.point.direction()).surface_m()
+        self.height_m - generator.sample(self.point.direction()).height_m.max(0.0)
     }
 
     pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator) {
@@ -148,9 +191,48 @@ impl Controller {
         let right = self.view.cross(up);
         let [x, y] = wish.movement.map(f64::from);
         let flat = (right * x + self.view * y).normalize_or_zero();
-        let sprint = if wish.sprint { SPRINT_FACTOR } else { 1.0 };
+        let sprint = match (wish.sprint, self.mode) {
+            (false, _) => 1.0,
+            (true, Mode::Walk) => RUN_FACTOR,
+            (true, Mode::Fly) => FLY_SPRINT_FACTOR,
+        };
 
+        // Deep enough to float, and sunk to floating depth: swim. Wading in
+        // from a beach and falling in from a cliff both end up here.
+        let ground = generator.sample(self.point.direction()).height_m;
+        self.swimming =
+            self.mode == Mode::Walk && ground < FLOAT_M - 0.1 && self.height_m <= FLOAT_M + 0.05;
+
+        let lift = f64::from(u8::from(wish.up)) - f64::from(u8::from(wish.down));
         let velocity = match self.mode {
+            // A leap out of the water: from the surface only. Gravity brings
+            // the swimmer back, and they are swimming again on the way down.
+            Mode::Walk if self.swimming && wish.up && !self.diving() => {
+                self.swimming = false;
+                self.vertical_mps = JUMP_MPS * 0.8;
+                self.height_m = FLOAT_M + 0.06;
+                flat * SWIM_MPS + up * self.vertical_mps
+            }
+            Mode::Walk if self.swimming => {
+                self.vertical_mps = 0.0;
+                self.grounded = false;
+                // Under water the camera steers. At the surface you swim flat,
+                // unless you look well down: then forward is a dive.
+                let steered = self.diving() || self.pitch < DIVE_PITCH;
+                let forward = if steered {
+                    self.view * self.pitch.cos() + up * self.pitch.sin()
+                } else {
+                    self.view
+                };
+                let wish_dir = (right * x + forward * y + up * lift).normalize_or_zero();
+                let pace = if wish.sprint { SWIM_SPRINT_FACTOR } else { 1.0 };
+                let drift = if wish_dir == DVec3::ZERO {
+                    up * BUOYANCY_MPS
+                } else {
+                    DVec3::ZERO
+                };
+                wish_dir * SWIM_MPS * pace + drift
+            }
             Mode::Walk => {
                 if self.grounded && wish.up {
                     self.vertical_mps = JUMP_MPS;
@@ -166,7 +248,6 @@ impl Controller {
                 self.grounded = false;
                 // Forward follows the camera pitch: look up, fly up.
                 let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
-                let lift = f64::from(u8::from(wish.up)) - f64::from(u8::from(wish.down));
                 let wish_dir = (right * x + forward * y + up * lift).normalize_or_zero();
                 let altitude = self.altitude_m(generator).max(0.0);
                 wish_dir * (FLY_MIN_MPS + altitude * FLY_PER_ALTITUDE) * sprint
@@ -175,6 +256,7 @@ impl Controller {
 
         self.step(velocity * dt, generator);
         self.speed_mps = velocity.length();
+        self.sprinting = wish.sprint && self.speed_mps > 0.1;
         self.ground_mps = (velocity - up * velocity.dot(up)).length();
         if self.grounded {
             self.stride_m += flat.length() * WALK_MPS * sprint * dt;
@@ -223,7 +305,12 @@ impl Controller {
             SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv).wrapped();
         self.height_m += up.dot(delta);
 
-        let ground = generator.sample(self.point.direction()).surface_m();
+        let ground = generator.sample(self.point.direction()).height_m;
+        if self.swimming {
+            // Between the sea floor and floating depth: nobody swims into the air.
+            self.height_m = self.height_m.min(FLOAT_M).max(ground);
+            return;
+        }
         let floor = match self.mode {
             Mode::Walk => ground,
             Mode::Fly => ground + 0.5,
@@ -267,7 +354,7 @@ impl Controller {
         let mut position = target - forward * self.boom_m;
 
         let camera_up = position.normalize();
-        let ground = generator.sample(camera_up.to_array()).surface_m();
+        let ground = generator.sample(camera_up.to_array()).height_m;
         let min_radius = RADIUS_M + ground + 0.4;
         if position.length() < min_radius {
             position = camera_up * min_radius;

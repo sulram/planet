@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn commands_parse_from_the_documented_json() {
-        let json = r#"{"type":"set_recipe","recipe":{"seed":"00000000deadbeef","generator_version":1,"params":{}}}"#;
+        let json = r#"{"type":"set_recipe","recipe":{"seed":"00000000deadbeef","generator_version":2,"params":{}}}"#;
         assert_eq!(
             Command::from_json(json).unwrap(),
             Command::SetRecipe {

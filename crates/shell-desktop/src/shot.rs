@@ -12,6 +12,9 @@ pub fn run(shot: Shot) -> Result<(), String> {
     let mut client = Client::new(shot.recipe).map_err(|e| e.to_string())?;
     client.set_aspect(width as f32 / height as f32);
     client.set_clock(shot.clock_s);
+    if let Some([u, v]) = shot.at {
+        client.teleport(u, v);
+    }
     client.pose(shot.altitude_m, shot.pitch_deg.to_radians(), shot.boom_m);
 
     assets::wear(&mut client, shot.avatar.as_deref());

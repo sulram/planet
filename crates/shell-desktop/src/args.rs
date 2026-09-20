@@ -25,6 +25,8 @@ pub struct Shot {
     pub boom_m: f64,
     /// Seconds of walking forward before the shot, to catch a gait mid stride.
     pub walk_s: f64,
+    /// Where to stand in sector 0, each `0..=1`. Default: the world's spawn.
+    pub at: Option<[f64; 2]>,
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -45,6 +47,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         pitch_deg: -14.0,
         boom_m: 6.0,
         walk_s: 0.0,
+        at: None,
     };
 
     while let Some(flag) = args.next() {
@@ -61,6 +64,11 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,
             "--pitch" if is_shot => shot.pitch_deg = number(&value()?, "--pitch")?,
+            "--at" if is_shot => {
+                let text = value()?;
+                let (u, v) = text.split_once(',').ok_or("--at wants U,V")?;
+                shot.at = Some([number(u, "--at")?, number(v, "--at")?]);
+            }
             "--walk" if is_shot => shot.walk_s = number(&value()?, "--walk")?,
             "--boom" if is_shot => shot.boom_m = number(&value()?, "--boom")?,
             other => return Err(format!("unknown argument {other}")),

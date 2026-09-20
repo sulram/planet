@@ -7,7 +7,9 @@
 //! drawing itself, so there are never holes.
 //!
 //! This is the far field of the terrain layer: a heightfield of the
-//! generator's surface. Editable terrain near the player (density + surface
+//! generator's ground, sea floor included, sampled with the generator's LOD
+//! filter so a coarse patch is a smooth version of the fine one. Where a patch
+//! dips under the sea it also carries a water surface. Editable terrain near the player (density + surface
 //! nets, ROADMAP M1/M3) will replace the deepest levels, not this structure.
 
 use std::collections::HashMap;
@@ -15,6 +17,7 @@ use std::collections::HashMap;
 use glam::{DVec3, Vec3};
 use scene::{
     Camera, PATCH_GRID, PATCH_VERTICES, PatchId, TerrainChange, TerrainMesh, TerrainVertex,
+    WaterVertex,
 };
 use topology::{RADIUS_M, SECTOR_BITS, SECTOR_SIDE, Sector, SurfacePoint};
 use worldgen::{Generator, Material, Sample};
@@ -27,6 +30,9 @@ const SPLIT_DISTANCE: f64 = 2.4;
 const BUILDS_PER_UPDATE: usize = 4;
 /// Patches kept before the least recently used ones are dropped.
 const CACHE_PATCHES: usize = 1400;
+
+/// No sea floor lies deeper than this, whatever the recipe says.
+const DEEPEST_M: f64 = 2000.0;
 
 const G: i32 = PATCH_GRID as i32;
 
@@ -189,10 +195,13 @@ impl Terrain {
         missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
         for (_, node) in missing.into_iter().take(budget) {
             let mesh = build(generator, node);
-            let radius_m = mesh
-                .vertices
-                .iter()
-                .map(|v| Vec3::from(v.position).length())
+            // The sea counts: over deep water the ground is far below the surface
+            // that is actually in view.
+            let ground = mesh.vertices.iter().map(|v| v.position);
+            let sea = mesh.water.iter().flatten().map(|v| v.position);
+            let radius_m = ground
+                .chain(sea)
+                .map(|position| Vec3::from(position).length())
                 .fold(0.0, f32::max);
             self.built.insert(
                 node,
@@ -231,14 +240,15 @@ impl Terrain {
 /// Inside the view frustum and not behind the horizon.
 fn visible(camera: &Camera, aspect: f32, center: DVec3, radius_m: f64) -> bool {
     // Horizon: compare angles at the planet centre. Terrain never sits below
-    // sea level, so the sea sphere is the occluder.
+    // the deepest sea floor, so a sphere at that depth is the occluder.
     let eye = camera.position.length();
     let reach = center.length() + radius_m;
     let angle = (camera.position / eye)
         .dot(center.normalize())
         .clamp(-1.0, 1.0)
         .acos();
-    let horizon = (RADIUS_M / eye).min(1.0).acos() + (RADIUS_M / reach).min(1.0).acos();
+    let occluder = RADIUS_M - DEEPEST_M;
+    let horizon = (occluder / eye).min(1.0).acos() + (occluder / reach).min(1.0).acos();
     if angle - radius_m / RADIUS_M > horizon {
         return false;
     }
@@ -258,14 +268,15 @@ fn visible(camera: &Camera, aspect: f32, center: DVec3, radius_m: f64) -> bool {
 fn build(generator: &Generator, node: Node) -> TerrainMesh {
     // One ring of samples past the rim, so rim normals match the neighbours'.
     let stride = (G + 3) as usize;
+    let spacing_m = node.side_blocks() * topology::BLOCK_M / f64::from(G);
     let mut samples: Vec<(DVec3, Sample)> = Vec::with_capacity(stride * stride);
     for j in -1..=G + 1 {
         for i in -1..=G + 1 {
             let point = node.point(f64::from(i) / f64::from(G), f64::from(j) / f64::from(G));
             let direction = point.direction();
-            let sample = generator.sample(direction);
+            let sample = generator.sample_at(direction, spacing_m);
             samples.push((
-                DVec3::from(direction) * (RADIUS_M + sample.surface_m()),
+                DVec3::from(direction) * (RADIUS_M + sample.height_m),
                 sample,
             ));
         }
@@ -280,11 +291,10 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
             let along_u = at(i + 1, j).0 - at(i - 1, j).0;
             let along_v = at(i, j + 1).0 - at(i, j - 1).0;
             let normal = along_u.cross(along_v).normalize();
-            let steepness = 1.0 - normal.dot(position.normalize());
             vertices.push(TerrainVertex {
                 position: (position - origin).as_vec3().to_array(),
                 normal: normal.as_vec3().to_array(),
-                color: color(sample, steepness),
+                color: color(sample),
             });
         }
     }
@@ -297,32 +307,50 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
         (0..=G).map(|k| (0, k)).collect(),
         (0..=G).map(|k| (G, k)).collect(),
     ];
-    for (i, j) in runs.into_iter().flatten() {
+    for &(i, j) in runs.iter().flatten() {
         let mut vertex = vertices[(j * (G + 1) + i) as usize];
         let down = -(at(i, j).0.normalize() * drop_m).as_vec3();
         vertex.position = (Vec3::from(vertex.position) + down).to_array();
         vertices.push(vertex);
     }
-    TerrainMesh { origin, vertices }
+    // The sea over this patch: the same grid flattened to sea level. The ring
+    // counts too, so a neighbour's shoreline never leaves a gap at the rim.
+    let wet = samples.iter().any(|(_, sample)| sample.height_m < 0.0);
+    let water = wet.then(|| {
+        let sea = |i: i32, j: i32, lowered: f64| {
+            let (position, sample) = at(i, j);
+            let level = position.normalize() * (RADIUS_M - lowered);
+            WaterVertex {
+                position: (level - origin).as_vec3().to_array(),
+                depth_m: -sample.height_m as f32,
+            }
+        };
+        let grid = (0..=G).flat_map(|j| (0..=G).map(move |i| (i, j, 0.0)));
+        // The sea is see-through, so a lowered skirt would show through the
+        // neighbour's surface. The sphere is smooth enough to need none: the
+        // skirt run collapses onto the rim.
+        let skirt = runs.iter().flatten().map(|&(i, j)| (i, j, 0.0));
+        grid.chain(skirt)
+            .map(|(i, j, lowered)| sea(i, j, lowered))
+            .collect()
+    });
+    TerrainMesh {
+        origin,
+        vertices,
+        water,
+    }
 }
 
-/// The look of the ground. Flat colours per material for now; the terrain
-/// style is an open question (docs/OPEN.md, Look).
-fn color(sample: Sample, steepness: f64) -> [u8; 4] {
-    let rgb: [u8; 3] = match sample.material {
-        Material::Water => {
-            // Shallow water is lighter.
-            let depth = (-sample.height_m / 120.0).clamp(0.0, 1.0);
-            let mix = |a: f64, b: f64| (a + (b - a) * depth) as u8;
-            [mix(58.0, 12.0), mix(128.0, 38.0), mix(148.0, 84.0)]
-        }
-        Material::Snow => [236, 238, 240],
-        // Anything steep shows its rock.
-        _ if steepness > 0.22 => [96, 92, 88],
-        Material::Sand => [206, 192, 150],
-        Material::Grass => [104, 138, 70],
-        Material::Forest => [54, 96, 56],
-        Material::Rock => [118, 112, 106],
-    };
-    [rgb[0], rgb[1], rgb[2], 255]
+/// Albedo and gloss of the ground cover. Rock on slopes is the renderer's
+/// job: it sees the slope per pixel, the same at every LOD.
+fn color(sample: Sample) -> [u8; 4] {
+    match sample.material {
+        Material::Snow => [236, 238, 240, 70],
+        Material::Sand => [206, 192, 150, 8],
+        Material::Grass => [104, 138, 70, 0],
+        Material::Forest => [54, 96, 56, 0],
+        Material::Rock => [118, 112, 106, 12],
+        // v1 calls everything under the sea water; it is sea floor all the same.
+        Material::Seabed | Material::Water => [112, 116, 98, 0],
+    }
 }
