@@ -438,14 +438,7 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
 /// Albedo and gloss of the ground cover. Rock on slopes is the renderer's
 /// job: it sees the slope per pixel, the same at every LOD.
 fn color(sample: Sample) -> [u8; 4] {
-    let [r, g, b, gloss] = cover(sample.material);
-    // Shade darkens toward the colour of lava plains, continuously.
-    let mix = |c: u8, dark: f64| (f64::from(c) + (dark - f64::from(c)) * sample.shade) as u8;
-    [mix(r, 66.0), mix(g, 66.0), mix(b, 72.0), gloss]
-}
-
-fn cover(material: Material) -> [u8; 4] {
-    match material {
+    match sample.material {
         Material::Snow => [236, 238, 240, 70],
         Material::Sand => [206, 192, 150, 8],
         Material::Grass => [104, 138, 70, 0],

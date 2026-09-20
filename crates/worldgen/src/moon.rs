@@ -16,8 +16,9 @@ pub const RADIUS_M: f64 = 8_000.0;
 
 /// Cells per radius for each crater size, big to small.
 const SCALES: [f64; 8] = [1.7, 3.0, 5.0, 11.0, 26.0, 60.0, 150.0, 400.0];
-/// The first sizes are basins: wide enough to read from the planet, flooded
-/// with dark mare (`Sample::shade`), and shallow for their width, as big craters are.
+/// The first sizes are basins: craters wide enough to survive the coarsest
+/// mesh, which is what the planet sees. They read by their relief alone: a
+/// deep bowl, a tall rim, and the light across them.
 const BASINS: usize = 2;
 
 /// splitmix64 over a cell and a salt, as three numbers in `0..1`.
@@ -38,15 +39,13 @@ fn cell_random(seed: u64, cell: [i64; 3], salt: u64) -> [f64; 3] {
 }
 
 /// Height of one size of craters at `p` (the direction times the scale), in
-/// cell units, and how far inside a bowl `p` is (`0` outside, `1` at a centre).
-fn craters(seed: u64, p: [f64; 3], salt: u64, basin: bool) -> (f64, f64) {
-    let shallow = if basin { 0.35 } else { 1.0 };
+/// cell units.
+fn craters(seed: u64, p: [f64; 3], salt: u64, basin: bool) -> f64 {
     let scale = libm::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
     // A crater is at most half a cell wide, so the eight cells around the
     // nearest lattice corner hold every crater that can reach `p`.
     let base = [0, 1, 2].map(|axis| libm::floor(p[axis] - 0.5) as i64);
     let mut height = 0.0;
-    let mut inside = 0.0f64;
     for corner in 0..8i64 {
         let cell = [
             base[0] + (corner & 1),
@@ -67,7 +66,12 @@ fn craters(seed: u64, p: [f64; 3], salt: u64, basin: bool) -> (f64, f64) {
                 libm::sqrt(center[0] * center[0] + center[1] * center[1] + center[2] * center[2]);
             center = center.map(|c| c / length * scale);
         }
-        let radius = 0.12 + 0.30 * size * size;
+        // Basins start wide: the smallest still spans several root vertices.
+        let radius = if basin {
+            0.24 + 0.18 * size
+        } else {
+            0.12 + 0.30 * size * size
+        };
         let offset = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
         let t = libm::sqrt(offset[0] * offset[0] + offset[1] * offset[1] + offset[2] * offset[2])
             / radius;
@@ -75,40 +79,36 @@ fn craters(seed: u64, p: [f64; 3], salt: u64, basin: bool) -> (f64, f64) {
             continue;
         }
         // Old craters are worn: shallower, softer rims.
-        let depth = radius * (0.10 + 0.22 * freshness) * shallow;
+        let depth = radius * (0.10 + 0.22 * freshness);
         let bowl = if t < 1.0 { depth * (t * t - 1.0) } else { 0.0 };
         let lip = (t - 1.0) / 0.22;
-        let rim = depth * 0.30 * libm::exp(-lip * lip) * smoothstep(2.0, 1.4, t).max(0.0);
+        let rim = depth
+            * if basin { 0.45 } else { 0.30 }
+            * libm::exp(-lip * lip)
+            * smoothstep(2.0, 1.4, t).max(0.0);
         height += bowl + rim;
-        inside = inside.max(1.0 - t);
     }
-    (height, inside)
+    height
 }
 
 pub fn sample(recipe: &Recipe, d: Direction, footprint_m: f64) -> Sample {
     let seed = recipe.seed;
-    let mut flooded = 0.0f64;
     let mut height_m = 120.0 * fbm(seed ^ ROLL, [d[0] * 2.5, d[1] * 2.5, d[2] * 2.5], 5, 0.5);
     for (index, scale) in SCALES.iter().enumerate() {
         let cell_m = RADIUS_M / scale;
-        // The smallest crater of this size is a quarter of a cell across.
-        let weight = band(cell_m * 0.25, footprint_m);
+        // The smallest crater of this size: a quarter of a cell across, or
+        // half for the basins.
+        let smallest = if index < BASINS { 0.48 } else { 0.25 };
+        let weight = band(cell_m * smallest, footprint_m);
         if weight <= 0.0 {
             break;
         }
         let p = [d[0] * scale, d[1] * scale, d[2] * scale];
-        let basin = index < BASINS;
-        let (height, inside) = craters(seed ^ CRATERS, p, index as u64, basin);
+        let height = craters(seed ^ CRATERS, p, index as u64, index < BASINS);
         height_m += weight * cell_m * height;
-        if basin {
-            flooded = flooded.max(inside);
-        }
     }
-    // Mare floods the floor of a basin and thins out up its walls.
-    let shade = smoothstep(0.10, 0.42, flooded);
     Sample {
         height_m,
         material: Material::Regolith,
-        shade,
     }
 }

@@ -53,7 +53,6 @@ pub fn sample(recipe: &Recipe, d: Direction) -> Sample {
     Sample {
         height_m,
         material: material(recipe, d, height_m),
-        shade: 0.0,
     }
 }
 

@@ -308,6 +308,8 @@ mesh fades small craters out and so sits higher: arriving fast, the avatar and
 camera ended up under the drawn ground. The streamer now reports the footprint
 the ground is drawn with at a place, and the camera and a flyer stay above the
 higher of the real and the shown ground. The moon's camera floor had also been
-left at zero from its smooth days. The moon gained a few wide basins, flooded
-with dark mare through a continuous `Sample::shade`, so it reads from the
-planet.
+left at zero from its smooth days. The moon gained a few wide basins so it
+reads from the planet. A first try painted them as dark mare; Marlus rejected
+the dalmatian look: craters are relief, never albedo. The basins are now deep
+bowls with tall rims, wide enough to survive the coarsest mesh, which is the
+one the planet sees.

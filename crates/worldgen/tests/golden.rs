@@ -87,7 +87,7 @@ fn v2_moon_is_frozen() {
     assert_eq!(hash, GOLDEN_V2_MOON, "the moon of generator v2 changed");
 }
 
-const GOLDEN_V2_MOON: u64 = 0x35e2_1fd0_08f9_7836;
+const GOLDEN_V2_MOON: u64 = 0xbc59_99e3_f1e4_af05;
 
 #[test]
 fn terrain_is_plausible() {

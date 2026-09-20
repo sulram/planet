@@ -48,9 +48,6 @@ pub struct Sample {
     /// Ground height in metres from the datum sphere. Negative is sea floor.
     pub height_m: f64,
     pub material: Material,
-    /// How far the ground cover darkens here, `0..=1`: continuous where a
-    /// material is a step. The moon's maria; zero elsewhere for now.
-    pub shade: f64,
 }
 
 impl Sample {
@@ -92,7 +89,6 @@ impl Generator {
             1 => Sample {
                 height_m: 0.0,
                 material: Material::Regolith,
-                shade: 0.0,
             },
             _ => moon::sample(&self.recipe, direction, footprint_m),
         }
