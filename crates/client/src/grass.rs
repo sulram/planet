@@ -69,11 +69,11 @@ pub fn build(
                 let x = (cu as f32 + 0.05 + random(0) * 0.9) * scale;
                 let y = (cv as f32 + 0.05 + random(8) * 0.9) * scale;
                 let (i, j) = ((x as usize).min(g - 1), (y as usize).min(g - 1));
-                // Require the four corners to be grass: no tuft on a beach or rock.
+                // Require the four corners to be meadow: no tuft on a beach or rock.
                 let corners = [(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)];
                 if !corners.iter().all(|&(a, b)| {
                     let s = samples[(b + 1) * (g + 3) + a + 1].1;
-                    s.height_m > 1.5 && matches!(s.material, Material::Grass | Material::Forest)
+                    s.height_m > 1.5 && s.material == Material::Grass
                 }) {
                     continue;
                 }
@@ -216,6 +216,7 @@ mod tests {
     #[test]
     fn bare_ground_has_no_grass_and_distant_patches_carry_only_far_tiers() {
         for material in [
+            Material::Forest,
             Material::Sand,
             Material::Water,
             Material::Rock,

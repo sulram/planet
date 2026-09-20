@@ -508,7 +508,8 @@ fn color(sample: Sample) -> [u8; 4] {
         Material::Snow => [236, 238, 240, 70],
         Material::Sand => [206, 192, 150, 8],
         Material::Grass => [104, 138, 70, 0],
-        Material::Forest => [54, 96, 56, 0],
+        // A shade off the meadow: open ground that waits for its trees, no tufts.
+        Material::Forest => [92, 128, 66, 0],
         Material::Rock => [118, 112, 106, 12],
         // v1 calls everything under the sea water; it is sea floor all the same.
         Material::Seabed | Material::Water => [112, 116, 98, 0],

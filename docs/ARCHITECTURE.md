@@ -176,7 +176,8 @@ Numbers marked (p) are proposed and not yet confirmed.
   never schedules generation. Skirts do not cast.
 - Cascade count and size live in `render::shadow`, which prepends them to
   every shader; texel sizes ride the view uniform.
-- Grass is cosmetic, planet only, built with the patch from its own samples:
+- Grass is cosmetic, planet only, on the meadow material alone (forest ground
+  is a shade off it and bare), built with the patch from its own samples:
   no generator call. Tier `k` has one tuft per `2^k` half blocks and reaches
   `20 m * 2^k` (six tiers, 640 m), so screen density stays level.
 - A tuft is (sector, tier, tier cell): subdivision never moves it. A patch
