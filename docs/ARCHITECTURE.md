@@ -190,8 +190,14 @@ Numbers marked (p) are proposed and not yet confirmed.
   shader tone maps. An effect is a stage.
 - Bloom: what is over a threshold (soft knee) is halved down a five level
   pyramid and summed back up it with a tent filter, then laid over the scene.
-  After the clouds, so their silver edges glow too. Haze is the air's density
+  After the clouds, so their silver edges glow too. The threshold is of
+  exposed light. Haze is the air's density
   as a factor, in `atmosphere`.
+- What glows is what is bright: bloom selects nothing. The moon in the night
+  sky is drawn `MOON_SHINE` times a sunlit rock (`moon_shine` in
+  `common.wgsl`), over the threshold: not the moon one stands on, nor the
+  moon by day (`night_sky`, the rule that drowns the stars). Nothing about
+  the picture adapts by itself.
 - Clouds are a shell of weather, 1100 to 3000 m over the sea, made of one
   tiling 64^3 noise texture drawn once on the GPU (`render::clouds`). The
   density field (`cloud_field.wgsl`) is in every shader: the compositor

@@ -91,6 +91,8 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     var albedo = mix(cover, ROCK, rock);
     albedo *= 0.78 + 0.22 * mix(1.0, fine * 2.0, near) * mix(1.0, medium * 1.4 + 0.3, mid) + 0.12 * (coarse - 0.5);
 
+    albedo *= moon_shine(in.relative);
+
     // Wet sand darkens and shines near the waterline.
     let shore = 1.0 - smoothstep(0.0, 1.2, abs(altitude));
     albedo *= 1.0 - 0.35 * shore;

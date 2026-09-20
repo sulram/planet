@@ -139,7 +139,7 @@ pub struct Effects {
     pub exposure: f32,
     /// How strongly bright light spills over its neighbours. 0 turns it off.
     pub bloom: f32,
-    /// How bright light must be to spill, in scene units: 1 is a sunlit wall.
+    /// How bright light must be to spill, once exposed: 1 is a sunlit wall.
     pub bloom_threshold: f32,
     /// How thick the air is, as a factor of the usual: distance fades sooner.
     pub haze: f32,
@@ -159,9 +159,9 @@ impl Default for Effects {
             wind_m_s: 14.0,
             cloud_change: 1.0,
             exposure: 1.0,
-            bloom: 0.5,
-            bloom_threshold: 1.1,
-            haze: 1.0,
+            bloom: 0.7,
+            bloom_threshold: 0.3,
+            haze: 0.8,
             water_clarity: 3.0,
             tone_map: ToneMap::Aces,
         }

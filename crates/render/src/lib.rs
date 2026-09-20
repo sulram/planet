@@ -30,7 +30,6 @@ pub use wgpu;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Top of the atmosphere above sea level, metres.
 const ATMOSPHERE_M: f64 = 3600.0;
-
 /// One camera drawing into one target.
 pub struct View<'a> {
     pub camera: Camera,
@@ -411,6 +410,7 @@ impl Renderer {
         let view_from_relative = Mat4::from_quat(camera.rotation.inverse().as_quat());
         let clip_from_relative = projection * view_from_relative;
         let radius = frame.planet_radius_m;
+        let exposure = frame.effects.exposure;
         ViewUniform {
             clip_from_relative: clip_from_relative.to_cols_array_2d(),
             relative_from_clip: clip_from_relative.inverse().to_cols_array_2d(),
@@ -440,12 +440,7 @@ impl Renderer {
                 .to_array(),
             post: {
                 let [body, wisp] = weather.rise;
-                [
-                    frame.effects.exposure,
-                    body,
-                    wisp,
-                    frame.effects.cloud_density,
-                ]
+                [exposure, body, wisp, frame.effects.cloud_density]
             },
             grade: [
                 frame.effects.haze,
@@ -453,13 +448,12 @@ impl Renderer {
                 frame.effects.water_clarity,
                 0.0,
             ],
-            bloom: [
-                frame.effects.bloom,
-                frame.effects.bloom_threshold,
+            bloom: {
+                // The threshold is of exposed light, as in a lens.
+                let threshold = frame.effects.bloom_threshold / exposure;
                 // Half the threshold: light eases into glowing, never pops.
-                frame.effects.bloom_threshold * 0.5,
-                0.0,
-            ],
+                [frame.effects.bloom, threshold, threshold * 0.5, 0.0]
+            },
             clouds: {
                 let [cos, sin] = weather.wind;
                 let on = f32::from(u8::from(frame.effects.clouds));

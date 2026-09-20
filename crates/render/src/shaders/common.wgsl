@@ -144,12 +144,42 @@ fn sunlight(relative: vec3<f32>) -> f32 {
     return planet * moon;
 }
 
-// Up at a point: away from the body whose surface is nearer.
-fn surface_up(relative: vec3<f32>) -> vec3<f32> {
+// Whether a point belongs to the moon: its surface is the nearer one.
+fn on_moon(relative: vec3<f32>) -> bool {
     let from_planet = view.camera.xyz + relative;
     let from_moon = relative - view.moon.xyz;
-    let nearer_moon = length(from_moon) - view.moon.w < length(from_planet) - view.camera.w;
-    return normalize(select(from_planet, from_moon, nearer_moon));
+    return length(from_moon) - view.moon.w < length(from_planet) - view.camera.w;
+}
+
+// Up at a point: away from the body whose surface is nearer.
+fn surface_up(relative: vec3<f32>) -> vec3<f32> {
+    return normalize(select(view.camera.xyz + relative, relative - view.moon.xyz, on_moon(relative)));
+}
+
+// How much a faint light of the night sky shows through `air`, the light the
+// atmosphere scatters along its ray: daylight drowns it, and so does standing
+// in daylight, however dark that corner of the sky is.
+fn night_sky(air: vec3<f32>) -> f32 {
+    let in_air = 1.0 - smoothstep(0.0, view.sun.w - view.camera.w, view.flags.z);
+    return (1.0 - smoothstep(0.02, 0.20, max(air.r, max(air.g, air.b))))
+        * (1.0 - in_air * daylight(normalize(view.camera.xyz)));
+}
+
+// How much brighter the moon's ground is drawn than a sunlit rock is. To an
+// eye used to the dark the moon blazes; nothing here adapts, so the moon in
+// the night sky is lifted over the bloom threshold instead, as a lamp will
+// be: what glows is what is bright. Not the moon one stands on, nor the moon
+// by day.
+const MOON_SHINE: f32 = 6.0;
+
+fn moon_shine(relative: vec3<f32>) -> f32 {
+    if !on_moon(relative) {
+        return 1.0;
+    }
+    let distance = length(relative);
+    let afar = 1.0 - smoothstep(0.15, 0.45, view.moon.w / length(view.moon.xyz));
+    let night = night_sky(atmosphere(relative / distance, distance).rgb);
+    return mix(1.0, MOON_SHINE, afar * night);
 }
 
 // Daylight at a place on the planet, 0 at night.

@@ -58,11 +58,8 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     // The planet hides the stars behind it.
     let ground = ray_sphere(view.camera.xyz, dir, view.camera.w);
     let open_sky = select(1.0, 0.0, ground.x <= ground.y && ground.y > 0.0);
-    // Daylight drowns the stars: the air along the ray outshines them, and so
-    // does standing in daylight, however dark that corner of the sky is.
-    let in_air = 1.0 - smoothstep(0.0, view.sun.w - view.camera.w, view.flags.z);
-    let dazzle = (1.0 - smoothstep(0.02, 0.20, max(air.r, max(air.g, air.b))))
-        * (1.0 - in_air * daylight(normalize(view.camera.xyz)));
+    // Daylight drowns the stars.
+    let dazzle = night_sky(air.rgb);
     let sun = vec3<f32>(1.0, 0.95, 0.85) * (disc + glow);
     // The moon is terrain with depth of its own: it hides sun, stars and
     // planet by being in front. The planet's night side may be culled, so it
