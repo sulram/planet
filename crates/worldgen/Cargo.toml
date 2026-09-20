@@ -1,0 +1,17 @@
+[package]
+name = "worldgen"
+description = "The generator: deterministic terrain from a recipe. Native, WASM and ARM agree bit for bit."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+libm.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
