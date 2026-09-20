@@ -25,7 +25,7 @@ use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use controller::{Controller, Wish};
 use figure::Figure;
 pub use input::{Input, Key};
-pub use scene::{Effects, Frame};
+pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Command, Event, Mode};
 use terrain::{Body, Terrain};
 
@@ -116,6 +116,9 @@ impl Client {
             wind_m_s: sane(effects.wind_m_s, 0.0, 80.0, usual.wind_m_s),
             cloud_change: sane(effects.cloud_change, 0.0, 6.0, usual.cloud_change),
             exposure: sane(effects.exposure, 0.1, 4.0, usual.exposure),
+            bloom: sane(effects.bloom, 0.0, 3.0, usual.bloom),
+            bloom_threshold: sane(effects.bloom_threshold, 0.2, 8.0, usual.bloom_threshold),
+            haze: sane(effects.haze, 0.0, 6.0, usual.haze),
             ..effects
         };
         self.events.push(Event::EffectsChanged {

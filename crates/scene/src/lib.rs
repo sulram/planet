@@ -82,6 +82,41 @@ pub struct GrassInstance {
     pub angle: f32,
 }
 
+/// The curve that turns the scene's light into what a screen can show.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToneMap {
+    /// Filmic, contrasty, saturated: Narkowicz's fit of the ACES curve.
+    #[default]
+    Aces,
+    /// Softer shoulder; bright colours fade to white instead of skewing hue.
+    Agx,
+    /// Khronos PBR neutral: colours as authored, only highlights compressed.
+    Neutral,
+    /// Reinhard on luminance: plain and flat.
+    Reinhard,
+    /// No curve: light above white clips.
+    Linear,
+}
+
+impl ToneMap {
+    /// The order the output shader knows them in.
+    pub const ALL: [ToneMap; 5] = [
+        ToneMap::Aces,
+        ToneMap::Agx,
+        ToneMap::Neutral,
+        ToneMap::Reinhard,
+        ToneMap::Linear,
+    ];
+
+    pub fn index(self) -> u32 {
+        ToneMap::ALL
+            .iter()
+            .position(|&each| each == self)
+            .expect("listed") as u32
+    }
+}
+
 /// How the picture is made, not what the world is: what a person may turn
 /// down on a slow machine or tune to taste. Travels in every [`Frame`]; a UI
 /// sets it through the client's seam. Absent fields take their default.
@@ -101,6 +136,13 @@ pub struct Effects {
     pub cloud_change: f32,
     /// What the scene's light is multiplied by before the tone map.
     pub exposure: f32,
+    /// How strongly bright light spills over its neighbours. 0 turns it off.
+    pub bloom: f32,
+    /// How bright light must be to spill, in scene units: 1 is a sunlit wall.
+    pub bloom_threshold: f32,
+    /// How thick the air is, as a factor of the usual: distance fades sooner.
+    pub haze: f32,
+    pub tone_map: ToneMap,
 }
 
 impl Default for Effects {
@@ -114,6 +156,10 @@ impl Default for Effects {
             wind_m_s: 14.0,
             cloud_change: 1.0,
             exposure: 1.0,
+            bloom: 0.5,
+            bloom_threshold: 1.1,
+            haze: 1.0,
+            tone_map: ToneMap::Aces,
         }
     }
 }

@@ -20,6 +20,7 @@ export type { Crumb } from './PageHeader.svelte';
 export { default as Pager } from './Pager.svelte';
 export { default as Panel } from './Panel.svelte';
 export { default as Segmented } from './Segmented.svelte';
+export { default as Select } from './Select.svelte';
 export { default as Slider } from './Slider.svelte';
 export { default as Spinner } from './Spinner.svelte';
 export { default as Stack } from './Stack.svelte';

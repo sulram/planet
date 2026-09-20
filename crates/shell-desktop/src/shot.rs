@@ -12,6 +12,9 @@ pub fn run(shot: Shot) -> Result<(), String> {
     let mut client = Client::new(shot.recipe).map_err(|e| e.to_string())?;
     client.set_aspect(width as f32 / height as f32);
     client.set_clock(shot.clock_s);
+    if let Some(effects) = &shot.effects {
+        client.command_json(&format!(r#"{{"type":"set_effects","effects":{effects}}}"#));
+    }
     if let Some([u, v]) = shot.at {
         client.teleport(u, v);
     }
@@ -45,17 +48,23 @@ pub fn run(shot: Shot) -> Result<(), String> {
         .renderer
         .apply_skinned(client.drain_skinned_changes());
     if shot.measure > 0 {
-        for (label, shadows, grass, clouds) in [
-            ("base", false, false, false),
-            ("shadows", true, false, false),
-            ("shadows + grass", true, true, false),
-            ("shadows + grass + clouds", true, true, true),
+        for (label, shadows, grass, clouds, bloom) in [
+            ("base", false, false, false, false),
+            ("shadows", true, false, false, false),
+            ("shadows + grass", true, true, false, false),
+            ("shadows + grass + clouds", true, true, true, false),
+            ("shadows + grass + clouds + bloom", true, true, true, true),
         ] {
             let priced = client::Frame {
                 effects: client::Effects {
                     shadows,
                     grass,
                     clouds,
+                    bloom: if bloom {
+                        frame.effects.bloom.max(0.5)
+                    } else {
+                        0.0
+                    },
                     ..frame.effects
                 },
                 ..frame.clone()

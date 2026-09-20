@@ -26,6 +26,10 @@ struct View {
     post: vec4<f32>,
     // xy: how far the weather has turned (cos, sin). z: cover. w: 1 when on.
     clouds: vec4<f32>,
+    // x: strength of the glow. y: the brightness it starts at. z: its knee.
+    bloom: vec4<f32>,
+    // x: how thick the air is, as a factor. y: which tone map, by index.
+    grade: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -95,7 +99,7 @@ fn atmosphere(dir: vec3<f32>, length: f32) -> vec4<f32> {
     if path <= 0.0 {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
-    let through = exp(-path * DENSITY_PER_M);
+    let through = exp(-path * DENSITY_PER_M * view.grade.x);
 
     // Daylight where the ray runs, warm when the sun is low.
     let middle = normalize(origin + dir * (enter + path * 0.5));

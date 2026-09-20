@@ -33,6 +33,8 @@ pub struct Shot {
     pub measure: usize,
     /// Paint the native settings panel, open, over the picture.
     pub panel: bool,
+    /// Effects as the seam takes them: `{"tone_map":"agx","bloom":1}`.
+    pub effects: Option<String>,
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -57,6 +59,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         moon_gap_m: None,
         measure: 0,
         panel: false,
+        effects: None,
     };
 
     while let Some(flag) = args.next() {
@@ -74,6 +77,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
                 shot.measure = number::<usize>(&value()?, "--measure")?.min(1000)
             }
             "--panel" if is_shot => shot.panel = true,
+            "--effects" if is_shot => shot.effects = Some(value()?),
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,
             "--pitch" if is_shot => shot.pitch_deg = number(&value()?, "--pitch")?,

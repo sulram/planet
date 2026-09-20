@@ -171,8 +171,13 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The compositor (`render::compose`): the world is drawn once into an HDR
   scene target (`Rgba16Float`, linear light) with its depth kept. A chain of
   full screen stages follows, each reading the colour and depth before it;
-  the last, `output`, applies exposure, the filmic curve and the target's
-  encoding. No scene shader tone maps. An effect is a stage.
+  the last, `output`, applies exposure, the chosen tone map (ACES, AgX,
+  Khronos neutral, Reinhard, linear) and the target's encoding. No scene
+  shader tone maps. An effect is a stage.
+- Bloom: what is over a threshold (soft knee) is halved down a five level
+  pyramid and summed back up it with a tent filter, then laid over the scene.
+  After the clouds, so their silver edges glow too. Haze is the air's density
+  as a factor, in `atmosphere`.
 - Clouds are a shell of weather, 1100 to 3000 m over the sea, made of one
   tiling 64^3 noise texture drawn once on the GPU (`render::clouds`). The
   density field (`cloud_field.wgsl`) is in every shader: the compositor

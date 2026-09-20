@@ -54,6 +54,8 @@ struct ViewUniform {
     interaction_end: [f32; 4],
     post: [f32; 4],
     clouds: [f32; 4],
+    bloom: [f32; 4],
+    grade: [f32; 4],
 }
 
 /// GPU state owned by one view slot.
@@ -349,6 +351,7 @@ impl Renderer {
         drop(pass);
         let chain = compose::Chain {
             clouds: frame.effects.clouds,
+            bloom: frame.effects.bloom > 0.0,
         };
         self.composer
             .run(encoder, &resources.bind_group, targets, chain, view.target);
@@ -401,6 +404,19 @@ impl Renderer {
                     frame.effects.cloud_density,
                 ]
             },
+            grade: [
+                frame.effects.haze,
+                frame.effects.tone_map.index() as f32,
+                0.0,
+                0.0,
+            ],
+            bloom: [
+                frame.effects.bloom,
+                frame.effects.bloom_threshold,
+                // Half the threshold: light eases into glowing, never pops.
+                frame.effects.bloom_threshold * 0.5,
+                0.0,
+            ],
             clouds: {
                 let [cos, sin] = weather.wind;
                 let on = f32::from(u8::from(frame.effects.clouds));
@@ -471,9 +487,10 @@ fn relative(origin: DVec3, camera: DVec3) -> Vec3 {
 /// WGSL with the shared prelude in front.
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     let source = format!(
-        "{}{}{}\n{}\n{source}",
+        "{}{}{}{}\n{}\n{source}",
         shadow::prelude(),
         clouds::prelude(),
+        compose::prelude(),
         include_str!("shaders/common.wgsl"),
         include_str!("shaders/cloud_field.wgsl")
     );

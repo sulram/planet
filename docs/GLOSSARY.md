@@ -49,6 +49,7 @@ this file in the same change.
 | Effects | How the picture is made, not what the world is: what a person turns down on a slow machine or tunes to taste. Plain data in every frame. |
 | Compositor | The part of the renderer that turns the drawn scene into the picture: a chain of stages ending in `output`. |
 | Stage | One full screen pass of the compositor. Reads the colour and depth before it, writes the next target. |
+| Tone map | The curve in `output` that turns the scene's unbounded light into what a screen shows. A setting. |
 | Scene target | The HDR, linear light texture the world is drawn into, with its depth. |
 | Weather | The low frequency field that says where on the planet clouds may stand at all. Turns with the clock. |
 | Cloud layer | The shell of altitude clouds live in. Marched by the compositor, sampled by lit surfaces for shade. |

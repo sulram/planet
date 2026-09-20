@@ -7,6 +7,9 @@ import type { Recipe } from '$lib/world';
 export type Mode = 'walk' | 'fly';
 export const modes = ['walk', 'fly'] as const satisfies readonly Mode[];
 
+export type ToneMap = 'aces' | 'agx' | 'neutral' | 'reinhard' | 'linear';
+export const toneMaps = ['aces', 'agx', 'neutral', 'reinhard', 'linear'] as const satisfies readonly ToneMap[];
+
 /** How the picture is made. Mirrors `scene::Effects`; the engine clamps it. */
 export interface Effects {
 	shadows: boolean;
@@ -17,6 +20,10 @@ export interface Effects {
 	wind_m_s: number;
 	cloud_change: number;
 	exposure: number;
+	bloom: number;
+	bloom_threshold: number;
+	haze: number;
+	tone_map: ToneMap;
 }
 
 export type Command =

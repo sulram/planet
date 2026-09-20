@@ -13,6 +13,7 @@
 		Pager,
 		Panel,
 		Segmented,
+		Select,
 		Slider,
 		Spinner,
 		Stack,
@@ -28,6 +29,11 @@
 
 	let shadows = $state(true);
 	let cover = $state(0.5);
+	let curve = $state('aces');
+	const curves = [
+		{ value: 'aces', label: 'ACES' },
+		{ value: 'agx', label: 'AgX' }
+	];
 
 	const primitives = ['black', 'grey-900', 'grey-800', 'grey-600', 'grey-400', 'grey-300', 'grey-100', 'white', 'red-600', 'red-400'];
 	const semantics = [
@@ -190,7 +196,7 @@
 		</section>
 
 		<section>
-			<h2>Checkbox and Slider</h2>
+			<h2>Checkbox, Slider and Select</h2>
 			<div class="row">
 				<Checkbox checked={shadows} onchange={(value) => (shadows = value)}>Shadows</Checkbox>
 				<Checkbox checked={false} disabled>Unavailable</Checkbox>
@@ -198,6 +204,7 @@
 			<Stack>
 				<Slider label="Cover" value={cover} min={0} max={1} oninput={(value) => (cover = value)} />
 				<Slider label="Disabled" value={0.3} min={0} max={1} disabled />
+				<Select label="Tone map" options={curves} value={curve} onselect={(value) => (curve = value)} />
 			</Stack>
 		</section>
 

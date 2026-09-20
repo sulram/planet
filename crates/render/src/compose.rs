@@ -14,9 +14,32 @@ pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// What every stage starts with: its inputs and the screen triangle.
 const STAGE_PRELUDE: &str = include_str!("shaders/stage.wgsl");
 
+/// How a stage leaves its target: most write every pixel, some add light to
+/// what another stage left there.
+#[derive(Clone, Copy, PartialEq)]
+enum Write {
+    Replace,
+    Add,
+}
+
+const ADD: wgpu::BlendComponent = wgpu::BlendComponent {
+    src_factor: wgpu::BlendFactor::One,
+    dst_factor: wgpu::BlendFactor::One,
+    operation: wgpu::BlendOperation::Add,
+};
+
+/// Halvings in the bloom pyramid: the widest glow is 2^6 pixels of the scene.
+const BLOOM_LEVELS: usize = 5;
+
+/// What the shaders must agree on, stated once: prepended to every module.
+pub fn prelude() -> String {
+    format!("const BLOOM_LEVELS: u32 = {BLOOM_LEVELS}u;\n")
+}
+
 /// One full screen pass of the chain.
 struct Stage {
     pipeline: wgpu::RenderPipeline,
+    write: Write,
 }
 
 impl Stage {
@@ -27,6 +50,7 @@ impl Stage {
         entry: &str,
         layouts: &[&wgpu::BindGroupLayout],
         format: wgpu::TextureFormat,
+        write: Write,
     ) -> Stage {
         let module = crate::shader(device, label, &format!("{STAGE_PRELUDE}\n{source}"));
         let groups: Vec<Option<&wgpu::BindGroupLayout>> =
@@ -50,7 +74,10 @@ impl Stage {
                 entry_point: Some(entry),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: None,
+                    blend: (write == Write::Add).then_some(wgpu::BlendState {
+                        color: ADD,
+                        alpha: ADD,
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: Default::default(),
@@ -61,7 +88,7 @@ impl Stage {
             multiview_mask: None,
             cache: None,
         });
-        Stage { pipeline }
+        Stage { pipeline, write }
     }
 }
 
@@ -69,6 +96,7 @@ impl Stage {
 #[derive(Clone, Copy)]
 pub struct Chain {
     pub clouds: bool,
+    pub bloom: bool,
 }
 
 pub struct Composer {
@@ -76,6 +104,10 @@ pub struct Composer {
     sampler: wgpu::Sampler,
     cloud_march: Stage,
     cloud_lay: Stage,
+    bloom_bright: Stage,
+    bloom_down: Stage,
+    bloom_up: Stage,
+    bloom_lay: Stage,
     output: Stage,
 }
 
@@ -135,6 +167,17 @@ impl Composer {
             ..Default::default()
         });
         let layouts = [view_layout, &input_layout];
+        let bloom = |entry, write| {
+            Stage::new(
+                device,
+                "bloom",
+                include_str!("shaders/bloom.wgsl"),
+                entry,
+                &layouts,
+                SCENE_FORMAT,
+                write,
+            )
+        };
         Composer {
             cloud_march: Stage::new(
                 device,
@@ -143,6 +186,7 @@ impl Composer {
                 "fs_march",
                 &layouts,
                 SCENE_FORMAT,
+                Write::Replace,
             ),
             cloud_lay: Stage::new(
                 device,
@@ -151,7 +195,12 @@ impl Composer {
                 "fs_lay",
                 &layouts,
                 SCENE_FORMAT,
+                Write::Replace,
             ),
+            bloom_bright: bloom("fs_bright", Write::Replace),
+            bloom_down: bloom("fs_down", Write::Replace),
+            bloom_up: bloom("fs_up", Write::Add),
+            bloom_lay: bloom("fs_lay", Write::Replace),
             output: Stage::new(
                 device,
                 "output",
@@ -159,6 +208,7 @@ impl Composer {
                 "fs",
                 &layouts,
                 format,
+                Write::Replace,
             ),
             input_layout,
             sampler,
@@ -196,6 +246,45 @@ impl Composer {
             );
             read = write;
         }
+        if chain.bloom {
+            // What is bright, halved down a pyramid, then summed back up it:
+            // each level adds a wider, fainter glow. Laid over the scene last.
+            let glow = &targets.glow;
+            Self::pass(
+                encoder,
+                &self.bloom_bright,
+                view,
+                &targets.inputs[read],
+                &glow[0].0,
+            );
+            for level in 1..BLOOM_LEVELS {
+                Self::pass(
+                    encoder,
+                    &self.bloom_down,
+                    view,
+                    &glow[level - 1].1,
+                    &glow[level].0,
+                );
+            }
+            for level in (1..BLOOM_LEVELS).rev() {
+                Self::pass(
+                    encoder,
+                    &self.bloom_up,
+                    view,
+                    &glow[level].1,
+                    &glow[level - 1].0,
+                );
+            }
+            let write = 1 - read;
+            Self::pass(
+                encoder,
+                &self.bloom_lay,
+                view,
+                &targets.glowing[read],
+                &targets.color[write],
+            );
+            read = write;
+        }
         Self::pass(encoder, &self.output, view, &targets.inputs[read], target);
     }
 
@@ -212,8 +301,11 @@ impl Composer {
                 view: target,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    // Every stage writes every pixel.
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: match stage.write {
+                        // Every pixel is written: what was there is no use.
+                        Write::Replace => wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        Write::Add => wgpu::LoadOp::Load,
+                    },
                     store: wgpu::StoreOp::Store,
                 },
                 depth_slice: None,
@@ -236,8 +328,8 @@ impl Composer {
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
                     size: wgpu::Extent3d {
-                        width: size[0].div_ceil(divide),
-                        height: size[1].div_ceil(divide),
+                        width: size[0].div_ceil(divide).max(1),
+                        height: size[1].div_ceil(divide).max(1),
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
@@ -281,6 +373,15 @@ impl Composer {
             })
         };
         let inputs = [input(&color[0], &half), input(&color[1], &half)];
+        // Level n is the scene halved n + 1 times. Each with itself as input.
+        let glow: [(wgpu::TextureView, wgpu::BindGroup); BLOOM_LEVELS] =
+            core::array::from_fn(|level| {
+                let view = texture("bloom level", SCENE_FORMAT, usage, 2 << level);
+                let group = input(&view, &half);
+                (view, group)
+            });
+        // The scene with the summed glow beside it, for the stage that lays it.
+        let glowing = [input(&color[0], &glow[0].0), input(&color[1], &glow[0].0)];
         // The half size target cannot be read while it is written.
         let marching = input(&color[0], &color[1]);
         Targets {
@@ -290,6 +391,8 @@ impl Composer {
             depth,
             inputs,
             marching,
+            glow,
+            glowing,
         }
     }
 }
@@ -305,4 +408,6 @@ pub struct Targets {
     inputs: [wgpu::BindGroup; 2],
     /// The scene's inputs for the stage that writes `half`.
     marching: wgpu::BindGroup,
+    glow: [(wgpu::TextureView, wgpu::BindGroup); BLOOM_LEVELS],
+    glowing: [wgpu::BindGroup; 2],
 }

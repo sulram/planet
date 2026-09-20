@@ -5,7 +5,7 @@
 
 mod paint;
 
-use client::{Command, Effects, Event};
+use client::{Command, Effects, Event, ToneMap};
 use winit::window::Window;
 
 pub struct Panel {
@@ -211,7 +211,20 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
                 ui.add(egui::Slider::new(&mut effects.cloud_change, 0.0..=6.0).text("Change"));
             });
             ui.separator();
+            ui.add(egui::Slider::new(&mut effects.haze, 0.0..=6.0).text("Haze"));
+            ui.add(egui::Slider::new(&mut effects.bloom, 0.0..=3.0).text("Bloom"));
+            ui.add_enabled(
+                effects.bloom > 0.0,
+                egui::Slider::new(&mut effects.bloom_threshold, 0.2..=8.0).text("Bloom from"),
+            );
             ui.add(egui::Slider::new(&mut effects.exposure, 0.1..=4.0).text("Exposure"));
+            egui::ComboBox::from_label("Tone map")
+                .selected_text(tone_map_name(effects.tone_map))
+                .show_ui(ui, |ui| {
+                    for each in ToneMap::ALL {
+                        ui.selectable_value(&mut effects.tone_map, each, tone_map_name(each));
+                    }
+                });
             if ui.button("Defaults").clicked() {
                 *effects = Effects::default();
             }

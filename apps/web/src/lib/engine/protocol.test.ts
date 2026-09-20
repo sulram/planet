@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { parseEvent } from './protocol';
+import { parseEvent, type Effects } from './protocol';
 
 describe('parseEvent', () => {
 	test('parses the known events', () => {
 		expect(parseEvent('{"type":"ready","generator_version":1}')).toEqual({ type: 'ready', generator_version: 1 });
 		expect(parseEvent('{"type":"mode_changed","mode":"fly"}')).toEqual({ type: 'mode_changed', mode: 'fly' });
-		const effects = {
+		const effects: Effects = {
 			shadows: true,
 			grass: true,
 			clouds: false,
@@ -13,7 +13,11 @@ describe('parseEvent', () => {
 			cloud_density: 1,
 			wind_m_s: 14,
 			cloud_change: 1,
-			exposure: 1
+			exposure: 1,
+			bloom: 0.5,
+			bloom_threshold: 1.1,
+			haze: 1,
+			tone_map: 'aces'
 		};
 		expect(parseEvent(JSON.stringify({ type: 'effects_changed', effects }))).toEqual({ type: 'effects_changed', effects });
 	});
