@@ -406,7 +406,7 @@ impl Renderer {
                 .extend(0.0)
                 .to_array(),
             post: {
-                let [body, wisp] = clouds::drift(frame.clock_s);
+                let [body, wisp] = clouds::rise(frame.clock_s);
                 [self.effects.exposure, body, wisp, 0.0]
             },
             clouds: {

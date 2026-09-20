@@ -21,8 +21,8 @@ struct View {
     shadow_texel_m: vec4<f32>,
     interaction_start: vec4<f32>,
     interaction_end: vec4<f32>,
-    // x: exposure. y, z: how far cloud bodies and wisps have slid through
-    // the noise, as a fraction of their repeat.
+    // x: exposure. y, z: how far the noise has risen through the cloud layer
+    // for bodies and for wisps, in repeats of each.
     post: vec4<f32>,
     // xy: how far the weather has turned (cos, sin). z: cover. w: 1 when on.
     clouds: vec4<f32>,

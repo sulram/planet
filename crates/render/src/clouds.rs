@@ -32,19 +32,27 @@ pub fn wind(clock_s: f64, planet_radius_m: f64) -> [f32; 2] {
     [angle.cos() as f32, angle.sin() as f32]
 }
 
-/// Clouds also change where they stand: the field slides through the noise,
-/// slowly for the bodies, faster for the wisps. Metres a second.
-const BODY_DRIFT_M_S: f64 = 2.5;
-const WISP_DRIFT_M_S: f64 = 9.0;
+/// Clouds also change where they stand: the noise rises through the layer,
+/// so a heap boils and reshapes in place while the wind carries it. Slowly
+/// for the bodies, faster for the wisps. Metres a second.
+const BODY_RISE_M_S: f64 = 9.0;
+const WISP_RISE_M_S: f64 = 22.0;
 /// Metres across one repeat of the noise, for bodies and for wisps.
 const SHAPE_TILE_M: f64 = 6200.0;
 const DETAIL_TILE_M: f64 = 1150.0;
+/// The rise turns back after this many repeats. It is along the local up,
+/// which no repeat of the noise lines up with, so it cannot wrap unseen; it
+/// swings instead, continuous for ever and small enough to stay exact in f32.
+const RISE_SWING: f64 = 64.0;
 
-/// How far each has slid, as a fraction of its own repeat: wraps unseen.
-pub fn drift(clock_s: f64) -> [f32; 2] {
+/// How far the noise has risen for bodies and wisps, in repeats of each.
+pub fn rise(clock_s: f64) -> [f32; 2] {
+    let swing = |repeats: f64| {
+        (RISE_SWING - (repeats.rem_euclid(2.0 * RISE_SWING) - RISE_SWING).abs()) as f32
+    };
     [
-        (clock_s * BODY_DRIFT_M_S / SHAPE_TILE_M).fract() as f32,
-        (clock_s * WISP_DRIFT_M_S / DETAIL_TILE_M).fract() as f32,
+        swing(clock_s * BODY_RISE_M_S / SHAPE_TILE_M),
+        swing(clock_s * WISP_RISE_M_S / DETAIL_TILE_M),
     ]
 }
 
@@ -249,6 +257,22 @@ impl Clouds {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_rise_never_jumps() {
+        // Across a turn of the swing and far into a long clock alike.
+        let turn = RISE_SWING * SHAPE_TILE_M / BODY_RISE_M_S;
+        for clock_s in [
+            0.0,
+            turn - 0.008,
+            turn,
+            2.0 * turn - 0.008,
+            86_400.0 * 365.0,
+        ] {
+            let (a, b) = (rise(clock_s), rise(clock_s + 0.016));
+            assert!((a[0] - b[0]).abs() < 0.0001 && (a[1] - b[1]).abs() < 0.001);
+        }
+    }
 
     #[test]
     fn the_wind_survives_a_long_clock() {

@@ -4,7 +4,7 @@
 @group(0) @binding(4) var cloud_sampler: sampler;
 
 // Metres across one repeat of the noise as weather. Bodies and wisps have
-// theirs in the prelude: the CPU slides them by fractions of it.
+// theirs in the prelude: the CPU raises the noise by repeats of them.
 const CLOUD_WEATHER_TILE_M: f32 = 38000.0;
 
 fn cloud_remap(x: f32, low: f32, high: f32) -> f32 {
@@ -38,9 +38,10 @@ fn cloud_density(from_planet: vec3<f32>, detail: bool) -> f32 {
     if cover <= 0.0 {
         return 0.0;
     }
-    // Sliding through the noise off the wind's way changes a cloud as it goes.
-    let slide = vec3<f32>(1.0, 2.0, 1.0);
-    let noise = textureSampleLevel(cloud_noise, cloud_sampler, p / CLOUD_SHAPE_TILE_M + slide * view.post.y, 0.0);
+    // The noise rises through the layer: a heap boils and reshapes where it
+    // stands, while the wind carries it.
+    let up = normalize(p);
+    let noise = textureSampleLevel(cloud_noise, cloud_sampler, p / CLOUD_SHAPE_TILE_M - up * view.post.y, 0.0);
     let billow = noise.g * 0.625 + noise.b * 0.375;
     let body = cloud_remap(noise.r, billow - 1.0, 1.0);
     // The cut rises with height: only the strongest of the noise stands tall,
@@ -53,7 +54,7 @@ fn cloud_density(from_planet: vec3<f32>, detail: bool) -> f32 {
     if density <= 0.0 || !detail {
         return density;
     }
-    let fine = textureSampleLevel(cloud_noise, cloud_sampler, p / CLOUD_DETAIL_TILE_M + slide.zxy * view.post.z, 0.0);
+    let fine = textureSampleLevel(cloud_noise, cloud_sampler, p / CLOUD_DETAIL_TILE_M - up * view.post.z, 0.0);
     // Wisps below, where air is drawn in; billows above, where it boils out.
     let wisp = fine.g * 0.6 + fine.b * 0.4;
     let erosion = mix(wisp, 1.0 - wisp, clamp(h * 4.0, 0.0, 1.0));
