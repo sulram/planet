@@ -64,6 +64,10 @@ pub fn from_vrm(name: &str) -> Option<usize> {
 }
 
 pub fn from_mixamo(node_name: &str) -> Option<usize> {
-    let name = node_name.strip_prefix("mixamorig:").unwrap_or(node_name);
+    // Exporters spell the namespace `mixamorig:Hips`, `mixamorig_Hips` or drop it.
+    let name = node_name
+        .strip_prefix("mixamorig:")
+        .or_else(|| node_name.strip_prefix("mixamorig_"))
+        .unwrap_or(node_name);
     BONES.iter().position(|(_, mixamo)| *mixamo == name)
 }

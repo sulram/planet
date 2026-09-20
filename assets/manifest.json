@@ -18,6 +18,7 @@
 		"run": "clips/run.glb",
 		"jump": "clips/jump.glb",
 		"fall": "clips/fall.glb",
-		"fly": "clips/fly.glb"
+		"fly": "clips/fly.glb",
+		"swim": "clips/swim.glb"
 	}
 }
