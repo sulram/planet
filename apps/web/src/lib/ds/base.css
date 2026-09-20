@@ -1,0 +1,73 @@
+/* ==========================================================================
+   Design system: base. Reset and element defaults; imports font and tokens.
+   Components carry their own scoped style; only this file is global.
+   ========================================================================== */
+
+@import '@fontsource-variable/jetbrains-mono/wght.css';
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html {
+	height: 100%;
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	min-height: 100%;
+	font-family: var(--font);
+	font-size: var(--fs);
+	font-weight: var(--fw-regular);
+	line-height: var(--lh);
+	color: var(--text);
+	background: var(--bg);
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	font-size: inherit;
+	font-weight: var(--fw-bold);
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+	border-radius: var(--radius);
+}
+
+a {
+	color: inherit;
+	text-underline-offset: 2px;
+}
+
+ul,
+ol {
+	list-style: none;
+}
+
+code,
+kbd {
+	font: inherit;
+}
+
+:focus-visible {
+	outline: calc(2 * var(--bw)) solid var(--focus);
+	outline-offset: var(--sp-1);
+}
+
+::selection {
+	background: var(--action);
+	color: var(--action-text);
+}

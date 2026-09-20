@@ -1,0 +1,84 @@
+/* ==========================================================================
+   Design system: tokens. The source of truth.
+
+   Two layers. Primitives name raw values. Semantics name a role. Components
+   reference semantic variables only, so a theme swaps one layer.
+
+   Theme: `color-scheme` drives `light-dark()`. With no choice made the page
+   follows the OS; `<html data-theme>` (stamped by the server from the `theme`
+   cookie) pins it. One declaration per token covers both modes.
+   ========================================================================== */
+
+:root {
+	/* ---- Primitives ---- */
+	--black: #000000;
+	--white: #ffffff;
+	--grey-100: #f0f0f0;
+	--grey-300: #c4c4c4;
+	--grey-400: #999999;
+	--grey-600: #666666;
+	--grey-800: #2a2a2a;
+	--grey-900: #111111;
+	--red-400: #ff5a4f;
+	--red-600: #c8160c;
+
+	/* ---- Semantics: colour ---- */
+	color-scheme: light dark;
+	--bg: light-dark(var(--white), var(--black));
+	--bg-inset: light-dark(var(--grey-100), var(--grey-900));
+	--bg-overlay: color-mix(in srgb, var(--bg) 88%, transparent);
+	--backdrop: color-mix(in srgb, var(--black) 60%, transparent);
+	--text: light-dark(var(--black), var(--white));
+	--text-muted: light-dark(var(--grey-600), var(--grey-400));
+	--border: light-dark(var(--grey-300), var(--grey-800));
+	--border-strong: var(--text);
+	--action: var(--text);
+	--action-text: var(--bg);
+	--focus: var(--text);
+	/* The one colour. Reserved for errors and destructive actions, and never
+	   the only carrier: a marker or a label always says the same thing. */
+	--danger: light-dark(var(--red-600), var(--red-400));
+	--danger-text: var(--bg);
+
+	/* ---- Type: one size. Hierarchy is weight, case, spacing and borders. ---- */
+	--font: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+	--fs: 10px;
+	--lh: 1.6;
+	--fw-regular: 400;
+	--fw-medium: 500;
+	--fw-bold: 700;
+	--ls-caps: 0.1em;
+
+	/* ---- Space ---- */
+	--sp-1: 2px;
+	--sp-2: 4px;
+	--sp-3: 8px;
+	--sp-4: 12px;
+	--sp-5: 16px;
+	--sp-6: 24px;
+	--sp-7: 32px;
+	--sp-8: 48px;
+
+	/* ---- Shape ---- */
+	--bw: 1px;
+	--radius: 0;
+
+	/* ---- Layout ---- */
+	--control-h: 24px;
+	--measure: 64ch;
+	--page-narrow: 360px;
+	--page-wide: 960px;
+	--panel-w: 260px;
+
+	/* ---- Layers ---- */
+	--z-panel: 10;
+	--z-topbar: 20;
+}
+
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
