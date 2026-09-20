@@ -24,7 +24,7 @@ use scene::{Camera, Frame, SkinnedChange, TerrainChange};
 
 pub use gpu::{Gpu, surface_configuration};
 #[cfg(not(target_arch = "wasm32"))]
-pub use headless::{Headless, write_png};
+pub use headless::{HEADLESS_FORMAT, Headless, Over, write_png};
 pub use wgpu;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -68,32 +68,8 @@ struct ViewResources {
     skinned: skinned::InstanceUniforms,
 }
 
-/// Cosmetic effects can be disabled by a shell without changing world state.
-#[derive(Clone, Copy, Debug)]
-pub struct Effects {
-    pub shadows: bool,
-    pub grass: bool,
-    pub clouds: bool,
-    /// How much of the sky the weather may fill, 0 to 1.
-    pub cloud_cover: f32,
-    /// What the scene's light is multiplied by before the tone map.
-    pub exposure: f32,
-}
-
-impl Default for Effects {
-    fn default() -> Self {
-        Self {
-            shadows: true,
-            grass: true,
-            clouds: true,
-            cloud_cover: 0.5,
-            exposure: 1.0,
-        }
-    }
-}
-
 pub struct Renderer {
-    effects: Effects,
+    weather: clouds::Weather,
     device: wgpu::Device,
     queue: wgpu::Queue,
     encode_srgb: bool,
@@ -182,7 +158,7 @@ impl Renderer {
         let composer = compose::Composer::new(&device, &view_layout, format);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
         Renderer {
-            effects: Effects::default(),
+            weather: clouds::Weather::default(),
             device,
             queue: gpu.queue.clone(),
             encode_srgb: !format.is_srgb(),
@@ -196,10 +172,6 @@ impl Renderer {
             composer,
             clouds,
         }
-    }
-
-    pub fn set_effects(&mut self, effects: Effects) {
-        self.effects = effects;
     }
 
     /// Uploads and drops patch meshes, in the order the client produced them.
@@ -227,8 +199,12 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("frame"),
             });
+        // Once a frame, not once a view: both eyes see one sky.
+        let weather = self
+            .weather
+            .advance(frame.clock_s, &frame.effects, frame.planet_radius_m);
         for (index, view) in views.iter().enumerate() {
-            self.render_view(&mut encoder, frame, view, index);
+            self.render_view(&mut encoder, frame, &weather, view, index);
         }
         self.queue.submit([encoder.finish()]);
     }
@@ -237,11 +213,12 @@ impl Renderer {
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         frame: &Frame,
+        weather: &clouds::WeatherNow,
         view: &View<'_>,
         index: usize,
     ) {
         let [width, height] = view.size.map(|n| n.max(1));
-        let uniform = self.view_uniform(frame, &view.camera, width as f32 / height as f32);
+        let uniform = self.view_uniform(frame, weather, &view.camera, width as f32 / height as f32);
 
         let resources = &mut self.views[index];
         self.queue
@@ -273,7 +250,7 @@ impl Renderer {
             .iter()
             .copied()
             .filter(|draw| {
-                self.effects.shadows
+                frame.effects.shadows
                     && self
                         .terrain
                         .casts_into(draw, view.camera.position, &matrices)
@@ -286,7 +263,11 @@ impl Renderer {
             &wanted,
             view.camera.position,
         );
-        for (cascade, matrix) in matrices.iter().enumerate().filter(|_| self.effects.shadows) {
+        for (cascade, matrix) in matrices
+            .iter()
+            .enumerate()
+            .filter(|_| frame.effects.shadows)
+        {
             let mut light = uniform;
             light.clip_from_relative = matrix.to_cols_array_2d();
             self.queue.write_buffer(
@@ -353,7 +334,7 @@ impl Renderer {
         });
         pass.set_bind_group(0, &resources.bind_group, &[]);
         self.terrain.draw(&mut pass, &resources.patches, &drawn);
-        if self.effects.grass {
+        if frame.effects.grass {
             self.terrain
                 .draw_grass(&mut pass, &resources.patches, &drawn);
         }
@@ -367,13 +348,19 @@ impl Renderer {
             .draw_water(&mut pass, &resources.patches, &drawn);
         drop(pass);
         let chain = compose::Chain {
-            clouds: self.effects.clouds,
+            clouds: frame.effects.clouds,
         };
         self.composer
             .run(encoder, &resources.bind_group, targets, chain, view.target);
     }
 
-    fn view_uniform(&self, frame: &Frame, camera: &Camera, aspect: f32) -> ViewUniform {
+    fn view_uniform(
+        &self,
+        frame: &Frame,
+        weather: &clouds::WeatherNow,
+        camera: &Camera,
+        aspect: f32,
+    ) -> ViewUniform {
         let projection = Mat4::perspective_infinite_reverse_rh(camera.fov_y, aspect, camera.near);
         let view_from_relative = Mat4::from_quat(camera.rotation.inverse().as_quat());
         let clip_from_relative = projection * view_from_relative;
@@ -406,20 +393,25 @@ impl Renderer {
                 .extend(0.0)
                 .to_array(),
             post: {
-                let [body, wisp] = clouds::rise(frame.clock_s);
-                [self.effects.exposure, body, wisp, 0.0]
+                let [body, wisp] = weather.rise;
+                [
+                    frame.effects.exposure,
+                    body,
+                    wisp,
+                    frame.effects.cloud_density,
+                ]
             },
             clouds: {
-                let [cos, sin] = clouds::wind(frame.clock_s, radius);
-                let on = f32::from(u8::from(self.effects.clouds));
-                [cos, sin, self.effects.cloud_cover, on]
+                let [cos, sin] = weather.wind;
+                let on = f32::from(u8::from(frame.effects.clouds));
+                [cos, sin, frame.effects.cloud_cover, on]
             },
             flags: [
                 f32::from(u8::from(self.encode_srgb)),
                 // Wrapped so f32 keeps sub millisecond steps all day.
                 (frame.clock_s % 3600.0) as f32,
                 (camera.position.length() - radius) as f32,
-                f32::from(u8::from(self.effects.shadows)),
+                f32::from(u8::from(frame.effects.shadows)),
             ],
         }
     }

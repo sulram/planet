@@ -38,7 +38,6 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 
 - ECS crate: `hecs` or `bevy_ecs` standalone.
 - Protocol schema language: protobuf or flatbuffers.
-- Native minimal UI: egui behind a seam, as in vybe?
 - How much building is possible outside the browser (Pi, headset).
 - Cubes on sloped smooth terrain: auto-flatten on build, or leave gaps.
 - Scripting model: server-side; language and sandbox undecided.

@@ -73,6 +73,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
   - `render`: all of wgpu lives here.
   - `client`: controller, streaming, tools, media manager. No window, no DOM.
+  - `ui-native`: the desktop settings panel. All of egui lives here.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
   - `bench`: what a frame costs in WASM, timed by `scripts/bench.ts`.
 - `server/`: Go module. PocketBase as a library + the world server.

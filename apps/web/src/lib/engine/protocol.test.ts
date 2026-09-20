@@ -5,6 +5,17 @@ describe('parseEvent', () => {
 	test('parses the known events', () => {
 		expect(parseEvent('{"type":"ready","generator_version":1}')).toEqual({ type: 'ready', generator_version: 1 });
 		expect(parseEvent('{"type":"mode_changed","mode":"fly"}')).toEqual({ type: 'mode_changed', mode: 'fly' });
+		const effects = {
+			shadows: true,
+			grass: true,
+			clouds: false,
+			cloud_cover: 0.5,
+			cloud_density: 1,
+			wind_m_s: 14,
+			cloud_change: 1,
+			exposure: 1
+		};
+		expect(parseEvent(JSON.stringify({ type: 'effects_changed', effects }))).toEqual({ type: 'effects_changed', effects });
 	});
 
 	test('ignores unknown types and malformed payloads', () => {

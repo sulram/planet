@@ -3,7 +3,7 @@
 	import { Alert, Spinner } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
-	import { loadEngine, type Engine, type EngineEvent, type Mode } from './index';
+	import { loadEngine, type Effects, type Engine, type EngineEvent, type Mode } from './index';
 
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
 	// runs its own frame loop, input listeners and resize tracking; this
@@ -14,10 +14,12 @@
 		mode: Mode;
 		/** Asset path of the avatar to wear. Null wears any the manifest offers. */
 		avatar: string | null;
+		/** How the picture is made. Undefined leaves the engine as it is. */
+		effects?: Effects;
 		onevent?: (event: EngineEvent) => void;
 	}
 
-	let { recipe, mode, avatar, onevent }: Props = $props();
+	let { recipe, mode, avatar, effects, onevent }: Props = $props();
 
 	type Status = 'loading' | 'running' | 'missing' | 'unsupported' | 'failed';
 
@@ -30,11 +32,13 @@
 	let engineRecipe = '';
 	let engineMode: Mode | undefined;
 	let engineAvatar: string | undefined;
+	let engineEffects = '';
 
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') engineRecipe = JSON.stringify(event.recipe);
 		if (event.type === 'mode_changed') engineMode = event.mode;
 		if (event.type === 'avatar_changed') engineAvatar = event.path;
+		if (event.type === 'effects_changed') engineEffects = JSON.stringify(event.effects);
 		onevent?.(event);
 	}
 
@@ -82,6 +86,14 @@
 		if (!engine || (avatar && avatar === engineAvatar)) return;
 		if (avatar) engineAvatar = avatar;
 		engine.command(avatar ? { type: 'set_avatar', path: avatar } : { type: 'random_avatar' });
+	});
+
+	$effect(() => {
+		if (!engine || !effects) return;
+		const next = JSON.stringify(effects);
+		if (next === engineEffects) return;
+		engineEffects = next;
+		engine.command({ type: 'set_effects', effects });
 	});
 
 	$effect(() => {

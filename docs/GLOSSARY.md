@@ -46,6 +46,7 @@ this file in the same change.
 | Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |
 | Scene | The plain data a client hands a renderer each frame. Crate `scene`. |
 | Patch | One quadtree node of far terrain, meshed as 32x32 quads. |
+| Effects | How the picture is made, not what the world is: what a person turns down on a slow machine or tunes to taste. Plain data in every frame. |
 | Compositor | The part of the renderer that turns the drawn scene into the picture: a chain of stages ending in `output`. |
 | Stage | One full screen pass of the compositor. Reads the colour and depth before it, writes the next target. |
 | Scene target | The HDR, linear light texture the world is drawn into, with its depth. |

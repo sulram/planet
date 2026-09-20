@@ -9,6 +9,18 @@ use crate::{Gpu, Renderer, View};
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
+/// What a painter over the headless picture is handed.
+pub struct Over<'a> {
+    pub device: &'a wgpu::Device,
+    pub queue: &'a wgpu::Queue,
+    pub encoder: &'a mut wgpu::CommandEncoder,
+    pub target: &'a wgpu::TextureView,
+    pub size: [u32; 2],
+}
+
+/// The format of the headless picture.
+pub const HEADLESS_FORMAT: wgpu::TextureFormat = FORMAT;
+
 pub struct Headless {
     gpu: Gpu,
     pub renderer: Renderer,
@@ -81,6 +93,12 @@ impl Headless {
 
     /// Renders the frame and returns its pixels, RGBA8 sRGB, top row first.
     pub fn render(&mut self, frame: &Frame) -> Vec<u8> {
+        self.render_under(frame, |_| {})
+    }
+
+    /// The same, with something painted over the picture before it is read: a
+    /// native UI is looked at the way the world is.
+    pub fn render_under(&mut self, frame: &Frame, over: impl FnOnce(Over<'_>)) -> Vec<u8> {
         let [width, height] = self.size;
         let target = self
             .texture
@@ -93,6 +111,21 @@ impl Headless {
                 size: self.size,
             }],
         );
+
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("over"),
+            });
+        over(Over {
+            device: &self.gpu.device,
+            queue: &self.gpu.queue,
+            encoder: &mut encoder,
+            target: &target,
+            size: self.size,
+        });
+        self.gpu.queue.submit([encoder.finish()]);
 
         // Rows in a readback buffer are padded to the copy alignment.
         let stride = (4 * width).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);

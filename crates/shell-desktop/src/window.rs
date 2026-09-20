@@ -48,6 +48,7 @@ struct Stage {
     config: wgpu::SurfaceConfiguration,
     gpu: Gpu,
     renderer: Renderer,
+    panel: ui_native::Panel,
     last_frame: Instant,
     /// The pointer is captured and steers the camera.
     looking: bool,
@@ -73,12 +74,14 @@ impl Stage {
         let config = surface_configuration(&surface, &gpu.adapter, size.width, size.height);
         surface.configure(&gpu.device, &config);
         let renderer = Renderer::new(&gpu, config.format);
+        let panel = ui_native::Panel::new(&gpu.device, config.format, &window);
         Ok(Stage {
             window,
             surface,
             config,
             gpu,
             renderer,
+            panel,
             last_frame: Instant::now(),
             looking: false,
         })
@@ -118,6 +121,7 @@ impl Stage {
         self.renderer.apply(client.drain_terrain_changes());
         self.renderer.apply_skinned(client.drain_skinned_changes());
         for event in client.drain_events() {
+            self.panel.event(&event);
             match event {
                 // The title bar is the native HUD until there is a native UI.
                 Event::Stats {
@@ -128,7 +132,10 @@ impl Stage {
                         .set_title(&format!("planet {seed} | {fps:.0} fps | {altitude_m:.0} m"));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
-                Event::RecipeChanged { .. } | Event::Ready { .. } | Event::ModeChanged { .. } => {}
+                Event::RecipeChanged { .. }
+                | Event::Ready { .. }
+                | Event::ModeChanged { .. }
+                | Event::EffectsChanged { .. } => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
         }
@@ -156,6 +163,25 @@ impl Stage {
                 size,
             }],
         );
+        // The panel goes over the finished picture, in a submission of its own.
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("panel"),
+            });
+        let commands = self.panel.frame(
+            &self.window,
+            &self.gpu.device,
+            &self.gpu.queue,
+            &mut encoder,
+            &target,
+            size,
+        );
+        self.gpu.queue.submit([encoder.finish()]);
+        for command in commands {
+            client.command(command);
+        }
         self.gpu.queue.present(texture);
     }
 }
@@ -179,6 +205,11 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         let Some(stage) = &mut self.stage else { return };
+        // The panel first, while the pointer is free: a click on a slider is
+        // not a click on the world. Captured, the pointer is the camera's.
+        if !stage.looking && stage.panel.window_event(&stage.window, &event) {
+            return;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => stage.resize(size),

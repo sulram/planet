@@ -51,20 +51,34 @@ pub fn run(shot: Shot) -> Result<(), String> {
             ("shadows + grass", true, true, false),
             ("shadows + grass + clouds", true, true, true),
         ] {
-            headless.renderer.set_effects(render::Effects {
-                shadows,
-                grass,
-                clouds,
-                ..Default::default()
-            });
-            let (median, p95) = headless.measure(&frame, shot.measure);
+            let priced = client::Frame {
+                effects: client::Effects {
+                    shadows,
+                    grass,
+                    clouds,
+                    ..frame.effects
+                },
+                ..frame.clone()
+            };
+            let (median, p95) = headless.measure(&priced, shot.measure);
             println!(
                 "{label}: median {median:.2} ms, p95 {p95:.2} ms (render + GPU wait, {width}x{height})"
             );
         }
-        headless.renderer.set_effects(render::Effects::default());
     }
-    let pixels = headless.render(&frame);
+    let pixels = if shot.panel {
+        headless.render_under(&frame, |over| {
+            ui_native::Panel::headless(over.device, render::HEADLESS_FORMAT).picture(
+                over.device,
+                over.queue,
+                over.encoder,
+                over.target,
+                over.size,
+            );
+        })
+    } else {
+        headless.render(&frame)
+    };
 
     if let Some(parent) = shot.out.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;

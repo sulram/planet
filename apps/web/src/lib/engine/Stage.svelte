@@ -3,8 +3,10 @@
 	import { Panel, Segmented, Stat } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
+	import { onMount } from 'svelte';
 	import EngineView from './EngineView.svelte';
-	import { modes, type EngineEvent, type Mode } from './index';
+	import Settings from './Settings.svelte';
+	import { modes, type Effects, type EngineEvent, type Mode } from './index';
 
 	// The full viewport engine with its floating panel: what `/play` and
 	// `/w/[id]` share. The page supplies the top of the panel; mode, key hints
@@ -24,6 +26,33 @@
 	let mode = $state<Mode>('walk');
 	let stats = $state<Extract<EngineEvent, { type: 'stats' }>>();
 
+	// How the picture is made belongs to the machine, not to the account: a
+	// phone and a desktop want different answers. It stays in this browser.
+	const EFFECTS_KEY = 'planet.effects';
+	/** What is asked of the engine: the stored choice, then the panel. */
+	let wanted = $state<Effects>();
+	/** What the engine says is in force, and what it started with. */
+	let effects = $state<Effects>();
+	let defaults = $state<Effects>();
+
+	onMount(() => {
+		try {
+			const stored = localStorage.getItem(EFFECTS_KEY);
+			if (stored) wanted = JSON.parse(stored);
+		} catch {
+			// unreadable or blocked storage: the engine's defaults stand
+		}
+	});
+
+	function choose(next: Effects) {
+		wanted = next;
+		try {
+			localStorage.setItem(EFFECTS_KEY, JSON.stringify(next));
+		} catch {
+			// best effort: the choice then lasts for this visit
+		}
+	}
+
 	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`engine.mode.${value}`) })));
 	const hints = $derived([
 		{ keys: t('engine.hint.look.keys'), does: t('engine.hint.look') },
@@ -41,6 +70,10 @@
 		if (event.type === 'ready') onready?.(event.generator_version);
 		else if (event.type === 'mode_changed') mode = event.mode;
 		else if (event.type === 'stats') stats = event;
+		else if (event.type === 'effects_changed') {
+			defaults ??= event.effects;
+			effects = event.effects;
+		}
 		else if (event.type === 'avatar_changed' && event.path !== avatar) remember(event.path);
 	}
 
@@ -56,7 +89,8 @@
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {mode} {avatar} onevent={receive} />
+	<EngineView {recipe} {mode} {avatar} effects={wanted} onevent={receive} />
+	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}
 			<a class="home" href="/">{t('common.appName')}</a>

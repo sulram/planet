@@ -33,7 +33,7 @@ fn cloud_sun_depth(from_planet: vec3<f32>) -> f32 {
         depth += cloud_density(from_planet + view.sun.xyz * at, false) * step;
         step *= 1.8;
     }
-    return depth * CLOUD_EXTINCTION;
+    return depth * CLOUD_EXTINCTION * view.post.w;
 }
 
 // Stable per pixel jitter (interleaved gradient noise): trades banding for grain.
@@ -100,7 +100,7 @@ fn cloud_march(dir: vec3<f32>, span: vec2<f32>, jitter: f32, carry: vec4<f32>) -
                 + vec3<f32>(0.010, 0.013, 0.022);
             let source = sun + sky;
 
-            let extinction = density * CLOUD_EXTINCTION;
+            let extinction = density * CLOUD_EXTINCTION * view.post.w;
             let survive = exp(-extinction * fine);
             // Energy conserving: what this step adds, shaded by itself.
             scattered += through * source * (1.0 - survive);

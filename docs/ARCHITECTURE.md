@@ -200,8 +200,8 @@ Numbers marked (p) are proposed and not yet confirmed.
   carries only the tiers that can reach it before it splits, farthest first;
   the renderer draws the prefix in reach, near patches first, capped.
 - `Frame::interaction` is one capsule (the avatar) that bends tufts. Visual
-  only. `render::Effects` turns shadows, grass and clouds off, sets cloud cover and
-  exposure; no shell exposes it yet.
+  only. `scene::Effects` turns shadows, grass and clouds off and tunes the clouds
+  and exposure (Clients and UI).
 - Three separate things hold an avatar. Its **site**: the body it is stored
   relative to, changed at the moon's sphere of influence (4 radii), so it
   rides the orbit. **Gravity**: turns continuously from planet to moon with
@@ -224,12 +224,21 @@ Numbers marked (p) are proposed and not yet confirmed.
 | Client | Shell | UI |
 |---|---|---|
 | Browser | `shell-web`, WASM + WebGPU, WebGL2 fallback, worker + OffscreenCanvas | Svelte + Bun: full builder and player modes |
-| Desktop | `shell-desktop`, winit | minimal native UI |
+| Desktop | `shell-desktop`, winit | `ui-native`: egui settings panel |
 | Raspberry Pi | `shell-desktop` on KMS/DRM | minimal |
 | Quest, Pico | `shell-xr`, Android + OpenXR + Vulkan | minimal |
 
 - One command/event seam between core and any UI. Svelte panels send commands
   and render events. Tool logic stays in Rust so every client shares it.
+- Settings are `scene::Effects`: set with `set_effects`, clamped by the client,
+  answered with `effects_changed`, carried in every `Frame`. The renderer holds
+  no setting of its own. Both UIs put a button in the top right corner.
+- Web: `engine/Settings.svelte`; the choice stays in the browser
+  (`localStorage`), since it belongs to the machine, not the account.
+- Desktop: `ui-native`, where all of egui lives. egui and egui-winit from
+  crates, the painter ours (`egui-wgpu` pins an older wgpu). The shell hands it
+  window events first while the pointer is free. `shot --panel` paints it over
+  the headless picture. It does not persist the choice yet.
   JSON tagged by `type`: `client::Command`, `client::Event`.
 - Crates: `topology` and `worldgen` (deterministic, `libm`), `scene` (plain
   data a client hands a renderer), `avatar` (VRM + clips, no GPU), `client`, `render`, `shell-desktop`,

@@ -17,6 +17,7 @@ scene = { path = "crates/scene" }
 avatar = { path = "crates/avatar" }
 client = { path = "crates/client" }
 render = { path = "crates/render" }
+ui-native = { path = "crates/ui-native" }
 
 # Pins shared with vybe (CLAUDE.md, Toolchain pins).
 wgpu = "30"

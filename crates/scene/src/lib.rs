@@ -82,6 +82,42 @@ pub struct GrassInstance {
     pub angle: f32,
 }
 
+/// How the picture is made, not what the world is: what a person may turn
+/// down on a slow machine or tune to taste. Travels in every [`Frame`]; a UI
+/// sets it through the client's seam. Absent fields take their default.
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Effects {
+    pub shadows: bool,
+    pub grass: bool,
+    pub clouds: bool,
+    /// How much of the sky the weather may fill, 0 to 1.
+    pub cloud_cover: f32,
+    /// How thick a cloud is to light, as a factor of the usual.
+    pub cloud_density: f32,
+    /// How fast the weather turns, metres a second at the equator.
+    pub wind_m_s: f32,
+    /// How fast clouds reshape where they stand, as a factor of the usual.
+    pub cloud_change: f32,
+    /// What the scene's light is multiplied by before the tone map.
+    pub exposure: f32,
+}
+
+impl Default for Effects {
+    fn default() -> Self {
+        Self {
+            shadows: true,
+            grass: true,
+            clouds: true,
+            cloud_cover: 0.5,
+            cloud_density: 1.0,
+            wind_m_s: 14.0,
+            cloud_change: 1.0,
+            exposure: 1.0,
+        }
+    }
+}
+
 /// Visual interaction only; does not participate in collision.
 #[derive(Clone, Copy, Debug)]
 pub struct InteractionCapsule {
@@ -245,6 +281,7 @@ pub struct Frame {
     /// Loaded terrain selected at shadow LOD, including offscreen casters.
     pub shadow_patches: Vec<PatchDraw>,
     pub interaction: InteractionCapsule,
+    pub effects: Effects,
     pub boxes: Vec<BoxPart>,
     pub skinned: Vec<SkinnedInstance>,
 }

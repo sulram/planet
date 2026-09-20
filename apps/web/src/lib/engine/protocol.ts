@@ -7,19 +7,34 @@ import type { Recipe } from '$lib/world';
 export type Mode = 'walk' | 'fly';
 export const modes = ['walk', 'fly'] as const satisfies readonly Mode[];
 
+/** How the picture is made. Mirrors `scene::Effects`; the engine clamps it. */
+export interface Effects {
+	shadows: boolean;
+	grass: boolean;
+	clouds: boolean;
+	cloud_cover: number;
+	cloud_density: number;
+	wind_m_s: number;
+	cloud_change: number;
+	exposure: number;
+}
+
 export type Command =
 	| { type: 'set_recipe'; recipe: Recipe }
 	| { type: 'set_mode'; mode: Mode }
 	/** `path` is an asset path from `assets/manifest.json`, such as `avatars/Kyle.vrm`. */
 	| { type: 'set_avatar'; path: string }
 	| { type: 'random_avatar' }
-	| { type: 'next_avatar' };
+	| { type: 'next_avatar' }
+	/** Fields left out take the engine's default. */
+	| { type: 'set_effects'; effects: Partial<Effects> };
 
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }
 	| { type: 'recipe_changed'; recipe: Recipe }
 	| { type: 'mode_changed'; mode: Mode }
 	| { type: 'avatar_changed'; path: string }
+	| { type: 'effects_changed'; effects: Effects }
 	| { type: 'stats'; fps: number; altitude_m: number; speed_mps: number; sector: number };
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
@@ -27,6 +42,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'recipe_changed',
 	'mode_changed',
 	'avatar_changed',
+	'effects_changed',
 	'stats'
 ]);
 

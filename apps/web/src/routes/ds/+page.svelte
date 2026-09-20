@@ -3,6 +3,7 @@
 		Alert,
 		Badge,
 		Button,
+		Checkbox,
 		Dialog,
 		Field,
 		Input,
@@ -12,6 +13,7 @@
 		Pager,
 		Panel,
 		Segmented,
+		Slider,
 		Spinner,
 		Stack,
 		Stat,
@@ -23,6 +25,9 @@
 	// The living catalogue. A developer reference, written in the project
 	// language like the code it documents; it is not product UI, so its prose
 	// does not go through i18n. Components render with their real strings.
+
+	let shadows = $state(true);
+	let cover = $state(0.5);
 
 	const primitives = ['black', 'grey-900', 'grey-800', 'grey-600', 'grey-400', 'grey-300', 'grey-100', 'white', 'red-600', 'red-400'];
 	const semantics = [
@@ -182,6 +187,18 @@
 				<Segmented options={speeds} value={speed} label="Movement" onselect={(value) => (speed = value)} />
 				<span class="muted">Selected: {speed}</span>
 			</div>
+		</section>
+
+		<section>
+			<h2>Checkbox and Slider</h2>
+			<div class="row">
+				<Checkbox checked={shadows} onchange={(value) => (shadows = value)}>Shadows</Checkbox>
+				<Checkbox checked={false} disabled>Unavailable</Checkbox>
+			</div>
+			<Stack>
+				<Slider label="Cover" value={cover} min={0} max={1} oninput={(value) => (cover = value)} />
+				<Slider label="Disabled" value={0.3} min={0} max={1} disabled />
+			</Stack>
 		</section>
 
 		<section>

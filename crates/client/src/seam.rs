@@ -4,6 +4,7 @@
 //! Both travel as JSON tagged by `type`, so the same seam serves a WASM
 //! boundary, a native panel and tests. Tool logic never leaks past this file.
 
+use scene::Effects;
 use serde::{Deserialize, Serialize};
 use worldgen::Recipe;
 
@@ -34,6 +35,10 @@ pub enum Command {
     RandomAvatar,
     /// Wear the next avatar on offer, after the current one.
     NextAvatar,
+    /// How the picture is made. Fields left out take their default.
+    SetEffects {
+        effects: Effects,
+    },
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]
@@ -52,6 +57,11 @@ pub enum Event {
     /// The avatar now worn. A UI persists this as the person's choice.
     AvatarChanged {
         path: String,
+    },
+    /// The effects now in force, clamped to what is sane. Sent once at the
+    /// start too. A UI persists this as the person's choice.
+    EffectsChanged {
+        effects: Effects,
     },
     /// Sent about twice a second.
     Stats {
@@ -94,6 +104,21 @@ mod tests {
         assert_eq!(
             Command::from_json(r#"{"type":"set_mode","mode":"fly"}"#).unwrap(),
             Command::SetMode { mode: Mode::Fly }
+        );
+    }
+
+    #[test]
+    fn effects_left_out_take_their_default() {
+        let command =
+            Command::from_json(r#"{"type":"set_effects","effects":{"clouds":false}}"#).unwrap();
+        assert_eq!(
+            command,
+            Command::SetEffects {
+                effects: Effects {
+                    clouds: false,
+                    ..Effects::default()
+                }
+            }
         );
     }
 

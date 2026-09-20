@@ -4,6 +4,7 @@
 //   bun run dev            (in another terminal)
 //   bun run webshot        -> out/web.png, from /play
 //   bun run webshot --path /play --wait 20 --out out/web.png
+//   bun run webshot --eval "document.querySelector('.toggle button').click()"
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -17,6 +18,8 @@ const option = (name: string, fallback: string) => {
 const url = `${option('origin', 'http://[::1]:5173')}${option('path', '/play')}`;
 const out = resolve(ROOT, option('out', 'out/web.png'));
 const waitMs = Number(option('wait', '15')) * 1000;
+// Run in the page once it has settled, a second before the picture: a click.
+const script = option('eval', '');
 const PORT = 9333;
 
 const binary =
@@ -78,6 +81,10 @@ await send('Log.enable');
 await send('Page.enable');
 await send('Page.navigate', { url });
 await Bun.sleep(waitMs);
+if (script) {
+	await send('Runtime.evaluate', { expression: script });
+	await Bun.sleep(1000);
+}
 const shot = await send('Page.captureScreenshot', { format: 'png' });
 mkdirSync(dirname(out), { recursive: true });
 await Bun.write(out, Buffer.from(shot.data, 'base64'));

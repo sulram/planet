@@ -74,5 +74,5 @@ fn cloud_shadow(relative: vec3<f32>) -> f32 {
     }
     let hit = ray_sphere(from_planet, view.sun.xyz, middle);
     let density = cloud_density(from_planet + view.sun.xyz * hit.y, false);
-    return exp(-density * 5.0);
+    return exp(-density * 5.0 * view.post.w);
 }

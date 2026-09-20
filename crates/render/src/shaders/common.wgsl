@@ -22,7 +22,7 @@ struct View {
     interaction_start: vec4<f32>,
     interaction_end: vec4<f32>,
     // x: exposure. y, z: how far the noise has risen through the cloud layer
-    // for bodies and for wisps, in repeats of each.
+    // for bodies and for wisps, in repeats of each. w: cloud density factor.
     post: vec4<f32>,
     // xy: how far the weather has turned (cos, sin). z: cover. w: 1 when on.
     clouds: vec4<f32>,

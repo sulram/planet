@@ -15,7 +15,7 @@ mod seam;
 mod terrain;
 
 use glam::DVec3;
-use scene::{Frame, SkinnedChange, TerrainChange};
+use scene::{SkinnedChange, TerrainChange};
 use topology::{RADIUS_M, SECTOR_SIDE, Sector, SurfacePoint};
 pub use worldgen::Recipe;
 use worldgen::{GENERATOR_VERSION, Generator, Material};
@@ -25,6 +25,7 @@ use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use controller::{Controller, Wish};
 use figure::Figure;
 pub use input::{Input, Key};
+pub use scene::{Effects, Frame};
 pub use seam::{Command, Event, Mode};
 use terrain::{Body, Terrain};
 
@@ -50,6 +51,7 @@ pub struct Client {
     /// The asset reference of the avatar asked for last.
     wanted_avatar: Option<String>,
     events: Vec<Event>,
+    effects: Effects,
     /// Width over height of the view, for culling.
     aspect: f32,
     clock_s: f64,
@@ -77,6 +79,7 @@ impl Client {
             events: vec![Event::Ready {
                 generator_version: GENERATOR_VERSION,
             }],
+            effects: Effects::default(),
             aspect: 16.0 / 9.0,
             clock_s: 0.0,
             noon_offset: 0.0,
@@ -91,7 +94,33 @@ impl Client {
         client.events.push(Event::RecipeChanged {
             recipe: client.generator.recipe().clone(),
         });
+        client.events.push(Event::EffectsChanged {
+            effects: client.effects,
+        });
         Ok(client)
+    }
+
+    /// Takes what a UI asked for, within what is sane, and says what it took.
+    fn set_effects(&mut self, effects: Effects) {
+        let sane = |value: f32, low: f32, high: f32, fallback: f32| {
+            if value.is_finite() {
+                value.clamp(low, high)
+            } else {
+                fallback
+            }
+        };
+        let usual = Effects::default();
+        self.effects = Effects {
+            cloud_cover: sane(effects.cloud_cover, 0.0, 1.0, usual.cloud_cover),
+            cloud_density: sane(effects.cloud_density, 0.1, 3.0, usual.cloud_density),
+            wind_m_s: sane(effects.wind_m_s, 0.0, 80.0, usual.wind_m_s),
+            cloud_change: sane(effects.cloud_change, 0.0, 6.0, usual.cloud_change),
+            exposure: sane(effects.exposure, 0.1, 4.0, usual.exposure),
+            ..effects
+        };
+        self.events.push(Event::EffectsChanged {
+            effects: self.effects,
+        });
     }
 
     pub fn recipe(&self) -> &Recipe {
@@ -152,6 +181,7 @@ impl Client {
             Command::SetAvatar { path } => self.wear(path),
             Command::RandomAvatar => self.random_avatar(),
             Command::NextAvatar => self.next_avatar(),
+            Command::SetEffects { effects } => self.set_effects(effects),
         }
     }
 
@@ -410,6 +440,7 @@ impl Client {
                         }),
                 )
                 .collect(),
+            effects: self.effects,
             interaction: scene::InteractionCapsule {
                 start: self.controller.position() + self.controller.up() * 0.2,
                 end: self.controller.position() + self.controller.up() * 1.5,

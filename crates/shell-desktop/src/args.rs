@@ -31,6 +31,8 @@ pub struct Shot {
     pub moon_gap_m: Option<f64>,
     /// Fixed-scene render timing, with effects toggled for comparison.
     pub measure: usize,
+    /// Paint the native settings panel, open, over the picture.
+    pub panel: bool,
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -54,6 +56,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         at: None,
         moon_gap_m: None,
         measure: 0,
+        panel: false,
     };
 
     while let Some(flag) = args.next() {
@@ -70,6 +73,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
             "--measure" if is_shot => {
                 shot.measure = number::<usize>(&value()?, "--measure")?.min(1000)
             }
+            "--panel" if is_shot => shot.panel = true,
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,
             "--pitch" if is_shot => shot.pitch_deg = number(&value()?, "--pitch")?,
