@@ -108,6 +108,9 @@ impl Stage {
         }
         self.window.set_cursor_visible(!looking);
         self.looking = looking;
+        if looking {
+            self.panel.pointer_gone();
+        }
     }
 
     fn draw(&mut self, client: &mut Client, input: &mut Input) {
@@ -206,8 +209,21 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         let Some(stage) = &mut self.stage else { return };
         // The panel first, while the pointer is free: a click on a slider is
-        // not a click on the world. Captured, the pointer is the camera's.
-        if !stage.looking && stage.panel.window_event(&stage.window, &event) {
+        // not a click on the world. Captured, the pointer is the camera's, but
+        // the panel still hears buttons let go: the click that captured it was
+        // pressed in the panel's sight, and a press it never sees released
+        // reads as a drag from outside, which makes it refuse every click.
+        let released = matches!(
+            event,
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                ..
+            }
+        );
+        if (!stage.looking || released)
+            && stage.panel.window_event(&stage.window, &event)
+            && !stage.looking
+        {
             return;
         }
         match event {

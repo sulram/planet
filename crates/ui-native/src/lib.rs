@@ -64,6 +64,13 @@ impl Panel {
             .is_some_and(|input| input.on_window_event(window, event).consumed)
     }
 
+    /// The pointer now steers the camera: nothing in the panel is hovered.
+    pub fn pointer_gone(&mut self) {
+        if let Some(input) = &mut self.input {
+            input.egui_input_mut().events.push(egui::Event::PointerGone);
+        }
+    }
+
     /// What the client said this frame.
     pub fn event(&mut self, event: &Event) {
         match event {
@@ -209,4 +216,61 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
                 *effects = Effects::default();
             }
         });
+}
+
+fn tone_map_name(tone_map: ToneMap) -> &'static str {
+    match tone_map {
+        ToneMap::Aces => "ACES",
+        ToneMap::Agx => "AgX",
+        ToneMap::Neutral => "Neutral",
+        ToneMap::Reinhard => "Reinhard",
+        ToneMap::Linear => "Linear",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SCREEN: egui::Vec2 = egui::vec2(1280.0, 720.0);
+    const WORLD: egui::Pos2 = egui::pos2(400.0, 400.0);
+    /// On the settings button, in the top right corner.
+    const BUTTON: egui::Pos2 = egui::pos2(1240.0, 22.0);
+
+    fn press(pos: egui::Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// Whether the panel claims the pointer after these events, a frame each.
+    fn claims(frames: &[&[egui::Event]]) -> bool {
+        let context = egui::Context::default();
+        let (mut open, mut effects) = (false, Effects::default());
+        for (second, events) in frames.iter().enumerate() {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SCREEN)),
+                time: Some(second as f64),
+                events: events.to_vec(),
+                ..Default::default()
+            };
+            let _ = context.run_ui(raw, |root| layout(root, &mut open, &mut effects, 60.0));
+        }
+        context.egui_wants_pointer_input()
+    }
+
+    #[test]
+    fn a_click_on_the_world_does_not_cost_the_panel_its_next_click() {
+        let settle: &[egui::Event] = &[];
+        let capture = [egui::Event::PointerMoved(WORLD), press(WORLD, true)];
+        let back = [egui::Event::PointerMoved(BUTTON)];
+        // The shell once kept the release from the panel while the pointer was
+        // the camera's: the press then read as a drag from outside, for ever.
+        assert!(!claims(&[settle, &capture, &back, settle]));
+        let release = [press(WORLD, false), egui::Event::PointerGone];
+        assert!(claims(&[settle, &capture, &release, &back, settle]));
+    }
 }
