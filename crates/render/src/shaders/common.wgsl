@@ -177,7 +177,10 @@ fn lit_surface(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<
     // Sky from above, warm bounce from the ground below: shadowed sides keep
     // their own colour instead of going blue.
     let facing_sky = 0.5 + 0.5 * dot(normal, up);
-    let ambient = mix(vec3<f32>(0.10, 0.09, 0.07), SKY * 0.38 + 0.06, facing_sky) * day
+    // A cast shadow also hides the bright sky around the sun and the ground
+    // it would have lit: less fill in there, or relief reads as a tint.
+    let fill = mix(0.45, 1.0, visibility);
+    let ambient = mix(vec3<f32>(0.10, 0.09, 0.07), SKY * 0.38 + 0.06, facing_sky) * day * fill
         // Starlight: nights are dark, never blind.
         + vec3<f32>(0.045, 0.058, 0.095) * facing_sky;
     var color = albedo * (direct * vec3<f32>(1.75, 1.66, 1.5) + ambient);
