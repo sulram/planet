@@ -5,7 +5,7 @@ use glam::{DAffine3, DVec3};
 use scene::BoxPart;
 use wgpu::util::DeviceExt;
 
-use crate::{PipelineSpec, pipeline};
+use crate::{PipelineSpec, Surface, pipeline};
 
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
@@ -55,7 +55,7 @@ impl Boxes {
                         ],
                     }),
                 ],
-                solid: true,
+                surface: Surface::Solid,
             },
         );
         let (vertex_data, index_data) = cube();

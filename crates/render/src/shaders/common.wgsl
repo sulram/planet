@@ -9,7 +9,10 @@ struct View {
     camera: vec4<f32>,
     // xyz: unit vector to the sun, w: radius of the top of the atmosphere.
     sun: vec4<f32>,
+    // xyz: unit vector to the moon, w: its angular radius.
+    moon: vec4<f32>,
     // x: 1 when the target is not sRGB and the shader must encode.
+    // y: world clock, seconds, wrapped. z: camera height over the sea, metres.
     flags: vec4<f32>,
 }
 
@@ -17,7 +20,7 @@ struct View {
 
 const SKY: vec3<f32> = vec3<f32>(0.30, 0.55, 1.00);
 const SUNSET: vec3<f32> = vec3<f32>(1.00, 0.45, 0.18);
-const DENSITY_PER_M: f32 = 0.0001;
+const DENSITY_PER_M: f32 = 0.00005;
 
 // Distances along the ray to a sphere at the planet centre. x > y is a miss.
 fn ray_sphere(origin: vec3<f32>, dir: vec3<f32>, radius: f32) -> vec2<f32> {
@@ -51,12 +54,17 @@ fn atmosphere(dir: vec3<f32>, length: f32) -> vec4<f32> {
     let warm = (1.0 - smoothstep(0.0, 0.40, sun_height)) * max(dot(dir, view.sun.xyz), 0.0);
     let tint = mix(SKY, SUNSET, warm);
     // Long paths wash out toward white, as the real horizon does.
-    let haze = mix(tint, vec3<f32>(1.0), (1.0 - through) * 0.45);
-    return vec4<f32>(haze * (1.0 - through) * day * 1.5, through);
+    let haze = mix(tint, vec3<f32>(1.0), (1.0 - through) * 0.30);
+    return vec4<f32>(haze * (1.0 - through) * day * 1.1, through);
+}
+
+// Filmic curve (Narkowicz's ACES fit): highlights roll off instead of clipping.
+fn tone_map(x: vec3<f32>) -> vec3<f32> {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 fn encode(linear: vec3<f32>) -> vec4<f32> {
-    let c = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    let c = tone_map(linear);
     if view.flags.x < 0.5 {
         return vec4<f32>(c, 1.0);
     }
@@ -65,7 +73,32 @@ fn encode(linear: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(select(high, low, c <= vec3<f32>(0.0031308)), 1.0);
 }
 
-// Sun and sky light on a surface, then the air between it and the camera.
+// Water takes red first, then green; blue travels furthest. Per metre.
+const WATER_ABSORB: vec3<f32> = vec3<f32>(0.35, 0.070, 0.045);
+// What the water itself scatters back: the colour of "nothing but sea".
+const WATER_SCATTER: vec3<f32> = vec3<f32>(0.012, 0.115, 0.170);
+
+// Daylight at a place on the planet, 0 at night.
+fn daylight(up: vec3<f32>) -> f32 {
+    return smoothstep(-0.10, 0.15, dot(up, view.sun.xyz));
+}
+
+// What the medium between the camera and a surface does to its colour: air
+// above the sea, water below it.
+fn through_medium(color: vec3<f32>, dir: vec3<f32>, distance: f32) -> vec3<f32> {
+    if view.flags.z < 0.0 {
+        let day = daylight(normalize(view.camera.xyz));
+        // Each colour dies at its own rate along the way, and the sea's own
+        // glow fills in. Both dim with the depth of the camera.
+        let survive = exp(-WATER_ABSORB * distance);
+        let glow = WATER_SCATTER * (0.08 + day) * exp(view.flags.z * 0.025);
+        return color * survive + glow * (1.0 - survive);
+    }
+    let air = atmosphere(dir, distance);
+    return color * air.a + air.rgb;
+}
+
+// Sun and sky light on a surface, then the medium between it and the camera.
 fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) -> vec3<f32> {
     let distance = length(relative);
     let dir = relative / distance;
@@ -73,14 +106,44 @@ fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) ->
     let sun = view.sun.xyz;
 
     // The planet shadows itself: daylight fades as the sun sets on this spot.
-    let day = smoothstep(-0.10, 0.15, dot(up, sun));
+    let day = daylight(up);
     let direct = max(dot(normal, sun), 0.0) * day;
-    let ambient = 0.05 + 0.25 * day * (0.5 + 0.5 * dot(normal, up));
-    var color = albedo * (direct * vec3<f32>(1.0, 0.96, 0.90) + ambient * SKY);
+    // Sky from above, warm bounce from the ground below: shadowed sides keep
+    // their own colour instead of going blue.
+    let facing_sky = 0.5 + 0.5 * dot(normal, up);
+    let ambient = mix(vec3<f32>(0.10, 0.09, 0.07), SKY * 0.38 + 0.06, facing_sky) * day
+        // Starlight: nights are dark, never blind.
+        + vec3<f32>(0.045, 0.058, 0.095) * facing_sky;
+    var color = albedo * (direct * vec3<f32>(1.75, 1.66, 1.5) + ambient);
+
+    // Moonlight: faint, and only as much as the moon is lit and up.
+    let moon = view.moon.xyz;
+    let moon_up = smoothstep(-0.05, 0.15, dot(up, moon));
+    let moon_lit = 0.5 - 0.5 * dot(moon, sun);
+    color += albedo * max(dot(normal, moon), 0.0) * moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
 
     let half_vector = normalize(sun - dir);
-    color += gloss * day * pow(max(dot(normal, half_vector), 0.0), 120.0) * 0.8;
+    color += gloss * day * pow(max(dot(normal, half_vector), 0.0), 90.0) * 1.5;
+    return through_medium(color, dir, distance);
+}
 
-    let air = atmosphere(dir, distance);
-    return color * air.a + air.rgb;
+// Value noise on a lattice that repeats every `period` cells, so it can be
+// fed positions wrapped by the CPU in f64 (see `placement.anchor`).
+fn lattice(cell: vec3<i32>, period: i32) -> f32 {
+    let c = vec3<u32>((cell % period + period) % period);
+    var h = (c.x * 0x8da6b343u) ^ (c.y * 0xd8163841u) ^ (c.z * 0xcb1ab31fu);
+    h = (h ^ (h >> 15u)) * 0x2c1b3c6du;
+    h = (h ^ (h >> 12u)) * 0x297a2d39u;
+    return f32((h ^ (h >> 15u)) & 0xffffu) / 65535.0;
+}
+
+fn value_noise(p: vec3<f32>, period: i32) -> f32 {
+    let cell = vec3<i32>(floor(p));
+    let f = fract(p);
+    let w = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(lattice(cell, period), lattice(cell + vec3<i32>(1, 0, 0), period), w.x);
+    let x10 = mix(lattice(cell + vec3<i32>(0, 1, 0), period), lattice(cell + vec3<i32>(1, 1, 0), period), w.x);
+    let x01 = mix(lattice(cell + vec3<i32>(0, 0, 1), period), lattice(cell + vec3<i32>(1, 0, 1), period), w.x);
+    let x11 = mix(lattice(cell + vec3<i32>(0, 1, 1), period), lattice(cell + vec3<i32>(1, 1, 1), period), w.x);
+    return mix(mix(x00, x10, w.y), mix(x01, x11, w.y), w.z);
 }

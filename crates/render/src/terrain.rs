@@ -4,18 +4,20 @@
 use std::collections::HashMap;
 
 use glam::DVec3;
-use scene::{PatchId, TerrainChange, TerrainVertex, patch_indices};
+use scene::{PatchId, TerrainChange, TerrainVertex, WaterVertex, patch_indices};
 use wgpu::util::DeviceExt;
 
-use crate::{PipelineSpec, pipeline, relative};
+use crate::{PipelineSpec, Surface, pipeline, relative};
 
 struct Patch {
     origin: DVec3,
     vertices: wgpu::Buffer,
+    water: Option<wgpu::Buffer>,
 }
 
 pub struct Terrain {
     pipeline: wgpu::RenderPipeline,
+    water_pipeline: wgpu::RenderPipeline,
     patch_layout: wgpu::BindGroupLayout,
     indices: wgpu::Buffer,
     index_count: u32,
@@ -32,7 +34,7 @@ impl Terrain {
             label: Some("patch"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: true,
@@ -41,7 +43,7 @@ impl Terrain {
                 count: None,
             }],
         });
-        let pipeline = pipeline(
+        let ground_pipeline = pipeline(
             device,
             format,
             PipelineSpec {
@@ -55,7 +57,22 @@ impl Terrain {
                         0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4
                     ],
                 })],
-                solid: true,
+                surface: Surface::Solid,
+            },
+        );
+        let water_pipeline = pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "water",
+                source: include_str!("shaders/water.wgsl"),
+                layouts: &[view_layout, &patch_layout],
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: size_of::<WaterVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32],
+                })],
+                surface: Surface::Translucent,
             },
         );
         let index_data = patch_indices();
@@ -65,7 +82,8 @@ impl Terrain {
             usage: wgpu::BufferUsages::INDEX,
         });
         Terrain {
-            pipeline,
+            pipeline: ground_pipeline,
+            water_pipeline,
             patch_layout,
             indices,
             index_count: index_data.len() as u32,
@@ -85,11 +103,19 @@ impl Terrain {
                     contents: bytemuck::cast_slice(&mesh.vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
+                let water = mesh.water.map(|water| {
+                    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("patch water"),
+                        contents: bytemuck::cast_slice(&water),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    })
+                });
                 self.patches.insert(
                     id,
                     Patch {
                         origin: mesh.origin,
                         vertices,
+                        water,
                     },
                 );
             }
@@ -116,10 +142,33 @@ impl Terrain {
             pass.draw_indexed(0..self.index_count, 0, 0..1);
         }
     }
+
+    /// Draws the sea over the same patches, after everything opaque.
+    pub fn draw_water(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &PatchUniforms,
+        drawn: &[PatchId],
+    ) {
+        pass.set_pipeline(&self.water_pipeline);
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
+        for (slot, id) in drawn.iter().enumerate() {
+            let Some(water) = &self.patches[id].water else {
+                continue;
+            };
+            pass.set_bind_group(1, &uniforms.bind_group, &[slot as u32 * uniforms.stride]);
+            pass.set_vertex_buffer(0, water.slice(..));
+            pass.draw_indexed(0..self.index_count, 0, 0..1);
+        }
+    }
 }
 
-/// Bytes the shader reads per patch: one `vec4<f32>`.
-const SLOT_BYTES: u64 = 16;
+/// Bytes the shader reads per patch: two `vec4<f32>`, offset and anchor.
+const SLOT_BYTES: u64 = 32;
+
+/// Detail noise repeats every this many metres, so an origin wrapped to it in
+/// f64 anchors the detail to the planet. Must match `ANCHOR_M` in the shaders.
+const ANCHOR_M: f64 = 1024.0;
 
 /// The camera-relative offsets of the patches one view draws this frame.
 pub struct PatchUniforms {
@@ -198,11 +247,18 @@ impl PatchUniforms {
         }
         let mut bytes = vec![0u8; drawn.len() * self.stride as usize];
         for (slot, id) in drawn.iter().enumerate() {
-            let offset = relative(terrain.patches[id].origin, camera)
-                .extend(0.0)
-                .to_array();
+            let origin = terrain.patches[id].origin;
+            let offset = relative(origin, camera).extend(0.0);
+            // Wrapped in f64: exact, however far from the planet centre.
+            let anchor = origin
+                .rem_euclid(DVec3::splat(ANCHOR_M))
+                .as_vec3()
+                .extend(0.0);
             let at = slot * self.stride as usize;
-            bytes[at..at + SLOT_BYTES as usize].copy_from_slice(bytemuck::bytes_of(&offset));
+            bytes[at..at + SLOT_BYTES as usize].copy_from_slice(bytemuck::cast_slice(&[
+                offset.to_array(),
+                anchor.to_array(),
+            ]));
         }
         queue.write_buffer(&self.buffer, 0, &bytes);
         drawn

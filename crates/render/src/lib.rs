@@ -27,6 +27,8 @@ pub use wgpu;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Top of the atmosphere above sea level, metres.
 const ATMOSPHERE_M: f64 = 2500.0;
+/// Angular radius of the moon in the sky. Three times ours: it is a small sky.
+const MOON_RADIUS_RAD: f32 = 0.014;
 
 /// One camera drawing into one target.
 pub struct View<'a> {
@@ -42,6 +44,7 @@ struct ViewUniform {
     relative_from_clip: [[f32; 4]; 4],
     camera: [f32; 4],
     sun: [f32; 4],
+    moon: [f32; 4],
     flags: [f32; 4],
 }
 
@@ -206,6 +209,9 @@ impl Renderer {
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
+        // Last: the sea blends over the world and the sky behind it.
+        self.terrain
+            .draw_water(&mut pass, &resources.patches, &drawn);
     }
 
     fn view_uniform(&self, frame: &Frame, camera: &Camera, aspect: f32) -> ViewUniform {
@@ -221,7 +227,14 @@ impl Renderer {
                 .sun_direction
                 .extend((radius + ATMOSPHERE_M) as f32)
                 .to_array(),
-            flags: [f32::from(u8::from(self.encode_srgb)), 0.0, 0.0, 0.0],
+            moon: frame.moon_direction.extend(MOON_RADIUS_RAD).to_array(),
+            flags: [
+                f32::from(u8::from(self.encode_srgb)),
+                // Wrapped so f32 keeps sub millisecond steps all day.
+                (frame.clock_s % 3600.0) as f32,
+                (camera.position.length() - radius) as f32,
+                0.0,
+            ],
         }
     }
 
@@ -283,14 +296,24 @@ fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModul
     })
 }
 
+/// How a pipeline treats depth, faces and blending.
+#[derive(Clone, Copy, PartialEq)]
+enum Surface {
+    /// Opaque geometry: writes depth, culls back faces.
+    Solid,
+    /// The sky: no depth write, no culling.
+    Backdrop,
+    /// Water: blended over what is there, seen from both sides.
+    Translucent,
+}
+
 /// What differs between our pipelines; the rest is fixed in [`pipeline`].
 struct PipelineSpec<'a> {
     label: &'a str,
     source: &'a str,
     layouts: &'a [&'a wgpu::BindGroupLayout],
     buffers: &'a [Option<wgpu::VertexBufferLayout<'a>>],
-    /// The sky neither writes depth nor culls.
-    solid: bool,
+    surface: Surface,
 }
 
 fn pipeline(
@@ -320,18 +343,19 @@ fn pipeline(
             entry_point: Some("fs"),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: None,
+                blend: (spec.surface == Surface::Translucent)
+                    .then_some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            cull_mode: spec.solid.then_some(wgpu::Face::Back),
+            cull_mode: (spec.surface == Surface::Solid).then_some(wgpu::Face::Back),
             ..Default::default()
         },
         depth_stencil: Some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
-            depth_write_enabled: Some(spec.solid),
+            depth_write_enabled: Some(spec.surface == Surface::Solid),
             // Reversed depth: nearer is greater. The sky sits at exactly 0.
             depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
             stencil: Default::default(),
@@ -356,7 +380,7 @@ fn sky_pipeline(
             source: include_str!("shaders/sky.wgsl"),
             layouts: &[view_layout],
             buffers: &[],
-            solid: false,
+            surface: Surface::Backdrop,
         },
     )
 }

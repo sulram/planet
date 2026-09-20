@@ -8,7 +8,7 @@ use glam::{DAffine3, DMat4, DVec3};
 use scene::{Image, MAX_JOINTS, SkinnedChange, SkinnedInstance, SkinnedMeshId, SkinnedVertex};
 use wgpu::util::DeviceExt;
 
-use crate::{PipelineSpec, pipeline};
+use crate::{PipelineSpec, Surface, pipeline};
 
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
@@ -86,7 +86,7 @@ impl Skinned {
                         0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4
                     ],
                 })],
-                solid: true,
+                surface: Surface::Solid,
             },
         );
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
