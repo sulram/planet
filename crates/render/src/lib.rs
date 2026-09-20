@@ -12,11 +12,12 @@ mod boxes;
 mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
+mod skinned;
 mod terrain;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DVec3, Mat4, Vec3};
-use scene::{Camera, Frame, TerrainChange};
+use scene::{Camera, Frame, SkinnedChange, TerrainChange};
 
 pub use gpu::{Gpu, surface_configuration};
 #[cfg(not(target_arch = "wasm32"))]
@@ -51,6 +52,7 @@ struct ViewResources {
     depth: Option<(wgpu::TextureView, [u32; 2])>,
     patches: terrain::PatchUniforms,
     boxes: boxes::Instances,
+    skinned: skinned::InstanceUniforms,
 }
 
 pub struct Renderer {
@@ -61,6 +63,7 @@ pub struct Renderer {
     views: Vec<ViewResources>,
     terrain: terrain::Terrain,
     boxes: boxes::Boxes,
+    skinned: skinned::Skinned,
     sky: wgpu::RenderPipeline,
 }
 
@@ -83,6 +86,7 @@ impl Renderer {
         });
         let terrain = terrain::Terrain::new(&device, &view_layout, format);
         let boxes = boxes::Boxes::new(&device, &view_layout, format);
+        let skinned = skinned::Skinned::new(&device, &view_layout, format);
         let sky = sky_pipeline(&device, &view_layout, format);
         Renderer {
             device,
@@ -92,6 +96,7 @@ impl Renderer {
             views: Vec::new(),
             terrain,
             boxes,
+            skinned,
             sky,
         }
     }
@@ -100,6 +105,13 @@ impl Renderer {
     pub fn apply(&mut self, changes: Vec<TerrainChange>) {
         for change in changes {
             self.terrain.apply(&self.device, change);
+        }
+    }
+
+    /// Uploads and drops skinned meshes (avatars).
+    pub fn apply_skinned(&mut self, changes: Vec<SkinnedChange>) {
+        for change in changes {
+            self.skinned.apply(&self.device, &self.queue, change);
         }
     }
 
@@ -146,6 +158,13 @@ impl Renderer {
             &frame.boxes,
             view.camera.position,
         );
+        let skinned_drawn = resources.skinned.write(
+            &self.device,
+            &self.queue,
+            &self.skinned,
+            &frame.skinned,
+            view.camera.position,
+        );
 
         if resources
             .depth
@@ -183,6 +202,8 @@ impl Renderer {
         pass.set_bind_group(0, &resources.bind_group, &[]);
         self.terrain.draw(&mut pass, &resources.patches, &drawn);
         self.boxes.draw(&mut pass, &resources.boxes, box_count);
+        self.skinned
+            .draw(&mut pass, &resources.skinned, &skinned_drawn);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
     }
@@ -225,6 +246,7 @@ impl Renderer {
             depth: None,
             patches: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             boxes: boxes::Instances::new(&self.device),
+            skinned: skinned::InstanceUniforms::default(),
         }
     }
 }
