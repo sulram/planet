@@ -1,0 +1,235 @@
+//! The windowed explorer.
+
+use std::sync::Arc;
+use std::time::Instant;
+
+use client::{Client, Event, Input, Key};
+use render::{Gpu, Renderer, View, surface_configuration, wgpu};
+use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
+use winit::event::{
+    DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent,
+};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::{CursorGrabMode, Window, WindowId};
+use worldgen::{Recipe, format_seed};
+
+pub fn run(recipe: Recipe) -> Result<(), String> {
+    let client = Client::new(recipe).map_err(|e| e.to_string())?;
+    let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
+    let mut app = App {
+        client,
+        input: Input::default(),
+        stage: None,
+        failure: None,
+    };
+    event_loop.run_app(&mut app).map_err(|e| e.to_string())?;
+    app.failure.map_or(Ok(()), Err)
+}
+
+struct App {
+    client: Client,
+    input: Input,
+    /// Exists between `resumed` and exit.
+    stage: Option<Stage>,
+    failure: Option<String>,
+}
+
+/// The window and everything that draws into it.
+struct Stage {
+    window: Arc<Window>,
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    gpu: Gpu,
+    renderer: Renderer,
+    last_frame: Instant,
+    /// The pointer is captured and steers the camera.
+    looking: bool,
+}
+
+impl Stage {
+    fn new(event_loop: &ActiveEventLoop) -> Result<Stage, String> {
+        let attributes = Window::default_attributes()
+            .with_title("planet")
+            .with_inner_size(PhysicalSize::new(1280, 720));
+        let window = Arc::new(
+            event_loop
+                .create_window(attributes)
+                .map_err(|e| e.to_string())?,
+        );
+        let instance = wgpu::Instance::default();
+        let surface = instance
+            .create_surface(window.clone())
+            .map_err(|e| e.to_string())?;
+        let gpu = pollster::block_on(Gpu::new(&instance, Some(&surface)))?;
+
+        let size = window.inner_size();
+        let config = surface_configuration(&surface, &gpu.adapter, size.width, size.height);
+        surface.configure(&gpu.device, &config);
+        let renderer = Renderer::new(&gpu, config.format);
+        Ok(Stage {
+            window,
+            surface,
+            config,
+            gpu,
+            renderer,
+            last_frame: Instant::now(),
+            looking: false,
+        })
+    }
+
+    fn resize(&mut self, size: PhysicalSize<u32>) {
+        self.config.width = size.width.max(1);
+        self.config.height = size.height.max(1);
+        self.surface.configure(&self.gpu.device, &self.config);
+    }
+
+    fn set_looking(&mut self, looking: bool) {
+        if looking {
+            // Locked where the platform has it (macOS, Wayland), confined elsewhere.
+            let grabbed = self
+                .window
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined));
+            if grabbed.is_err() {
+                return;
+            }
+        } else {
+            let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+        }
+        self.window.set_cursor_visible(!looking);
+        self.looking = looking;
+    }
+
+    fn draw(&mut self, client: &mut Client, input: &mut Input) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_frame).as_secs_f64();
+        self.last_frame = now;
+
+        client.set_aspect(self.config.width as f32 / self.config.height as f32);
+        let frame = client.update(dt, input);
+        self.renderer.apply(client.drain_terrain_changes());
+        for event in client.drain_events() {
+            match event {
+                Event::RecipeChanged { recipe } => {
+                    self.window
+                        .set_title(&format!("planet {}", format_seed(recipe.seed)));
+                }
+                Event::Stats { .. } | Event::Ready { .. } | Event::ModeChanged { .. } => {}
+                Event::Rejected { message } => log::warn!("command rejected: {message}"),
+            }
+        }
+
+        use wgpu::CurrentSurfaceTexture::{
+            Lost, Occluded, Outdated, Suboptimal, Success, Timeout, Validation,
+        };
+        let texture = match self.surface.get_current_texture() {
+            Success(texture) | Suboptimal(texture) => texture,
+            Outdated | Lost => {
+                self.surface.configure(&self.gpu.device, &self.config);
+                return;
+            }
+            Timeout | Occluded | Validation => return,
+        };
+        let target = texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let size = [self.config.width, self.config.height];
+        self.renderer.render(
+            &frame,
+            &[View {
+                camera: frame.camera,
+                target: &target,
+                size,
+            }],
+        );
+        self.gpu.queue.present(texture);
+    }
+}
+
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.stage.is_some() {
+            return;
+        }
+        match Stage::new(event_loop) {
+            Ok(stage) => {
+                stage.window.request_redraw();
+                self.stage = Some(stage);
+            }
+            Err(message) => {
+                self.failure = Some(message);
+                event_loop.exit();
+            }
+        }
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        let Some(stage) = &mut self.stage else { return };
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Resized(size) => stage.resize(size),
+            WindowEvent::Focused(false) => {
+                self.input.release_all();
+                stage.set_looking(false);
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                stage.set_looking(true);
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.input.zoom += match delta {
+                    MouseScrollDelta::LineDelta(_, lines) => lines,
+                    MouseScrollDelta::PixelDelta(pixels) => pixels.y as f32 / 40.0,
+                };
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                let PhysicalKey::Code(code) = event.physical_key else {
+                    return;
+                };
+                let down = event.state == ElementState::Pressed;
+                if code == KeyCode::Escape && down {
+                    stage.set_looking(false);
+                } else if let Some(key) = binding(code) {
+                    // One shot keys must not fire again while held.
+                    if !(down && event.repeat) {
+                        self.input.key(key, down);
+                    }
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                stage.draw(&mut self.client, &mut self.input);
+                stage.window.request_redraw();
+            }
+            _ => {}
+        }
+    }
+
+    fn device_event(&mut self, _: &ActiveEventLoop, _: DeviceId, event: DeviceEvent) {
+        let looking = self.stage.as_ref().is_some_and(|stage| stage.looking);
+        if let (true, DeviceEvent::MouseMotion { delta }) = (looking, event) {
+            self.input.look[0] += delta.0 as f32;
+            self.input.look[1] += delta.1 as f32;
+        }
+    }
+}
+
+/// Key bindings. `shell-web` mirrors this table with DOM key codes.
+fn binding(code: KeyCode) -> Option<Key> {
+    Some(match code {
+        KeyCode::KeyW | KeyCode::ArrowUp => Key::Forward,
+        KeyCode::KeyS | KeyCode::ArrowDown => Key::Back,
+        KeyCode::KeyA | KeyCode::ArrowLeft => Key::Left,
+        KeyCode::KeyD | KeyCode::ArrowRight => Key::Right,
+        KeyCode::Space => Key::Up,
+        KeyCode::KeyC | KeyCode::ControlLeft => Key::Down,
+        KeyCode::ShiftLeft | KeyCode::ShiftRight => Key::Sprint,
+        KeyCode::KeyF => Key::ToggleMode,
+        KeyCode::KeyR => Key::NewSeed,
+        _ => return None,
+    })
+}
