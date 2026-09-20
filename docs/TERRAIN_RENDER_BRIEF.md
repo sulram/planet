@@ -19,8 +19,8 @@
   `color()` always writes 255, and the shader interprets alpha as gloss.
   Every terrain material therefore receives maximum specular strength.
 - `common.wgsl`: directional diffuse light, blue ambient light and a fixed
-  specular exponent; no terrain or avatar shadow map.
-- Planet day/night attenuation is not terrain self-shadowing.
+  specular exponent. Shadow maps have since shipped (ARCHITECTURE, Sea, sky
+  and light).
 - `Sample::surface_m()` clamps height to sea level. Water shares the terrain
   mesh and cannot currently expose the actual underwater terrain.
 - Normals and the steepness color threshold depend on patch sample spacing;

@@ -13,11 +13,13 @@ struct Patch {
     origin: DVec3,
     vertices: wgpu::Buffer,
     water: Option<wgpu::Buffer>,
+    radius_m: f32,
 }
 
 pub struct Terrain {
     pipeline: wgpu::RenderPipeline,
     water_pipeline: wgpu::RenderPipeline,
+    shadow_pipeline: wgpu::RenderPipeline,
     patch_layout: wgpu::BindGroupLayout,
     indices: wgpu::Buffer,
     index_count: u32,
@@ -28,6 +30,7 @@ impl Terrain {
     pub fn new(
         device: &wgpu::Device,
         view_layout: &wgpu::BindGroupLayout,
+        shadow_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> Terrain {
         let patch_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -43,6 +46,13 @@ impl Terrain {
                 count: None,
             }],
         });
+        let buffers = &[Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<TerrainVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![
+                0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4
+            ],
+        })];
         let ground_pipeline = pipeline(
             device,
             format,
@@ -50,14 +60,19 @@ impl Terrain {
                 label: "terrain",
                 source: include_str!("shaders/terrain.wgsl"),
                 layouts: &[view_layout, &patch_layout],
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: size_of::<TerrainVertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4
-                    ],
-                })],
+                buffers,
                 surface: Surface::Solid,
+            },
+        );
+        let shadow_pipeline = pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "terrain",
+                source: include_str!("shaders/terrain.wgsl"),
+                layouts: &[shadow_layout, &patch_layout],
+                buffers,
+                surface: Surface::Shadow,
             },
         );
         let water_pipeline = pipeline(
@@ -84,6 +99,7 @@ impl Terrain {
         Terrain {
             pipeline: ground_pipeline,
             water_pipeline,
+            shadow_pipeline,
             patch_layout,
             indices,
             index_count: index_data.len() as u32,
@@ -110,12 +126,18 @@ impl Terrain {
                         usage: wgpu::BufferUsages::VERTEX,
                     })
                 });
+                let radius_m = mesh
+                    .vertices
+                    .iter()
+                    .map(|v| glam::Vec3::from(v.position).length())
+                    .fold(0.0, f32::max);
                 self.patches.insert(
                     id,
                     Patch {
                         origin: mesh.origin,
                         vertices,
                         water,
+                        radius_m,
                     },
                 );
             }
@@ -132,14 +154,60 @@ impl Terrain {
         uniforms: &PatchUniforms,
         drawn: &[PatchId],
     ) {
-        pass.set_pipeline(&self.pipeline);
+        self.draw_with(pass, uniforms, drawn, &self.pipeline, self.index_count);
+    }
+
+    pub fn draw_shadow(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &PatchUniforms,
+        drawn: &[PatchId],
+        matrix: glam::Mat4,
+    ) {
+        pass.set_pipeline(&self.shadow_pipeline);
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
+        for (slot, id) in drawn.iter().enumerate() {
+            let patch = &self.patches[id];
+            if !crate::shadow::intersects(matrix, uniforms.centers[slot], patch.radius_m) {
+                continue;
+            }
+            pass.set_bind_group(1, &uniforms.bind_group, &[slot as u32 * uniforms.stride]);
+            pass.set_vertex_buffer(0, patch.vertices.slice(..));
+            // Skirts must not cast artificial walls at LOD boundaries.
+            pass.draw_indexed(0..6 * scene::PATCH_GRID * scene::PATCH_GRID, 0, 0..1);
+        }
+    }
+
+    fn draw_with(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &PatchUniforms,
+        drawn: &[PatchId],
+        pipeline: &wgpu::RenderPipeline,
+        indices: u32,
+    ) {
+        pass.set_pipeline(pipeline);
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
         for (slot, id) in drawn.iter().enumerate() {
             let patch = &self.patches[id];
             pass.set_bind_group(1, &uniforms.bind_group, &[slot as u32 * uniforms.stride]);
             pass.set_vertex_buffer(0, patch.vertices.slice(..));
-            pass.draw_indexed(0..self.index_count, 0, 0..1);
+            pass.draw_indexed(0..indices, 0, 0..1);
         }
+    }
+
+    pub fn casts_into(
+        &self,
+        draw: &PatchDraw,
+        camera: DVec3,
+        matrices: &[glam::Mat4; crate::shadow::CASCADES],
+    ) -> bool {
+        self.patches.get(&draw.id).is_some_and(|p| {
+            let center = relative(draw.body_center + p.origin, camera);
+            matrices
+                .iter()
+                .any(|&m| crate::shadow::intersects(m, center, p.radius_m))
+        })
     }
 
     /// Draws the sea over the same patches, after everything opaque.
@@ -177,6 +245,7 @@ pub struct PatchUniforms {
     /// Bytes between slots: the device's dynamic offset alignment.
     stride: u32,
     capacity: usize,
+    centers: Vec<glam::Vec3>,
 }
 
 impl PatchUniforms {
@@ -193,6 +262,7 @@ impl PatchUniforms {
             layout: layout.clone(),
             stride,
             capacity,
+            centers: Vec::new(),
         }
     }
 
@@ -244,12 +314,15 @@ impl PatchUniforms {
             (self.buffer, self.bind_group) =
                 Self::allocate(device, &self.layout, self.stride, self.capacity);
         }
+        self.centers.clear();
         let mut bytes = vec![0u8; drawn.len() * self.stride as usize];
         for (slot, draw) in placed.iter().enumerate() {
             // A patch is built around its body's centre; the body is wherever
             // it is this frame.
             let origin = terrain.patches[&draw.id].origin;
-            let offset = relative(draw.body_center + origin, camera).extend(0.0);
+            let center = relative(draw.body_center + origin, camera);
+            self.centers.push(center);
+            let offset = center.extend(0.0);
             // Wrapped in f64: exact, however far from the body's centre. It is
             // the body relative origin that is wrapped, so detail is fixed to
             // the ground of a moving moon too.

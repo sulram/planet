@@ -391,6 +391,24 @@ impl Client {
             planet_radius_m: RADIUS_M,
             clock_s: self.clock_s,
             patches,
+            shadow_patches: self
+                .terrain
+                .shadow_patches()
+                .iter()
+                .map(|&id| scene::PatchDraw {
+                    id,
+                    body_center: DVec3::ZERO,
+                })
+                .chain(
+                    self.moon_terrain
+                        .shadow_patches()
+                        .iter()
+                        .map(|&id| scene::PatchDraw {
+                            id,
+                            body_center: self.moon_position(),
+                        }),
+                )
+                .collect(),
             boxes: if self.figure.is_worn() {
                 Vec::new()
             } else {

@@ -46,6 +46,8 @@ this file in the same change.
 | Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |
 | Scene | The plain data a client hands a renderer each frame. Crate `scene`. |
 | Patch | One quadtree node of far terrain, meshed as 32x32 quads. |
+| Cascade | One sun shadow map of a nested set around the eye; each covers more ground at a coarser texel. |
+| Caster | A patch, box or avatar drawn into a cascade. Chosen apart from what the camera sees. |
 | Tangent warp | The quad sphere mapping: `tan(s * pi / 4)` on the cube face. |
 | Avatar | The VRM body a person wears. Named by an asset reference, never by index. |
 | Asset reference | A path under the asset root, or an absolute URL. How the client names any file it wants. |

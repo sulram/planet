@@ -79,5 +79,5 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     albedo *= 1.0 - 0.35 * shore;
     let gloss = max(in.color.a, shore * 0.5) * (1.0 - rock);
 
-    return encode(lit(albedo, normal, gloss, in.relative));
+    return encode(lit_surface(albedo, normal, gloss, in.relative, normalize(in.normal)));
 }

@@ -16,9 +16,50 @@ struct View {
     // x: 1 when the target is not sRGB and the shader must encode.
     // y: world clock, seconds, wrapped. z: camera height over the sea, metres.
     flags: vec4<f32>,
+    shadow_clip: array<mat4x4<f32>, SHADOW_CASCADES>,
+    // Side of a texel of each cascade on the ground, metres.
+    shadow_texel_m: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
+@group(0) @binding(1) var shadow_map: texture_depth_2d_array;
+@group(0) @binding(2) var shadow_sampler: sampler_comparison;
+
+fn shadow_sample(relative: vec3<f32>, normal: vec3<f32>, cascade: u32) -> vec2<f32> {
+    let texel_m = view.shadow_texel_m[cascade];
+    let facing = clamp(dot(normal, view.sun.xyz), 0.0, 1.0);
+    let offset = normal * texel_m * (0.3 + 1.0 - facing);
+    let p = (view.shadow_clip[cascade] * vec4<f32>(relative + offset, 1.0)).xyz;
+    let coverage = 1.0 - smoothstep(0.78, 0.97, max(abs(p.x), abs(p.y)));
+    if coverage <= 0.0 || p.z <= 0.0 || p.z >= 1.0 {
+        return vec2<f32>(1.0, 0.0);
+    }
+    let uv = p.xy * vec2<f32>(0.5, -0.5) + 0.5;
+    var sum = 0.0;
+    // Four bilinear comparison samples form a small, deterministic PCF kernel.
+    for (var y = 0; y < 2; y++) {
+        for (var x = 0; x < 2; x++) {
+            let tap = (vec2<f32>(f32(x), f32(y)) - 0.5) / SHADOW_SIZE;
+            sum += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + tap, i32(cascade), p.z + 0.000008);
+        }
+    }
+    let valid = select(0.0, coverage, p.z > 0.0 && p.z < 1.0);
+    return vec2<f32>(sum * 0.25, valid);
+}
+
+fn terrain_shadow(relative: vec3<f32>, normal: vec3<f32>) -> f32 {
+    if view.flags.w < 0.5 { return 1.0; }
+    // Finest cascade first; each hands what its rim does not cover to the next.
+    var lit = 0.0;
+    var left = 1.0;
+    for (var cascade = 0u; cascade < SHADOW_CASCADES; cascade++) {
+        let sample = shadow_sample(relative, normal, cascade);
+        lit += left * sample.y * sample.x;
+        left *= 1.0 - sample.y;
+        if left <= 0.0 { break; }
+    }
+    return lit + left;
+}
 
 const SKY: vec3<f32> = vec3<f32>(0.30, 0.55, 1.00);
 const SUNSET: vec3<f32> = vec3<f32>(1.00, 0.45, 0.18);
@@ -131,6 +172,10 @@ fn through_medium(color: vec3<f32>, dir: vec3<f32>, distance: f32) -> vec3<f32> 
 
 // Sun and sky light on a surface, then the medium between it and the camera.
 fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) -> vec3<f32> {
+    return lit_surface(albedo,normal,gloss,relative,normal);
+}
+
+fn lit_surface(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>, geometric_normal: vec3<f32>) -> vec3<f32> {
     let distance = length(relative);
     let dir = relative / distance;
     let up = surface_up(relative);
@@ -138,7 +183,8 @@ fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) ->
 
     // Bodies shadow themselves and each other: night, and eclipses.
     let day = sunlight(relative);
-    let direct = max(dot(normal, sun), 0.0) * day;
+    let visibility = terrain_shadow(relative, geometric_normal);
+    let direct = max(dot(normal, sun), 0.0) * day * visibility;
     // Sky from above, warm bounce from the ground below: shadowed sides keep
     // their own colour instead of going blue.
     let facing_sky = 0.5 + 0.5 * dot(normal, up);
@@ -154,7 +200,7 @@ fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) ->
     color += albedo * max(dot(normal, moon), 0.0) * moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
 
     let half_vector = normalize(sun - dir);
-    color += gloss * day * pow(max(dot(normal, half_vector), 0.0), 90.0) * 1.5;
+    color += gloss * day * visibility * pow(max(dot(normal, half_vector), 0.0), 90.0) * 1.5;
     return through_medium(color, dir, distance);
 }
 

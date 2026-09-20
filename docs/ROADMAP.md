@@ -23,7 +23,7 @@ Every milestone ends runnable end to end.
 - [x] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
 - [x] Sun as rotating directional light; first atmosphere (uniform shell)
 - [ ] Atmosphere with real scattering
-- [ ] Atmospheric clouds: a layer seen from the ground, from above and from orbit, with shadows on the ground
+- [ ] Atmospheric clouds: a layer seen from the ground, from above and from orbit, with shadows on the ground. Next, before more water work
 - [x] Headless render to PNG (fixed clock + seed)
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [ ] Params as knobs in the panel
@@ -44,7 +44,7 @@ Every milestone ends runnable end to end.
 - [x] Material contract: explicit gloss, rock by slope in the shader, stable across LOD
 - [x] Ground detail anchored to the planet (procedural first, textures with provenance later)
 - [x] Lighting: sky and ground ambient, tone mapping
-- [ ] Directional shadow map near the player: terrain and avatars cast and receive
+- [x] Sun shadow cascades: terrain and avatars cast and receive, contact to horizon
 - [ ] Grass: instanced tufts, wind in the vertex shader, bends away from the avatar
 - [ ] LOD by projected error with hysteresis; geomorph between levels
 - [ ] Patch building behind a job queue (workers native and web), measured budget

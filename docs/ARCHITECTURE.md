@@ -168,6 +168,15 @@ Numbers marked (p) are proposed and not yet confirmed.
   generator v2, no sea. Craters are searched in a cell grid per sample; the
   few basins are listed once per `Generator`.
 - Sunlight at a point is what neither sphere shadows: night and eclipses.
+- Sun shadows: three cascades around the eye (40 m, 400 m, 4 km half side,
+  1024 px each), snapped to their texel, in the frame of the nearest body.
+  Terrain, boxes and avatars cast; everything lit by `lit` receives.
+- Casters are not the drawn patches: `Frame::shadow_patches` holds built
+  leaves before view culling, coarser with distance (1 m, 4 m, 16 m), and
+  never schedules generation. Skirts do not cast.
+- Cascade count and size live in `render::shadow`, which prepends them to
+  every shader; texel sizes ride the view uniform.
+- `render::Effects` turns shadows off; no shell exposes it yet.
 - Three separate things hold an avatar. Its **site**: the body it is stored
   relative to, changed at the moon's sphere of influence (4 radii), so it
   rides the orbit. **Gravity**: turns continuously from planet to moon with

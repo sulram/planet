@@ -210,6 +210,8 @@ pub struct Frame {
     pub clock_s: f64,
     /// Patches to draw this frame. All were announced by a [`TerrainChange::Add`].
     pub patches: Vec<PatchDraw>,
+    /// Loaded terrain selected at shadow LOD, including offscreen casters.
+    pub shadow_patches: Vec<PatchDraw>,
     pub boxes: Vec<BoxPart>,
     pub skinned: Vec<SkinnedInstance>,
 }

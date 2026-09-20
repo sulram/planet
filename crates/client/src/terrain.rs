@@ -150,6 +150,7 @@ pub struct Terrain {
     built: HashMap<Node, Built>,
     changes: Vec<TerrainChange>,
     frame: u64,
+    casters: Vec<PatchId>,
 }
 
 impl Terrain {
@@ -159,7 +160,12 @@ impl Terrain {
             built: HashMap::new(),
             changes: Vec::new(),
             frame: 0,
+            casters: Vec::new(),
         }
+    }
+
+    pub fn shadow_patches(&self) -> &[PatchId] {
+        &self.casters
     }
 
     /// Forgets everything: the recipe changed.
@@ -168,6 +174,7 @@ impl Terrain {
             self.changes.push(TerrainChange::Remove(node.id()));
         }
         self.built.clear();
+        self.casters.clear();
     }
 
     /// Mesh uploads and removals since the last call, in order.
@@ -202,6 +209,7 @@ impl Terrain {
         budget: usize,
     ) -> Vec<PatchId> {
         self.frame += 1;
+        self.casters.clear();
         let mut draw = Vec::new();
         let mut missing: Vec<(f64, Node)> = Vec::new();
 
@@ -271,8 +279,50 @@ impl Terrain {
             );
             self.changes.push(TerrainChange::Add(node.id(), mesh));
         }
+        self.select_shadow_lod(camera.position);
         self.evict();
         draw
+    }
+
+    /// Shadows reuse built ancestors, never schedule extra generation. Nearby
+    /// contacts keep metre detail; distant terrain casts from a coarser mesh.
+    fn select_shadow_lod(&mut self, eye: DVec3) {
+        let mut stack: Vec<_> = Sector::ALL
+            .into_iter()
+            .map(|sector| Node {
+                body: self.body,
+                sector,
+                depth: 0,
+                x: 0,
+                y: 0,
+            })
+            .collect();
+        while let Some(node) = stack.pop() {
+            let Some(built) = self.built.get(&node) else {
+                continue;
+            };
+            let distance = (built.center - eye).length() - built.radius_m;
+            let target = if distance < 250.0 {
+                0.0
+            } else if distance < 350.0 {
+                4.0
+            } else {
+                16.0
+            };
+            let children = node.children();
+            if node.depth < self.body.max_depth()
+                && node.side_m() / f64::from(PATCH_GRID) > target
+                && children.iter().all(|child| self.built.contains_key(child))
+            {
+                stack.extend(children);
+            } else {
+                self.casters.push(node.id());
+                self.built
+                    .get_mut(&node)
+                    .expect("selected built node")
+                    .last_used = self.frame;
+            }
+        }
     }
 
     /// The spacing of the finest mesh built so far over a direction from the

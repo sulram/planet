@@ -12,6 +12,7 @@ mod boxes;
 mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
+mod shadow;
 mod skinned;
 mod terrain;
 
@@ -45,6 +46,8 @@ struct ViewUniform {
     moon: [f32; 4],
     moon_light: [f32; 4],
     flags: [f32; 4],
+    shadow_clip: [[[f32; 4]; 4]; shadow::CASCADES],
+    shadow_texel_m: [f32; 4],
 }
 
 /// GPU state owned by one view slot.
@@ -53,15 +56,31 @@ struct ViewResources {
     bind_group: wgpu::BindGroup,
     depth: Option<(wgpu::TextureView, [u32; 2])>,
     patches: terrain::PatchUniforms,
+    casters: terrain::PatchUniforms,
+    shadows: shadow::Maps,
     boxes: boxes::Instances,
     skinned: skinned::InstanceUniforms,
 }
 
+/// Cosmetic effects can be disabled by a shell without changing world state.
+#[derive(Clone, Copy, Debug)]
+pub struct Effects {
+    pub shadows: bool,
+}
+
+impl Default for Effects {
+    fn default() -> Self {
+        Self { shadows: true }
+    }
+}
+
 pub struct Renderer {
+    effects: Effects,
     device: wgpu::Device,
     queue: wgpu::Queue,
     encode_srgb: bool,
     view_layout: wgpu::BindGroupLayout,
+    shadow_layout: wgpu::BindGroupLayout,
     views: Vec<ViewResources>,
     terrain: terrain::Terrain,
     boxes: boxes::Boxes,
@@ -86,21 +105,59 @@ impl Renderer {
                 count: None,
             }],
         });
-        let terrain = terrain::Terrain::new(&device, &view_layout, format);
-        let boxes = boxes::Boxes::new(&device, &view_layout, format);
-        let skinned = skinned::Skinned::new(&device, &view_layout, format);
+        let shadow_layout = view_layout;
+        let view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("view and sun shadows"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
+        });
+        let terrain = terrain::Terrain::new(&device, &view_layout, &shadow_layout, format);
+        let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, format);
+        let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, format);
         let sky = sky_pipeline(&device, &view_layout, format);
         Renderer {
+            effects: Effects::default(),
             device,
             queue: gpu.queue.clone(),
             encode_srgb: !format.is_srgb(),
             view_layout,
+            shadow_layout,
             views: Vec::new(),
             terrain,
             boxes,
             skinned,
             sky,
         }
+    }
+
+    pub fn set_effects(&mut self, effects: Effects) {
+        self.effects = effects;
     }
 
     /// Uploads and drops patch meshes, in the order the client produced them.
@@ -167,6 +224,57 @@ impl Renderer {
             &frame.skinned,
             view.camera.position,
         );
+
+        let matrices = shadow::matrices(frame, &view.camera);
+        let wanted: Vec<_> = frame
+            .shadow_patches
+            .iter()
+            .copied()
+            .filter(|draw| {
+                self.effects.shadows
+                    && self
+                        .terrain
+                        .casts_into(draw, view.camera.position, &matrices)
+            })
+            .collect();
+        let casters = resources.casters.write(
+            &self.device,
+            &self.queue,
+            &self.terrain,
+            &wanted,
+            view.camera.position,
+        );
+        for (cascade, matrix) in matrices.iter().enumerate().filter(|_| self.effects.shadows) {
+            let mut light = uniform;
+            light.clip_from_relative = matrix.to_cols_array_2d();
+            self.queue.write_buffer(
+                &resources.shadows.uniforms[cascade],
+                0,
+                bytemuck::bytes_of(&light),
+            );
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sun shadows"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &resources.shadows.layers[cascade],
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &resources.shadows.groups[cascade], &[]);
+            self.terrain
+                .draw_shadow(&mut pass, &resources.casters, &casters, *matrix);
+            self.boxes
+                .draw_shadow(&mut pass, &resources.boxes, box_count);
+            self.skinned
+                .draw_shadow(&mut pass, &resources.skinned, &skinned_drawn);
+        }
 
         if resources
             .depth
@@ -237,12 +345,14 @@ impl Renderer {
                 .as_vec3()
                 .extend(0.0)
                 .to_array(),
+            shadow_clip: shadow::matrices(frame, camera).map(|m| m.to_cols_array_2d()),
+            shadow_texel_m: shadow::texels_m(),
             flags: [
                 f32::from(u8::from(self.encode_srgb)),
                 // Wrapped so f32 keeps sub millisecond steps all day.
                 (frame.clock_s % 3600.0) as f32,
                 (camera.position.length() - radius) as f32,
-                0.0,
+                f32::from(u8::from(self.effects.shadows)),
             ],
         }
     }
@@ -254,18 +364,31 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let shadows = shadow::Maps::new(&self.device, &self.shadow_layout);
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("view"),
             layout: &self.view_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&shadows.sampled),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&shadows.sampler),
+                },
+            ],
         });
         ViewResources {
             uniform,
             bind_group,
             depth: None,
+            shadows,
+            casters: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             patches: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             boxes: boxes::Instances::new(&self.device),
             skinned: skinned::InstanceUniforms::default(),
@@ -298,7 +421,11 @@ fn depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Textur
 
 /// WGSL with the shared prelude in front.
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
-    let source = format!("{}\n{source}", include_str!("shaders/common.wgsl"));
+    let source = format!(
+        "{}{}\n{source}",
+        shadow::prelude(),
+        include_str!("shaders/common.wgsl")
+    );
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
         source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -314,6 +441,8 @@ enum Surface {
     Backdrop,
     /// Water: blended over what is there, seen from both sides.
     Translucent,
+    Shadow,
+    ShadowCutout,
 }
 
 /// What differs between our pipelines; the rest is fixed in [`pipeline`].
@@ -331,6 +460,12 @@ fn pipeline(
     spec: PipelineSpec<'_>,
 ) -> wgpu::RenderPipeline {
     let module = shader(device, spec.label, spec.source);
+    let shadow = matches!(spec.surface, Surface::Shadow | Surface::ShadowCutout);
+    let targets = [Some(wgpu::ColorTargetState {
+        format,
+        blend: (spec.surface == Surface::Translucent).then_some(wgpu::BlendState::ALPHA_BLENDING),
+        write_mask: wgpu::ColorWrites::ALL,
+    })];
     let groups: Vec<Option<&wgpu::BindGroupLayout>> =
         spec.layouts.iter().map(|layout| Some(*layout)).collect();
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -347,28 +482,31 @@ fn pipeline(
             buffers: spec.buffers,
             compilation_options: Default::default(),
         },
-        fragment: Some(wgpu::FragmentState {
+        fragment: (spec.surface != Surface::Shadow).then_some(wgpu::FragmentState {
             module: &module,
-            entry_point: Some("fs"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format,
-                blend: (spec.surface == Surface::Translucent)
-                    .then_some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
+            entry_point: Some(if shadow { "fs_shadow" } else { "fs" }),
+            targets: if shadow { &[] } else { &targets },
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            cull_mode: (spec.surface == Surface::Solid).then_some(wgpu::Face::Back),
+            cull_mode: (spec.surface == Surface::Solid || shadow).then_some(wgpu::Face::Back),
             ..Default::default()
         },
         depth_stencil: Some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
-            depth_write_enabled: Some(spec.surface == Surface::Solid),
+            depth_write_enabled: Some(spec.surface == Surface::Solid || shadow),
             // Reversed depth: nearer is greater. The sky sits at exactly 0.
             depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
             stencil: Default::default(),
-            bias: Default::default(),
+            bias: if shadow {
+                wgpu::DepthBiasState {
+                    constant: -2,
+                    slope_scale: -1.5,
+                    clamp: 0.0,
+                }
+            } else {
+                Default::default()
+            },
         }),
         multisample: Default::default(),
         multiview_mask: None,

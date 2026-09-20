@@ -23,6 +23,7 @@ struct Instance {
 
 pub struct Boxes {
     pipeline: wgpu::RenderPipeline,
+    shadow_pipeline: wgpu::RenderPipeline,
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
 }
@@ -31,8 +32,24 @@ impl Boxes {
     pub fn new(
         device: &wgpu::Device,
         view_layout: &wgpu::BindGroupLayout,
+        shadow_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> Boxes {
+        let buffers = &[
+            Some(wgpu::VertexBufferLayout {
+                array_stride: size_of::<CubeVertex>() as u64,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
+            }),
+            Some(wgpu::VertexBufferLayout {
+                array_stride: size_of::<Instance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &wgpu::vertex_attr_array![
+                    2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4,
+                    6 => Float32x4
+                ],
+            }),
+        ];
         let pipeline = pipeline(
             device,
             format,
@@ -40,22 +57,19 @@ impl Boxes {
                 label: "boxes",
                 source: include_str!("shaders/boxes.wgsl"),
                 layouts: &[view_layout],
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: size_of::<CubeVertex>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
-                    }),
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: size_of::<Instance>() as u64,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![
-                            2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4,
-                            6 => Float32x4
-                        ],
-                    }),
-                ],
+                buffers,
                 surface: Surface::Solid,
+            },
+        );
+        let shadow_pipeline = crate::pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "boxes",
+                source: include_str!("shaders/boxes.wgsl"),
+                layouts: &[shadow_layout],
+                buffers,
+                surface: Surface::Shadow,
             },
         );
         let (vertex_data, index_data) = cube();
@@ -71,6 +85,7 @@ impl Boxes {
         });
         Boxes {
             pipeline,
+            shadow_pipeline,
             vertices,
             indices,
         }
@@ -80,7 +95,21 @@ impl Boxes {
         if count == 0 {
             return;
         }
-        pass.set_pipeline(&self.pipeline);
+        self.draw_with(pass, instances, count, &self.pipeline);
+    }
+
+    pub fn draw_shadow(&self, pass: &mut wgpu::RenderPass<'_>, instances: &Instances, count: u32) {
+        self.draw_with(pass, instances, count, &self.shadow_pipeline);
+    }
+
+    fn draw_with(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        instances: &Instances,
+        count: u32,
+        pipeline: &wgpu::RenderPipeline,
+    ) {
+        pass.set_pipeline(pipeline);
         pass.set_vertex_buffer(0, self.vertices.slice(..));
         pass.set_vertex_buffer(1, instances.buffer.slice(..));
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);

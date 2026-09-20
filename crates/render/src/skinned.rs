@@ -26,6 +26,7 @@ struct Mesh {
 
 pub struct Skinned {
     pipeline: wgpu::RenderPipeline,
+    shadow_pipeline: wgpu::RenderPipeline,
     instance_layout: wgpu::BindGroupLayout,
     texture_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -36,6 +37,7 @@ impl Skinned {
     pub fn new(
         device: &wgpu::Device,
         view_layout: &wgpu::BindGroupLayout,
+        shadow_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> Skinned {
         let instance_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -72,6 +74,13 @@ impl Skinned {
                 },
             ],
         });
+        let buffers = &[Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<SkinnedVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![
+                0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4
+            ],
+        })];
         let pipeline = pipeline(
             device,
             format,
@@ -79,14 +88,19 @@ impl Skinned {
                 label: "skinned",
                 source: include_str!("shaders/skinned.wgsl"),
                 layouts: &[view_layout, &instance_layout, &texture_layout],
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: size_of::<SkinnedVertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4
-                    ],
-                })],
+                buffers,
                 surface: Surface::Solid,
+            },
+        );
+        let shadow_pipeline = crate::pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "skinned",
+                source: include_str!("shaders/skinned.wgsl"),
+                layouts: &[shadow_layout, &instance_layout, &texture_layout],
+                buffers,
+                surface: Surface::ShadowCutout,
             },
         );
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -99,6 +113,7 @@ impl Skinned {
         });
         Skinned {
             pipeline,
+            shadow_pipeline,
             instance_layout,
             texture_layout,
             sampler,
@@ -202,7 +217,26 @@ impl Skinned {
         if drawn.is_empty() {
             return;
         }
-        pass.set_pipeline(&self.pipeline);
+        self.draw_with(pass, uniforms, drawn, &self.pipeline);
+    }
+
+    pub fn draw_shadow(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &InstanceUniforms,
+        drawn: &[SkinnedMeshId],
+    ) {
+        self.draw_with(pass, uniforms, drawn, &self.shadow_pipeline);
+    }
+
+    fn draw_with(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &InstanceUniforms,
+        drawn: &[SkinnedMeshId],
+        pipeline: &wgpu::RenderPipeline,
+    ) {
+        pass.set_pipeline(pipeline);
         for (slot, id) in drawn.iter().enumerate() {
             let mesh = &self.meshes[id];
             pass.set_bind_group(1, &uniforms.slots[slot].1, &[]);

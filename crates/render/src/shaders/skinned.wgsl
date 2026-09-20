@@ -50,3 +50,11 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     }
     return encode(lit(texel.rgb, normalize(in.normal), 0.0, in.relative));
 }
+
+// Same alpha cutout as the visible mesh: hair gaps do not cast solid cards.
+@fragment
+fn fs_shadow(in: Varying) {
+    if textureSample(base_color, base_sampler, in.uv).a < 0.5 {
+        discard;
+    }
+}
