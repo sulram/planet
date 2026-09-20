@@ -91,8 +91,11 @@ Every milestone ends runnable end to end.
 
 ## Wishes (unordered)
 
-- [ ] Grass that casts shadows; flattened trails with timed recovery
-- [ ] Effects (shadows, grass) as a quality choice in the shells, with a reduced tier for the Pi
+- [ ] Grass self shadowing: tufts in the contact cascade only, same bend as the visible pass; root occlusion first, it is free
+- [ ] Flattened grass trails with timed recovery
+- [ ] Softer shadows: a wider rotated PCF kernel, penumbra that widens with distance from the caster
+- [ ] HDR scene target with bloom and one final tone map: sun glints, snow, sky at dusk
+- [ ] Settings panel over the command/event seam: Svelte on the web, native on desktop (egui, OPEN). Effects and their quality, with a reduced tier for the Pi
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 
