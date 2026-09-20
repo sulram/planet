@@ -45,6 +45,8 @@ Every milestone ends runnable end to end.
 - [x] Water receives light like the land: cast shadows (terrain, avatars, clouds) on its surface and on the sea floor
 - [x] From under water, the world outside: relief and sky refracted through Snell's window, fog that thins toward the surface instead of hiding everything. The scene target and its depth are there for it (compositor)
 - [x] Material contract: explicit gloss, rock by slope in the shader, stable across LOD
+- [x] The shore per pixel, by height: no mesh teeth on far coasts (DECISIONS 41)
+- [ ] Snow and forest per pixel too: continuous, footprint filtered cover fields in the vertex, the threshold in the shader
 - [x] Ground detail anchored to the planet (procedural first, textures with provenance later)
 - [x] Lighting: sky and ground ambient, tone mapping
 - [x] Sun shadow cascades: terrain and avatars cast and receive, contact to horizon

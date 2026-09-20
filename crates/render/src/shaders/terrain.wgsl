@@ -12,6 +12,12 @@ struct Patch {
 // Must match `ANCHOR_M` in terrain.rs. Every detail scale divides it.
 const ANCHOR_M: f32 = 1024.0;
 const ROCK: vec3<f32> = vec3<f32>(0.115, 0.105, 0.098);
+// The shore, as generator v2 lays it: sand up to SAND_TOP_M over the sea, sea
+// floor below SEABED_TOP_M. rgb: linear albedo, a: gloss.
+const SAND: vec4<f32> = vec4<f32>(0.625, 0.536, 0.311, 0.03);
+const SEABED: vec4<f32> = vec4<f32>(0.164, 0.177, 0.122, 0.0);
+const SAND_TOP_M: f32 = 2.0;
+const SEABED_TOP_M: f32 = -6.0;
 
 struct Vertex {
     @location(0) position: vec3<f32>,
@@ -69,15 +75,26 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     // Rock shows where the ground is steep: per pixel, so the same at every LOD.
     let slope = 1.0 - dot(normalize(in.normal), up);
     let rock = smoothstep(0.16, 0.34, slope + (medium - 0.5) * 0.10 * mid);
-    let cover = pow(in.color.rgb, vec3<f32>(2.2));
+    // The shore is a height over the sea: per pixel, so its line is the smooth
+    // contour of the ground at every LOD, never the teeth of a mesh. Detail
+    // lets it wander up close; the pixel's own reach softens it from afar.
+    // Only the planet has a sea: far from its sea level all of this is zero.
+    let altitude = length(view.camera.xyz + in.relative) - view.camera.w;
+    let wander = ((coarse - 0.5) * 1.6 + (medium - 0.5) * 0.5) * mid;
+    let reach = fwidth(altitude);
+    let sand_edge = max(reach, 0.35);
+    let seabed_edge = max(reach, 1.5);
+    let sand = 1.0 - smoothstep(SAND_TOP_M - sand_edge, SAND_TOP_M + sand_edge, altitude + wander);
+    let seabed = 1.0 - smoothstep(SEABED_TOP_M - seabed_edge, SEABED_TOP_M + seabed_edge, altitude + wander);
+    let beach = mix(SAND, SEABED, seabed);
+    let cover = mix(pow(in.color.rgb, vec3<f32>(2.2)), beach.rgb, sand);
     var albedo = mix(cover, ROCK, rock);
     albedo *= 0.78 + 0.22 * mix(1.0, fine * 2.0, near) * mix(1.0, medium * 1.4 + 0.3, mid) + 0.12 * (coarse - 0.5);
 
     // Wet sand darkens and shines near the waterline.
-    // Only the planet has a sea: far from its sea level this is zero anyway.
-    let shore = 1.0 - smoothstep(0.0, 1.2, abs(length(view.camera.xyz + in.relative) - view.camera.w));
+    let shore = 1.0 - smoothstep(0.0, 1.2, abs(altitude));
     albedo *= 1.0 - 0.35 * shore;
-    let gloss = max(in.color.a, shore * 0.5) * (1.0 - rock);
+    let gloss = max(mix(in.color.a, beach.a, sand), shore * 0.5) * (1.0 - rock);
 
     return vec4<f32>(lit_surface(albedo, normal, gloss, in.relative, normalize(in.normal)), 1.0);
 }

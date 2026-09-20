@@ -434,10 +434,22 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
             let along_u = at(i + 1, j).0 - at(i - 1, j).0;
             let along_v = at(i, j + 1).0 - at(i, j - 1).0;
             let normal = along_u.cross(along_v).normalize();
+            // A vertex under the shore wears the cover of the highest land
+            // beside it, so no beach bleeds uphill across a coarse triangle.
+            let cover = if shore(sample) {
+                let around = (-1..=1).flat_map(|dj| (-1..=1).map(move |di| (di, dj)));
+                around
+                    .map(|(di, dj)| at(i + di, j + dj).1)
+                    .filter(|beside| !shore(*beside))
+                    .max_by(|a, b| a.height_m.total_cmp(&b.height_m))
+                    .unwrap_or(sample)
+            } else {
+                sample
+            };
             vertices.push(TerrainVertex {
                 position: (position - origin).as_vec3().to_array(),
                 normal: normal.as_vec3().to_array(),
-                color: color(sample),
+                color: color(cover),
             });
         }
     }
@@ -501,8 +513,18 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
     }
 }
 
-/// Albedo and gloss of the ground cover. Rock on slopes is the renderer's
-/// job: it sees the slope per pixel, the same at every LOD.
+/// Ground the renderer paints by height over the sea, never by vertex.
+fn shore(sample: Sample) -> bool {
+    matches!(
+        sample.material,
+        Material::Sand | Material::Seabed | Material::Water
+    )
+}
+
+/// Albedo and gloss of the ground cover. Rock on slopes and the shore (sand,
+/// sea floor) are the renderer's job: it sees the slope and the height per
+/// pixel, the same at every LOD. A shore color here only shows where no land
+/// is near, under the renderer's own.
 fn color(sample: Sample) -> [u8; 4] {
     match sample.material {
         Material::Snow => [236, 238, 240, 70],

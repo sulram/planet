@@ -227,6 +227,9 @@ Numbers marked (p) are proposed and not yet confirmed.
   surface. Flight goes where you look.
 - Ground detail is procedural noise anchored to the planet: patch origins are
   wrapped to 1024 m in f64 on the CPU. Rock shows by slope, per pixel.
+- The shore (sand, sea floor) shows by height over the sea, per pixel: a
+  smooth contour at every LOD. A vertex under it carries the cover of the
+  land beside it.
 
 ## Gravity
 
