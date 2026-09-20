@@ -1,0 +1,23 @@
+{
+	"default_avatar": "avatars/Kyle.vrm",
+	"avatars": [
+		"avatars/Bizdude.vrm",
+		"avatars/CoolAlien.vrm",
+		"avatars/CoolBanana.vrm",
+		"avatars/CoolBee.vrm",
+		"avatars/Kyle.vrm",
+		"avatars/MoonGirl.vrm",
+		"avatars/Mushy.vrm",
+		"avatars/Olivia.vrm",
+		"avatars/Shiro.vrm",
+		"avatars/Skull.vrm"
+	],
+	"clips": {
+		"idle": "clips/idle.glb",
+		"walk": "clips/walk.glb",
+		"run": "clips/run.glb",
+		"jump": "clips/jump.glb",
+		"fall": "clips/fall.glb",
+		"fly": "clips/fly.glb"
+	}
+}

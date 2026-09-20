@@ -11,6 +11,7 @@
 		"server": "bun scripts/server.ts",
 		"web": "bun run --cwd apps/web dev",
 		"wasm": "bun scripts/wasm.ts",
+		"assets": "bun scripts/assets.ts",
 		"desktop": "cargo run --release -p shell-desktop",
 		"shot": "bun scripts/shot.ts",
 		"check": "bun scripts/check.ts",
