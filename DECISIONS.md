@@ -1,0 +1,153 @@
+# DECISIONS
+
+Append-only log. Each entry: what, why, what was rejected. Current state lives
+in ARCHITECTURE.md.
+
+Status: **decided** = Marlus said so. **proposed** = recommended in the design
+conversation, not yet explicitly confirmed. Confirm or strike proposed entries
+before the code depends on them.
+
+All entries below: 2026-09-20, from the founding design conversation.
+
+## 01. Build from scratch (decided)
+
+The earlier idea (Oct 2025) was managed hosting for Hyperfy. It was replaced:
+both Hyperfy and Cryptovoxels have readable source now, and the goal became a
+world on our own terms that blends the two. Rejected: forking Hyperfy (GPL,
+three.js, not our stack), building on Vircadia World (generic entity state in
+Postgres, pre-1.0, solves a different problem than procedural voxel chunks).
+All three remain reading material in `refs/`.
+
+## 02. Rust client, Go server (decided)
+
+Marlus wants to learn both. Rust + wgpu gives one client for desktop, browser
+(WASM), Pi and headsets. Go fits an authoritative network server and embeds
+PocketBase. One protocol schema generates both sides.
+
+## 03. Raw wgpu and a light ECS, not Bevy (proposed)
+
+Control matters most where Pi and Quest are tight, Marlus is already fluent in
+wgpu through vybe, and Bevy breaks API every release with community-only XR.
+Rejected: Bevy. Reference for the platform matrix: matthewjberger/wgpu-example.
+
+## 04. Spherical only (decided)
+
+A real sphere gives sun with time zones, moon, orbit, satellites and a curve
+visible from afar. A flat looping map is a torus, a different topology, and was
+dropped. The flat view survives as the atlas and as the simulation space.
+
+## 05. Quad sphere with a single build band (proposed, direction accepted)
+
+After reading Bowerbyte's "Blocky Planet": blocks aligned with gravity
+everywhere beat a Cartesian ball of cubes, whose ground turns into stairs away
+from the six poles. Most of the pain in that article comes from tiny planets
+and digging to the core. We avoid both: building is confined to one band of one
+shell, and the 8 singular corners are zoned as nature. Proposed numbers: 0.5 m
+blocks, 2^16 per sector side, radius about 20.9 km. The Cartesian ball stays as
+the topology for moons and micro worlds. Note: the address scheme is the save
+format, so this is settled before M1.
+
+## 06. Simulate flat, render spherical (proposed)
+
+Inside the band the data is six flat grids. Collision, walking and editing run
+in address space where blocks are unit cubes; curvature is a render function.
+This also means the spherical choice is reversible: only the seam topology is
+permanent, not the shape.
+
+## 07. Hybrid voxels: smooth terrain, cubic construction (decided)
+
+Smooth terrain (density + surface nets) is what vehicles need and what the
+generator's noise already is. Cubes keep crisp Cryptovoxels architecture.
+Rejected: cubes only (vehicles flip on stairs, blocky LOD from orbit), smooth
+only (no straight walls). Cost accepted: two meshers, two tool sets.
+References: Roblox terrain + parts, Space Engineers.
+
+## 08. The world is a recipe; copy on first write (decided)
+
+A planet this size has about 25 billion block columns and cannot be baked. The
+database stores only modified chunks; everything else is regenerated from the
+seed by every machine. Consequence: the generator version is frozen per world,
+or untouched terrain would shift next to existing builds.
+
+## 09. One generator, in Rust, run as WASM inside Go (proposed)
+
+The server and headless agents need terrain too. Compiling the Rust generator
+to WASM and running it through wazero keeps a single source of truth without
+CGO. Rejected: porting the generator to Go (two implementations will diverge).
+
+## 10. SQLite per world, PocketBase for the cold plane (decided; split proposed)
+
+Marlus chose SQLite and PocketBase, which he already runs in production. The
+split is ours: PocketBase holds accounts, worlds, volumes, roles and records;
+chunks and the op log live in a separate `world.db` driven by our code, because
+voxel edits are frequent, binary and tiny, and PocketBase realtime is SSE +
+JSON with no Rust SDK. PocketBase is pre-1.0, so the core never imports it.
+
+## 11. Many worlds from the start; file global, placement per world (decided; split proposed)
+
+Cheap now, expensive later, and it gives a staging world immediately. The
+refinement: the asset file is global by content hash, the placement belongs to
+a world. Same for people: user global, role per world. This is the SaaS shape.
+
+## 12. World generator runs in the client first (decided)
+
+Generate many candidate planets and explore them walking and flying before any
+database exists. This makes the offline explorer the first milestone and a
+permanent preview mode.
+
+## 13. Email identity, wallets later (decided)
+
+Magic link in the browser, one-time code on native and headset. It removes the
+entry barrier and fits a world whose authority is the server anyway. Wallets
+become optional links. Chain choice is deferred because nothing binds it until
+we mint something; leaning Tezos for assets (Brazilian cryptoart community),
+Bitcoin as notary for world snapshots. Rejected for now: wallet-only login.
+
+## 14. Volumes with delegated landlords, plus world admins (decided; rules proposed)
+
+Marlus's model: he draws volumes, names a landlord for each, who may carve
+smaller volumes for others; admins build anywhere. Proposed rules: integer
+address boxes inside one sector, child inside parent, siblings never overlap,
+power flows down only, revoking never deletes work, admins are logged too.
+
+## 15. Media like Hyperfy, then uploads (decided; details proposed)
+
+Public URLs on a CDN are allowed. Because building is restricted to trusted
+people, uploads (image, video, GLB) are allowed too, stored on the Hetzner
+Object Storage already attached to PocketBase. Later business: sell data
+packages, which is only a quota number. Proposed details: thumbnails made by
+the owner's client, heavy media served straight from the bucket, proximity
+loading with a decoder budget. Known cost of external URLs: CORS and visitor
+IP exposure.
+
+## 16. Destruction: instigator decides, others watch particles (decided; modes proposed)
+
+Marlus's model. Refinement: removed voxels are world state and go through the
+server as a permission-checked op; debris is cosmetic and simulated locally
+from a shared seed. Proposed per-volume modes: protected, ephemeral, permanent.
+Rejected: structural collapse physics.
+
+## 17. Web UI in Svelte + Bun; minimal UI elsewhere (decided)
+
+Builder and player modes are full in the browser. Pi, headsets and the native
+executable get a simplified UI. Consequence: tool logic lives in Rust behind a
+command/event seam so every client shares it.
+
+## 18. Repo conventions (decided)
+
+CLAUDE.md at the root, AGENTS.md as a symlink so Claude, Codex and Kimi share
+one guide; docs/ in the style of vybe and Plataforma ITS; scripts and packages
+separated; Conventional Commits with Semantic Release; no AI co-author
+trailers; `refs/` gitignored for reference checkouts.
+
+## 19. Gravity as fields, after Super Mario Galaxy (proposed)
+
+Gravity is decoupled from geometry: invisible volumes with a direction rule,
+range and priority. It makes the quad sphere, moons, inverted rooms and planets
+inside a voxel the same mechanism.
+
+## 20. NVIDIA neural rendering is deferred (proposed)
+
+DLSS 5 is RTX 50 only and has no wgpu path, so it cannot reach Pi, Quest or the
+browser. The renderer writes depth and motion vectors from day one to keep the
+door open. The realistic route is a cloud "cinema mode" streamed over WebRTC.

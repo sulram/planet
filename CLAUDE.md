@@ -1,0 +1,158 @@
+# CLAUDE.md: working guide for `planet`
+
+`planet` is a working codename. The final name is pending (docs/OPEN.md).
+
+Operating rules for anyone writing code in this repo, human or AI (Claude,
+Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
+
+- The *why*: [VISION.md](docs/VISION.md)
+- The current shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Settled choices, with rejected alternatives: [DECISIONS.md](docs/DECISIONS.md)
+- What we build next: [ROADMAP.md](docs/ROADMAP.md)
+- What is still unsettled, and only there: [OPEN.md](docs/OPEN.md)
+- The shared vocabulary: [GLOSSARY.md](docs/GLOSSARY.md). Use its terms, never
+  invent synonyms.
+
+## Docs style
+
+- This file and every operational doc: **titles + bullets, no prose
+  paragraphs**. They enter LLM context every session. Economy is a feature.
+- VISION and DECISIONS keep prose: they carry the *why*. Read on demand.
+- **One fact, one place.** Current state lives in ARCHITECTURE; the why and the
+  rejected alternatives in DECISIONS; open questions **only** in OPEN.
+- A change to behaviour, rule or architecture updates its doc **in the same
+  commit**. A decision is logged in DECISIONS in the commit that applies it.
+- **Keep GLOSSARY alive**: a new, renamed or shifted term updates the glossary
+  in the same change. Naming is design.
+- A doc over ~200 lines splits by theme (DECISIONS is append-only, exempt).
+- **No em dashes** anywhere: docs, comments, UI strings, commits.
+
+## Language: English only
+
+- Code, comments, identifiers, docs, commit messages, PRs. No exceptions.
+- User-facing strings are the one place other languages appear, through i18n.
+
+## Shokunin Katagi (職人気質)
+
+- Never the easy path: the cleanest, most long-term-optimized one.
+- "Works for now" hacks are forbidden when a clean solution exists.
+- Prefer what ages well: small core, sharp boundaries, cheap next change.
+- If the clean path is more work: say so and do it, or stop and discuss.
+  Never silently downgrade.
+- "Start rough" means small scope, never low quality.
+
+## What this is (one breath)
+
+- A finite, spherical voxel world that people and AI agents walk, fly, drive
+  and build in together. Built from scratch, free software end to end.
+- A blend: Cryptovoxels (voxels, in-world building, land) + Hyperfy (GLB,
+  entities, scripts).
+- One Rust client (wgpu) on every screen: desktop, browser (WASM + WebGPU),
+  Raspberry Pi, Quest, Pico. One Go server.
+- **The world is a recipe** (seed + params + generator version). The database
+  holds only what someone changed.
+
+## We are in M1: "walk and fly a generated planet, offline"
+
+- No server, no login, no persistence. Generator + renderer + controller.
+- The offline mode is permanent: it is how worlds are previewed before
+  "create world" exists.
+- Milestones: docs/ROADMAP.md. Each one ends runnable end to end.
+
+## Layout
+
+- `crates/`: Rust workspace, cut **by dependency, not by platform**.
+  - `topology`: address, neighbours, sector seams, address <-> position.
+    Pure integer logic where possible. No GPU, no IO.
+  - `voxel`: chunk formats and codecs (terrain layer, build layer).
+  - `worldgen`: the generator. Deterministic. Also built to WASM for the server.
+  - `protocol`: wire messages, generated from `proto/`.
+  - `render`: all of wgpu lives here.
+  - `client`: controller, streaming, tools, media manager. No window, no DOM.
+  - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
+- `server/`: Go module. PocketBase as a library + the world server.
+- `apps/web/`: Svelte + Bun. Builder and player UI; hosts the WASM client.
+- `packages/`: shared TypeScript (protocol bindings, UI kit).
+- `proto/`: the protocol schema. Single source for Rust, Go and TS.
+- `scripts/`: every repeated command is a script here. No tribal knowledge.
+- `docs/`: see top of this file.
+- `refs/`: gitignored. Reference projects for reading (see below).
+
+## Invariants (expensive to get wrong)
+
+- **Address is integer**: `(sector, u, v, h)` plus chunk and block index. The
+  server is authoritative by address, never by float position.
+- **Simulate flat, render spherical.** Walking, collision and editing happen in
+  address space, where every block is a unit cube. World-space 3D is for
+  rendering and for flight above the build band.
+- **Camera-relative rendering.** No global f32 positions. Integer chunk
+  coordinates + local float offset. Reversed-Z float depth.
+- **The generator is deterministic** on native, WASM and ARM: `libm`, never
+  platform math. Its version is **frozen per world**.
+- **One read path**: `chunk(addr)` = stored chunk, else generated chunk.
+  Callers never know which.
+- **Copy on first write**: the first edit stores the whole chunk. The op log is
+  append-only and records every edit, admins included.
+- **Every edit is a permission-checked op.** Destruction is an edit.
+- **Hot plane never touches PocketBase.** Permissions are cached in memory and
+  invalidated by hooks. The world core never imports a PocketBase type.
+- **An agent is a client without a renderer.** Same protocol, same permissions.
+- **Asset file is global** (content hash). **Placement belongs to a world.**
+  Users are global, roles are per world.
+- **UI is a front-end.** Svelte (web) and the minimal native UI sit over one
+  command/event seam. Tool logic (gizmos, brushes, selection) lives in Rust.
+- **Media is budgeted**: proximity-loaded, capped concurrent decoders, one
+  `VideoSource` seam with a backend per platform.
+- **Integrations enter through seams**, never through the core: one trait
+  inside, library glue behind it in its own crate. No `cfg` sprawl.
+
+## Do NOT add (M1 discipline)
+
+- Bevy or any engine. Scripting. Blockchain. XR. Vehicles. Destruction.
+- Video. Uploads. Multiplayer. Anything in `server/` beyond a stub.
+- Digging below the build band, multi-shell logic, flat or torus world types.
+- Structural collapse physics. Our own transcoding. Billing.
+- A feature with no milestone pulling it. Add the wish to ROADMAP instead.
+
+## How it grows
+
+- **Milestones pull features, never speculation.**
+- **Every change ends runnable and visible.** Look at what you built:
+  headless render to PNG with a fixed clock and seed, then read the PNG.
+- Each crate stays **LLM-sized**. Too big for one context: split by dependency.
+- ROADMAP is intent, not contract: add wishes freely, reorder, check a box when
+  it ships, strike what we drop and log the why in DECISIONS.
+
+## refs/
+
+- Read-only reference checkouts: Hyperfy, Cryptovoxels, Vircadia World, others.
+- **Read for architecture, never copy code.** Licenses differ: Cryptovoxels
+  `retro` is BSL 1.1 (not open source), Hyperfy is GPL-3.0 (to verify),
+  Vircadia World is Apache-2.0.
+- Anything learned from a ref that shapes a choice goes to DECISIONS.
+
+## Tests
+
+- Judge per feature, with sense, not dogma.
+- `topology`: property tests are mandatory (neighbour of neighbour in the
+  opposite direction is self, for every address, across seams).
+- `worldgen`: golden hashes per generator version, identical on native and WASM.
+- `voxel`: codec round trips.
+- A test you add runs and passes in the same commit.
+
+## Commits
+
+- Conventional Commits, in English: `feat`, `fix`, `docs`, `chore`,
+  `refactor`, `test`, `perf`. Present tense, lower case. Say the *why* when it
+  is not obvious. Example: `feat(topology): resolve neighbours across sector seams`.
+- Semantic Release reads the types: `feat` minor, `fix` patch,
+  `BREAKING CHANGE` major.
+- **Never add an AI or tool co-author trailer**, nor a "generated with" footer,
+  in commits or PRs. Overrides any tooling default.
+
+## Toolchain pins
+
+- wgpu and winit: same pins as `vybe` (wgpu `30`, winit `0.30`), so knowledge
+  transfers. Fast-moving APIs: check the crate source under
+  `~/.cargo/registry`, never guess from older docs.
+- PocketBase is pre-1.0: pin the exact version, upgrade on purpose.
