@@ -4,7 +4,9 @@
 //! is always `output`: exposure, tone map and encoding, into the view's target.
 //!
 //! An effect is a stage: a WGSL fragment entry over [`STAGE_PRELUDE`]. Adding
-//! one (bloom, grading) is a shader and a line in [`Composer::run`].
+//! one (bloom, grading) is a shader and a line in [`Composer::run`]. A costly
+//! effect works at half size into an auxiliary target and a second stage lays
+//! it over the scene at full size: the clouds do.
 
 /// Linear light, room above white for the sun, a glint, a cloud's silver edge.
 pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -22,6 +24,7 @@ impl Stage {
         device: &wgpu::Device,
         label: &str,
         source: &str,
+        entry: &str,
         layouts: &[&wgpu::BindGroupLayout],
         format: wgpu::TextureFormat,
     ) -> Stage {
@@ -44,7 +47,7 @@ impl Stage {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
-                entry_point: Some("fs"),
+                entry_point: Some(entry),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: None,
@@ -62,9 +65,17 @@ impl Stage {
     }
 }
 
+/// Which optional stages run this frame.
+#[derive(Clone, Copy)]
+pub struct Chain {
+    pub clouds: bool,
+}
+
 pub struct Composer {
     input_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    cloud_march: Stage,
+    cloud_lay: Stage,
     output: Stage,
 }
 
@@ -104,6 +115,17 @@ impl Composer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                // Auxiliary: what a half size stage left for the next to lay.
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -114,10 +136,27 @@ impl Composer {
         });
         let layouts = [view_layout, &input_layout];
         Composer {
+            cloud_march: Stage::new(
+                device,
+                "cloud march",
+                include_str!("shaders/clouds.wgsl"),
+                "fs_march",
+                &layouts,
+                SCENE_FORMAT,
+            ),
+            cloud_lay: Stage::new(
+                device,
+                "cloud lay",
+                include_str!("shaders/clouds.wgsl"),
+                "fs_lay",
+                &layouts,
+                SCENE_FORMAT,
+            ),
             output: Stage::new(
                 device,
                 "output",
                 include_str!("shaders/output.wgsl"),
+                "fs",
                 &layouts,
                 format,
             ),
@@ -132,21 +171,30 @@ impl Composer {
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::BindGroup,
         targets: &Targets,
+        chain: Chain,
         target: &wgpu::TextureView,
     ) {
-        // No optional stage yet: bloom and clouds enter here, in order.
-        let stages: [&Stage; 0] = [];
         // The scene is in colour 0; each stage reads one and writes the other.
         let mut read = 0;
-        for stage in stages {
+        // In order. Bloom enters after the clouds it should catch.
+        if chain.clouds {
+            // Marched at half size from the depth alone, laid at full size.
             Self::pass(
                 encoder,
-                stage,
+                &self.cloud_march,
+                view,
+                &targets.marching,
+                &targets.half,
+            );
+            let write = 1 - read;
+            Self::pass(
+                encoder,
+                &self.cloud_lay,
                 view,
                 &targets.inputs[read],
-                &targets.color[1 - read],
+                &targets.color[write],
             );
-            read = 1 - read;
+            read = write;
         }
         Self::pass(encoder, &self.output, view, &targets.inputs[read], target);
     }
@@ -183,13 +231,13 @@ impl Composer {
 
     /// The targets of one view, at its size.
     pub fn targets(&self, device: &wgpu::Device, size: [u32; 2]) -> Targets {
-        let texture = |label, format, usage| {
+        let texture = |label, format, usage, divide: u32| {
             device
                 .create_texture(&wgpu::TextureDescriptor {
                     label: Some(label),
                     size: wgpu::Extent3d {
-                        width: size[0],
-                        height: size[1],
+                        width: size[0].div_ceil(divide),
+                        height: size[1].div_ceil(divide),
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
@@ -203,18 +251,19 @@ impl Composer {
         };
         let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         let color = [
-            texture("scene colour", SCENE_FORMAT, usage),
-            texture("stage colour", SCENE_FORMAT, usage),
+            texture("scene colour", SCENE_FORMAT, usage, 1),
+            texture("stage colour", SCENE_FORMAT, usage, 1),
         ];
-        let depth = texture("scene depth", crate::DEPTH_FORMAT, usage);
-        let inputs = core::array::from_fn(|i| {
+        let half = texture("half size stage", SCENE_FORMAT, usage, 2);
+        let depth = texture("scene depth", crate::DEPTH_FORMAT, usage, 1);
+        let input = |color: &wgpu::TextureView, aux: &wgpu::TextureView| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("stage input"),
                 layout: &self.input_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&color[i]),
+                        resource: wgpu::BindingResource::TextureView(color),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -224,14 +273,23 @@ impl Composer {
                         binding: 2,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(aux),
+                    },
                 ],
             })
-        });
+        };
+        let inputs = [input(&color[0], &half), input(&color[1], &half)];
+        // The half size target cannot be read while it is written.
+        let marching = input(&color[0], &color[1]);
         Targets {
             size,
             color,
+            half,
             depth,
             inputs,
+            marching,
         }
     }
 }
@@ -242,5 +300,9 @@ pub struct Targets {
     /// 0 takes the scene; the stages alternate between the two.
     pub color: [wgpu::TextureView; 2],
     pub depth: wgpu::TextureView,
+    /// Where a costly stage works, half the size each way.
+    half: wgpu::TextureView,
     inputs: [wgpu::BindGroup; 2],
+    /// The scene's inputs for the stage that writes `half`.
+    marching: wgpu::BindGroup,
 }

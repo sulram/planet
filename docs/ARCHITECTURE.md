@@ -173,6 +173,16 @@ Numbers marked (p) are proposed and not yet confirmed.
   full screen stages follows, each reading the colour and depth before it;
   the last, `output`, applies exposure, the filmic curve and the target's
   encoding. No scene shader tone maps. An effect is a stage.
+- Clouds are a shell of weather, 1100 to 3000 m over the sea, made of one
+  tiling 64^3 noise texture drawn once on the GPU (`render::clouds`). The
+  density field (`cloud_field.wgsl`) is in every shader: the compositor
+  marches it, and every lit surface asks it for shade along the sun.
+- The march runs at half size from the scene depth (two paces: strides in
+  clear air, short steps in cloud, both growing with distance), and a full
+  size stage lays it over the scene, cut where terrain stands in front.
+- Weather turns about the planet's axis with the clock, and slides through
+  the noise so clouds change as they go. Angles and slides are wrapped on
+  the CPU in f64. Cosmetic: not simulated, not stored, the same for a clock.
 - Sun shadows: three cascades around the eye (40 m, 400 m, 4 km half side,
   1024 px each), snapped to their texel, in the frame of the nearest body.
   Terrain, boxes and avatars cast; everything lit by `lit` receives.
@@ -189,8 +199,8 @@ Numbers marked (p) are proposed and not yet confirmed.
   carries only the tiers that can reach it before it splits, farthest first;
   the renderer draws the prefix in reach, near patches first, capped.
 - `Frame::interaction` is one capsule (the avatar) that bends tufts. Visual
-  only. `render::Effects` turns shadows and grass off and sets exposure; no shell
-  exposes it yet.
+  only. `render::Effects` turns shadows, grass and clouds off, sets cloud cover and
+  exposure; no shell exposes it yet.
 - Three separate things hold an avatar. Its **site**: the body it is stored
   relative to, changed at the moon's sphere of influence (4 radii), so it
   rides the orbit. **Gravity**: turns continuously from planet to moon with

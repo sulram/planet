@@ -21,8 +21,11 @@ struct View {
     shadow_texel_m: vec4<f32>,
     interaction_start: vec4<f32>,
     interaction_end: vec4<f32>,
-    // x: exposure.
+    // x: exposure. y, z: how far cloud bodies and wisps have slid through
+    // the noise, as a fraction of their repeat.
     post: vec4<f32>,
+    // xy: how far the weather has turned (cos, sin). z: cover. w: 1 when on.
+    clouds: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -173,7 +176,7 @@ fn lit_surface(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<
     // Bodies shadow themselves and each other: night, and eclipses.
     let day = sunlight(relative);
     let visibility = terrain_shadow(relative, geometric_normal);
-    let direct = max(dot(normal, sun), 0.0) * day * visibility;
+    let direct = max(dot(normal, sun), 0.0) * day * visibility * cloud_shadow(relative);
     // Sky from above, warm bounce from the ground below: shadowed sides keep
     // their own colour instead of going blue.
     let facing_sky = 0.5 + 0.5 * dot(normal, up);

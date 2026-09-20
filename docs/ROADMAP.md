@@ -23,7 +23,7 @@ Every milestone ends runnable end to end.
 - [x] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
 - [x] Sun as rotating directional light; first atmosphere (uniform shell)
 - [ ] Atmosphere with real scattering
-- [ ] Atmospheric clouds: a layer seen from the ground, from above and from orbit, with shadows on the ground. Next, before more water work
+- [x] Atmospheric clouds: a volumetric layer seen from the ground, from above and from orbit, with shadows on the ground
 - [x] Headless render to PNG (fixed clock + seed)
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [ ] Params as knobs in the panel
@@ -41,6 +41,8 @@ Every milestone ends runnable end to end.
 - [ ] A swim clip (the fly clip stands in)
 - [x] Night sky: stars fixed to the world, a moon on rails with real phases, moonlight
 - [ ] Water refraction and absorption from the scene depth and colour (needs an offscreen pass); caustics; the waterline when the camera straddles the surface
+- [ ] Water receives light like the land: cast shadows (terrain, avatars, clouds) on its surface and on the sea floor
+- [ ] From under water, the world outside: relief and sky refracted through Snell's window, fog that thins toward the surface instead of hiding everything. The scene target and its depth are there for it (compositor)
 - [x] Material contract: explicit gloss, rock by slope in the shader, stable across LOD
 - [x] Ground detail anchored to the planet (procedural first, textures with provenance later)
 - [x] Lighting: sky and ground ambient, tone mapping
@@ -92,11 +94,12 @@ Every milestone ends runnable end to end.
 ## Wishes (unordered)
 
 - [ ] Grass self shadowing: tufts in the contact cascade only, same bend as the visible pass; root occlusion first, it is free
+- [ ] Clouds: temporal reprojection to spend fewer samples; high cirrus; weather as a recipe param; shade on water
 - [ ] Flattened grass trails with timed recovery
 - [ ] Softer shadows: a wider rotated PCF kernel, penumbra that widens with distance from the caster
 - [x] Compositor: HDR scene target, a chain of stages, one final tone map
 - [ ] Bloom as a compositor stage: sun glints, snow, sky at dusk
-- [ ] Settings panel over the command/event seam: Svelte on the web, native on desktop (egui, OPEN). Effects and their quality, with a reduced tier for the Pi
+- [ ] Settings panel over the command/event seam: Svelte on the web, native on desktop (egui, OPEN). Every compositor parameter is a knob there: exposure, cloud cover, layer height, wind, density, and each effect's quality, with a reduced tier for the Pi
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 

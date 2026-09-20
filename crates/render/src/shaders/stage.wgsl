@@ -3,6 +3,8 @@
 @group(1) @binding(0) var stage_color: texture_2d<f32>;
 @group(1) @binding(1) var stage_depth: texture_depth_2d;
 @group(1) @binding(2) var stage_sampler: sampler;
+// What a half size stage left for the next one to lay over the scene.
+@group(1) @binding(3) var stage_aux: texture_2d<f32>;
 
 struct Screen {
     @builtin(position) clip: vec4<f32>,

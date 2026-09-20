@@ -49,6 +49,8 @@ this file in the same change.
 | Compositor | The part of the renderer that turns the drawn scene into the picture: a chain of stages ending in `output`. |
 | Stage | One full screen pass of the compositor. Reads the colour and depth before it, writes the next target. |
 | Scene target | The HDR, linear light texture the world is drawn into, with its depth. |
+| Weather | The low frequency field that says where on the planet clouds may stand at all. Turns with the clock. |
+| Cloud layer | The shell of altitude clouds live in. Marched by the compositor, sampled by lit surfaces for shade. |
 | Cascade | One sun shadow map of a nested set around the eye; each covers more ground at a coarser texel. |
 | Caster | A patch, box or avatar drawn into a cascade. Chosen apart from what the camera sees. |
 | Tuft | One cosmetic grass instance, identified by (sector, tier, tier cell). Not an entity, not stored. |

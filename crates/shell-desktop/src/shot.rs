@@ -45,14 +45,16 @@ pub fn run(shot: Shot) -> Result<(), String> {
         .renderer
         .apply_skinned(client.drain_skinned_changes());
     if shot.measure > 0 {
-        for (label, shadows, grass) in [
-            ("base", false, false),
-            ("shadows", true, false),
-            ("shadows + grass", true, true),
+        for (label, shadows, grass, clouds) in [
+            ("base", false, false, false),
+            ("shadows", true, false, false),
+            ("shadows + grass", true, true, false),
+            ("shadows + grass + clouds", true, true, true),
         ] {
             headless.renderer.set_effects(render::Effects {
                 shadows,
                 grass,
+                clouds,
                 ..Default::default()
             });
             let (median, p95) = headless.measure(&frame, shot.measure);

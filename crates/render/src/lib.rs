@@ -9,6 +9,7 @@
 //!   passes one [`View`], a headset will pass two.
 
 mod boxes;
+mod clouds;
 mod compose;
 mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
@@ -52,6 +53,7 @@ struct ViewUniform {
     interaction_start: [f32; 4],
     interaction_end: [f32; 4],
     post: [f32; 4],
+    clouds: [f32; 4],
 }
 
 /// GPU state owned by one view slot.
@@ -71,6 +73,9 @@ struct ViewResources {
 pub struct Effects {
     pub shadows: bool,
     pub grass: bool,
+    pub clouds: bool,
+    /// How much of the sky the weather may fill, 0 to 1.
+    pub cloud_cover: f32,
     /// What the scene's light is multiplied by before the tone map.
     pub exposure: f32,
 }
@@ -80,6 +85,8 @@ impl Default for Effects {
         Self {
             shadows: true,
             grass: true,
+            clouds: true,
+            cloud_cover: 0.5,
             exposure: 1.0,
         }
     }
@@ -98,6 +105,7 @@ pub struct Renderer {
     skinned: skinned::Skinned,
     sky: wgpu::RenderPipeline,
     composer: compose::Composer,
+    clouds: clouds::Clouds,
 }
 
 impl Renderer {
@@ -148,6 +156,22 @@ impl Renderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D3,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let scene = compose::SCENE_FORMAT;
@@ -156,6 +180,7 @@ impl Renderer {
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
         let composer = compose::Composer::new(&device, &view_layout, format);
+        let clouds = clouds::Clouds::new(&device, &gpu.queue);
         Renderer {
             effects: Effects::default(),
             device,
@@ -169,6 +194,7 @@ impl Renderer {
             skinned,
             sky,
             composer,
+            clouds,
         }
     }
 
@@ -340,8 +366,11 @@ impl Renderer {
         self.terrain
             .draw_water(&mut pass, &resources.patches, &drawn);
         drop(pass);
+        let chain = compose::Chain {
+            clouds: self.effects.clouds,
+        };
         self.composer
-            .run(encoder, &resources.bind_group, targets, view.target);
+            .run(encoder, &resources.bind_group, targets, chain, view.target);
     }
 
     fn view_uniform(&self, frame: &Frame, camera: &Camera, aspect: f32) -> ViewUniform {
@@ -376,7 +405,15 @@ impl Renderer {
             interaction_end: relative(frame.interaction.end, camera.position)
                 .extend(0.0)
                 .to_array(),
-            post: [self.effects.exposure, 0.0, 0.0, 0.0],
+            post: {
+                let [body, wisp] = clouds::drift(frame.clock_s);
+                [self.effects.exposure, body, wisp, 0.0]
+            },
+            clouds: {
+                let [cos, sin] = clouds::wind(frame.clock_s, radius);
+                let on = f32::from(u8::from(self.effects.clouds));
+                [cos, sin, self.effects.cloud_cover, on]
+            },
             flags: [
                 f32::from(u8::from(self.encode_srgb)),
                 // Wrapped so f32 keeps sub millisecond steps all day.
@@ -411,6 +448,14 @@ impl Renderer {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&shadows.sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&self.clouds.noise),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.clouds.sampler),
+                },
             ],
         });
         ViewResources {
@@ -434,9 +479,11 @@ fn relative(origin: DVec3, camera: DVec3) -> Vec3 {
 /// WGSL with the shared prelude in front.
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     let source = format!(
-        "{}{}\n{source}",
+        "{}{}{}\n{}\n{source}",
         shadow::prelude(),
-        include_str!("shaders/common.wgsl")
+        clouds::prelude(),
+        include_str!("shaders/common.wgsl"),
+        include_str!("shaders/cloud_field.wgsl")
     );
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
