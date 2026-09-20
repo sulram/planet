@@ -39,37 +39,6 @@ fn stars(dir: vec3<f32>) -> vec3<f32> {
     return tint * (1.0 - smoothstep(0.0, radius, spot)) * (0.25 + 5.0 * brightness);
 }
 
-// The moon: a real sphere, hit by the view ray and shaded by the real sun, so
-// it has phases from any side and fills the sky as you fly to it.
-// rgb: its light, a: how much of the pixel it covers.
-fn moon_disc(dir: vec3<f32>) -> vec4<f32> {
-    let center = view.moon.xyz;
-    let radius = view.moon.w;
-    let along = dot(center, dir);
-    let miss2 = dot(center, center) - along * along;
-    // Derivatives must be taken before any branch (uniform control flow).
-    let edge = sqrt(max(miss2, 0.0)) / radius;
-    let rim = 1.5 * fwidth(edge);
-    if along < 0.0 || miss2 > radius * radius {
-        return vec4<f32>(0.0);
-    }
-    let hit = dir * (along - sqrt(radius * radius - miss2));
-    let normal = (hit - center) / radius;
-    // Soft rim: about a pixel wide, from orbit or standing on it.
-    let cover = 1.0 - smoothstep(1.0 - rim, 1.0, edge);
-    let lit = smoothstep(-0.02, 0.12, dot(normal, view.sun.xyz));
-    // Maria and craters fixed to the surface, finer ones as it comes close.
-    let face = normal * 4.0;
-    let maria = value_noise(face + 40.0, 64);
-    // Regolith shows only up close: finer grain as the surface nears.
-    let near = 1.0 - smoothstep(200.0, 3000.0, length(hit));
-    let grain = value_noise(normal * radius / 8.0, 4096) * 0.6 + value_noise(normal * radius / 0.7, 65536) * 0.4;
-    let rough = value_noise(face * 6.0 + 9.0, 256) * 0.5 + value_noise(face * 40.0, 1024) * 0.25 + (grain - 0.5) * 1.1 * near;
-    let albedo = 0.16 + 0.34 * smoothstep(0.35, 0.65, maria) - 0.16 * rough;
-    let shine = vec3<f32>(0.95, 0.93, 0.86) * albedo * (lit * 1.05 + 0.010);
-    return vec4<f32>(shine, cover);
-}
-
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
     // A point on the near plane (depth 1) is a direction from the camera.
@@ -94,8 +63,8 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     let dazzle = (1.0 - smoothstep(0.02, 0.20, max(air.r, max(air.g, air.b))))
         * (1.0 - in_air * daylight(normalize(view.camera.xyz)));
     let sun = vec3<f32>(1.0, 0.95, 0.85) * (disc + glow);
-    let moon = moon_disc(dir);
-    // The moon hides the stars behind it, lit side or dark.
-    let night_sky = mix(stars(dir) * dazzle, moon.rgb, moon.a);
-    return encode((sun + night_sky * open_sky) * air.a + air.rgb);
+    // The moon is terrain with depth of its own: it hides sun, stars and
+    // planet by being in front. The planet's night side may be culled, so it
+    // hides them here.
+    return encode((sun + stars(dir) * dazzle) * open_sky * air.a + air.rgb);
 }

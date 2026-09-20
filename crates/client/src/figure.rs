@@ -1,4 +1,4 @@
-//! The body the player wears: a VRM avatar moved by locomotion clips, or the
+//! The figure the player wears: a VRM avatar moved by locomotion clips, or the
 //! box figure while nothing is loaded.
 
 use std::collections::HashMap;
@@ -63,7 +63,7 @@ const LEAN_SPRINT: f64 = core::f64::consts::FRAC_PI_4;
 const LEAN_SWIM: f64 = 1.25;
 const LEAN_PER_S: f64 = 5.0;
 
-pub struct Body {
+pub struct Figure {
     clips: HashMap<Gait, Clip>,
     avatar: Option<(SkinnedMeshId, Avatar)>,
     animator: Animator<Gait>,
@@ -73,9 +73,9 @@ pub struct Body {
     changes: Vec<SkinnedChange>,
 }
 
-impl Default for Body {
-    fn default() -> Body {
-        Body {
+impl Default for Figure {
+    fn default() -> Figure {
+        Figure {
             clips: HashMap::new(),
             avatar: None,
             animator: Animator::new(Gait::Idle),
@@ -86,7 +86,7 @@ impl Default for Body {
     }
 }
 
-impl Body {
+impl Figure {
     pub fn add_clip(&mut self, gait: Gait, clip: Clip) {
         self.clips.insert(gait, clip);
     }

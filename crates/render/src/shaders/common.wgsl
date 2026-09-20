@@ -22,7 +22,7 @@ struct View {
 
 const SKY: vec3<f32> = vec3<f32>(0.30, 0.55, 1.00);
 const SUNSET: vec3<f32> = vec3<f32>(1.00, 0.45, 0.18);
-const DENSITY_PER_M: f32 = 0.000032;
+const DENSITY_PER_M: f32 = 0.00004;
 
 // Distances along the ray to a sphere at the planet centre. x > y is a miss.
 fn ray_sphere(origin: vec3<f32>, dir: vec3<f32>, radius: f32) -> vec2<f32> {
@@ -80,6 +80,35 @@ const WATER_ABSORB: vec3<f32> = vec3<f32>(0.35, 0.070, 0.045);
 // What the water itself scatters back: the colour of "nothing but sea".
 const WATER_SCATTER: vec3<f32> = vec3<f32>(0.012, 0.115, 0.170);
 
+// How much of the sun reaches a point (relative to the camera) past a sphere:
+// 0 in its shadow, 1 clear of it, soft across the edge. Only a sphere between
+// the point and the sun can shadow it. On the sphere's own surface that is the
+// night side; the day side is left to the surface normal, as for any light.
+fn past_sphere(relative: vec3<f32>, center: vec3<f32>, radius: f32) -> f32 {
+    let to_center = center - relative;
+    let along = dot(to_center, view.sun.xyz);
+    let miss = sqrt(max(dot(to_center, to_center) - along * along, 0.0));
+    let soft = radius * 0.06;
+    let shadow = smoothstep(radius - soft, radius + soft, miss);
+    // Ease in across the terminator, where the sphere is just coming between.
+    return mix(1.0, shadow, smoothstep(0.0, radius * 0.15, along));
+}
+
+// Sunlight at a point: whatever neither body shadows.
+fn sunlight(relative: vec3<f32>) -> f32 {
+    let planet = past_sphere(relative, -view.camera.xyz, view.camera.w);
+    let moon = past_sphere(relative, view.moon.xyz, view.moon.w);
+    return planet * moon;
+}
+
+// Up at a point: away from the body whose surface is nearer.
+fn surface_up(relative: vec3<f32>) -> vec3<f32> {
+    let from_planet = view.camera.xyz + relative;
+    let from_moon = relative - view.moon.xyz;
+    let nearer_moon = length(from_moon) - view.moon.w < length(from_planet) - view.camera.w;
+    return normalize(select(from_planet, from_moon, nearer_moon));
+}
+
 // Daylight at a place on the planet, 0 at night.
 fn daylight(up: vec3<f32>) -> f32 {
     return smoothstep(-0.10, 0.15, dot(up, view.sun.xyz));
@@ -104,15 +133,11 @@ fn through_medium(color: vec3<f32>, dir: vec3<f32>, distance: f32) -> vec3<f32> 
 fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) -> vec3<f32> {
     let distance = length(relative);
     let dir = relative / distance;
-    // Up is away from whichever body holds this surface: the moon inside its
-    // gravity field, the planet everywhere else.
-    let from_moon = relative - view.moon.xyz;
-    let on_moon = length(from_moon) < view.moon.w * 1.9;
-    let up = select(normalize(view.camera.xyz + relative), normalize(from_moon), on_moon);
+    let up = surface_up(relative);
     let sun = view.sun.xyz;
 
-    // The planet shadows itself: daylight fades as the sun sets on this spot.
-    let day = daylight(up);
+    // Bodies shadow themselves and each other: night, and eclipses.
+    let day = sunlight(relative);
     let direct = max(dot(normal, sun), 0.0) * day;
     // Sky from above, warm bounce from the ground below: shadowed sides keep
     // their own colour instead of going blue.

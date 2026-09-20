@@ -46,7 +46,7 @@ fn detail(p: vec3<f32>, cell_m: f32) -> f32 {
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
     let distance = length(in.relative);
-    let up = normalize(view.camera.xyz + in.relative);
+    let up = surface_up(in.relative);
     var normal = normalize(in.normal);
 
     // Three scales of detail; the fine ones fade before they would shimmer.
@@ -74,6 +74,7 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     albedo *= 0.78 + 0.22 * mix(1.0, fine * 2.0, near) * mix(1.0, medium * 1.4 + 0.3, mid) + 0.12 * (coarse - 0.5);
 
     // Wet sand darkens and shines near the waterline.
+    // Only the planet has a sea: far from its sea level this is zero anyway.
     let shore = 1.0 - smoothstep(0.0, 1.2, abs(length(view.camera.xyz + in.relative) - view.camera.w));
     albedo *= 1.0 - 0.35 * shore;
     let gloss = max(in.color.a, shore * 0.5) * (1.0 - rock);

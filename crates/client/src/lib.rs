@@ -6,9 +6,9 @@
 //! same type and simply never renders.
 
 mod assets;
-mod body;
 mod box_figure;
 mod controller;
+mod figure;
 mod input;
 mod seam;
 mod terrain;
@@ -21,11 +21,11 @@ use worldgen::{GENERATOR_VERSION, Generator, Material};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
-use body::Body;
 pub use controller::{Controller, Wish};
+use figure::Figure;
 pub use input::{Input, Key};
 pub use seam::{Command, Event, Mode};
-use terrain::Terrain;
+use terrain::{Body, Terrain};
 
 /// Seconds for the sun to go around once.
 const DAY_S: f64 = 1200.0;
@@ -33,14 +33,15 @@ const DAY_S: f64 = 1200.0;
 const MOON_PACE: f64 = 0.93;
 /// Centre of the planet to centre of the moon, metres.
 const MOON_ORBIT_M: f64 = 160_000.0;
-const MOON_RADIUS_M: f64 = 8_000.0;
+use worldgen::MOON_RADIUS_M;
 const STATS_EVERY_S: f64 = 0.5;
 
 pub struct Client {
     generator: Generator,
     controller: Controller,
     terrain: Terrain,
-    body: Body,
+    moon_terrain: Terrain,
+    figure: Figure,
     requests: Requests,
     manifest: Option<Manifest>,
     /// A random avatar was asked for before the manifest arrived.
@@ -65,8 +66,9 @@ impl Client {
         let mut client = Client {
             generator,
             controller,
-            terrain: Terrain::default(),
-            body: Body::default(),
+            terrain: Terrain::new(Body::Planet),
+            moon_terrain: Terrain::new(Body::Moon),
+            figure: Figure::default(),
             requests: Requests::default(),
             manifest: None,
             wants_random_avatar: false,
@@ -188,7 +190,7 @@ impl Client {
                 .map(|avatar| self.worn(avatar))
                 .map_err(|e| e.to_string()),
             Purpose::Clip(gait) => avatar::Clip::from_glb(&bytes)
-                .map(|clip| self.body.add_clip(gait, clip))
+                .map(|clip| self.figure.add_clip(gait, clip))
                 .map_err(|e| e.to_string()),
         });
         if let Err(message) = outcome {
@@ -210,7 +212,7 @@ impl Client {
     }
 
     fn worn(&mut self, avatar: avatar::Avatar) {
-        self.body.wear(avatar);
+        self.figure.wear(avatar);
         if let Some(path) = self.wanted_avatar.clone() {
             self.events.push(Event::AvatarChanged { path });
         }
@@ -271,11 +273,13 @@ impl Client {
     }
 
     pub fn drain_skinned_changes(&mut self) -> Vec<SkinnedChange> {
-        self.body.drain_changes()
+        self.figure.drain_changes()
     }
 
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
-        self.terrain.drain_changes()
+        let mut changes = self.terrain.drain_changes();
+        changes.extend(self.moon_terrain.drain_changes());
+        changes
     }
 
     /// Advances the simulation by `dt` seconds and returns the frame to draw.
@@ -315,12 +319,19 @@ impl Client {
             center: moon,
             radius_m: MOON_RADIUS_M,
         });
+        let streamer = if self.controller.on_moon() {
+            &self.moon_terrain
+        } else {
+            &self.terrain
+        };
+        let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
+        self.controller.set_drawn_footprint(footprint_m);
         self.controller.update(dt, wish, &self.generator);
-        self.body.update(dt, &self.controller);
+        self.figure.update(dt, &self.controller);
         self.stats(dt);
 
         let camera = self.controller.camera(&self.generator);
-        let patches = self.terrain.update(&self.generator, &camera, self.aspect);
+        let patches = self.stream(&camera, Terrain::update);
         self.frame(camera, patches)
     }
 
@@ -328,7 +339,7 @@ impl Client {
     /// patch is built: for headless renders only.
     pub fn settled_frame(&mut self) -> Frame {
         let camera = self.controller.camera(&self.generator);
-        let patches = self.terrain.settle(&self.generator, &camera, self.aspect);
+        let patches = self.stream(&camera, Terrain::settle);
         self.frame(camera, patches)
     }
 
@@ -342,7 +353,32 @@ impl Client {
         DVec3::new(lunar.cos(), tilt, lunar.sin()).normalize() * MOON_ORBIT_M
     }
 
-    fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchId>) -> Frame {
+    /// Streams the terrain of every body and lists what to draw. Each
+    /// streamer works around its own body's centre, so the moon's sees the
+    /// camera from where the moon is now.
+    fn stream(
+        &mut self,
+        camera: &scene::Camera,
+        select: fn(&mut Terrain, &Generator, &scene::Camera, f32) -> Vec<scene::PatchId>,
+    ) -> Vec<scene::PatchDraw> {
+        let moon = self.moon_position();
+        let from_moon = scene::Camera {
+            position: camera.position - moon,
+            ..*camera
+        };
+        let on_planet = select(&mut self.terrain, &self.generator, camera, self.aspect);
+        let on_moon = select(
+            &mut self.moon_terrain,
+            &self.generator,
+            &from_moon,
+            self.aspect,
+        );
+        let at = |body_center: DVec3| move |id| scene::PatchDraw { id, body_center };
+        let planet = on_planet.into_iter().map(at(DVec3::ZERO));
+        planet.chain(on_moon.into_iter().map(at(moon))).collect()
+    }
+
+    fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchDraw>) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
         Frame {
@@ -355,12 +391,12 @@ impl Client {
             planet_radius_m: RADIUS_M,
             clock_s: self.clock_s,
             patches,
-            boxes: if self.body.is_worn() {
+            boxes: if self.figure.is_worn() {
                 Vec::new()
             } else {
                 box_figure::parts(&self.controller)
             },
-            skinned: self.body.instance(&self.controller).into_iter().collect(),
+            skinned: self.figure.instance(&self.controller).into_iter().collect(),
         }
     }
 
@@ -377,6 +413,7 @@ impl Client {
         self.controller = Controller::spawn(spawn_point(&self.generator), &self.generator);
         self.controller.mode = mode;
         self.terrain.clear();
+        self.moon_terrain.clear();
         self.face_the_sun();
         self.events.push(Event::RecipeChanged {
             recipe: self.generator.recipe().clone(),

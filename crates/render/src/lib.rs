@@ -26,7 +26,7 @@ pub use wgpu;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Top of the atmosphere above sea level, metres.
-const ATMOSPHERE_M: f64 = 5000.0;
+const ATMOSPHERE_M: f64 = 3600.0;
 
 /// One camera drawing into one target.
 pub struct View<'a> {

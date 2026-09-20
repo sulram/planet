@@ -35,13 +35,24 @@ const DIVE_PITCH: f64 = -0.5;
 const BUOYANCY_MPS: f64 = 0.7;
 /// The moon pulls a fifth as hard: the same legs jump five times as high.
 const MOON_GRAVITY_MPS2: f64 = GRAVITY_MPS2 / 5.0;
-/// Reach of the moon's gravity field above its surface, as a share of its
-/// radius. Inside it the moon is down. Leaving takes a little more height than
-/// entering, so the edge never flickers.
-const MOON_FIELD: f64 = 0.75;
-const MOON_FIELD_EXIT: f64 = 0.9;
-/// How fast the body and camera swing to a new up, per second.
-const UP_EASE_PER_S: f64 = 2.5;
+/// The moon's sphere of influence, in moon radii from its centre. Inside it
+/// the avatar is stored relative to the moon and rides its orbit. It is wide
+/// on purpose: the hand-over happens where nothing can be seen of it. Leaving
+/// takes a little more distance than entering, so the edge never flickers.
+const MOON_SOI_ENTER: f64 = 4.0;
+const MOON_SOI_EXIT: f64 = 4.4;
+/// Between these distances (moon radii from its centre) down turns from the
+/// planet to the moon, continuously.
+const MOON_PULL_FAR: f64 = 3.0;
+const MOON_PULL_NEAR: f64 = 1.3;
+/// How fast the frame turns to gravity on foot, per second.
+const WALK_ALIGN_PER_S: f64 = 4.0;
+/// In flight the frame is the flyer's own. It only settles to the horizon
+/// close to a surface: fully under `FLY_ALIGN_NEAR` body radii of clearance,
+/// not at all over `FLY_ALIGN_FAR`.
+const FLY_ALIGN_PER_S: f64 = 1.5;
+const FLY_ALIGN_NEAR: f64 = 0.02;
+const FLY_ALIGN_FAR: f64 = 0.30;
 const EYE_M: f64 = 1.5;
 const LOOK_RAD_PER_PX: f64 = 0.0025;
 const PITCH_LIMIT: f64 = 1.45;
@@ -59,19 +70,18 @@ pub struct Wish {
     pub zoom: f32,
 }
 
-/// The celestial body whose gravity field holds the avatar. It decides which
-/// way is down and what the position is stored relative to, so an avatar on
-/// the moon rides along its orbit without anyone moving it.
+/// The celestial body whose frame of reference holds the avatar: what its
+/// position is stored relative to. An avatar in the moon's sphere of influence
+/// rides the moon's orbit without anyone moving it.
 ///
-/// This is the first gravity field (docs/ARCHITECTURE.md, Gravity): a sphere
-/// with a range. The highest priority field containing you wins; with two
-/// bodies that is "the moon's, when inside it".
+/// Which way is down is a separate matter, and continuous: see
+/// [`Controller::gravity_up`].
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Site {
     /// Position is `point` + `height_m` over the datum sphere.
     Planet,
     /// Position is `direction` (unit, from the moon's centre) + `height_m`
-    /// over the moon's surface. The moon is a smooth ball for now.
+    /// over the moon's datum sphere.
     Moon { direction: DVec3 },
 }
 
@@ -109,10 +119,15 @@ pub struct Controller {
     swimming: bool,
     site: Site,
     moon: Option<MoonBody>,
-    /// Up as the body and the camera show it: eased toward the true up, so
-    /// entering another gravity field swings the world round instead of
-    /// snapping it.
-    body_up: DVec3,
+    /// The footprint the ground around the avatar is drawn with right now:
+    /// see [`Controller::shown_ground_m`].
+    drawn_footprint_m: f64,
+    /// Up of the avatar's own frame: what the camera, the controls and the
+    /// body stand on. It turns toward gravity by rotation, never by a cut:
+    /// quickly on foot, and in flight only near a surface, because in flight
+    /// the flyer's frame wins. Look at the planet from the moon and fly: you go
+    /// to the planet, and nothing turns you on the way.
+    frame_up: DVec3,
 }
 
 impl Controller {
@@ -137,7 +152,8 @@ impl Controller {
             swimming: false,
             site: Site::Planet,
             moon: None,
-            body_up: DVec3::from(tangents.up),
+            drawn_footprint_m: 0.0,
+            frame_up: DVec3::from(tangents.up),
         }
     }
 
@@ -145,25 +161,47 @@ impl Controller {
         self.point
     }
 
-    /// True up: against the gravity of the body that holds the avatar.
+    /// Up of the avatar's frame. See the `frame_up` field.
     pub fn up(&self) -> DVec3 {
+        self.frame_up
+    }
+
+    /// From the centre of the site's body through the avatar.
+    pub fn radial(&self) -> DVec3 {
         match self.site {
             Site::Planet => DVec3::from(self.point.direction()),
             Site::Moon { direction } => direction,
         }
     }
 
-    /// Up as shown: see [`Controller::body_basis`].
-    pub fn body_up(&self) -> DVec3 {
-        self.body_up
+    /// How much of "down" belongs to the moon here, `0..=1`.
+    fn moon_pull(&self) -> f64 {
+        match (self.site, self.moon) {
+            (Site::Moon { .. }, Some(moon)) => {
+                let radii = (moon.radius_m + self.height_m) / moon.radius_m;
+                1.0 - ((radii - MOON_PULL_NEAR) / (MOON_PULL_FAR - MOON_PULL_NEAR)).clamp(0.0, 1.0)
+            }
+            _ => 0.0,
+        }
     }
 
-    /// The avatar's frame as shown, columns right, up, back: eased up, and
-    /// the facing flattened against it.
+    /// Against gravity, here. Between the bodies it turns continuously from
+    /// one to the other: the first gravity fields (docs/ARCHITECTURE.md).
+    pub fn gravity_up(&self) -> DVec3 {
+        let pull = self.moon_pull();
+        let planet_up = self.position().normalize();
+        if pull <= 0.0 {
+            return planet_up;
+        }
+        let eased = pull * pull * (3.0 - 2.0 * pull);
+        rotate_toward(planet_up, self.radial(), eased, self.view)
+    }
+
+    /// The avatar's frame, columns right, up, back.
     pub fn body_basis(&self) -> DMat3 {
-        let up = self.body_up;
-        let back =
-            -(self.facing - up * self.facing.dot(up)).normalize_or(up.any_orthonormal_vector());
+        let up = self.frame_up;
+        let flat = self.facing - up * self.facing.dot(up);
+        let back = -flat.normalize_or(up.any_orthonormal_vector());
         DMat3::from_cols(up.cross(back), up, back)
     }
 
@@ -183,21 +221,47 @@ impl Controller {
     fn ground_m(&self, generator: &Generator) -> f64 {
         match self.site {
             Site::Planet => generator.sample(self.point.direction()).height_m,
-            Site::Moon { .. } => 0.0,
+            Site::Moon { direction } => {
+                generator.moon_sample_at(direction.to_array(), 0.0).height_m
+            }
         }
     }
 
+    /// Tells the controller how coarse the mesh around the avatar is this frame.
+    pub fn set_drawn_footprint(&mut self, footprint_m: f64) {
+        self.drawn_footprint_m = footprint_m;
+    }
+
+    /// The ground as it is on screen along `direction` from the body's centre:
+    /// the real ground, or the coarser mesh over it while finer patches are
+    /// still streaming in, whichever is higher. Physics on foot uses the real
+    /// ground; the camera and a flyer stay above this one, so nobody ends up
+    /// looking at the terrain from underneath.
+    fn shown_ground_m(&self, generator: &Generator, direction: DVec3) -> f64 {
+        let at = |footprint_m: f64| match self.site {
+            Site::Planet => {
+                generator
+                    .sample_at(direction.to_array(), footprint_m)
+                    .height_m
+            }
+            Site::Moon { .. } => {
+                generator
+                    .moon_sample_at(direction.to_array(), footprint_m)
+                    .height_m
+            }
+        };
+        at(0.0).max(at(self.drawn_footprint_m))
+    }
+
     fn gravity_mps2(&self) -> f64 {
-        match self.site {
-            Site::Planet => GRAVITY_MPS2,
-            Site::Moon { .. } => MOON_GRAVITY_MPS2,
-        }
+        let pull = self.moon_pull();
+        GRAVITY_MPS2 + (MOON_GRAVITY_MPS2 - GRAVITY_MPS2) * pull
     }
 
     /// Feet in world space.
     pub fn position(&self) -> DVec3 {
         let (center, radius_m) = self.body();
-        center + self.up() * (radius_m + self.height_m)
+        center + self.radial() * (radius_m + self.height_m)
     }
 
     pub fn facing(&self) -> DVec3 {
@@ -233,32 +297,50 @@ impl Controller {
         self.altitude_m(generator).min(to_moon).max(0.0)
     }
 
-    /// Hands the avatar to whichever gravity field it is in now.
+    /// Hands the avatar to the frame of reference it is in now. World position
+    /// does not change, only what it is measured from.
     fn resolve_site(&mut self) {
         let Some(moon) = self.moon else {
             return;
         };
         let position = self.position();
+        let offset = position - moon.center;
+        let radii = offset.length() / moon.radius_m;
         match self.site {
-            Site::Planet => {
-                let offset = position - moon.center;
-                if offset.length() < moon.radius_m * (1.0 + MOON_FIELD) {
-                    self.site = Site::Moon {
-                        direction: offset.normalize_or(DVec3::Y),
-                    };
-                    self.height_m = offset.length() - moon.radius_m;
-                    self.vertical_mps = 0.0;
-                }
+            Site::Planet if radii < MOON_SOI_ENTER => {
+                self.site = Site::Moon {
+                    direction: offset.normalize_or(DVec3::Y),
+                };
+                self.height_m = offset.length() - moon.radius_m;
             }
-            Site::Moon { .. } => {
-                if self.height_m > moon.radius_m * MOON_FIELD_EXIT {
-                    self.site = Site::Planet;
-                    self.point = SurfacePoint::from_direction(position.to_array());
-                    self.height_m = position.length() - RADIUS_M;
-                    self.vertical_mps = 0.0;
-                }
+            Site::Moon { .. } if radii > MOON_SOI_EXIT => {
+                self.site = Site::Planet;
+                self.point = SurfacePoint::from_direction(position.to_array());
+                self.height_m = position.length() - RADIUS_M;
             }
+            _ => {}
         }
+    }
+
+    /// Turns the avatar's frame toward gravity: see the `frame_up` field.
+    fn align_frame(&mut self, dt: f64, generator: &Generator) {
+        let rate = match self.mode {
+            Mode::Walk => WALK_ALIGN_PER_S,
+            Mode::Fly => {
+                let body_radius = self.body().1;
+                let clearance = self.altitude_m(generator).max(0.0);
+                let far =
+                    (clearance / body_radius - FLY_ALIGN_NEAR) / (FLY_ALIGN_FAR - FLY_ALIGN_NEAR);
+                FLY_ALIGN_PER_S * (1.0 - far.clamp(0.0, 1.0))
+            }
+        };
+        // The whole frame turns as one: what the avatar looks at and faces
+        // turns with its up, so aligning never reads as a camera move.
+        let fraction = 1.0 - (-rate * dt).exp();
+        let turn = turn_toward(self.frame_up, self.gravity_up(), fraction, self.view);
+        self.frame_up = (turn * self.frame_up).normalize();
+        self.view = turn * self.view;
+        self.facing = turn * self.facing;
     }
 
     pub fn swimming(&self) -> bool {
@@ -291,7 +373,7 @@ impl Controller {
         self.mode = Mode::Fly;
         self.grounded = false;
         self.resolve_site();
-        self.body_up = self.up();
+        self.frame_up = self.gravity_up();
         self.transport();
     }
 
@@ -327,13 +409,25 @@ impl Controller {
         self.pose_view(pitch, boom_m);
     }
 
-    /// Metres above the ground or the sea. Negative under water.
+    /// Metres above the ground, or above the sea where there is one. Negative
+    /// under water.
     pub fn altitude_m(&self, generator: &Generator) -> f64 {
-        self.height_m - self.ground_m(generator).max(0.0)
+        let ground = self.ground_m(generator);
+        // Only the planet has a sea to be above.
+        let surface = if self.site == Site::Planet {
+            ground.max(0.0)
+        } else {
+            ground
+        };
+        self.height_m - surface
     }
 
     pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator) {
-        let up = self.up();
+        // `up` is the avatar's own frame: look, steer and fly by it. `gravity`
+        // is the world's: fall and float by it. On foot the two agree within a
+        // moment; in flight they may not, and the frame wins.
+        let up = self.frame_up;
+        let gravity = self.gravity_up();
         self.look(wish, up);
 
         let right = self.view.cross(up);
@@ -361,7 +455,7 @@ impl Controller {
                 self.swimming = false;
                 self.vertical_mps = JUMP_MPS * 0.8;
                 self.height_m = FLOAT_M + 0.06;
-                flat * SWIM_MPS + up * self.vertical_mps
+                flat * SWIM_MPS + gravity * self.vertical_mps
             }
             Mode::Walk if self.swimming => {
                 self.vertical_mps = 0.0;
@@ -374,10 +468,10 @@ impl Controller {
                 } else {
                     self.view
                 };
-                let wish_dir = (right * x + forward * y + up * lift).normalize_or_zero();
+                let wish_dir = (right * x + forward * y + gravity * lift).normalize_or_zero();
                 let pace = if wish.sprint { SWIM_SPRINT_FACTOR } else { 1.0 };
                 let drift = if wish_dir == DVec3::ZERO {
-                    up * BUOYANCY_MPS
+                    gravity * BUOYANCY_MPS
                 } else {
                     DVec3::ZERO
                 };
@@ -391,7 +485,7 @@ impl Controller {
                 if !self.grounded {
                     self.vertical_mps -= self.gravity_mps2() * dt;
                 }
-                flat * WALK_MPS * sprint + up * self.vertical_mps
+                flat * WALK_MPS * sprint + gravity * self.vertical_mps
             }
             Mode::Fly => {
                 self.vertical_mps = 0.0;
@@ -408,7 +502,7 @@ impl Controller {
         self.resolve_site();
         self.speed_mps = velocity.length();
         self.sprinting = wish.sprint && self.speed_mps > 0.1;
-        self.ground_mps = (velocity - up * velocity.dot(up)).length();
+        self.ground_mps = (velocity - gravity * velocity.dot(gravity)).length();
         if self.grounded {
             self.stride_m += flat.length() * WALK_MPS * sprint * dt;
         }
@@ -422,9 +516,8 @@ impl Controller {
             let blend = 1.0 - (-TURN_PER_S * dt).exp();
             self.facing = self.facing.lerp(target, blend);
         }
+        self.align_frame(dt, generator);
         self.transport();
-        let ease = 1.0 - (-UP_EASE_PER_S * dt).exp();
-        self.body_up = self.body_up.lerp(self.up(), ease).normalize_or(self.up());
     }
 
     /// Applies pointer look and zoom.
@@ -459,7 +552,7 @@ impl Controller {
         }
         let floor = match self.mode {
             Mode::Walk => ground,
-            Mode::Fly => ground + 0.5,
+            Mode::Fly => self.shown_ground_m(generator, self.radial()) + 0.5,
         };
         if self.height_m <= floor {
             self.height_m = floor;
@@ -500,11 +593,12 @@ impl Controller {
         self.height_m += up.dot(delta);
     }
 
-    /// Keeps the tangent vectors tangent after the avatar moved: up changed,
-    /// so they are projected back on the new tangent plane. This is parallel
-    /// transport, and it is why seams and corners need no special case.
+    /// Keeps the tangent vectors tangent to the frame: projected back on the
+    /// plane under `frame_up`. With the frame following gravity as the avatar
+    /// moves this is parallel transport, and it is why seams and corners need
+    /// no special case.
     fn transport(&mut self) {
-        let up = self.up();
+        let up = self.frame_up;
         let flatten = |v: DVec3, fallback: DVec3| {
             let flat = (v - up * v.dot(up)).normalize_or_zero();
             if flat == DVec3::ZERO { fallback } else { flat }
@@ -516,25 +610,15 @@ impl Controller {
 
     /// The third person camera: behind and above the avatar, never underground.
     pub fn camera(&self, generator: &Generator) -> Camera {
-        // The shown up, and the view flattened against it: while a new gravity
-        // field swings the body round, the camera swings with it.
-        let up = self.body_up;
-        let view = (self.view - up * self.view.dot(up)).normalize_or(self.view);
-        let forward = view * self.pitch.cos() + up * self.pitch.sin();
+        let up = self.frame_up;
+        let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
         let target = self.position() + up * EYE_M;
         let mut position = target - forward * self.boom_m;
 
-        // Never inside the body the avatar stands on.
+        // Never inside the body the avatar stands on, as drawn.
         let (center, datum_m) = self.body();
         let from_center = position - center;
-        let ground = match self.site {
-            Site::Planet => {
-                generator
-                    .sample(from_center.normalize().to_array())
-                    .height_m
-            }
-            Site::Moon { .. } => 0.0,
-        };
+        let ground = self.shown_ground_m(generator, from_center.normalize());
         let min_radius = datum_m + ground + 0.4;
         if from_center.length() < min_radius {
             position = center + from_center.normalize() * min_radius;
@@ -551,4 +635,24 @@ impl Controller {
             near: 0.1,
         }
     }
+}
+
+/// The rotation that takes `from` a `fraction` of the way to `to`, both unit.
+/// When they are opposite any axis would do, so the caller names one.
+fn turn_toward(from: DVec3, to: DVec3, fraction: f64, fallback_axis: DVec3) -> DQuat {
+    let angle = from.dot(to).clamp(-1.0, 1.0).acos();
+    if angle < 1e-9 {
+        return DQuat::IDENTITY;
+    }
+    let axis = from.cross(to).normalize_or(
+        fallback_axis
+            .cross(from)
+            .normalize_or(from.any_orthonormal_vector()),
+    );
+    DQuat::from_axis_angle(axis, angle * fraction)
+}
+
+/// `from` turned a `fraction` of the way to `to`.
+fn rotate_toward(from: DVec3, to: DVec3, fraction: f64, fallback_axis: DVec3) -> DVec3 {
+    (turn_toward(from, to, fraction, fallback_axis) * from).normalize()
 }

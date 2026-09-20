@@ -44,9 +44,21 @@ fn flight_off_near_the_moon_means_landing_on_it() {
         "jumped {on_moon} against {on_planet} at home"
     );
 
-    // Walking moves along the ground, and a minute later you are still on it:
-    // the moon carries you along its orbit.
+    // Walking follows the craters, and a minute later you are still on the
+    // ground: the moon carries you along its orbit.
     input.key(Key::Forward, true);
     let (walking, _) = altitude_after(&mut client, &mut input, 60.0);
-    assert!(walking.abs() < 0.01, "walking on the moon at {walking}");
+    assert!(
+        (-0.01..1.0).contains(&walking),
+        "walking on the moon at {walking}"
+    );
+
+    // Flight wins over gravity: from the moon, fly away and the planet's frame
+    // takes you back, with no gravity pulling the flyer round on the way.
+    input.key(Key::Forward, false);
+    client.command(Command::SetMode { mode: Mode::Fly });
+    input.key(Key::Up, true);
+    input.key(Key::Sprint, true);
+    let (leaving, _) = altitude_after(&mut client, &mut input, 30.0);
+    assert!(leaving > 30_000.0, "flew {leaving} m away from the moon");
 }

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use glam::DVec3;
-use scene::{PatchId, TerrainChange, TerrainVertex, WaterVertex, patch_indices};
+use scene::{PatchDraw, PatchId, TerrainChange, TerrainVertex, WaterVertex, patch_indices};
 use wgpu::util::DeviceExt;
 
 use crate::{PipelineSpec, Surface, pipeline, relative};
@@ -122,7 +122,6 @@ impl Terrain {
             TerrainChange::Remove(id) => {
                 self.patches.remove(&id);
             }
-            TerrainChange::Clear => self.patches.clear(),
         }
     }
 
@@ -232,24 +231,28 @@ impl PatchUniforms {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         terrain: &Terrain,
-        wanted: &[PatchId],
+        wanted: &[PatchDraw],
         camera: DVec3,
     ) -> Vec<PatchId> {
-        let drawn: Vec<PatchId> = wanted
+        let placed: Vec<&PatchDraw> = wanted
             .iter()
-            .copied()
-            .filter(|id| terrain.patches.contains_key(id))
+            .filter(|draw| terrain.patches.contains_key(&draw.id))
             .collect();
+        let drawn: Vec<PatchId> = placed.iter().map(|draw| draw.id).collect();
         if drawn.len() > self.capacity {
             self.capacity = drawn.len().next_power_of_two();
             (self.buffer, self.bind_group) =
                 Self::allocate(device, &self.layout, self.stride, self.capacity);
         }
         let mut bytes = vec![0u8; drawn.len() * self.stride as usize];
-        for (slot, id) in drawn.iter().enumerate() {
-            let origin = terrain.patches[id].origin;
-            let offset = relative(origin, camera).extend(0.0);
-            // Wrapped in f64: exact, however far from the planet centre.
+        for (slot, draw) in placed.iter().enumerate() {
+            // A patch is built around its body's centre; the body is wherever
+            // it is this frame.
+            let origin = terrain.patches[&draw.id].origin;
+            let offset = relative(draw.body_center + origin, camera).extend(0.0);
+            // Wrapped in f64: exact, however far from the body's centre. It is
+            // the body relative origin that is wrapped, so detail is fixed to
+            // the ground of a moving moon too.
             let anchor = origin
                 .rem_euclid(DVec3::splat(ANCHOR_M))
                 .as_vec3()

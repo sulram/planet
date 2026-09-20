@@ -161,12 +161,18 @@ Numbers marked (p) are proposed and not yet confirmed.
 - A camera under sea level sees through water as a medium (red dies first).
 - Swimming is part of walking: in water too deep to stand you float at chest
   depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
-- Sky: a shell atmosphere (5 km), a sun, stars fixed to the world.
-- The moon is a real sphere on an orbit on rails (160 km out, 8 km radius),
-  drawn by ray and sphere in the sky pass: real phases, faint moonlight.
-- It is the first gravity field: inside its range the controller stores the
-  avatar relative to the moon, down is its centre, gravity is a fifth, and the
-  shown up eases round. Fly in, turn flight off, land, walk, jump high.
+- Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world.
+- Bodies: the planet and the moon share one terrain quadtree (`Body`). Patches
+  are built around their body's centre; the renderer adds where the body is
+  this frame. The moon orbits on rails, 160 km out, 8 km radius, craters from
+  generator v2, no sea.
+- Sunlight at a point is what neither sphere shadows: night and eclipses.
+- Three separate things hold an avatar. Its **site**: the body it is stored
+  relative to, changed at the moon's sphere of influence (4 radii), so it
+  rides the orbit. **Gravity**: turns continuously from planet to moon with
+  distance; a fifth as strong on the moon. Its own **frame** (`frame_up`):
+  turns toward gravity by rotation, fast on foot, in flight only near a
+  surface. Flight goes where you look.
 - Ground detail is procedural noise anchored to the planet: patch origins are
   wrapped to 1024 m in f64 on the CPU. Rock shows by slope, per pixel.
 

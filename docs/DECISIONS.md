@@ -269,3 +269,45 @@ moon is a smooth ball for now: terrain on it needs the ball topology, which
 stays on the ROADMAP. The atmosphere shell doubled to 5 km with a thinner
 density, by Marlus's eye. Rejected: keeping the moon as a painted disc with a
 fake "arrival" trigger.
+
+## 32. The moon is terrain; flight owns its frame; gravity is continuous (decided)
+
+Testing decision 31, Marlus found that the far side of the moon hid the stars
+but not the sun or the planet, that the moon had no craters, and that the
+approach jolted. All three came from shortcuts. The painted sphere lived in
+the sky pass, behind everything with depth. The moon is now a second body on
+the same terrain quadtree: `Body::Planet` and `Body::Moon` differ in radius,
+depth and having a sea, patches are built around their body's centre, and the
+renderer adds the centre of the moving body each frame. A crater generator
+(stacked cell grids of bowls with rims, footprint filtered like the planet)
+joins generator v2, guarded by its own golden hash. Depth does the occlusion;
+sunlight is what neither sphere shadows, which gives night and eclipses alike.
+
+The jolts had two causes: the avatar only started riding the moon 6 km out,
+while it sweeps past at 730 m/s, and down flipped in one frame. Marlus asked
+that flight predominate. So three things are separate now. The frame of
+reference (sphere of influence, 4 moon radii, with hysteresis) changes far
+away where nothing shows. Gravity turns continuously from one body to the
+other with distance. And the avatar has a frame of its own, `frame_up`, that
+turns toward gravity by rotation, carrying view and facing with it: quickly on
+foot, in flight only near a surface. Look at the planet from the moon and fly:
+you go there, and nothing turns you on the way. Rejected: easing only the
+drawn body while the controls snapped (what decision 31 shipped). The
+atmosphere settled at 3.6 km. The avatar's `Body` type became `Figure`:
+in the GLOSSARY a body is celestial.
+
+## 33. Shadows are cast, not assumed; what is shown has a floor (decided)
+
+Two bugs from decision 32, both found by Marlus within the hour. The planet
+went dark because the sphere shadow test mirrored its measure for spheres on
+the far side of the sun, and the moon almost always is: every point read as
+eclipsed. A sphere now shadows a point only when it lies between the point and
+the sun; a body's own day side is left to the surface normal. And the moon
+read as a hollow shell because collision uses the full terrain while a coarse
+mesh fades small craters out and so sits higher: arriving fast, the avatar and
+camera ended up under the drawn ground. The streamer now reports the footprint
+the ground is drawn with at a place, and the camera and a flyer stay above the
+higher of the real and the shown ground. The moon's camera floor had also been
+left at zero from its smooth days. The moon gained a few wide basins, flooded
+with dark mare through a continuous `Sample::shade`, so it reads from the
+planet.

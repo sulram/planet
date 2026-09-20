@@ -23,6 +23,7 @@ Every milestone ends runnable end to end.
 - [x] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
 - [x] Sun as rotating directional light; first atmosphere (uniform shell)
 - [ ] Atmosphere with real scattering
+- [ ] Atmospheric clouds: a layer seen from the ground, from above and from orbit, with shadows on the ground
 - [x] Headless render to PNG (fixed clock + seed)
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [ ] Params as knobs in the panel
@@ -94,8 +95,8 @@ Every milestone ends runnable end to end.
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 
-- [x] A moon you can fly to: a real sphere in orbit, its own gravity field, walk and jump on it
-- [ ] The moon as a voxel body (Cartesian ball topology): terrain, craters you can stand in, building
+- [x] A moon you can fly to: a second body with cratered terrain, its own gravity, walk and jump on it
+- [ ] The moon as a voxel body (Cartesian ball topology): digging and building on it
 - [ ] Rockets, satellites on rails, buildable orbital grids
 - [ ] Vehicles: hover first, raycast wheels later
 - [ ] Destruction: ops + local debris; protected, ephemeral, permanent modes

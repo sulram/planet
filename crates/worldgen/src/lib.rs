@@ -9,6 +9,7 @@
 //! version they were created with. New terrain means a new version module
 //! beside `v1`, and the golden hashes in `tests/golden.rs` guard the old ones.
 
+mod moon;
 mod noise;
 mod recipe;
 mod v1;
@@ -18,6 +19,9 @@ pub use recipe::{Params, Recipe, RecipeError, format_seed, parse_seed};
 
 /// The version new worlds are created with.
 pub const GENERATOR_VERSION: u32 = 2;
+
+/// Radius of the moon's datum sphere, metres.
+pub const MOON_RADIUS_M: f64 = moon::RADIUS_M;
 
 /// A unit vector from the planet centre.
 pub type Direction = [f64; 3];
@@ -34,6 +38,8 @@ pub enum Material {
     Snow = 5,
     /// The sea floor below the reach of waves. Generator v2 and later.
     Seabed = 6,
+    /// The dust of an airless moon. Generator v2 and later.
+    Regolith = 7,
 }
 
 /// The terrain under one direction.
@@ -42,6 +48,9 @@ pub struct Sample {
     /// Ground height in metres from the datum sphere. Negative is sea floor.
     pub height_m: f64,
     pub material: Material,
+    /// How far the ground cover darkens here, `0..=1`: continuous where a
+    /// material is a step. The moon's maria; zero elsewhere for now.
+    pub shade: f64,
 }
 
 impl Sample {
@@ -74,6 +83,19 @@ impl Generator {
     /// and anything saved use this.
     pub fn sample(&self, direction: Direction) -> Sample {
         self.sample_at(direction, 0.0)
+    }
+
+    /// The moon's ground under a unit direction from its centre, filtered
+    /// like [`Generator::sample_at`]. Worlds older than v2 have a smooth moon.
+    pub fn moon_sample_at(&self, direction: Direction, footprint_m: f64) -> Sample {
+        match self.recipe.generator_version {
+            1 => Sample {
+                height_m: 0.0,
+                material: Material::Regolith,
+                shade: 0.0,
+            },
+            _ => moon::sample(&self.recipe, direction, footprint_m),
+        }
     }
 
     /// Terrain as a mesh with one sample every `footprint_m` metres should see

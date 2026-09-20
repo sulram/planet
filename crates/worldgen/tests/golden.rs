@@ -69,6 +69,26 @@ const GOLDEN_V1: [u64; 4] = [
     0x7d90_535e_723d_d9ee,
 ];
 
+/// FNV-1a over the moon of generator v2.
+#[test]
+fn v2_moon_is_frozen() {
+    let generator = Generator::new(Recipe::new(1)).unwrap();
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for d in directions() {
+        for byte in generator
+            .moon_sample_at(d, 0.0)
+            .height_m
+            .to_bits()
+            .to_le_bytes()
+        {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    assert_eq!(hash, GOLDEN_V2_MOON, "the moon of generator v2 changed");
+}
+
+const GOLDEN_V2_MOON: u64 = 0x35e2_1fd0_08f9_7836;
+
 #[test]
 fn terrain_is_plausible() {
     let generator = Generator::new(Recipe::new(7)).unwrap();

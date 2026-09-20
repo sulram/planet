@@ -158,6 +158,7 @@ pub fn sample(recipe: &Recipe, d: Direction, footprint_m: f64) -> Sample {
     Sample {
         height_m,
         material: material(recipe, d, height_m),
+        shade: 0.0,
     }
 }
 

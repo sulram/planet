@@ -47,7 +47,8 @@ pub struct WaterVertex {
     pub depth_m: f32,
 }
 
-/// One terrain patch: [`PATCH_VERTICES`] vertices around an `f64` origin.
+/// One terrain patch: [`PATCH_VERTICES`] vertices around an `f64` origin. The
+/// origin is relative to the centre of the patch's body: see [`PatchDraw`].
 #[derive(Clone, Debug)]
 pub struct TerrainMesh {
     pub origin: DVec3,
@@ -90,12 +91,19 @@ pub fn patch_indices() -> Vec<u16> {
     out
 }
 
+/// A patch to draw, and where its body is this frame. Bodies move (the moon
+/// orbits), patches do not: a mesh is built once around its body's centre.
+#[derive(Clone, Copy, Debug)]
+pub struct PatchDraw {
+    pub id: PatchId,
+    pub body_center: DVec3,
+}
+
 /// A change to the set of terrain patches a renderer holds.
 #[derive(Clone, Debug)]
 pub enum TerrainChange {
     Add(PatchId, TerrainMesh),
     Remove(PatchId),
-    Clear,
 }
 
 /// A unit cube (`-0.5..=0.5`) placed in world space. Avatars are made of these
@@ -180,8 +188,8 @@ pub struct Camera {
     pub near: f32,
 }
 
-/// The moon: a sphere somewhere in world space. Scenery with a real place, so
-/// it grows as you fly to it and shows its phases from any side.
+/// The moon as the light sees it: a sphere that casts a shadow and lends a
+/// little light. Its ground is ordinary terrain, in [`Frame::patches`].
 #[derive(Clone, Copy, Debug)]
 pub struct Moon {
     pub position: DVec3,
@@ -201,7 +209,7 @@ pub struct Frame {
     /// World clock, seconds: moves water and wind.
     pub clock_s: f64,
     /// Patches to draw this frame. All were announced by a [`TerrainChange::Add`].
-    pub patches: Vec<PatchId>,
+    pub patches: Vec<PatchDraw>,
     pub boxes: Vec<BoxPart>,
     pub skinned: Vec<SkinnedInstance>,
 }

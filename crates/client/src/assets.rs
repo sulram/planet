@@ -22,7 +22,7 @@ pub struct AssetRequest {
 pub(crate) enum Purpose {
     Manifest,
     Avatar,
-    Clip(crate::body::Gait),
+    Clip(crate::figure::Gait),
 }
 
 /// `manifest.json` at the asset root: the one place that says which avatars
@@ -33,7 +33,7 @@ pub(crate) struct Manifest {
     pub default_avatar: Option<String>,
     /// What the instance offers to anyone.
     pub avatars: Vec<String>,
-    pub clips: std::collections::HashMap<crate::body::Gait, String>,
+    pub clips: std::collections::HashMap<crate::figure::Gait, String>,
 }
 
 pub(crate) const MANIFEST_PATH: &str = "manifest.json";

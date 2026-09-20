@@ -1,4 +1,4 @@
-//! Terrain streaming: a quadtree per sector, ground to orbit.
+//! Terrain streaming: a quadtree per sector, ground to orbit, for any body.
 //!
 //! Each node is a square of address space meshed as one patch of
 //! `PATCH_GRID^2` quads. Near the camera nodes split, so triangles stay about
@@ -9,8 +9,13 @@
 //! This is the far field of the terrain layer: a heightfield of the
 //! generator's ground, sea floor included, sampled with the generator's LOD
 //! filter so a coarse patch is a smooth version of the fine one. Where a patch
-//! dips under the sea it also carries a water surface. Editable terrain near the player (density + surface
-//! nets, ROADMAP M1/M3) will replace the deepest levels, not this structure.
+//! dips under a sea it also carries a water surface. Editable terrain near the
+//! player (density + surface nets, ROADMAP M1/M3) will replace the deepest
+//! levels, not this structure.
+//!
+//! Everything here is relative to the centre of the body: the planet sits at
+//! the world origin, the moon moves, and whoever draws a patch adds the body's
+//! centre for that frame.
 
 use std::collections::HashMap;
 
@@ -20,25 +25,66 @@ use scene::{
     WaterVertex,
 };
 use topology::{RADIUS_M, SECTOR_BITS, SECTOR_SIDE, Sector, SurfacePoint};
-use worldgen::{Generator, Material, Sample};
+use worldgen::{Generator, MOON_RADIUS_M, Material, Sample};
 
-/// Deepest level: patches of 32 blocks, one vertex per block.
-const MAX_DEPTH: u32 = SECTOR_BITS - 5;
 /// A node splits when the camera is closer than this many node widths.
 const SPLIT_DISTANCE: f64 = 2.4;
 /// Patches generated per update. Each costs about a millisecond or two.
-const BUILDS_PER_UPDATE: usize = 4;
+const BUILDS_PER_UPDATE: usize = 6;
 /// Patches kept before the least recently used ones are dropped.
 const CACHE_PATCHES: usize = 1400;
 
-/// No sea floor lies deeper than this, whatever the recipe says.
-const DEEPEST_M: f64 = 2000.0;
-
 const G: i32 = PATCH_GRID as i32;
 
-/// A quadtree node: a square of `SECTOR_SIDE >> depth` blocks.
+/// The body a terrain streamer covers. Every body is a quad sphere meshed by
+/// the same quadtree; they differ in size, in depth, and in having a sea.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Body {
+    Planet,
+    Moon,
+}
+
+impl Body {
+    pub fn radius_m(self) -> f64 {
+        match self {
+            Body::Planet => RADIUS_M,
+            Body::Moon => MOON_RADIUS_M,
+        }
+    }
+
+    /// Deepest quadtree level. The planet: patches of 32 blocks, one vertex
+    /// per block. The moon is smaller, so it gets as fine sooner.
+    fn max_depth(self) -> u32 {
+        match self {
+            Body::Planet => SECTOR_BITS - 5,
+            Body::Moon => 9,
+        }
+    }
+
+    fn has_sea(self) -> bool {
+        self == Body::Planet
+    }
+
+    /// No ground lies deeper than this under the datum, whatever the recipe.
+    fn deepest_m(self) -> f64 {
+        match self {
+            Body::Planet => 2000.0,
+            Body::Moon => 1500.0,
+        }
+    }
+
+    pub fn sample(self, generator: &Generator, direction: [f64; 3], footprint_m: f64) -> Sample {
+        match self {
+            Body::Planet => generator.sample_at(direction, footprint_m),
+            Body::Moon => generator.moon_sample_at(direction, footprint_m),
+        }
+    }
+}
+
+/// A quadtree node: a square of `SECTOR_SIDE >> depth` cells of one body.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct Node {
+    body: Body,
     sector: Sector,
     depth: u32,
     x: u32,
@@ -47,20 +93,28 @@ struct Node {
 
 impl Node {
     fn id(self) -> PatchId {
-        let bits = (self.sector.index() as u64) << 60
+        let bits = u64::from(self.body == Body::Moon) << 63
+            | (self.sector.index() as u64) << 59
             | u64::from(self.depth) << 52
             | u64::from(self.x) << 26
             | u64::from(self.y);
         PatchId(bits)
     }
 
-    fn side_blocks(self) -> f64 {
-        f64::from(SECTOR_SIDE >> self.depth)
+    /// Share of a sector side this node spans.
+    fn span(self) -> f64 {
+        1.0 / f64::from(1u32 << self.depth)
+    }
+
+    /// Width on the ground, metres: a sector side is a quarter of a great circle.
+    fn side_m(self) -> f64 {
+        self.span() * self.body.radius_m() * core::f64::consts::FRAC_PI_2
     }
 
     fn children(self) -> [Node; 4] {
         let (depth, x, y) = (self.depth + 1, self.x * 2, self.y * 2);
         [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(i, j)| Node {
+            body: self.body,
             sector: self.sector,
             depth,
             x: x + i,
@@ -68,16 +122,18 @@ impl Node {
         })
     }
 
-    /// A point of the node, `s` and `t` in `0..=1`. Values outside reach past
-    /// the node, and past the sector: the projection stays continuous there,
-    /// which is all the mesher needs for normals at the rim.
-    fn point(self, s: f64, t: f64) -> SurfacePoint {
-        let side = self.side_blocks();
-        SurfacePoint::new(
+    /// The unit direction of a point of the node, `s` and `t` in `0..=1`.
+    /// Values outside reach past the node, and past the sector: the projection
+    /// stays continuous there, which is all the mesher needs for normals at
+    /// the rim. Every body uses the planet's sector grid as its parametrisation.
+    fn direction(self, s: f64, t: f64) -> [f64; 3] {
+        let side = f64::from(SECTOR_SIDE) * self.span();
+        let point = SurfacePoint::new(
             self.sector,
             (f64::from(self.x) + s) * side,
             (f64::from(self.y) + t) * side,
-        )
+        );
+        point.direction()
     }
 }
 
@@ -90,26 +146,28 @@ struct Built {
 }
 
 pub struct Terrain {
+    body: Body,
     built: HashMap<Node, Built>,
     changes: Vec<TerrainChange>,
     frame: u64,
 }
 
-impl Default for Terrain {
-    fn default() -> Terrain {
+impl Terrain {
+    pub fn new(body: Body) -> Terrain {
         Terrain {
+            body,
             built: HashMap::new(),
-            changes: vec![TerrainChange::Clear],
+            changes: Vec::new(),
             frame: 0,
         }
     }
-}
 
-impl Terrain {
     /// Forgets everything: the recipe changed.
     pub fn clear(&mut self) {
+        for node in self.built.keys() {
+            self.changes.push(TerrainChange::Remove(node.id()));
+        }
         self.built.clear();
-        self.changes = vec![TerrainChange::Clear];
     }
 
     /// Mesh uploads and removals since the last call, in order.
@@ -118,7 +176,8 @@ impl Terrain {
     }
 
     /// Picks the patches to draw from `camera`, building missing ones within
-    /// the per update budget. `aspect` is width over height.
+    /// the per update budget. The camera is relative to the body's centre;
+    /// `aspect` is width over height.
     pub fn update(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
         self.select(generator, camera, aspect, BUILDS_PER_UPDATE)
     }
@@ -146,9 +205,11 @@ impl Terrain {
         let mut draw = Vec::new();
         let mut missing: Vec<(f64, Node)> = Vec::new();
 
+        let body = self.body;
         let mut stack: Vec<Node> = Sector::ALL
             .into_iter()
             .map(|sector| Node {
+                body,
                 sector,
                 depth: 0,
                 x: 0,
@@ -165,10 +226,7 @@ impl Terrain {
             let (center, radius_m) = (built.center, built.radius_m);
 
             let distance = (center - camera.position).length();
-            let side_m = node.side_blocks() / f64::from(SECTOR_SIDE)
-                * RADIUS_M
-                * core::f64::consts::FRAC_PI_2;
-            if node.depth < MAX_DEPTH && distance < side_m * SPLIT_DISTANCE {
+            if node.depth < body.max_depth() && distance < node.side_m() * SPLIT_DISTANCE {
                 let children = node.children();
                 let mut ready = true;
                 for child in children {
@@ -186,7 +244,7 @@ impl Terrain {
                     continue;
                 }
             }
-            if visible(camera, aspect, center, radius_m) {
+            if visible(body, camera, aspect, center, radius_m) {
                 draw.push(node.id());
             }
         }
@@ -217,6 +275,42 @@ impl Terrain {
         draw
     }
 
+    /// The spacing of the finest mesh built so far over a direction from the
+    /// body's centre: the footprint the ground is *drawn* with there. Collision
+    /// uses the full terrain, and a coarse mesh can sit well above it (small
+    /// craters are faded out of it), so whatever must stay above what is on
+    /// screen, the camera and a flyer, asks for the ground at this footprint.
+    pub fn drawn_footprint_m(&self, direction: DVec3) -> f64 {
+        let point = SurfacePoint::from_direction(direction.to_array());
+        let side = f64::from(SECTOR_SIDE);
+        let (s, t) = (
+            (point.u / side).clamp(0.0, 1.0 - 1e-12),
+            (point.v / side).clamp(0.0, 1.0 - 1e-12),
+        );
+        let mut finest = Node {
+            body: self.body,
+            sector: point.sector,
+            depth: 0,
+            x: 0,
+            y: 0,
+        };
+        for depth in 1..=self.body.max_depth() {
+            let cells = f64::from(1u32 << depth);
+            let node = Node {
+                body: self.body,
+                sector: point.sector,
+                depth,
+                x: (s * cells) as u32,
+                y: (t * cells) as u32,
+            };
+            if !self.built.contains_key(&node) {
+                break;
+            }
+            finest = node;
+        }
+        finest.side_m() / f64::from(G)
+    }
+
     /// Drops the patches unused for the longest while the cache is over size.
     fn evict(&mut self) {
         if self.built.len() <= CACHE_PATCHES {
@@ -237,19 +331,19 @@ impl Terrain {
     }
 }
 
-/// Inside the view frustum and not behind the horizon.
-fn visible(camera: &Camera, aspect: f32, center: DVec3, radius_m: f64) -> bool {
-    // Horizon: compare angles at the planet centre. Terrain never sits below
-    // the deepest sea floor, so a sphere at that depth is the occluder.
+/// Inside the view frustum and not behind the body's own horizon.
+fn visible(body: Body, camera: &Camera, aspect: f32, center: DVec3, radius_m: f64) -> bool {
+    // Horizon: compare angles at the body's centre. Ground never sits below
+    // the deepest floor, so a sphere at that depth is the occluder.
     let eye = camera.position.length();
     let reach = center.length() + radius_m;
     let angle = (camera.position / eye)
         .dot(center.normalize())
         .clamp(-1.0, 1.0)
         .acos();
-    let occluder = RADIUS_M - DEEPEST_M;
+    let occluder = body.radius_m() - body.deepest_m();
     let horizon = (occluder / eye).min(1.0).acos() + (occluder / reach).min(1.0).acos();
-    if angle - radius_m / RADIUS_M > horizon {
+    if angle - radius_m / body.radius_m() > horizon {
         return false;
     }
 
@@ -266,19 +360,18 @@ fn visible(camera: &Camera, aspect: f32, center: DVec3, radius_m: f64) -> bool {
 
 /// Meshes one node.
 fn build(generator: &Generator, node: Node) -> TerrainMesh {
+    let body = node.body;
+    let radius = body.radius_m();
     // One ring of samples past the rim, so rim normals match the neighbours'.
     let stride = (G + 3) as usize;
-    let spacing_m = node.side_blocks() * topology::BLOCK_M / f64::from(G);
+    let spacing_m = node.side_m() / f64::from(G);
     let mut samples: Vec<(DVec3, Sample)> = Vec::with_capacity(stride * stride);
     for j in -1..=G + 1 {
         for i in -1..=G + 1 {
-            let point = node.point(f64::from(i) / f64::from(G), f64::from(j) / f64::from(G));
-            let direction = point.direction();
-            let sample = generator.sample_at(direction, spacing_m);
-            samples.push((
-                DVec3::from(direction) * (RADIUS_M + sample.height_m),
-                sample,
-            ));
+            let direction =
+                node.direction(f64::from(i) / f64::from(G), f64::from(j) / f64::from(G));
+            let sample = body.sample(generator, direction, spacing_m);
+            samples.push((DVec3::from(direction) * (radius + sample.height_m), sample));
         }
     }
     let at = |i: i32, j: i32| &samples[(j + 1) as usize * stride + (i + 1) as usize];
@@ -300,7 +393,7 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
     }
 
     // Skirts hide the cracks between neighbours of different depth.
-    let drop_m = node.side_blocks() * topology::BLOCK_M / f64::from(G) * 2.0;
+    let drop_m = spacing_m * 2.0;
     let runs = [
         (0..=G).map(|k| (k, 0)).collect::<Vec<_>>(),
         (0..=G).map(|k| (k, G)).collect(),
@@ -313,25 +406,26 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
         vertex.position = (Vec3::from(vertex.position) + down).to_array();
         vertices.push(vertex);
     }
+
     // The sea over this patch: the same grid flattened to sea level. The ring
     // counts too, so a neighbour's shoreline never leaves a gap at the rim.
-    let wet = samples.iter().any(|(_, sample)| sample.height_m < 0.0);
+    let wet = body.has_sea() && samples.iter().any(|(_, sample)| sample.height_m < 0.0);
     let water = wet.then(|| {
-        let sea = |i: i32, j: i32, lowered: f64| {
+        let sea = |(i, j): (i32, i32)| {
             let (position, sample) = at(i, j);
-            let level = position.normalize() * (RADIUS_M - lowered);
             WaterVertex {
-                position: (level - origin).as_vec3().to_array(),
+                position: (position.normalize() * radius - origin)
+                    .as_vec3()
+                    .to_array(),
                 depth_m: -sample.height_m as f32,
             }
         };
-        let grid = (0..=G).flat_map(|j| (0..=G).map(move |i| (i, j, 0.0)));
         // The sea is see-through, so a lowered skirt would show through the
         // neighbour's surface. The sphere is smooth enough to need none: the
         // skirt run collapses onto the rim.
-        let skirt = runs.iter().flatten().map(|&(i, j)| (i, j, 0.0));
-        grid.chain(skirt)
-            .map(|(i, j, lowered)| sea(i, j, lowered))
+        let grid = (0..=G).flat_map(|j| (0..=G).map(move |i| (i, j)));
+        grid.chain(runs.iter().flatten().copied())
+            .map(sea)
             .collect()
     });
     TerrainMesh {
@@ -344,7 +438,14 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
 /// Albedo and gloss of the ground cover. Rock on slopes is the renderer's
 /// job: it sees the slope per pixel, the same at every LOD.
 fn color(sample: Sample) -> [u8; 4] {
-    match sample.material {
+    let [r, g, b, gloss] = cover(sample.material);
+    // Shade darkens toward the colour of lava plains, continuously.
+    let mix = |c: u8, dark: f64| (f64::from(c) + (dark - f64::from(c)) * sample.shade) as u8;
+    [mix(r, 66.0), mix(g, 66.0), mix(b, 72.0), gloss]
+}
+
+fn cover(material: Material) -> [u8; 4] {
+    match material {
         Material::Snow => [236, 238, 240, 70],
         Material::Sand => [206, 192, 150, 8],
         Material::Grass => [104, 138, 70, 0],
@@ -352,5 +453,6 @@ fn color(sample: Sample) -> [u8; 4] {
         Material::Rock => [118, 112, 106, 12],
         // v1 calls everything under the sea water; it is sea floor all the same.
         Material::Seabed | Material::Water => [112, 116, 98, 0],
+        Material::Regolith => [112, 110, 105, 0],
     }
 }
