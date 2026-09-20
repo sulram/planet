@@ -61,13 +61,17 @@ impl Sample {
 #[derive(Clone, Debug)]
 pub struct Generator {
     recipe: Recipe,
+    moon_basins: moon::Basins,
 }
 
 impl Generator {
     /// Fails when the recipe asks for a generator version this build lacks.
     pub fn new(recipe: Recipe) -> Result<Generator, RecipeError> {
         match recipe.generator_version {
-            1 | 2 => Ok(Generator { recipe }),
+            1 | 2 => Ok(Generator {
+                moon_basins: moon::Basins::new(&recipe),
+                recipe,
+            }),
             version => Err(RecipeError::UnknownGeneratorVersion(version)),
         }
     }
@@ -90,7 +94,7 @@ impl Generator {
                 height_m: 0.0,
                 material: Material::Regolith,
             },
-            _ => moon::sample(&self.recipe, direction, footprint_m),
+            _ => moon::sample(&self.recipe, &self.moon_basins, direction, footprint_m),
         }
     }
 

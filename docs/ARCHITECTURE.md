@@ -165,7 +165,8 @@ Numbers marked (p) are proposed and not yet confirmed.
 - Bodies: the planet and the moon share one terrain quadtree (`Body`). Patches
   are built around their body's centre; the renderer adds where the body is
   this frame. The moon orbits on rails, 160 km out, 8 km radius, craters from
-  generator v2, no sea.
+  generator v2, no sea. Craters are searched in a cell grid per sample; the
+  few basins are listed once per `Generator`.
 - Sunlight at a point is what neither sphere shadows: night and eclipses.
 - Three separate things hold an avatar. Its **site**: the body it is stored
   relative to, changed at the moon's sphere of influence (4 radii), so it

@@ -4,6 +4,10 @@
 //! sizes stacked, the way impacts of every size pile up. Each cell may hold
 //! one crater: a parabolic bowl with a raised rim. Like the planet, sampling
 //! takes a footprint, and craters too small for the mesh that asks fade out.
+//!
+//! Sampling runs on the frame's thread in the browser, where a cell costs
+//! several times what it does natively: the cost of a sample is a design
+//! constraint here, and it is measured in WASM.
 
 use crate::noise::{band, fbm, smoothstep};
 use crate::{Direction, Material, Recipe, Sample};
@@ -38,60 +42,146 @@ fn cell_random(seed: u64, cell: [i64; 3], salt: u64) -> [f64; 3] {
     [next(), next(), next()]
 }
 
+/// The widest bowl of any size, in cells. The rim reaches twice as far.
+const WIDEST: f64 = 0.42;
+/// A basin's cell centre is pulled onto the surface from at most this far, in
+/// cells: cells deeper inside the moon or further out hold no basin.
+const BASIN_SHELL: f64 = 0.65;
+
+/// One crater, in the cell units of its size.
+#[derive(Clone, Copy, Debug)]
+struct Crater {
+    center: [f64; 3],
+    radius: f64,
+    depth: f64,
+    /// Height of the rim, as a share of the depth.
+    rim: f64,
+}
+
+impl Crater {
+    /// A parabolic bowl, and a rim that fades out at twice the radius.
+    fn height(&self, p: [f64; 3]) -> f64 {
+        let offset = [0, 1, 2].map(|axis| p[axis] - self.center[axis]);
+        let squared = offset[0] * offset[0] + offset[1] * offset[1] + offset[2] * offset[2];
+        let reach = 2.0 * self.radius;
+        if squared >= reach * reach {
+            return 0.0;
+        }
+        let t = libm::sqrt(squared) / self.radius;
+        let bowl = if t < 1.0 {
+            self.depth * (t * t - 1.0)
+        } else {
+            0.0
+        };
+        let lip = (t - 1.0) / 0.22;
+        let rim = self.depth * self.rim * libm::exp(-lip * lip) * smoothstep(2.0, 1.4, t).max(0.0);
+        bowl + rim
+    }
+}
+
+/// Old craters are worn: shallower, softer rims.
+fn depth(radius: f64, freshness: f64) -> f64 {
+    radius * (0.10 + 0.22 * freshness)
+}
+
+/// The basins of one moon, per basin size: few enough to list once, when the
+/// generator is made, instead of searching cells at every sample. Their cells
+/// are as wide as the moon is deep, so most centres would miss the surface:
+/// those within `BASIN_SHELL` of it are pulled onto it and are basins, and the
+/// rest hold nothing.
+#[derive(Clone, Debug)]
+pub struct Basins([Vec<Crater>; BASINS]);
+
+impl Basins {
+    pub fn new(recipe: &Recipe) -> Basins {
+        let seed = recipe.seed ^ CRATERS;
+        Basins(core::array::from_fn(|index| {
+            let (scale, salt) = (SCALES[index], index as u64);
+            let last = libm::floor(scale + BASIN_SHELL) as i64;
+            let mut basins = Vec::new();
+            for k in -last - 1..=last {
+                for j in -last - 1..=last {
+                    for i in -last - 1..=last {
+                        let cell = [i, j, k];
+                        let [a, b, c] = cell_random(seed, cell, salt);
+                        let center = [i as f64 + a, j as f64 + b, k as f64 + c];
+                        let length = libm::sqrt(
+                            center[0] * center[0] + center[1] * center[1] + center[2] * center[2],
+                        );
+                        let [size, freshness, _] = cell_random(seed, cell, salt ^ 0x5bd1);
+                        // Basins are rare: a few seas, not a pattern.
+                        if libm::fabs(length - scale) > BASIN_SHELL || freshness < 0.55 {
+                            continue;
+                        }
+                        // They start wide: the smallest still spans several
+                        // root vertices.
+                        let radius = 0.24 + (WIDEST - 0.24) * size;
+                        basins.push(Crater {
+                            center: center.map(|c| c / length * scale),
+                            radius,
+                            depth: depth(radius, freshness),
+                            rim: 0.45,
+                        });
+                    }
+                }
+            }
+            basins
+        }))
+    }
+}
+
 /// Height of one size of craters at `p` (the direction times the scale), in
 /// cell units.
-fn craters(seed: u64, p: [f64; 3], salt: u64, basin: bool) -> f64 {
-    let scale = libm::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-    // A crater is at most half a cell wide, so the eight cells around the
-    // nearest lattice corner hold every crater that can reach `p`.
-    let base = [0, 1, 2].map(|axis| libm::floor(p[axis] - 0.5) as i64);
+fn craters(seed: u64, p: [f64; 3], salt: u64) -> f64 {
+    // Every cell whose crater can reach `p` is visited, or the crater would
+    // end in a cliff where the search stops seeing it. A rim reaches
+    // `2 * WIDEST` from its centre: under one cell, so the cells around the
+    // one that holds `p`.
+    let reach = 2.0 * WIDEST;
+    let home = [0, 1, 2].map(|axis| libm::floor(p[axis]));
+    // How far `p` is from each neighbour cell along an axis: below, same, above.
+    let gap = [0, 1, 2].map(|axis| {
+        let inside = p[axis] - home[axis];
+        [inside * inside, 0.0, (1.0 - inside) * (1.0 - inside)]
+    });
     let mut height = 0.0;
-    for corner in 0..8i64 {
-        let cell = [
-            base[0] + (corner & 1),
-            base[1] + ((corner >> 1) & 1),
-            base[2] + (corner >> 2),
-        ];
-        let [a, b, c] = cell_random(seed, cell, salt);
-        let [size, freshness, _] = cell_random(seed, cell, salt ^ 0x5bd1);
-        // Basins are rare: a few seas, not a pattern.
-        if basin && freshness < 0.55 {
-            continue;
+    for k in 0..3 {
+        for j in 0..3 {
+            for i in 0..3 {
+                // Nothing in a cell this far reaches `p`: skip it before
+                // paying for the hash.
+                if gap[0][i] + gap[1][j] + gap[2][k] >= reach * reach {
+                    continue;
+                }
+                let cell = [
+                    home[0] as i64 + i as i64 - 1,
+                    home[1] as i64 + j as i64 - 1,
+                    home[2] as i64 + k as i64 - 1,
+                ];
+                let [a, b, c] = cell_random(seed, cell, salt);
+                let center = [cell[0] as f64 + a, cell[1] as f64 + b, cell[2] as f64 + c];
+                let offset = [0, 1, 2].map(|axis| p[axis] - center[axis]);
+                if offset[0] * offset[0] + offset[1] * offset[1] + offset[2] * offset[2]
+                    >= reach * reach
+                {
+                    continue;
+                }
+                let [size, freshness, _] = cell_random(seed, cell, salt ^ 0x5bd1);
+                let radius = 0.12 + (WIDEST - 0.12) * size * size;
+                let crater = Crater {
+                    center,
+                    radius,
+                    depth: depth(radius, freshness),
+                    rim: 0.30,
+                };
+                height += crater.height(p);
+            }
         }
-        let mut center = [cell[0] as f64 + a, cell[1] as f64 + b, cell[2] as f64 + c];
-        if basin {
-            // Basin cells are as wide as the moon is deep: most centres would
-            // miss the surface. Pull them onto it, so every one is a basin.
-            let length =
-                libm::sqrt(center[0] * center[0] + center[1] * center[1] + center[2] * center[2]);
-            center = center.map(|c| c / length * scale);
-        }
-        // Basins start wide: the smallest still spans several root vertices.
-        let radius = if basin {
-            0.24 + 0.18 * size
-        } else {
-            0.12 + 0.30 * size * size
-        };
-        let offset = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
-        let t = libm::sqrt(offset[0] * offset[0] + offset[1] * offset[1] + offset[2] * offset[2])
-            / radius;
-        if t >= 2.0 {
-            continue;
-        }
-        // Old craters are worn: shallower, softer rims.
-        let depth = radius * (0.10 + 0.22 * freshness);
-        let bowl = if t < 1.0 { depth * (t * t - 1.0) } else { 0.0 };
-        let lip = (t - 1.0) / 0.22;
-        let rim = depth
-            * if basin { 0.45 } else { 0.30 }
-            * libm::exp(-lip * lip)
-            * smoothstep(2.0, 1.4, t).max(0.0);
-        height += bowl + rim;
     }
     height
 }
 
-pub fn sample(recipe: &Recipe, d: Direction, footprint_m: f64) -> Sample {
+pub fn sample(recipe: &Recipe, basins: &Basins, d: Direction, footprint_m: f64) -> Sample {
     let seed = recipe.seed;
     let mut height_m = 120.0 * fbm(seed ^ ROLL, [d[0] * 2.5, d[1] * 2.5, d[2] * 2.5], 5, 0.5);
     for (index, scale) in SCALES.iter().enumerate() {
@@ -104,7 +194,10 @@ pub fn sample(recipe: &Recipe, d: Direction, footprint_m: f64) -> Sample {
             break;
         }
         let p = [d[0] * scale, d[1] * scale, d[2] * scale];
-        let height = craters(seed ^ CRATERS, p, index as u64, index < BASINS);
+        let height = match basins.0.get(index) {
+            Some(basins) => basins.iter().map(|basin| basin.height(p)).sum(),
+            None => craters(seed ^ CRATERS, p, index as u64),
+        };
         height_m += weight * cell_m * height;
     }
     Sample {

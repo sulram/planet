@@ -74,6 +74,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   - `render`: all of wgpu lives here.
   - `client`: controller, streaming, tools, media manager. No window, no DOM.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
+  - `bench`: what a frame costs in WASM, timed by `scripts/bench.ts`.
 - `server/`: Go module. PocketBase as a library + the world server.
   `internal/world` is the core and imports no PocketBase; `internal/cold` is
   the glue; `migrations` are Go.
@@ -83,7 +84,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `assets/`: the instance's default set (avatars, clips) and its
   `manifest.json`, the config that names them.
 - `scripts/`: every repeated command is a script here. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | assets | desktop | shot | check`.
+  `bun run setup | dev | server | web | wasm | assets | desktop | shot | bench | check`.
 - `docs/`: see top of this file.
 - `refs/`: gitignored. Reference projects for reading (see below).
 
@@ -114,6 +115,20 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   `VideoSource` seam with a backend per platform.
 - **Integrations enter through seams**, never through the core: one trait
   inside, library glue behind it in its own crate. No `cfg` sprawl.
+
+## Performance (non-negotiable)
+
+- The targets are a Raspberry Pi, a phone and a browser tab, not the
+  development machine. A change that is fast only natively is not fast.
+- In the browser the generator and the streamer share a thread with the
+  frame, and WASM can cost several times native (a crater cell: 4x). **Measure
+  in WASM**: `bun run bench`, which fails when a budget is blown.
+- Any change to `worldgen`, to terrain streaming or to per-frame client code
+  runs `bun run bench` before it lands, and says the numbers in the commit.
+- Cost per sample is a design constraint of a generator, like determinism.
+  What is the same for every sample (a list of basins) is computed once, in
+  `Generator::new`, never searched per sample.
+- A budget is raised only on purpose, with the why in DECISIONS.
 
 ## Do NOT add (M1 discipline)
 

@@ -87,7 +87,30 @@ fn v2_moon_is_frozen() {
     assert_eq!(hash, GOLDEN_V2_MOON, "the moon of generator v2 changed");
 }
 
-const GOLDEN_V2_MOON: u64 = 0xbc59_99e3_f1e4_af05;
+const GOLDEN_V2_MOON: u64 = 0x4efc_b822_ba9b_f9a8;
+
+/// A crater the search stops seeing ends in a cliff. Along great circles in
+/// half metre steps the moon's ground never jumps: the steepest wall is a
+/// slope, not a step.
+#[test]
+fn moon_has_no_cliffs() {
+    let generator = Generator::new(Recipe::new(1)).unwrap();
+    let step = 0.5 / worldgen::MOON_RADIUS_M;
+    for circle in 0..3 {
+        let tilt = f64::from(circle) * 0.9;
+        let mut last: Option<f64> = None;
+        for i in 0..(core::f64::consts::TAU / step) as u32 {
+            let a = f64::from(i) * step;
+            let d = [a.cos() * tilt.cos(), a.sin(), a.cos() * tilt.sin()];
+            let height = generator.moon_sample_at(d, 0.0).height_m;
+            if let Some(last) = last {
+                let jump = (height - last).abs();
+                assert!(jump < 2.0, "the moon jumps {jump:.1} m at {d:?}");
+            }
+            last = Some(height);
+        }
+    }
+}
 
 #[test]
 fn terrain_is_plausible() {
