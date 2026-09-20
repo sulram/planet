@@ -45,7 +45,7 @@ Every milestone ends runnable end to end.
 - [x] Ground detail anchored to the planet (procedural first, textures with provenance later)
 - [x] Lighting: sky and ground ambient, tone mapping
 - [x] Sun shadow cascades: terrain and avatars cast and receive, contact to horizon
-- [ ] Grass: instanced tufts, wind in the vertex shader, bends away from the avatar
+- [x] Grass: instanced tufts in reach tiers to 640 m, wind in the vertex shader, bends away from the avatar
 - [ ] LOD by projected error with hysteresis; geomorph between levels
 - [ ] Patch building behind a job queue (workers native and web), measured budget
 - [ ] MSAA or filtered edges, after measuring cost
@@ -91,7 +91,8 @@ Every milestone ends runnable end to end.
 
 ## Wishes (unordered)
 
-- [ ] Interactive grass: implementation scope in [terrain rendering brief](TERRAIN_RENDER_BRIEF.md#delivery-4-interactive-grass-after-ground-materials)
+- [ ] Grass that casts shadows; flattened trails with timed recovery
+- [ ] Effects (shadows, grass) as a quality choice in the shells, with a reduced tier for the Pi
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 

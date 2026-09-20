@@ -19,6 +19,8 @@ struct View {
     shadow_clip: array<mat4x4<f32>, SHADOW_CASCADES>,
     // Side of a texel of each cascade on the ground, metres.
     shadow_texel_m: vec4<f32>,
+    interaction_start: vec4<f32>,
+    interaction_end: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;

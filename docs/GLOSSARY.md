@@ -48,6 +48,9 @@ this file in the same change.
 | Patch | One quadtree node of far terrain, meshed as 32x32 quads. |
 | Cascade | One sun shadow map of a nested set around the eye; each covers more ground at a coarser texel. |
 | Caster | A patch, box or avatar drawn into a cascade. Chosen apart from what the camera sees. |
+| Tuft | One cosmetic grass instance, identified by (sector, tier, tier cell). Not an entity, not stored. |
+| Grass tier | A density level of tufts: tier `k` spaces them `2^k` half blocks apart and reaches twice as far as tier `k-1`. |
+| Interaction capsule | A capsule the renderer bends grass away from. Visual only, no collision. |
 | Tangent warp | The quad sphere mapping: `tan(s * pi / 4)` on the cube face. |
 | Avatar | The VRM body a person wears. Named by an asset reference, never by index. |
 | Asset reference | A path under the asset root, or an absolute URL. How the client names any file it wants. |

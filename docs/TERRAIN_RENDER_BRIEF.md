@@ -114,7 +114,7 @@
 
 ## Delivery 4: interactive grass, after ground materials
 
-- Track this extension in ROADMAP; it is not implemented by this brief.
+- Shipped without shadow casting, trails or a quality choice (ROADMAP wishes).
 - Draw simple stylized grass tufts with instancing and vertex-shader bending.
   Vary height, orientation and tint; fix roots while wind bends the tips.
 - Let `client` select stable candidates from recipe seed and integer address,

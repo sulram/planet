@@ -9,6 +9,7 @@ mod assets;
 mod box_figure;
 mod controller;
 mod figure;
+mod grass;
 mod input;
 mod seam;
 mod terrain;
@@ -409,6 +410,11 @@ impl Client {
                         }),
                 )
                 .collect(),
+            interaction: scene::InteractionCapsule {
+                start: self.controller.position() + self.controller.up() * 0.2,
+                end: self.controller.position() + self.controller.up() * 1.5,
+                radius_m: 0.65,
+            },
             boxes: if self.figure.is_worn() {
                 Vec::new()
             } else {

@@ -176,7 +176,14 @@ Numbers marked (p) are proposed and not yet confirmed.
   never schedules generation. Skirts do not cast.
 - Cascade count and size live in `render::shadow`, which prepends them to
   every shader; texel sizes ride the view uniform.
-- `render::Effects` turns shadows off; no shell exposes it yet.
+- Grass is cosmetic, planet only, built with the patch from its own samples:
+  no generator call. Tier `k` has one tuft per `2^k` half blocks and reaches
+  `20 m * 2^k` (six tiers, 640 m), so screen density stays level.
+- A tuft is (sector, tier, tier cell): subdivision never moves it. A patch
+  carries only the tiers that can reach it before it splits, farthest first;
+  the renderer draws the prefix in reach, near patches first, capped.
+- `Frame::interaction` is one capsule (the avatar) that bends tufts. Visual
+  only. `render::Effects` turns shadows and grass off; no shell exposes it yet.
 - Three separate things hold an avatar. Its **site**: the body it is stored
   relative to, changed at the moon's sphere of influence (4 radii), so it
   rides the orbit. **Gravity**: turns continuously from planet to moon with

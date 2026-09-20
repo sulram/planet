@@ -48,6 +48,8 @@ struct ViewUniform {
     flags: [f32; 4],
     shadow_clip: [[[f32; 4]; 4]; shadow::CASCADES],
     shadow_texel_m: [f32; 4],
+    interaction_start: [f32; 4],
+    interaction_end: [f32; 4],
 }
 
 /// GPU state owned by one view slot.
@@ -66,11 +68,15 @@ struct ViewResources {
 #[derive(Clone, Copy, Debug)]
 pub struct Effects {
     pub shadows: bool,
+    pub grass: bool,
 }
 
 impl Default for Effects {
     fn default() -> Self {
-        Self { shadows: true }
+        Self {
+            shadows: true,
+            grass: true,
+        }
     }
 }
 
@@ -311,6 +317,10 @@ impl Renderer {
         });
         pass.set_bind_group(0, &resources.bind_group, &[]);
         self.terrain.draw(&mut pass, &resources.patches, &drawn);
+        if self.effects.grass {
+            self.terrain
+                .draw_grass(&mut pass, &resources.patches, &drawn);
+        }
         self.boxes.draw(&mut pass, &resources.boxes, box_count);
         self.skinned
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
@@ -347,6 +357,12 @@ impl Renderer {
                 .to_array(),
             shadow_clip: shadow::matrices(frame, camera).map(|m| m.to_cols_array_2d()),
             shadow_texel_m: shadow::texels_m(),
+            interaction_start: relative(frame.interaction.start, camera.position)
+                .extend(frame.interaction.radius_m)
+                .to_array(),
+            interaction_end: relative(frame.interaction.end, camera.position)
+                .extend(0.0)
+                .to_array(),
             flags: [
                 f32::from(u8::from(self.encode_srgb)),
                 // Wrapped so f32 keeps sub millisecond steps all day.
@@ -441,6 +457,7 @@ enum Surface {
     Backdrop,
     /// Water: blended over what is there, seen from both sides.
     Translucent,
+    Foliage,
     Shadow,
     ShadowCutout,
 }
@@ -494,7 +511,9 @@ fn pipeline(
         },
         depth_stencil: Some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
-            depth_write_enabled: Some(spec.surface == Surface::Solid || shadow),
+            depth_write_enabled: Some(
+                spec.surface == Surface::Solid || spec.surface == Surface::Foliage || shadow,
+            ),
             // Reversed depth: nearer is greater. The sky sits at exactly 0.
             depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
             stencil: Default::default(),

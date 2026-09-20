@@ -478,7 +478,23 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
             .map(sea)
             .collect()
     });
+    let grass = if body == Body::Planet {
+        super::grass::build(
+            super::grass::Patch {
+                seed: generator.recipe().seed,
+                sector: node.sector.index() as u32,
+                cell: [node.x, node.y],
+                depth: node.depth,
+            },
+            origin,
+            &vertices,
+            &samples,
+        )
+    } else {
+        Vec::new()
+    };
     TerrainMesh {
+        grass,
         origin,
         vertices,
         water,

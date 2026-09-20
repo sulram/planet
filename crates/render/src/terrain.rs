@@ -13,13 +13,27 @@ struct Patch {
     origin: DVec3,
     vertices: wgpu::Buffer,
     water: Option<wgpu::Buffer>,
+    grass: Option<Grass>,
     radius_m: f32,
+}
+
+/// Tufts drawn per view at most. A flat meadow asks for about half of it.
+const GRASS_TUFTS: u32 = 160_000;
+/// Past this a tuft is drawn as one blade instead of three, metres.
+const BLADES_REACH_M: f32 = 60.0;
+
+/// A patch's tufts, farthest reaching first, and where each reach ends.
+struct Grass {
+    instances: wgpu::Buffer,
+    /// `(reach_m, instances with at least that reach)`, by falling reach.
+    tiers: Vec<(f32, u32)>,
 }
 
 pub struct Terrain {
     pipeline: wgpu::RenderPipeline,
     water_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
+    grass_pipeline: wgpu::RenderPipeline,
     patch_layout: wgpu::BindGroupLayout,
     indices: wgpu::Buffer,
     index_count: u32,
@@ -75,6 +89,21 @@ impl Terrain {
                 surface: Surface::Shadow,
             },
         );
+        let grass_pipeline = pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "grass",
+                source: include_str!("shaders/grass.wgsl"),
+                layouts: &[view_layout, &patch_layout],
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: size_of::<scene::GrassInstance>() as u64,
+                    step_mode: wgpu::VertexStepMode::Instance,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4],
+                })],
+                surface: Surface::Foliage,
+            },
+        );
         let water_pipeline = pipeline(
             device,
             format,
@@ -100,6 +129,7 @@ impl Terrain {
             pipeline: ground_pipeline,
             water_pipeline,
             shadow_pipeline,
+            grass_pipeline,
             patch_layout,
             indices,
             index_count: index_data.len() as u32,
@@ -131,12 +161,32 @@ impl Terrain {
                     .iter()
                     .map(|v| glam::Vec3::from(v.position).length())
                     .fold(0.0, f32::max);
+                let grass = (!mesh.grass.is_empty()).then(|| {
+                    let mut tiers: Vec<(f32, u32)> = Vec::new();
+                    for (index, tuft) in mesh.grass.iter().enumerate() {
+                        match tiers.last_mut() {
+                            Some((reach_m, end)) if *reach_m == tuft.reach_m => {
+                                *end = index as u32 + 1
+                            }
+                            _ => tiers.push((tuft.reach_m, index as u32 + 1)),
+                        }
+                    }
+                    Grass {
+                        instances: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("grass instances"),
+                            contents: bytemuck::cast_slice(&mesh.grass),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        }),
+                        tiers,
+                    }
+                });
                 self.patches.insert(
                     id,
                     Patch {
                         origin: mesh.origin,
                         vertices,
                         water,
+                        grass,
                         radius_m,
                     },
                 );
@@ -208,6 +258,45 @@ impl Terrain {
                 .iter()
                 .any(|&m| crate::shadow::intersects(m, center, p.radius_m))
         })
+    }
+
+    pub fn draw_grass(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &PatchUniforms,
+        drawn: &[PatchId],
+    ) {
+        pass.set_pipeline(&self.grass_pipeline);
+        let mut budget = GRASS_TUFTS;
+        // Near before far, so a blown budget thins the horizon, not the feet.
+        let mut candidates: Vec<_> = drawn
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, id)| {
+                let patch = &self.patches[id];
+                let grass = patch.grass.as_ref()?;
+                let nearest = uniforms.centers[slot].length() - patch.radius_m;
+                // The tufts that reach the nearest point of the patch: a prefix.
+                let tier = grass
+                    .tiers
+                    .partition_point(|(reach_m, _)| *reach_m > nearest);
+                let count = grass.tiers[..tier].last()?.1;
+                Some((nearest, slot, *id, grass, count))
+            })
+            .collect();
+        candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.2.cmp(&b.2)));
+        for (nearest, slot, _, grass, count) in candidates {
+            let count = count.min(budget);
+            if count == 0 {
+                break;
+            }
+            budget -= count;
+            pass.set_bind_group(1, &uniforms.bind_group, &[slot as u32 * uniforms.stride]);
+            pass.set_vertex_buffer(0, grass.instances.slice(..));
+            // One blade stands for the tuft where three are under a pixel.
+            let vertices = if nearest > BLADES_REACH_M { 9 } else { 27 };
+            pass.draw(0..vertices, 0..count);
+        }
     }
 
     /// Draws the sea over the same patches, after everything opaque.

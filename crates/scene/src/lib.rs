@@ -56,6 +56,36 @@ pub struct TerrainMesh {
     /// Present when any of the patch is under the sea. Same layout and index
     /// buffer as `vertices`.
     pub water: Option<Vec<WaterVertex>>,
+    /// Cosmetic tufts rooted in this patch, sorted by falling `reach_m`: the
+    /// tufts seen from a distance are a prefix. Empty on far patches.
+    pub grass: Vec<GrassInstance>,
+}
+
+/// How far the densest grass tier is seen, metres. Each sparser tier doubles
+/// it. Bounded by the terrain LOD: a patch must split before the tiers it
+/// lacks come into reach (`client::grass`).
+pub const GRASS_TIER_0_REACH_M: f32 = 20.0;
+
+/// One cosmetic tuft, in the same local space as its terrain patch.
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct GrassInstance {
+    pub root: [f32; 3],
+    pub height: f32,
+    pub up: [f32; 3],
+    /// The tuft has faded into the ground this far from the eye.
+    pub reach_m: f32,
+    /// Linear albedo, and rotation about radial up.
+    pub color: [f32; 3],
+    pub angle: f32,
+}
+
+/// Visual interaction only; does not participate in collision.
+#[derive(Clone, Copy, Debug)]
+pub struct InteractionCapsule {
+    pub start: DVec3,
+    pub end: DVec3,
+    pub radius_m: f32,
 }
 
 /// The index buffer shared by every patch. Counter clockwise seen from
@@ -212,6 +242,7 @@ pub struct Frame {
     pub patches: Vec<PatchDraw>,
     /// Loaded terrain selected at shadow LOD, including offscreen casters.
     pub shadow_patches: Vec<PatchDraw>,
+    pub interaction: InteractionCapsule,
     pub boxes: Vec<BoxPart>,
     pub skinned: Vec<SkinnedInstance>,
 }
