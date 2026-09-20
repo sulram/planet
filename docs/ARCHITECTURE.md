@@ -15,11 +15,17 @@ Numbers marked (p) are proposed and not yet confirmed.
   invalidate the cache. A revoke in the panel applies on the next block.
 - No transaction spans both files. Permission decides, op log records.
 - The world core talks to PocketBase through one small interface of ours.
+- Server layout: `cmd/planet` (entry), `internal/world` (core, imports no
+  PocketBase), `internal/cold` (all PocketBase glue), `migrations` (Go, applied
+  on serve). PocketBase settings come from the env and are reapplied on start.
 
 ## Topology: quad sphere, single build band
 
 - Six sectors (cube faces), each a square grid, projected onto the sphere with
-  a pre-distorted mapping to keep blocks near square.
+  the tangent warp (p): grid coordinate `s` moves to `tan(s * pi / 4)` on the
+  face. A block edge is 0.5 m at a sector centre, 0.35 m at the corners.
+- Seams are computed, not tabled: a column is an integer point on a cube, a
+  step over an edge is one vector sum, swaps and flips fall out of the frames.
 - Address: `sector (0..5), u, v, h` then chunk index and block index.
 - Block edge 0.5 m (p). `2^16` blocks per sector side (p): u and v fit in 16
   bits. Radius about 20.9 km, surface about 5,500 km2.
@@ -46,6 +52,13 @@ Numbers marked (p) are proposed and not yet confirmed.
 ## The world is a recipe
 
 - World = seed + params + generator version. "Create world" writes one row.
+- Wire shape, shared unmapped by Rust, Go, TypeScript and the `worlds`
+  collection: `{seed, generator_version, params}`. The seed is a u64 written
+  as 16 lowercase hex digits (JSON numbers stop at 2^53).
+- The recipe of a stored world is frozen by a validate hook, superusers too.
+- Generator v1: continents, ridged mountains and detail as 3D simplex noise;
+  materials water, sand, grass, forest, rock, snow. Params: `relief_m`,
+  `ocean_depth_m`, `continent_scale`, `sea_share`.
 - `world.db` stores only modified chunks and the op log.
 - Read path: stored chunk if present, else generate. One function, everywhere.
 - First edit to a chunk: generate it, apply the edit, store the whole chunk.
@@ -60,14 +73,24 @@ Numbers marked (p) are proposed and not yet confirmed.
 - On arrival the client asks: which chunks near me are stored, at what version?
 - The server sends only those. Untouched terrain costs zero bandwidth.
 - Rings of interest around the player; ring depth follows the bandwidth budget.
-- Quadtree per sector for planetary LOD, ground to orbit.
+- Quadtree per sector for planetary LOD, ground to orbit. Today it is the whole
+  terrain: heightfield patches of 32x32 quads with skirts, down to one vertex
+  per block, a few built per frame, nearest and coarsest first. Surface nets
+  chunks will replace the deepest levels near the player.
 - Client cache: SQLite on native, OPFS in the browser.
 
 ## Identity and permissions
 
 - Account by email: magic link in the browser, one-time code typed on native
   and headset (PocketBase OTP). Wallets are optional links, later.
-- Visitor: anonymous, walks and looks, never builds.
+- Visitor: anonymous, enters any world, walks and looks, never builds.
+  `worlds` is publicly readable; `/play` and `/w/[id]` need no login.
+- Sign up and sign in are one flow: the first code request creates the
+  account (server hook), the first valid code verifies it. No passwords.
+- The email carries a link `{APP_URL}/login/verify?otpId=&code=` and the code.
+- Operator: global flag `users.operator`. Gates `/backoffice`. Only an
+  operator changes it. `PLANET_OPERATOR_EMAIL` seeds the first one.
+- Any signed in user creates worlds and owns them. Per world roles arrive in M4.
 - Agent: API token issued by a responsible user.
 - Users are global. Roles are per world.
 
@@ -126,8 +149,25 @@ Numbers marked (p) are proposed and not yet confirmed.
 
 - One command/event seam between core and any UI. Svelte panels send commands
   and render events. Tool logic stays in Rust so every client shares it.
+  JSON tagged by `type`: `client::Command`, `client::Event`.
+- Crates: `topology` and `worldgen` (deterministic, `libm`), `scene` (plain
+  data a client hands a renderer), `client`, `render`, `shell-desktop`,
+  `shell-web`. `voxel` and `protocol` appear when a milestone pulls them.
+- The controller keeps its state in address space; a wish direction in metres
+  becomes an address delta through the local tangents. Tangent vectors are
+  parallel transported, so seams and corners need no special case.
+- Web app: SvelteKit on adapter-node. One PocketBase client per request,
+  session in the httpOnly `pb_auth` cookie, operator barrier in
+  `hooks.server.ts`. It holds no superuser credentials.
+- The WASM client lands in `apps/web/src/lib/engine/pkg` (`bun run wasm`),
+  loaded by glob so the app builds without it.
+- Design system: `apps/web/src/lib/ds`, catalogue at `/ds`. JetBrains Mono,
+  one 10px size, black and white plus one red, radius 0, light and dark.
+  Components reference semantic tokens only.
+- i18n: flat dotted keys, `en.ts` is the source, `pt.ts` must match it.
 - The renderer accepts N views from day one (1 desktop, 2 XR).
-- The renderer writes depth and motion vectors from day one.
+- The renderer writes depth (reversed, infinite) today; the motion vector
+  target is on the ROADMAP (M1).
 
 ## Future shapes already accounted for
 

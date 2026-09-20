@@ -151,3 +151,66 @@ inside a voxel the same mechanism.
 DLSS 5 is RTX 50 only and has no wgpu path, so it cannot reach Pi, Quest or the
 browser. The renderer writes depth and motion vectors from day one to keep the
 door open. The realistic route is a cloud "cinema mode" streamed over WebRTC.
+
+Entries below: 2026-09-20, from the first vertical.
+
+## 21. Versions count from 0.0.1; `dev` publishes prereleases (decided)
+
+Marlus asked for a `dev` branch that counts `0.0.1-dev.N` before anything
+reaches `main`. Semantic Release does it with a prerelease branch and the tag
+`v0.0.0` as anchor. Before 1.0.0 the rules are: BREAKING CHANGE bumps minor,
+feat, fix and perf bump patch, so 1.0.0 is a deliberate act. At 1.0.0 the
+custom rules are deleted and the defaults apply. Rejected: the default rules
+from day one (the first feat would publish 1.0.0).
+
+## 22. The first vertical cuts through M0, M1 and M2 (decided)
+
+Marlus chose to build one thin slice end to end instead of finishing M1 first:
+design system, login, backoffice, the engine with a third person avatar on a
+generated planet, and "create world" writing the recipe. The M1 discipline list
+in CLAUDE.md was relaxed for exactly these items. Everything else in it stands.
+
+## 23. Web app follows Plataforma ITS; PocketBase stays a Go library (decided)
+
+SvelteKit on adapter-node, a PocketBase client per request, the session in an
+httpOnly cookie, OTP as magic link, the design system in `$lib/ds` with a live
+catalogue, flat i18n keys, scripts in Bun: all as in Plataforma ITS, which
+Marlus runs in production. The one difference is decision 10: PocketBase is
+embedded in our Go binary, not run as its own binary, because the hot plane
+needs its permission cache invalidated by hooks in the same process. Accounts
+are created by a server hook on the first code request, so the web app holds
+no superuser credentials. Rejected: a static SPA served by Go (the token would
+live in storage readable by scripts).
+
+## 24. Operator, a global flag (decided)
+
+The backoffice needs a gate, and roles are per world. An operator is a user
+with `users.operator = true`: the person who runs the instance. It is not the
+PocketBase superuser (panel login) and not the per world admin. Guarded by an
+API rule with `:changed`, so only operators change it, and user creation over
+the API is closed because the default public create would allow self grant.
+
+## 25. Tangent warp, computed seams (proposed)
+
+Settles the OPEN question on the pre-distortion mapping: `tan(s * pi / 4)`.
+It is one line, exactly invertible with `atan`, deterministic through `libm`,
+and bounds the block edge between 0.35 m and 0.5 m. Seams are derived from
+integer cube geometry rather than a hand written table, so the mandatory
+property tests check geometry, not typing. Rejected for now: Everitt and other
+equal area warps (more math for a gain that does not matter at this size).
+
+## 26. Far terrain is a heightfield quadtree; the avatar is procedural (decided)
+
+Walking a planet needs ground to orbit LOD before it needs editable voxels, so
+the first terrain is heightfield patches from the generator. Surface nets
+chunks replace only the deepest levels later, and the structure stays. The
+avatar is a figure of boxes until the avatar format question in OPEN is
+settled. Patches are built on the main thread under a per frame budget, which
+is the one approach that runs the same on native and WASM; worker threads are
+an optimisation behind the same queue.
+
+## 27. PocketBase 0.40 needs Go 1.27 (decided)
+
+The 0.40 line declares `go 1.27`. We pin 0.40.4 exactly and let the Go
+toolchain fetch itself. The recipe freeze is a validate hook, not an API rule,
+because rules skip superusers and Go side saves.

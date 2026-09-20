@@ -6,28 +6,36 @@ Every milestone ends runnable end to end.
 
 ## M0: the repo stands
 
-- [ ] Cargo workspace, Go module, `apps/web` (Svelte + Bun), `proto/`, `scripts/`
-- [ ] `CLAUDE.md`, `AGENTS.md -> CLAUDE.md`, `docs/`, `.gitignore` with `refs/`
-- [ ] Conventional Commits check + Semantic Release
-- [ ] CI builds native and WASM; runs tests
-- [ ] A triangle on desktop and in the browser from the same `render` crate
+- [x] Cargo workspace, Go module, `apps/web` (Svelte + Bun), `scripts/` (`proto/` waits for the wire protocol, M2)
+- [x] `CLAUDE.md`, `AGENTS.md -> CLAUDE.md`, `docs/`, `.gitignore` with `refs/`
+- [x] Conventional Commits check + Semantic Release
+- [x] CI builds native and WASM; runs tests
+- [x] ~~A triangle~~ A planet on desktop and in the browser from the same `render` crate
 
 ## M1: walk and fly a generated planet, offline
 
-- [ ] `topology`: address, neighbours, sector seams, address <-> position, property tests
-- [ ] `worldgen`: layered 3D noise on the sphere, params as knobs, golden hashes native = WASM
+- [x] `topology`: address, neighbours, sector seams, address <-> position, property tests
+- [x] `worldgen`: layered 3D noise on the sphere, params as knobs, golden hashes
+- [ ] Golden hashes also run on WASM in CI (wasmtime)
 - [ ] Terrain layer + surface nets mesher, in address space
-- [ ] Camera-relative rendering, reversed-Z depth, quadtree LOD ground to orbit
-- [ ] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
-- [ ] Atmosphere shader, sun as rotating directional light
-- [ ] Headless render to PNG (fixed clock + seed)
-- [ ] Browser build with a minimal Svelte panel: seed, knobs, regenerate
+- [x] Camera-relative rendering, reversed-Z depth, quadtree LOD ground to orbit
+- [ ] Motion vector target; patch building on worker threads
+- [x] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
+- [x] Sun as rotating directional light; first atmosphere (uniform shell)
+- [ ] Atmosphere with real scattering
+- [x] Headless render to PNG (fixed clock + seed)
+- [x] Browser build with a minimal Svelte panel: seed, regenerate
+- [ ] Params as knobs in the panel
+- [x] Third person placeholder avatar (boxes, walk cycle)
+- [x] Design system v0: JetBrains Mono 10px, black and white, light and dark, `/ds`
 
 ## M2: create world, two people see each other
 
-- [ ] `server/`: PocketBase embedded, `worlds` collection, "create world" writes the recipe
+- [x] `server/`: PocketBase embedded, `worlds` collection, "create world" writes the recipe
 - [ ] `world.db` per world, world actor per active world
-- [ ] Email login: magic link (web), one-time code (native); anonymous visitor
+- [x] Email login: magic link (web); anonymous visitor
+- [ ] One-time code login on native
+- [x] Backoffice for operators: worlds and users
 - [ ] Binary WebSocket protocol; presence; avatars (default set)
 - [ ] Generator as WASM inside Go (wazero)
 

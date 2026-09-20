@@ -36,8 +36,17 @@ this file in the same change.
 | Landlord | Role on a volume: build, subdivide, grant roles inside. |
 | Builder | Role on a volume: build only. |
 | Admin | Role on a world: build anywhere. Still logged. |
+| Operator | Global user flag (`users.operator`). Runs the instance, may use the backoffice. Not the superuser, not a world admin. |
+| Superuser | The PocketBase panel login. Infrastructure, never a person in a world. |
+| Backoffice | The operator pages of the web app: worlds and users. |
+| Magic link | The sign in email: a one click link plus the same code to type on native. |
 | Visitor | Anyone without a role here, including anonymous. Looks, never builds. |
 | Agent | An AI client without a renderer, authenticated by an API token. |
+| Offline preview | The engine with no server: `/play` and the desktop explorer. Permanent. |
+| Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |
+| Scene | The plain data a client hands a renderer each frame. Crate `scene`. |
+| Patch | One quadtree node of far terrain, meshed as 32x32 quads. |
+| Tangent warp | The quad sphere mapping: `tan(s * pi / 4)` on the cube face. |
 | Entity | A placed thing that is not a voxel: GLB, part, light, field, portal, media frame, script. |
 | Asset | A file, global, named by its content hash. |
 | Placement | The use of an asset by an entity in a world. Counts against budgets. |

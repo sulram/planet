@@ -16,11 +16,20 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
   denser and cheaper to fill; larger feels flatter.
 - **Build band height**: +-128 m? How deep may people dig?
 - **Chunk size**: 16 or 32 per side?
-- **Pre-distortion mapping** for the quad sphere: which one (tangent warp,
-  Everitt, other)? Needs a small study.
+- **Confirm decision 25**: tangent warp as the quad sphere mapping.
+- **Relief against the build band**: generator v1 raises peaks to 1400 m while
+  the band is about +-128 m. Does the band follow the terrain surface?
 - **Look**: terrain material style (flat colors, pixel textures, triplanar)?
 
 ## Later
+
+- **License.** "Free software end to end" names no license yet.
+- Account deletion: superuser only today; `worlds.owner` has no cascade.
+- World ownership transfer: the update rule allows it with no consent step.
+- PocketBase rate limits are off; the code request both mails and creates
+  accounts. Enable before any public deploy. No `SMTP_TLS` env yet.
+- The magic link is consumed on GET; mail scanners that prefetch could burn
+  it. Hardened variant: a confirm button page.
 
 - ECS crate: `hecs` or `bevy_ecs` standalone.
 - Protocol schema language: protobuf or flatbuffers.

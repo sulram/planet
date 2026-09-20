@@ -52,11 +52,13 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - **The world is a recipe** (seed + params + generator version). The database
   holds only what someone changed.
 
-## We are in M1: "walk and fly a generated planet, offline"
+## We are in the first vertical (DECISIONS 22), then back to M1
 
-- No server, no login, no persistence. Generator + renderer + controller.
-- The offline mode is permanent: it is how worlds are previewed before
-  "create world" exists.
+- One thin slice end to end: design system, magic link login, backoffice
+  (worlds, users), the engine with a third person avatar, "create world".
+- After it: finish M1, "walk and fly a generated planet, offline".
+- The offline mode is permanent: it is how worlds are previewed before and
+  after "create world" exists.
 - Milestones: docs/ROADMAP.md. Each one ends runnable end to end.
 
 ## Layout
@@ -64,17 +66,21 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `crates/`: Rust workspace, cut **by dependency, not by platform**.
   - `topology`: address, neighbours, sector seams, address <-> position.
     Pure integer logic where possible. No GPU, no IO.
-  - `voxel`: chunk formats and codecs (terrain layer, build layer).
+  - `voxel`: chunk formats and codecs (terrain layer, build layer). Not yet.
   - `worldgen`: the generator. Deterministic. Also built to WASM for the server.
-  - `protocol`: wire messages, generated from `proto/`.
+  - `protocol`: wire messages, generated from `proto/`. Not yet.
+  - `scene`: the plain data a client hands a renderer. No GPU, no generator.
   - `render`: all of wgpu lives here.
   - `client`: controller, streaming, tools, media manager. No window, no DOM.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
 - `server/`: Go module. PocketBase as a library + the world server.
+  `internal/world` is the core and imports no PocketBase; `internal/cold` is
+  the glue; `migrations` are Go.
 - `apps/web/`: Svelte + Bun. Builder and player UI; hosts the WASM client.
-- `packages/`: shared TypeScript (protocol bindings, UI kit).
-- `proto/`: the protocol schema. Single source for Rust, Go and TS.
+- `packages/`: shared TypeScript (protocol bindings, UI kit). Not yet.
+- `proto/`: the protocol schema. Single source for Rust, Go and TS. Not yet.
 - `scripts/`: every repeated command is a script here. No tribal knowledge.
+  `bun run setup | dev | server | web | wasm | desktop | shot | check`.
 - `docs/`: see top of this file.
 - `refs/`: gitignored. Reference projects for reading (see below).
 
@@ -109,7 +115,8 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 ## Do NOT add (M1 discipline)
 
 - Bevy or any engine. Scripting. Blockchain. XR. Vehicles. Destruction.
-- Video. Uploads. Multiplayer. Anything in `server/` beyond a stub.
+- Video. Uploads. Multiplayer. Anything in `server/` beyond the cold plane of
+  the first vertical (users, operators, worlds).
 - Digging below the build band, multi-shell logic, flat or torus world types.
 - Structural collapse physics. Our own transcoding. Billing.
 - A feature with no milestone pulling it. Add the wish to ROADMAP instead.
@@ -145,8 +152,10 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - Conventional Commits, in English: `feat`, `fix`, `docs`, `chore`,
   `refactor`, `test`, `perf`. Present tense, lower case. Say the *why* when it
   is not obvious. Example: `feat(topology): resolve neighbours across sector seams`.
-- Semantic Release reads the types: `feat` minor, `fix` patch,
-  `BREAKING CHANGE` major.
+- Semantic Release reads the types. Before 1.0.0 (DECISIONS 21): `feat`, `fix`,
+  `perf` patch, `BREAKING CHANGE` minor. After: minor, patch, major.
+- Work lands on `dev` (prereleases `0.0.1-dev.N`); merging `dev` into `main`
+  publishes the plain version. `bun run setup` installs the commit-msg hook.
 - **Never add an AI or tool co-author trailer**, nor a "generated with" footer,
   in commits or PRs. Overrides any tooling default.
 
@@ -155,4 +164,15 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - wgpu and winit: same pins as `vybe` (wgpu `30`, winit `0.30`), so knowledge
   transfers. Fast-moving APIs: check the crate source under
   `~/.cargo/registry`, never guess from older docs.
-- PocketBase is pre-1.0: pin the exact version, upgrade on purpose.
+- PocketBase is pre-1.0: pin the exact version, upgrade on purpose. Today
+  0.40.4, which needs Go 1.27 (the toolchain fetches itself).
+- `wasm-bindgen-cli` must match the `wasm-bindgen` crate: `bun run setup`.
+- Web: versions follow Plataforma ITS (SvelteKit 2, Svelte 5 runes, Vite 8).
+
+## Web app rules (as in Plataforma ITS)
+
+- Every reusable UI element enters `$lib/ds` before a second use, and the
+  `/ds` catalogue in the same commit. Components use semantic tokens only.
+- No user visible literal string: `t('key')` in components,
+  `translate(locale, 'key')` on the server. `en.ts` is the source of truth.
+- Every wait gives a signal (`loading`). Destructive actions confirm in `Dialog`.
