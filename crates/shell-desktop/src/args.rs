@@ -29,6 +29,8 @@ pub struct Shot {
     pub at: Option<[f64; 2]>,
     /// Fly to this many metres under the moon instead.
     pub moon_gap_m: Option<f64>,
+    /// Fixed-scene render timing, with effects toggled for comparison.
+    pub measure: usize,
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -51,6 +53,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         walk_s: 0.0,
         at: None,
         moon_gap_m: None,
+        measure: 0,
     };
 
     while let Some(flag) = args.next() {
@@ -63,6 +66,9 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
                 let text = value()?;
                 let (w, h) = text.split_once('x').ok_or("--size wants WxH")?;
                 shot.size = [number(w, "--size")?, number(h, "--size")?];
+            }
+            "--measure" if is_shot => {
+                shot.measure = number::<usize>(&value()?, "--measure")?.min(1000)
             }
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,

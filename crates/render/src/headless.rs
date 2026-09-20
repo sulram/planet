@@ -43,6 +43,42 @@ impl Headless {
         })
     }
 
+    /// CPU submission plus GPU completion, without readback or PNG encoding.
+    /// Warm up first. This is a fixed-scene diagnostic, not interactive FPS.
+    pub fn measure(&mut self, frame: &Frame, count: usize) -> (f64, f64) {
+        let count = count.max(1);
+        let target = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut elapsed = Vec::with_capacity(count);
+        for index in 0..count + 8 {
+            let start = std::time::Instant::now();
+            self.renderer.render(
+                frame,
+                &[View {
+                    camera: frame.camera,
+                    target: &target,
+                    size: self.size,
+                }],
+            );
+            self.gpu
+                .device
+                .poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                })
+                .expect("GPU completion");
+            if index >= 8 {
+                elapsed.push(start.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        elapsed.sort_by(f64::total_cmp);
+        (
+            elapsed[count / 2],
+            elapsed[((count as f64 * 0.95) as usize).min(count - 1)],
+        )
+    }
+
     /// Renders the frame and returns its pixels, RGBA8 sRGB, top row first.
     pub fn render(&mut self, frame: &Frame) -> Vec<u8> {
         let [width, height] = self.size;

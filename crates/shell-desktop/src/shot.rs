@@ -44,6 +44,21 @@ pub fn run(shot: Shot) -> Result<(), String> {
     headless
         .renderer
         .apply_skinned(client.drain_skinned_changes());
+    if shot.measure > 0 {
+        for (label, shadows, grass) in [
+            ("base", false, false),
+            ("shadows", true, false),
+            ("shadows + grass", true, true),
+        ] {
+            headless
+                .renderer
+                .set_effects(render::Effects { shadows, grass });
+            let (median, p95) = headless.measure(&frame, shot.measure);
+            println!(
+                "{label}: median {median:.2} ms, p95 {p95:.2} ms (render + GPU wait, {width}x{height})"
+            );
+        }
+    }
     let pixels = headless.render(&frame);
 
     if let Some(parent) = shot.out.parent().filter(|p| !p.as_os_str().is_empty()) {
