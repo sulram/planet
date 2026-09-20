@@ -12,8 +12,15 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 ## Blocks M1 (the address is the save format)
 
 - **Block edge**: 0.5 m like Cryptovoxels, or finer (0.25 m)?
-- **Sector resolution**: `2^16` per side (radius about 20.9 km)? Smaller is
-  denser and cheaper to fill; larger feels flatter.
+- **Sector resolution**: `2^16` per side (radius about 20.9 km)? Measured at
+  `2^19` and reverted (DECISIONS 45). The trade, per bit, with `relief_m` at
+  its default: `2^16` is 48 times exaggerated with Chile 590 m wide, `2^17`
+  24 times and 1.2 km, `2^18` 12 times and 2.4 km, `2^19` 6 times and 4.7 km.
+  `relief_m` buys drama back at any size: 2500 at `2^18` is 22 times with four
+  times the ground. What also has to move with the size: the atmosphere's
+  density and height (a uniform shell cannot cover both a blue zenith and a
+  far horizon; that is the real-scattering item in ROADMAP), the snow line in
+  `material`, and three more octaves in the generator to hold ground detail.
 - **Build band height**: +-128 m? How deep may people dig?
 - **Chunk size**: 16 or 32 per side?
 - **Confirm decision 25**: tangent warp as the quad sphere mapping.

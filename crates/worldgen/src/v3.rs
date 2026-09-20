@@ -143,12 +143,20 @@ fn filtered(seed: u64, d: Direction, frequency: f64, octaves: u32, footprint: f6
 /// because zero maps to zero, and where the ground is rough, which is where
 /// a belt belongs. The relief itself is the generator's, and `relief_m` sets
 /// how tall it grows.
-fn field_shape(field: &Field, d: Direction, footprint_m: f64) -> Shape {
+fn field_shape(recipe: &Recipe, field: &Field, d: Direction, footprint_m: f64) -> Shape {
+    let params = &recipe.params;
     let ground = field.sample(d, footprint_m);
-    let land = if ground.elevation_m < 0.0 {
-        ground.elevation_m / SEA_M
+    // Where the shore is, is a choice: the body's own sea level, or higher,
+    // or lower.
+    let elevation_m = ground.elevation_m - params.sea_level_m;
+    let land = if elevation_m < 0.0 {
+        // Depth follows a curve, not a proportion. At our scale a proportion
+        // leaves every strait and shelf sea under a metre of water; the curve
+        // spends the depth near the shore and still reaches `ocean_depth_m`
+        // out on the plain.
+        -libm::pow(-elevation_m / SEA_M, params.sea_curve)
     } else {
-        (ground.elevation_m / LAND_M).min(INLAND_MAX)
+        (elevation_m / LAND_M).min(INLAND_MAX)
     };
     // Never finer than the mesh that asked: a coarse patch pays for the level
     // it is already reading, not for a finer one.
@@ -174,7 +182,7 @@ pub fn sample(
     let scale = params.continent_scale;
 
     let shape = match field {
-        Some(field) => field_shape(field, d, footprint_m),
+        Some(field) => field_shape(recipe, field, d, footprint_m),
         None => plates.shape(seed, d, params.sea_share),
     };
     let Shape { land, lift, ranges } = shape;

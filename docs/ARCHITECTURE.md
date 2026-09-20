@@ -83,6 +83,13 @@ Numbers marked (p) are proposed and not yet confirmed.
 - Fields are baked by `bun run field` into `assets/fields/` (gitignored), each
   with a sidecar naming its content id. Default: ETOPO 2022, public domain,
   1024 texels per face side (32 m of planet, 9.8 km of Earth), 25 MB.
+- Params are one table in `$lib/world.ts`: range, step, default and the shapes
+  each means anything for. They are sliders in `/play` and parameters of its
+  address; the server clamps again when a world is created. A knob at its
+  default is absent from both.
+- The sea takes an exaggeration of its own (`sea_curve`), because a depth in
+  proportion to a real body leaves every strait a shoal, and `sea_level_m`
+  moves a field's coastline the way `sea_share` moves a generated one.
 - A recipe that names a field cannot be generated without it: the shell reads
   it (`--field` on desktop, one fetch on the web) and hands it over before the
   recipe. `Generator::new` refuses; `Generator::with_field` checks the id.

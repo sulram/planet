@@ -58,6 +58,19 @@ pub struct Params {
     /// Share of the planet under water, `0..=1`, approximate. A field fixes
     /// its own coastline, so this and `continent_scale` do nothing there.
     pub sea_share: f64,
+    /// Where the coastline sits on the source body, metres above its own sea
+    /// level. A field's knob for the same thing `sea_share` does for a
+    /// generated world: raise it to drown the lowlands, lower it to walk out
+    /// onto the shelves, as the Channel was walkable in the ice age.
+    pub sea_level_m: f64,
+    /// The exponent the sea's depth follows, down from the shore.
+    ///
+    /// `1` is honest proportion, and at our scale honest proportion drowns
+    /// nothing: the Channel is 40 m of a body that reaches 11 km, so it comes
+    /// out under a metre of water and reads as a mud flat. Lower spends more
+    /// of the depth near the shore, and the deep stays as deep as
+    /// `ocean_depth_m` says. At `0.45` the Channel is 42 m down.
+    pub sea_curve: f64,
     /// Where the shape comes from. Generator v3 and later.
     pub source: Source,
 }
@@ -69,6 +82,8 @@ impl Default for Params {
             ocean_depth_m: 500.0,
             continent_scale: 1.6,
             sea_share: 0.55,
+            sea_level_m: 0.0,
+            sea_curve: 0.45,
             source: Source::Generated,
         }
     }

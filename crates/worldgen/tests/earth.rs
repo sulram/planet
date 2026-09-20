@@ -64,6 +64,45 @@ fn land_is_where_the_earth_has_land() {
     }
 }
 
+/// A shallow sea has to read as a sea.
+///
+/// This is where honest proportion fails: the Channel is 40 m of a body whose
+/// range is 11 km, so a depth in proportion puts it under less than a metre
+/// of water and the map grows a land bridge from Dover to Calais.
+#[test]
+fn a_strait_is_water_deep_enough_to_be_water() {
+    let Some(generator) = earth() else {
+        return;
+    };
+    for (name, lat, lon, least_m) in [
+        ("the Channel", 50.3, 0.5, 15.0),
+        ("the North Sea", 55.5, 3.5, 20.0),
+        ("the Gulf of Bothnia", 61.0, 20.0, 15.0),
+        ("the Persian Gulf", 27.0, 51.0, 10.0),
+        ("the Yellow Sea", 35.5, 123.0, 15.0),
+    ] {
+        let depth_m = generator.sample(at(lat, lon)).water_depth_m();
+        assert!(
+            depth_m > least_m,
+            "{name} ({lat}, {lon}) is only {depth_m:.1} m deep"
+        );
+    }
+}
+
+/// And a deep one still reaches the floor the recipe asks for.
+#[test]
+fn the_deep_is_still_as_deep_as_the_recipe_says() {
+    let Some(generator) = earth() else {
+        return;
+    };
+    let depth_m = generator.sample(at(-20.0, -130.0)).water_depth_m();
+    let floor_m = Recipe::new(1).params.ocean_depth_m;
+    assert!(
+        depth_m > floor_m * 0.85,
+        "the South Pacific is {depth_m:.0} m of a floor at {floor_m:.0} m"
+    );
+}
+
 #[test]
 fn the_poles_are_where_the_poles_are() {
     let Some(generator) = earth() else {
