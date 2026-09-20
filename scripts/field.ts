@@ -33,6 +33,17 @@ const SIDE = 1024;
 const LEVELS = 7;
 /** Metres of ruggedness in one step of the byte. Matches `field.rs`. */
 const RUGGED_STEP = 16;
+/**
+ * Which way longitude runs on our sphere.
+ *
+ * A place on the source body has to be put at the direction where the engine
+ * draws it, and that frame is a mirror of the body's: baked straight in, a map
+ * comes out east for west, and the Italian boot points the wrong way. One sign,
+ * in one place, used by everything here that turns a latitude and a longitude
+ * into a direction. `crates/worldgen/tests/earth.rs` carries the same sign,
+ * and says why a test cannot be what checks it.
+ */
+const EAST = -1;
 const SECTOR_SIDE = 65536;
 const HALF = SECTOR_SIDE / 2;
 const QUARTER_PI = Math.PI / 4;
@@ -125,7 +136,7 @@ async function scatter(): Promise<Face[]> {
 	for (let c = 0; c < COLS; c++) {
 		const lon = ((-180 + (c * STRIDE + 0.5) / 60) * Math.PI) / 180;
 		cosLon[c] = Math.cos(lon);
-		sinLon[c] = Math.sin(lon);
+		sinLon[c] = EAST * Math.sin(lon);
 	}
 
 	for (let b = 0; b < SRC_ROWS / BAND; b++) {
@@ -248,7 +259,7 @@ function preview(faces: Face[], side: number, width: number): Uint8Array {
 		const lat = ((90 - ((y + 0.5) / height) * 180) * Math.PI) / 180;
 		for (let x = 0; x < width; x++) {
 			const lon = ((-180 + ((x + 0.5) / width) * 360) * Math.PI) / 180;
-			const d = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)];
+			const d = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), EAST * Math.cos(lat) * Math.sin(lon)];
 			const [sector, u, v] = fromDirection(d);
 			const tx = Math.min(side - 1, Math.floor((u / SECTOR_SIDE) * side));
 			const ty = Math.min(side - 1, Math.floor((v / SECTOR_SIDE) * side));
