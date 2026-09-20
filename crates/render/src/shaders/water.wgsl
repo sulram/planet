@@ -90,6 +90,12 @@ fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4
     if in.depth_m < -0.05 {
         discard;
     }
+    // Past the horizon the sphere turns its back. A camera over the sea sees
+    // only the face of it, one under the sea only the back: the other side is
+    // the far sea, behind the near one, and this pass has no depth to say so.
+    if from_above != (view.flags.z >= 0.0) {
+        discard;
+    }
     let distance = length(in.relative);
     // This pass has no depth of its own: whatever the scene drew nearer wins.
     let here = in.clip.xy / vec2<f32>(textureDimensions(behind_depth));

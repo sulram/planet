@@ -161,6 +161,8 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The sea is drawn after the opaque world and the sky, in a pass of its own:
   the picture so far is copied aside and the water reads that copy and the
   depth (`Composer::behind`). It tests depth itself, having none attached.
+  The side of the sphere turned from the camera (the far sea, past the
+  horizon) is discarded: nothing else would hide it behind the near one.
 - From above it refracts what lies under it and colours it by the water
   actually crossed (down to the floor, back along the ray), so shallows go
   turquoise. It takes sun, cast shadows and cloud shade as the land does.

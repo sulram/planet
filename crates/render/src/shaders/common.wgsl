@@ -183,7 +183,8 @@ fn through_water(color: vec3<f32>, wet: f32) -> vec3<f32> {
     // Clarity stretches how far a swimmer sees; the sea seen from the air
     // keeps its colour.
     let survive = exp(-WATER_ABSORB * wet / view.grade.z);
-    let glow = WATER_SCATTER * (0.08 + day) * exp(view.flags.z * 0.025);
+    // Never brighter than at the surface, whoever asks from over it.
+    let glow = WATER_SCATTER * (0.08 + day) * exp(min(view.flags.z, 0.0) * 0.025);
     return color * survive + glow * (1.0 - survive);
 }
 
