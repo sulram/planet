@@ -11,6 +11,8 @@ export * from './protocol';
 /** A running engine bound to one canvas. `free()` stops its loop and listeners. */
 export interface Engine {
 	command(command: Command): void;
+	/** The ground a recipe names. Sent before the recipe that names it. */
+	set_field(bytes: Uint8Array): void;
 	free(): void;
 }
 
@@ -23,6 +25,7 @@ export interface EngineModule {
 /** The shape `wasm-bindgen --target web` emits for `shell-web`. */
 interface RawEngine {
 	command(json: string): void;
+	set_field(bytes: Uint8Array): void;
 	free(): void;
 }
 interface RawModule {
@@ -49,6 +52,7 @@ async function load(): Promise<EngineModule | null> {
 			});
 			return {
 				command: (command) => engine.command(JSON.stringify(command)),
+				set_field: (bytes) => engine.set_field(bytes),
 				free: () => engine.free()
 			};
 		}

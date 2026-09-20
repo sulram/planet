@@ -28,6 +28,9 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
   (GPL-3.0-only, Mixamo rig) and are temporary: replace them with clips from
   Mixamo or our own before choosing a license that GPL does not fit. Where the
   default set is hosted later (repo, LFS, bucket) is open too.
+- **Fields: where they are hosted.** 25 MB each, gitignored, baked by
+  `bun run field`. Same question as the default asset set, and the same answer
+  when it comes. Whether an instance should offer more than one is open too.
 - **License.** "Free software end to end" names no license yet.
 - Account deletion: superuser only today; `worlds.owner` has no cascade.
 - World ownership transfer: the update rule allows it with no consent step.

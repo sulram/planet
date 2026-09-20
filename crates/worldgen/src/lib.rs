@@ -9,16 +9,22 @@
 //! version they were created with. New terrain means a new version module
 //! beside `v1`, and the golden hashes in `tests/golden.rs` guard the old ones.
 
+mod field;
 mod moon;
 mod noise;
+mod plates;
 mod recipe;
 mod v1;
 mod v2;
+mod v3;
 
-pub use recipe::{Params, Recipe, RecipeError, format_seed, parse_seed};
+pub use field::{Field, FieldError, Ground};
+pub use recipe::{
+    Params, Recipe, RecipeError, Source, format_id, format_seed, parse_id, parse_seed,
+};
 
 /// The version new worlds are created with.
-pub const GENERATOR_VERSION: u32 = 2;
+pub const GENERATOR_VERSION: u32 = 3;
 
 /// Radius of the moon's datum sphere, metres.
 pub const MOON_RADIUS_M: f64 = moon::RADIUS_M;
@@ -62,14 +68,49 @@ impl Sample {
 pub struct Generator {
     recipe: Recipe,
     moon_basins: moon::Basins,
+    plates: plates::Plates,
+    field: Option<Field>,
 }
 
 impl Generator {
-    /// Fails when the recipe asks for a generator version this build lacks.
+    /// Fails when the recipe asks for a generator version this build lacks,
+    /// or when it names a field: that one needs [`Generator::with_field`].
     pub fn new(recipe: Recipe) -> Result<Generator, RecipeError> {
+        if let Source::Field(id) = recipe.params.source {
+            return Err(RecipeError::FieldRequired(id));
+        }
+        Generator::build(recipe, None)
+    }
+
+    /// The generator of a recipe that names a field, with that field. The id
+    /// must be the one the recipe names: a world shaped by other ground is a
+    /// different world, and its stored chunks would no longer line up.
+    pub fn with_field(recipe: Recipe, field: Field) -> Result<Generator, RecipeError> {
+        match recipe.params.source {
+            Source::Field(want) if want != field.id() => Err(RecipeError::FieldMismatch {
+                want,
+                got: field.id(),
+            }),
+            Source::Field(_) => Generator::build(recipe, Some(field)),
+            // A generated world is welcome to ignore the field it was handed.
+            Source::Generated => Generator::build(recipe, None),
+        }
+    }
+
+    /// The id of the field this recipe needs, if it needs one.
+    pub fn required_field(recipe: &Recipe) -> Option<[u8; 32]> {
+        match recipe.params.source {
+            Source::Field(id) => Some(id),
+            Source::Generated => None,
+        }
+    }
+
+    fn build(recipe: Recipe, field: Option<Field>) -> Result<Generator, RecipeError> {
         match recipe.generator_version {
-            1 | 2 => Ok(Generator {
+            1..=3 => Ok(Generator {
                 moon_basins: moon::Basins::new(&recipe),
+                plates: plates::Plates::new(&recipe),
+                field,
                 recipe,
             }),
             version => Err(RecipeError::UnknownGeneratorVersion(version)),
@@ -104,7 +145,14 @@ impl Generator {
     pub fn sample_at(&self, direction: Direction, footprint_m: f64) -> Sample {
         match self.recipe.generator_version {
             1 => v1::sample(&self.recipe, direction),
-            _ => v2::sample(&self.recipe, direction, footprint_m),
+            2 => v2::sample(&self.recipe, direction, footprint_m),
+            _ => v3::sample(
+                &self.recipe,
+                &self.plates,
+                self.field.as_ref(),
+                direction,
+                footprint_m,
+            ),
         }
     }
 }

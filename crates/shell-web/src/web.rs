@@ -83,6 +83,17 @@ impl Engine {
     pub fn command(&self, json: &str) {
         self.state.borrow_mut().client.command_json(json);
     }
+
+    /// The ground a field world is shaped by. Sent before the recipe that
+    /// names it: a world cannot be generated without the field it was made
+    /// from, so the page fetches it first.
+    pub fn set_field(&self, bytes: Vec<u8>) -> Result<(), JsError> {
+        self.state
+            .borrow_mut()
+            .client
+            .set_field(bytes)
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
 }
 
 impl Drop for Engine {

@@ -3375,6 +3375,7 @@ dependencies = [
  "libm",
  "serde",
  "serde_json",
+ "topology",
 ]
 
 [[package]]

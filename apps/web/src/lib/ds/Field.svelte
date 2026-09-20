@@ -3,8 +3,8 @@
 
 	interface Props {
 		label: string;
-		/** id of the inner control, for the label's `for`. */
-		for: string;
+		/** id of the inner control. Left out for a group, which names itself. */
+		for?: string;
 		hint?: string;
 		/** Shown whole, in place of the hint. */
 		error?: string;
@@ -15,7 +15,11 @@
 </script>
 
 <div class="field">
-	<label for={forId}>{label}</label>
+	{#if forId}
+		<label for={forId}>{label}</label>
+	{:else}
+		<span class="label">{label}</span>
+	{/if}
 	{@render children()}
 	{#if error}
 		<p class="note error" role="alert">{error}</p>
@@ -25,6 +29,10 @@
 </div>
 
 <style>
+	label,
+	.label {
+		display: block;
+	}
 	.field {
 		display: flex;
 		flex-direction: column;

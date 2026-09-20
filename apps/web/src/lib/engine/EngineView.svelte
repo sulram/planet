@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Alert, Spinner } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import type { Recipe } from '$lib/world';
+	import { fieldId, type Recipe } from '$lib/world';
 	import { loadEngine, type Effects, type Engine, type EngineEvent, type Mode } from './index';
 
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
@@ -11,6 +11,8 @@
 	interface Props {
 		/** Null until the caller knows the whole recipe; nothing is sent meanwhile. */
 		recipe: Recipe | null;
+		/** Where to fetch the field a recipe names, when it names one. */
+		fieldPath?: string;
 		mode: Mode;
 		/** Asset path of the avatar to wear. Null wears any the manifest offers. */
 		avatar: string | null;
@@ -19,9 +21,9 @@
 		onevent?: (event: EngineEvent) => void;
 	}
 
-	let { recipe, mode, avatar, effects, onevent }: Props = $props();
+	let { recipe, fieldPath, mode, avatar, effects, onevent }: Props = $props();
 
-	type Status = 'loading' | 'running' | 'missing' | 'unsupported' | 'failed';
+	type Status = 'loading' | 'shaping' | 'running' | 'missing' | 'unsupported' | 'failed';
 
 	let canvas: HTMLCanvasElement | undefined = $state();
 	let engine = $state.raw<Engine>();
@@ -33,6 +35,8 @@
 	let engineMode: Mode | undefined;
 	let engineAvatar: string | undefined;
 	let engineEffects = '';
+	/** The field already handed to the engine, by id. */
+	let engineField: string | undefined;
 
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') engineRecipe = JSON.stringify(event.recipe);
@@ -74,12 +78,36 @@
 		};
 	});
 
+	// A world shaped by a field cannot be generated without it, so the bytes
+	// go over first and the recipe follows. The engine keeps the field, so a
+	// new seed over the same ground downloads nothing.
 	$effect(() => {
 		if (!engine || !recipe) return;
 		const next = JSON.stringify(recipe);
 		if (next === engineRecipe) return;
+		const wanted = fieldId(recipe);
+		const here = engine;
+		if (!wanted || wanted === engineField) {
+			engineRecipe = next;
+			here.command({ type: 'set_recipe', recipe });
+			return;
+		}
+		if (!fieldPath) return;
 		engineRecipe = next;
-		engine.command({ type: 'set_recipe', recipe });
+		status = 'shaping';
+		fetch(fieldPath)
+			.then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(response.status)))
+			.then((bytes) => {
+				if (here !== engine) return;
+				here.set_field(new Uint8Array(bytes));
+				engineField = wanted;
+				status = 'running';
+				here.command({ type: 'set_recipe', recipe });
+			})
+			.catch(() => {
+				engineRecipe = '';
+				status = 'failed';
+			});
 	});
 
 	$effect(() => {
@@ -109,6 +137,8 @@
 		<div class="notice">
 			{#if status === 'loading'}
 				<Spinner label={t('engine.loading')} />
+			{:else if status === 'shaping'}
+				<Spinner label={t('engine.shaping')} />
 			{:else if status === 'missing'}
 				<Alert title={t('engine.missing.title')}>{t('engine.missing.body')} <code>bun run wasm</code></Alert>
 			{:else if status === 'unsupported'}

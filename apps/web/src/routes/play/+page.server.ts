@@ -4,16 +4,22 @@ import { loginPath } from '$lib/server/auth';
 import { visitorAvatar } from '$lib/server/avatar';
 import { pbStatus } from '$lib/server/pb';
 import { createWorld } from '$lib/server/worlds';
-import { isGeneratorVersion, normalizeSeed, randomSeed, WORLD_NAME_MAX } from '$lib/world';
+import { isGeneratorVersion, isShape, normalizeSeed, randomSeed, WORLD_NAME_MAX, type Shape } from '$lib/world';
+import { readFieldSidecar } from '$lib/server/fields';
 import type { Actions, PageServerLoad } from './$types';
 
-// The offline preview. The seed lives in the URL so a planet can be shared;
-// arriving without a valid one lands on a fresh random planet.
+// The offline preview. The seed and the shape live in the URL so a planet can
+// be shared; arriving without a valid seed lands on a fresh random planet.
 export const load: PageServerLoad = async (event) => {
 	const { url } = event;
 	const seed = normalizeSeed(url.searchParams.get('seed'));
 	if (!seed || seed !== url.searchParams.get('seed')) redirect(303, `/play?seed=${seed ?? randomSeed()}`);
-	return { seed, avatar: await visitorAvatar(event) };
+	const asked = url.searchParams.get('shape');
+	const shape: Shape = isShape(asked) ? asked : 'generated';
+	// The sidecar names the ground without anyone downloading it: the page can
+	// build the whole recipe before the engine fetches a single texel.
+	const field = shape === 'generated' ? null : await readFieldSidecar(shape);
+	return { seed, shape: field ? shape : 'generated', field, avatar: await visitorAvatar(event) };
 };
 
 export const actions: Actions = {
@@ -26,12 +32,17 @@ export const actions: Actions = {
 		if (!locals.user) redirect(303, loginPath(seed ? `/play?seed=${seed}` : '/play'));
 
 		const generatorVersion = Number(form.get('generator_version'));
+		const asked = String(form.get('shape') ?? 'generated');
+		const shape: Shape = isShape(asked) ? asked : 'generated';
+		// The id is read here, from the file this instance serves, and never
+		// taken from the form: a recipe may only ever name ground we have.
+		const field = shape === 'generated' ? null : await readFieldSidecar(shape);
 
 		if (!name) return fail(400, { name, error: translate(locals.locale, 'play.error.nameRequired') });
 		if (name.length > WORLD_NAME_MAX) {
 			return fail(400, { name, error: translate(locals.locale, 'play.error.nameTooLong', { max: WORLD_NAME_MAX }) });
 		}
-		if (!seed || !isGeneratorVersion(generatorVersion)) {
+		if (!seed || !isGeneratorVersion(generatorVersion) || (shape !== 'generated' && !field)) {
 			return fail(400, { name, error: translate(locals.locale, 'play.error.recipeInvalid') });
 		}
 
@@ -40,7 +51,7 @@ export const actions: Actions = {
 			({ id } = await createWorld(locals.pb, locals.user.id, name, {
 				seed,
 				generator_version: generatorVersion,
-				params: {}
+				params: field ? { source: { field: field.id } } : {}
 			}));
 		} catch (err) {
 			const key = pbStatus(err) === 0 ? 'error.unreachable' : 'play.error.createFailed';

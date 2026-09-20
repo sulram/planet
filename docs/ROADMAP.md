@@ -26,6 +26,8 @@ Every milestone ends runnable end to end.
 - [x] Atmospheric clouds: a volumetric layer seen from the ground, from above and from orbit, with shadows on the ground
 - [x] Headless render to PNG (fixed clock + seed)
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
+- [x] Generator v3: the shape is a source; plates for a seed world, a baked field for a real one (DECISIONS 44)
+- [x] "Earth or generated" when a planet is made, in `/play` and in the recipe
 - [ ] Params as knobs in the panel
 - [x] Third person placeholder avatar (boxes, walk cycle)
 - [x] VRM avatars with shared locomotion clips; random per visitor; `V` for the next
@@ -115,6 +117,9 @@ Every milestone ends runnable end to end.
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
 - [ ] Portals between places, scales and worlds; magic as a capability
 - [ ] Gravity fields as placeable entities
+- [ ] Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
+- [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
+- [ ] More fields: the Moon and Mars from the same bake, a region of Earth at a kinder scale
 - [ ] Scripts, server side
 - [ ] AI agents as headless clients with API tokens
 - [ ] Animals and NPCs

@@ -56,7 +56,10 @@ Numbers marked (p) are proposed and not yet confirmed.
   collection: `{seed, generator_version, params}`. The seed is a u64 written
   as 16 lowercase hex digits (JSON numbers stop at 2^53).
 - The recipe of a stored world is frozen by a validate hook, superusers too.
-- Generator v2 (new worlds): eroded massifs, a sea floor, and
+- Generator v3 (new worlds): the shape is a source, and the body below it is
+  v2's. `params.source` is `generated` (tectonic plates over the seed) or
+  `{field}` (a baked cube map of a real body, named by content id).
+- Generator v2: eroded massifs, a sea floor, and
   `sample_at(direction, footprint_m)` which fades detail finer than the mesh
   that asks. Collision and saves use full detail. v1 stays frozen beside it.
 - Generator v1: continents, ridged mountains and detail as 3D simplex noise;
@@ -70,6 +73,19 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The generator is written once in Rust: native in clients, WASM in the
   browser, the same WASM inside Go through wazero (pure Go, no CGO).
 - 3D noise sampled on the sphere: no seams, no projection distortion.
+- A **field** is a cube map of ground, one face per sector, with a mip pyramid
+  and a one texel gutter across each seam. Two channels: elevation (`i16`,
+  metres on the source body) and ruggedness (a byte of 16 m steps, the spread
+  inside a finest texel). Levels blend by footprint, as `band` fades an octave.
+- A field gives shape, never height: at 1/305 of Earth, honest elevations are
+  a billiard ball and honest exaggeration is a wall. Zero maps to zero, so the
+  coastline is exact; the relief is the generator's, sized by `relief_m`.
+- Fields are baked by `bun run field` into `assets/fields/` (gitignored), each
+  with a sidecar naming its content id. Default: ETOPO 2022, public domain,
+  1024 texels per face side (32 m of planet, 9.8 km of Earth), 25 MB.
+- A recipe that names a field cannot be generated without it: the shell reads
+  it (`--field` on desktop, one fetch on the web) and hands it over before the
+  recipe. `Generator::new` refuses; `Generator::with_field` checks the id.
 
 ## Streaming and LOD
 

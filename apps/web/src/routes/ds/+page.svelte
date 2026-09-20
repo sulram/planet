@@ -174,6 +174,16 @@
 					<Field label="Email" for="ds-email" hint="A hint explains what is expected.">
 						<Input id="ds-email" type="email" placeholder="you@example.com" bind:value={email} />
 					</Field>
+					<Field label="Shape" hint="Without `for`, the label names a group instead of one control.">
+						<Segmented
+							options={[
+								{ value: 'a', label: 'Generated' },
+								{ value: 'b', label: 'Earth' }
+							]}
+							value="a"
+							label="Shape"
+						/>
+					</Field>
 					<Field label="Seed" for="ds-seed" error="An error replaces the hint and is shown whole.">
 						<Input id="ds-seed" value="not a seed" invalid />
 					</Field>

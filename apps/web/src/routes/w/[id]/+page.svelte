@@ -11,7 +11,7 @@
 	<title>{data.world.name} · {t('common.appName')}</title>
 </svelte:head>
 
-<Stage title={data.world.name} recipe={data.world.recipe} avatar={data.avatar}>
+<Stage title={data.world.name} recipe={data.world.recipe} fieldPath={data.fieldPath ?? undefined} avatar={data.avatar}>
 	<dl>
 		<Stat label={t('world.seed')} value={data.world.recipe.seed} />
 		<Stat label={t('world.generatorVersion')} value={String(data.world.recipe.generator_version)} />

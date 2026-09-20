@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use client::{Client, Input, Key, Recipe};
 use wasm_bindgen::prelude::wasm_bindgen;
-use worldgen::Generator;
+use worldgen::{Field, Generator, Source};
 
 thread_local! {
     static DESCENT: RefCell<Option<(Client, Input)>> = const { RefCell::new(None) };
@@ -14,12 +14,43 @@ thread_local! {
 
 /// Body numbers shared with the host.
 const MOON: i32 = 1;
+/// The planet again, shaped by the field the host loaded.
+const FIELD: i32 = 2;
+
+thread_local! {
+    static GROUND: RefCell<Option<Field>> = const { RefCell::new(None) };
+}
+
+/// Hands over a baked field, so the host can time a world shaped by one. The
+/// host skips these when the field has not been baked.
+#[wasm_bindgen]
+pub fn load_field(bytes: Vec<u8>) {
+    let field = Field::parse(bytes).expect("a baked field");
+    GROUND.with(|held| *held.borrow_mut() = Some(field));
+}
+
+/// The recipe of a world over the loaded field, for the bodies that want one.
+fn over_field(body: i32) -> Option<(Recipe, Field)> {
+    if body != FIELD {
+        return None;
+    }
+    GROUND.with(|held| {
+        held.borrow().clone().map(|field| {
+            let mut recipe = Recipe::new(1);
+            recipe.params.source = Source::Field(field.id());
+            (recipe, field)
+        })
+    })
+}
 
 /// Samples `count` directions of a body at the footprint of its finest mesh.
 /// A patch is 35 x 35 of them.
 #[wasm_bindgen]
 pub fn samples(body: i32, count: i32) -> f64 {
-    let generator = Generator::new(Recipe::new(1)).expect("the current generator version");
+    let generator = match over_field(body) {
+        Some((recipe, field)) => Generator::with_field(recipe, field).expect("the loaded field"),
+        None => Generator::new(Recipe::new(1)).expect("the current generator version"),
+    };
     let mut sum = 0.0;
     for i in 0..count {
         let a = f64::from(i) * 1e-4;
@@ -38,7 +69,10 @@ pub fn samples(body: i32, count: i32) -> f64 {
 /// hardest moment, every level of the quadtree arriving at once.
 #[wasm_bindgen]
 pub fn descent_start(body: i32) {
-    let mut client = Client::new(Recipe::new(1)).expect("the current generator version");
+    let mut client = match over_field(body) {
+        Some((recipe, field)) => Client::with_field(recipe, field).expect("the loaded field"),
+        None => Client::new(Recipe::new(1)).expect("the current generator version"),
+    };
     if body == MOON {
         client.visit_moon(3000.0, -1.2, 6.0);
     } else {

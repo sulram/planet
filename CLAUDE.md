@@ -68,6 +68,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
     Pure integer logic where possible. No GPU, no IO.
   - `voxel`: chunk formats and codecs (terrain layer, build layer). Not yet.
   - `worldgen`: the generator. Deterministic. Also built to WASM for the server.
+    A world's shape is a source: plates over the seed, or a baked `field`.
   - `protocol`: wire messages, generated from `proto/`. Not yet.
   - `scene`: the plain data a client hands a renderer. No GPU, no generator.
   - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
@@ -83,9 +84,10 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `packages/`: shared TypeScript (protocol bindings, UI kit). Not yet.
 - `proto/`: the protocol schema. Single source for Rust, Go and TS. Not yet.
 - `assets/`: the instance's default set (avatars, clips) and its
-  `manifest.json`, the config that names them.
+  `manifest.json`, the config that names them. `assets/fields/` holds baked
+  fields, made by `bun run field` and gitignored.
 - `scripts/`: every repeated command is a script here. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | assets | desktop | shot | webshot | bench | check`.
+  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | check`.
 - `docs/`: see top of this file.
 - `refs/`: gitignored. Reference projects for reading (see below).
 

@@ -4,6 +4,41 @@
  * collection, so a Recipe travels unmapped.
  */
 
+/**
+ * What gives a world its shape. Both still take the seed: a field carries the
+ * low frequencies of a real body, and everything under one of its texels is
+ * the generator's, so one field is a family of worlds, never a single world.
+ */
+export type Source = 'generated' | { field: string };
+
+/** What a person picks in the UI, before it becomes a `Source`. */
+export const SHAPES = ['generated', 'earth'] as const;
+export type Shape = (typeof SHAPES)[number];
+
+export function isShape(value: string | null): value is Shape {
+	return SHAPES.includes(value as Shape);
+}
+
+/** A baked field, as its sidecar names it. `bun run field` writes both. */
+export interface Field {
+	id: string;
+	texel_m: number;
+	source: string;
+}
+
+/** Where a shape's field and its sidecar are served from. */
+export const FIELD_PATH: Record<Exclude<Shape, 'generated'>, string> = {
+	earth: '/assets/fields/earth.field'
+};
+
+/** The id a recipe names, or null when the seed alone shapes the world. */
+export function fieldId(recipe: Recipe): string | null {
+	const source = recipe.params.source;
+	return typeof source === 'object' && source !== null && 'field' in source
+		? String((source as { field: unknown }).field)
+		: null;
+}
+
 /** Seed + params + generator version: enough to regenerate all untouched terrain. */
 export interface Recipe {
 	/** A u64 as 16 lowercase hex digits. */

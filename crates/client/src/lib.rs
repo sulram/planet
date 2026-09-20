@@ -17,7 +17,7 @@ mod terrain;
 use glam::DVec3;
 use scene::{SkinnedChange, TerrainChange};
 use topology::{RADIUS_M, SECTOR_SIDE, Sector, SurfacePoint};
-pub use worldgen::Recipe;
+pub use worldgen::{Field, Recipe};
 use worldgen::{GENERATOR_VERSION, Generator, Material};
 
 pub use assets::AssetRequest;
@@ -40,6 +40,8 @@ const STATS_EVERY_S: f64 = 0.5;
 
 pub struct Client {
     generator: Generator,
+    /// Kept so a new recipe over the same ground needs no second download.
+    field: Option<Field>,
     controller: Controller,
     terrain: Terrain,
     moon_terrain: Terrain,
@@ -63,11 +65,24 @@ pub struct Client {
 }
 
 impl Client {
+    /// A world that needs only its seed. A recipe that names a field is
+    /// refused here: that one needs [`Client::with_field`].
     pub fn new(recipe: Recipe) -> Result<Client, worldgen::RecipeError> {
-        let generator = Generator::new(recipe)?;
+        Client::build(Generator::new(recipe)?, None)
+    }
+
+    /// A world shaped by a baked field. The field is kept, so a later
+    /// `SetRecipe` onto the same ground costs nothing but the respawn.
+    pub fn with_field(recipe: Recipe, field: Field) -> Result<Client, worldgen::RecipeError> {
+        let generator = Generator::with_field(recipe, field.clone())?;
+        Client::build(generator, Some(field))
+    }
+
+    fn build(generator: Generator, field: Option<Field>) -> Result<Client, worldgen::RecipeError> {
         let controller = Controller::spawn(spawn_point(&generator), &generator);
         let mut client = Client {
             generator,
+            field,
             controller,
             terrain: Terrain::new(Body::Planet),
             moon_terrain: Terrain::new(Body::Moon),
@@ -98,6 +113,23 @@ impl Client {
             effects: client.effects,
         });
         Ok(client)
+    }
+
+    /// The generator for a recipe, with the field this client holds when the
+    /// recipe asks for one. A UI that wants other ground hands it over first.
+    fn generator_for(&self, recipe: Recipe) -> Result<Generator, worldgen::RecipeError> {
+        match (Generator::required_field(&recipe), self.field.clone()) {
+            (Some(_), Some(field)) => Generator::with_field(recipe, field),
+            _ => Generator::new(recipe),
+        }
+    }
+
+    /// The ground a field world is shaped by, before its recipe arrives.
+    /// Fails when the bytes are not a field; the world it belongs to is
+    /// checked against its id when the recipe comes.
+    pub fn set_field(&mut self, bytes: Vec<u8>) -> Result<(), worldgen::FieldError> {
+        self.field = Some(Field::parse(bytes)?);
+        Ok(())
     }
 
     /// Takes what a UI asked for, within what is sane, and says what it took.
@@ -175,7 +207,7 @@ impl Client {
 
     pub fn command(&mut self, command: Command) {
         match command {
-            Command::SetRecipe { recipe } => match Generator::new(recipe) {
+            Command::SetRecipe { recipe } => match self.generator_for(recipe) {
                 Ok(generator) => self.regenerate(generator),
                 Err(error) => self.events.push(Event::Rejected {
                     message: error.to_string(),
@@ -328,7 +360,12 @@ impl Client {
                     Mode::Fly => Mode::Walk,
                 }),
                 Key::NewSeed => {
-                    let recipe = Recipe::new(mix(self.recipe().seed ^ self.entropy));
+                    // A new seed over the same ground: a field world keeps its
+                    // coastlines and gets new mountains under them.
+                    let recipe = Recipe {
+                        params: self.recipe().params,
+                        ..Recipe::new(mix(self.recipe().seed ^ self.entropy))
+                    };
                     self.command(Command::SetRecipe { recipe });
                 }
                 Key::NextAvatar => self.next_avatar(),

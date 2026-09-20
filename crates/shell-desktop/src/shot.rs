@@ -9,7 +9,11 @@ use crate::assets;
 
 pub fn run(shot: Shot) -> Result<(), String> {
     let [width, height] = shot.size;
-    let mut client = Client::new(shot.recipe).map_err(|e| e.to_string())?;
+    let mut client = match shot.field {
+        Some(field) => Client::with_field(shot.recipe, field),
+        None => Client::new(shot.recipe),
+    }
+    .map_err(|e| e.to_string())?;
     client.set_aspect(width as f32 / height as f32);
     client.set_clock(shot.clock_s);
     if let Some(effects) = &shot.effects {

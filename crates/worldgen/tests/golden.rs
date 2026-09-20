@@ -50,6 +50,19 @@ fn v1_is_frozen() {
 const SEEDS: [u64; 4] = [0, 1, 0x0000_0000_dead_beef, u64::MAX];
 
 #[test]
+fn v3_is_frozen() {
+    let got: Vec<u64> = SEEDS.map(|seed| fingerprint(3, seed)).to_vec();
+    assert_eq!(got, GOLDEN_V3, "generator v3 changed its output");
+}
+
+const GOLDEN_V3: [u64; 4] = [
+    0xed12_aeda_06d7_8008,
+    0x0031_791e_1f9b_b2c9,
+    0xb8e2_df13_eede_7796,
+    0x644f_108f_3349_caf3,
+];
+
+#[test]
 fn v2_is_frozen() {
     let got: Vec<u64> = SEEDS.map(|seed| fingerprint(2, seed)).to_vec();
     assert_eq!(got, GOLDEN_V2, "generator v2 changed its output");

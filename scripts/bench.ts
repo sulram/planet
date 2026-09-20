@@ -23,7 +23,20 @@ const report = (what: string, ms: number, budget: number) => {
 	console.log(`${over ? 'OVER' : 'ok  '} ${what}: ${ms.toFixed(2)} ms (budget ${budget})`);
 };
 
-for (const [body, name] of [[0, 'planet'], [1, 'moon']] as const) {
+// A world shaped by a field is the other hot path, once one has been baked.
+const field = Bun.file(`${ROOT}/assets/fields/earth.field`);
+const runs: [number, string][] = [
+	[0, 'planet'],
+	[1, 'moon']
+];
+if (await field.exists()) {
+	bench.load_field(await field.bytes());
+	runs.push([2, 'planet over a field']);
+} else {
+	console.log('no field baked (bun run field): that path is not measured');
+}
+
+for (const [body, name] of runs) {
 	const rounds = 40;
 	bench.samples(body, PATCH_SAMPLES * rounds);
 	const start = performance.now();
@@ -39,4 +52,5 @@ for (const [body, name] of [[0, 'planet'], [1, 'moon']] as const) {
 	}
 	report(`${name}: worst frame of a 10 s descent`, worst, FRAME_BUDGET_MS);
 }
+
 if (failed) process.exit(1);

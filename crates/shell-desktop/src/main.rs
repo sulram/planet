@@ -17,7 +17,11 @@ fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,planet=info"))
         .init();
     let result = match args::parse(std::env::args().skip(1)) {
-        Ok(args::Invocation::Window { recipe, avatar }) => window::run(recipe, avatar),
+        Ok(args::Invocation::Window {
+            recipe,
+            field,
+            avatar,
+        }) => window::run(recipe, field, avatar),
         Ok(args::Invocation::Shot(shot)) => shot::run(shot),
         Err(message) => Err(message),
     };

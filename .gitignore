@@ -26,3 +26,6 @@ server/pb_data/
 
 # headless render output
 out/
+
+# The baked fields: made by `bun run field`, too large to carry here.
+assets/fields/

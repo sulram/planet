@@ -2,11 +2,12 @@
 
 use std::path::PathBuf;
 
-use worldgen::{Recipe, parse_seed};
+use worldgen::{Field, Recipe, Source, parse_seed};
 
 pub enum Invocation {
     Window {
         recipe: Recipe,
+        field: Option<Field>,
         avatar: Option<String>,
     },
     Shot(Shot),
@@ -14,6 +15,8 @@ pub enum Invocation {
 
 pub struct Shot {
     pub recipe: Recipe,
+    /// The ground the recipe names, already read. `None` for a seed world.
+    pub field: Option<Field>,
     /// File stem under `assets/avatars`.
     pub avatar: Option<String>,
     pub out: PathBuf,
@@ -45,8 +48,10 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
     let is_shot = args.next_if(|arg| arg == "shot").is_some();
 
     let mut recipe = Recipe::new(DEFAULT_SEED);
+    let mut field = None;
     let mut shot = Shot {
         recipe: recipe.clone(),
+        field: None,
         avatar: None,
         out: PathBuf::new(),
         size: [1280, 720],
@@ -66,6 +71,15 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         let mut value = || args.next().ok_or(format!("{flag} needs a value"));
         match flag.as_str() {
             "--seed" => recipe.seed = parse_seed(&value()?).map_err(|e| e.to_string())?,
+            // The file names the ground, and the recipe follows it: a field
+            // world is only ever the world that field was baked for.
+            "--field" => {
+                let path = value()?;
+                let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+                let read = Field::parse(bytes).map_err(|e| format!("{path}: {e}"))?;
+                recipe.params.source = Source::Field(read.id());
+                field = Some(read);
+            }
             "--avatar" => shot.avatar = Some(value()?),
             "--out" if is_shot => shot.out = PathBuf::from(value()?),
             "--size" if is_shot => {
@@ -96,6 +110,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
     if !is_shot {
         return Ok(Invocation::Window {
             recipe,
+            field,
             avatar: shot.avatar,
         });
     }
@@ -103,6 +118,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         return Err("shot needs --out FILE".into());
     }
     shot.recipe = recipe;
+    shot.field = field;
     Ok(Invocation::Shot(shot))
 }
 

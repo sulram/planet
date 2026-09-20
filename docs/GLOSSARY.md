@@ -8,6 +8,10 @@ this file in the same change.
 | World | One recipe + one `world.db` + its records in PocketBase. An instance holds many. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |
 | Generator | The deterministic function from recipe + address to terrain. Versioned, frozen per world. |
+| Source | Where a world's shape comes from: `generated` (plates over the seed) or a field. A recipe param. |
+| Field | A cube map of a real body's ground, baked per sector, named by content id and frozen like the generator version. Gives shape, never height. |
+| Ruggedness | How far elevation ranges inside one finest texel of a field. What tells a cordillera from a plateau. |
+| Plate | One of the tectonic plates a generated world is made of. Its edges are where ranges, trenches and rifts are. |
 | Body | A celestial object in a world: the planet, a moon, a micro world. Each has a topology. |
 | Topology | The rule set mapping addresses to positions and neighbours. Two kinds: quad sphere, ball. |
 | Quad sphere | Six square grids projected on a sphere. Topology of the planet. |

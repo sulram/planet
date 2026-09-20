@@ -14,6 +14,8 @@
 	interface Props {
 		title: string;
 		recipe: Recipe | null;
+		/** Where to fetch the field the recipe names, when it names one. */
+		fieldPath?: string;
 		/** Asset path of the visitor's avatar, from the page load. */
 		avatar: string | null;
 		/** Called once the engine reports which generator version it runs. */
@@ -21,7 +23,7 @@
 		children: Snippet;
 	}
 
-	let { title, recipe, avatar, onready, children }: Props = $props();
+	let { title, recipe, fieldPath, avatar, onready, children }: Props = $props();
 
 	let mode = $state<Mode>('walk');
 	let stats = $state<Extract<EngineEvent, { type: 'stats' }>>();
@@ -89,7 +91,7 @@
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {mode} {avatar} effects={wanted} onevent={receive} />
+	<EngineView {recipe} {fieldPath} {mode} {avatar} effects={wanted} onevent={receive} />
 	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}
