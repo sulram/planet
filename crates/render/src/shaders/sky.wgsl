@@ -47,7 +47,7 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
 
     // Under the sea there is no sky, only water all the way.
     if view.flags.z < 0.0 {
-        return encode(through_medium(vec3<f32>(0.0), dir, 1.0e6));
+        return vec4<f32>(through_medium(vec3<f32>(0.0), dir, 1.0e6), 1.0);
     }
 
     let air = atmosphere(dir, 1.0e9);
@@ -66,5 +66,5 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     // The moon is terrain with depth of its own: it hides sun, stars and
     // planet by being in front. The planet's night side may be culled, so it
     // hides them here.
-    return encode((sun + stars(dir) * dazzle) * open_sky * air.a + air.rgb);
+    return vec4<f32>((sun + stars(dir) * dazzle) * open_sky * air.a + air.rgb, 1.0);
 }

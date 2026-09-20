@@ -50,14 +50,17 @@ pub fn run(shot: Shot) -> Result<(), String> {
             ("shadows", true, false),
             ("shadows + grass", true, true),
         ] {
-            headless
-                .renderer
-                .set_effects(render::Effects { shadows, grass });
+            headless.renderer.set_effects(render::Effects {
+                shadows,
+                grass,
+                ..Default::default()
+            });
             let (median, p95) = headless.measure(&frame, shot.measure);
             println!(
                 "{label}: median {median:.2} ms, p95 {p95:.2} ms (render + GPU wait, {width}x{height})"
             );
         }
+        headless.renderer.set_effects(render::Effects::default());
     }
     let pixels = headless.render(&frame);
 

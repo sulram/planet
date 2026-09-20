@@ -36,5 +36,5 @@ fn vs(in: Vertex, box: Instance) -> Varying {
 
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
-    return encode(lit(in.color, normalize(in.normal), 0.0, in.relative));
+    return vec4<f32>(lit(in.color, normalize(in.normal), 0.0, in.relative), 1.0);
 }

@@ -67,5 +67,5 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     // roots would read as dirt specks.
     let occlusion = mix(0.30, 1.0, smoothstep(0.0, 0.85, in.tip));
     let color = in.color * mix(occlusion, 1.0, in.far) * mix(1.0, 1.18, in.tip);
-    return encode(lit(color,normalize(in.normal),0.0,in.relative));
+    return vec4<f32>(lit(color,normalize(in.normal),0.0,in.relative), 1.0);
 }

@@ -9,6 +9,7 @@
 //!   passes one [`View`], a headset will pass two.
 
 mod boxes;
+mod compose;
 mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
@@ -50,13 +51,14 @@ struct ViewUniform {
     shadow_texel_m: [f32; 4],
     interaction_start: [f32; 4],
     interaction_end: [f32; 4],
+    post: [f32; 4],
 }
 
 /// GPU state owned by one view slot.
 struct ViewResources {
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
-    depth: Option<(wgpu::TextureView, [u32; 2])>,
+    targets: Option<compose::Targets>,
     patches: terrain::PatchUniforms,
     casters: terrain::PatchUniforms,
     shadows: shadow::Maps,
@@ -69,6 +71,8 @@ struct ViewResources {
 pub struct Effects {
     pub shadows: bool,
     pub grass: bool,
+    /// What the scene's light is multiplied by before the tone map.
+    pub exposure: f32,
 }
 
 impl Default for Effects {
@@ -76,6 +80,7 @@ impl Default for Effects {
         Self {
             shadows: true,
             grass: true,
+            exposure: 1.0,
         }
     }
 }
@@ -92,10 +97,12 @@ pub struct Renderer {
     boxes: boxes::Boxes,
     skinned: skinned::Skinned,
     sky: wgpu::RenderPipeline,
+    composer: compose::Composer,
 }
 
 impl Renderer {
-    /// `format` is the format of the targets this renderer will draw into.
+    /// `format` is the format of the targets this renderer will present into.
+    /// The world itself is drawn in [`compose::SCENE_FORMAT`].
     pub fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Renderer {
         let device = gpu.device.clone();
         let view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -143,10 +150,12 @@ impl Renderer {
                 },
             ],
         });
-        let terrain = terrain::Terrain::new(&device, &view_layout, &shadow_layout, format);
-        let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, format);
-        let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, format);
-        let sky = sky_pipeline(&device, &view_layout, format);
+        let scene = compose::SCENE_FORMAT;
+        let terrain = terrain::Terrain::new(&device, &view_layout, &shadow_layout, scene);
+        let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, scene);
+        let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
+        let sky = sky_pipeline(&device, &view_layout, scene);
+        let composer = compose::Composer::new(&device, &view_layout, format);
         Renderer {
             effects: Effects::default(),
             device,
@@ -159,6 +168,7 @@ impl Renderer {
             boxes,
             skinned,
             sky,
+            composer,
         }
     }
 
@@ -283,18 +293,18 @@ impl Renderer {
         }
 
         if resources
-            .depth
+            .targets
             .as_ref()
-            .is_none_or(|(_, size)| *size != [width, height])
+            .is_none_or(|targets| targets.size != [width, height])
         {
-            resources.depth = Some((depth_texture(&self.device, width, height), [width, height]));
+            resources.targets = Some(self.composer.targets(&self.device, [width, height]));
         }
-        let depth = &resources.depth.as_ref().expect("just ensured").0;
+        let targets = resources.targets.as_ref().expect("just ensured");
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("world"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: view.target,
+                view: &targets.color[0],
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -303,11 +313,11 @@ impl Renderer {
                 depth_slice: None,
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth,
+                view: &targets.depth,
                 depth_ops: Some(wgpu::Operations {
-                    // Reversed depth: far is 0.
+                    // Reversed depth: far is 0. Kept: the stages read it.
                     load: wgpu::LoadOp::Clear(0.0),
-                    store: wgpu::StoreOp::Discard,
+                    store: wgpu::StoreOp::Store,
                 }),
                 stencil_ops: None,
             }),
@@ -329,6 +339,9 @@ impl Renderer {
         // Last: the sea blends over the world and the sky behind it.
         self.terrain
             .draw_water(&mut pass, &resources.patches, &drawn);
+        drop(pass);
+        self.composer
+            .run(encoder, &resources.bind_group, targets, view.target);
     }
 
     fn view_uniform(&self, frame: &Frame, camera: &Camera, aspect: f32) -> ViewUniform {
@@ -363,6 +376,7 @@ impl Renderer {
             interaction_end: relative(frame.interaction.end, camera.position)
                 .extend(0.0)
                 .to_array(),
+            post: [self.effects.exposure, 0.0, 0.0, 0.0],
             flags: [
                 f32::from(u8::from(self.encode_srgb)),
                 // Wrapped so f32 keeps sub millisecond steps all day.
@@ -402,7 +416,7 @@ impl Renderer {
         ViewResources {
             uniform,
             bind_group,
-            depth: None,
+            targets: None,
             shadows,
             casters: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             patches: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
@@ -415,24 +429,6 @@ impl Renderer {
 /// `origin - camera`, the one subtraction that keeps `f32` honest.
 fn relative(origin: DVec3, camera: DVec3) -> Vec3 {
     (origin - camera).as_vec3()
-}
-
-fn depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::TextureView {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("depth"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
-    texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 /// WGSL with the shared prelude in front.

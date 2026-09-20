@@ -70,8 +70,8 @@ fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4
         let mirror = WATER_SCATTER * (0.10 + 1.3 * day);
         let ceiling = vec3<f32>(0.55, 0.85, 0.90) * day;
         let color = mix(mirror, ceiling, window);
-        let seen = encode(through_medium(color, dir, distance));
-        return vec4<f32>(seen.rgb, mix(0.97, 0.22, window));
+        let seen = through_medium(color, dir, distance);
+        return vec4<f32>(seen, mix(0.97, 0.22, window));
     }
 
     // From above. Light that reaches the floor and comes back crosses the
@@ -97,6 +97,6 @@ fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4
     // What survives the round trip is the floor showing through. One alpha
     // cannot tint per colour, so it follows green, the middle of the three.
     let alpha = clamp(max(max(1.0 - survive.g, fresnel), foam), 0.0, 1.0);
-    let seen = encode(through_medium(color, dir, distance));
-    return vec4<f32>(seen.rgb, alpha);
+    let seen = through_medium(color, dir, distance);
+    return vec4<f32>(seen, alpha);
 }

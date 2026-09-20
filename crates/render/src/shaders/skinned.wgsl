@@ -48,7 +48,7 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     if texel.a < 0.5 {
         discard;
     }
-    return encode(lit(texel.rgb, normalize(in.normal), 0.0, in.relative));
+    return vec4<f32>(lit(texel.rgb, normalize(in.normal), 0.0, in.relative), 1.0);
 }
 
 // Same alpha cutout as the visible mesh: hair gaps do not cast solid cards.
