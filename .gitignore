@@ -1,1 +1,28 @@
+# reference checkouts, read only (CLAUDE.md, refs/)
 refs
+
+# OS
+.DS_Store
+
+# env: only .env.example is tracked
+.env
+.env.*
+!.env.example
+
+# Rust
+target/
+
+# Bun, Node
+node_modules/
+
+# web build output and the generated WASM client package
+apps/web/build/
+apps/web/.svelte-kit/
+apps/web/src/lib/engine/pkg/
+
+# server binary and PocketBase data
+server/bin/
+server/pb_data/
+
+# headless render output
+out/
