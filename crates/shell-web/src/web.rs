@@ -34,6 +34,9 @@ struct State {
     last_frame_ms: f64,
 }
 
+/// Where the web app serves the asset root.
+const ASSET_ROOT: &str = "/assets/";
+
 #[wasm_bindgen]
 impl Engine {
     /// Rejects when the browser offers neither WebGPU nor WebGL2.
@@ -94,6 +97,47 @@ impl Drop for Engine {
     }
 }
 
+/// The browser side of the asset seam: one `fetch` per request, answered
+/// whenever it lands. A dropped engine simply never hears the answer.
+fn fetch_assets(state: &Rc<RefCell<State>>) {
+    for request in state.borrow_mut().client.drain_asset_requests() {
+        let state = Rc::downgrade(state);
+        wasm_bindgen_futures::spawn_local(async move {
+            let bytes = fetch(&resolve(&request.path)).await;
+            if let Some(state) = state.upgrade() {
+                state.borrow_mut().client.asset_loaded(request.id, bytes);
+            }
+        });
+    }
+}
+
+/// An asset reference as a URL: absolute ones (a user's own avatar) pass
+/// through, relative ones live under the asset root.
+fn resolve(reference: &str) -> String {
+    let absolute = reference.starts_with('/') || reference.contains("://");
+    if absolute {
+        reference.to_owned()
+    } else {
+        format!("{ASSET_ROOT}{reference}")
+    }
+}
+
+async fn fetch(url: &str) -> Result<Vec<u8>, String> {
+    let describe = |error: JsValue| format!("{url}: {error:?}");
+    let window = web_sys::window().ok_or("no window")?;
+    let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
+        .await
+        .map_err(describe)?;
+    let response: web_sys::Response = response.unchecked_into();
+    if !response.ok() {
+        return Err(format!("{url}: HTTP {}", response.status()));
+    }
+    let buffer = wasm_bindgen_futures::JsFuture::from(response.array_buffer().map_err(describe)?)
+        .await
+        .map_err(describe)?;
+    Ok(js_sys::Uint8Array::new(&buffer).to_vec())
+}
+
 impl State {
     fn frame(&mut self) {
         let now = now_ms();
@@ -115,6 +159,8 @@ impl State {
         self.client.set_aspect(width as f32 / height as f32);
         let frame = self.client.update(dt, &mut self.input);
         self.renderer.apply(self.client.drain_terrain_changes());
+        self.renderer
+            .apply_skinned(self.client.drain_skinned_changes());
         for event in self.client.drain_events() {
             let json = JsValue::from_str(&event.to_json());
             if let Err(error) = self.on_event.call1(&JsValue::NULL, &json) {
@@ -154,6 +200,7 @@ fn run(state: Rc<RefCell<State>>, alive: Rc<RefCell<bool>>) {
             again.borrow_mut().take();
             return;
         }
+        fetch_assets(&state);
         state.borrow_mut().frame();
         request_frame(again.borrow().as_ref().expect("the loop closure"));
     }));
@@ -290,6 +337,7 @@ fn binding(code: &str) -> Option<Key> {
         "ShiftLeft" | "ShiftRight" => Key::Sprint,
         "KeyF" => Key::ToggleMode,
         "KeyR" => Key::NewSeed,
+        "KeyV" => Key::NextAvatar,
         _ => return None,
     })
 }

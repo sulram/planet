@@ -1,12 +1,13 @@
 //! The desktop shell: the offline explorer in a window, or a headless shot.
 //!
 //! ```text
-//! planet [--seed HEX]
-//! planet shot --out FILE [--seed HEX] [--size WxH] [--clock S]
-//!             [--altitude M] [--pitch DEG] [--boom M]
+//! planet [--seed HEX] [--avatar NAME]
+//! planet shot --out FILE [--seed HEX] [--avatar NAME] [--size WxH] [--clock S]
+//!             [--altitude M] [--pitch DEG] [--boom M] [--walk S]
 //! ```
 
 mod args;
+mod assets;
 mod shot;
 mod window;
 
@@ -16,7 +17,7 @@ fn main() -> ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn,planet=info"))
         .init();
     let result = match args::parse(std::env::args().skip(1)) {
-        Ok(args::Invocation::Window { recipe }) => window::run(recipe),
+        Ok(args::Invocation::Window { recipe, avatar }) => window::run(recipe, avatar),
         Ok(args::Invocation::Shot(shot)) => shot::run(shot),
         Err(message) => Err(message),
     };

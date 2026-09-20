@@ -5,6 +5,7 @@ use client::Client;
 use render::{Headless, write_png};
 
 use crate::args::Shot;
+use crate::assets;
 
 pub fn run(shot: Shot) -> Result<(), String> {
     let [width, height] = shot.size;
@@ -13,9 +14,30 @@ pub fn run(shot: Shot) -> Result<(), String> {
     client.set_clock(shot.clock_s);
     client.pose(shot.altitude_m, shot.pitch_deg.to_radians(), shot.boom_m);
 
+    assets::wear(&mut client, shot.avatar.as_deref());
+    // Manifest first, then what it names: two rounds.
+    assets::serve(&mut client);
+    assets::serve(&mut client);
+    for event in client.drain_events() {
+        if let client::Event::Rejected { message } = event {
+            log::warn!("{message}");
+        }
+    }
+
+    // A fixed step keeps the stride, and so the picture, reproducible.
+    let mut input = client::Input::default();
+    input.key(client::Key::Forward, true);
+    for _ in 0..(shot.walk_s * 60.0) as u32 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    client.set_clock(shot.clock_s);
+
     let frame = client.settled_frame();
     let mut headless = Headless::new(width, height)?;
     headless.renderer.apply(client.drain_terrain_changes());
+    headless
+        .renderer
+        .apply_skinned(client.drain_skinned_changes());
     let pixels = headless.render(&frame);
 
     if let Some(parent) = shot.out.parent().filter(|p| !p.as_os_str().is_empty()) {

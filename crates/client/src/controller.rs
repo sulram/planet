@@ -13,7 +13,7 @@ use worldgen::Generator;
 
 use crate::seam::Mode;
 
-const WALK_MPS: f64 = 5.0;
+const WALK_MPS: f64 = 3.2;
 const SPRINT_FACTOR: f64 = 4.0;
 const JUMP_MPS: f64 = 6.0;
 const GRAVITY_MPS2: f64 = 14.0;
@@ -55,6 +55,8 @@ pub struct Controller {
     boom_m: f64,
     /// Speed over the last step, metres per second.
     speed_mps: f64,
+    /// The part of it along the ground.
+    ground_mps: f64,
     /// Distance walked, for the walk cycle.
     stride_m: f64,
 }
@@ -75,6 +77,7 @@ impl Controller {
             pitch: -0.25,
             boom_m: 6.0,
             speed_mps: 0.0,
+            ground_mps: 0.0,
             stride_m: 0.0,
         }
     }
@@ -98,6 +101,15 @@ impl Controller {
 
     pub fn speed_mps(&self) -> f64 {
         self.speed_mps
+    }
+
+    pub fn ground_mps(&self) -> f64 {
+        self.ground_mps
+    }
+
+    /// Metres per second along up: positive while rising.
+    pub fn vertical_mps(&self) -> f64 {
+        self.vertical_mps
     }
 
     pub fn stride_m(&self) -> f64 {
@@ -163,6 +175,7 @@ impl Controller {
 
         self.step(velocity * dt, generator);
         self.speed_mps = velocity.length();
+        self.ground_mps = (velocity - up * velocity.dot(up)).length();
         if self.grounded {
             self.stride_m += flat.length() * WALK_MPS * sprint * dt;
         }

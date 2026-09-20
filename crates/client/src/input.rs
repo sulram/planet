@@ -19,6 +19,8 @@ pub enum Key {
     ToggleMode,
     /// Explore another planet: a fresh random seed.
     NewSeed,
+    /// Wear the next avatar on offer.
+    NextAvatar,
 }
 
 /// Input gathered by a shell since the last update.
@@ -76,6 +78,6 @@ fn held_slot(key: Key) -> Option<usize> {
         Key::Up => Some(4),
         Key::Down => Some(5),
         Key::Sprint => Some(6),
-        Key::ToggleMode | Key::NewSeed => None,
+        Key::ToggleMode | Key::NewSeed | Key::NextAvatar => None,
     }
 }

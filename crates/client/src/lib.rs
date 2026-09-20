@@ -5,18 +5,23 @@
 //! [`scene::Frame`] and terrain changes to a renderer. An agent drives the
 //! same type and simply never renders.
 
-mod avatar;
+mod assets;
+mod body;
+mod box_figure;
 mod controller;
 mod input;
 mod seam;
 mod terrain;
 
 use glam::DVec3;
-use scene::{Frame, TerrainChange};
+use scene::{Frame, SkinnedChange, TerrainChange};
 use topology::{RADIUS_M, SECTOR_SIDE, Sector, SurfacePoint};
 pub use worldgen::Recipe;
 use worldgen::{GENERATOR_VERSION, Generator, Material};
 
+pub use assets::AssetRequest;
+use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
+use body::Body;
 pub use controller::{Controller, Wish};
 pub use input::{Input, Key};
 pub use seam::{Command, Event, Mode};
@@ -30,6 +35,13 @@ pub struct Client {
     generator: Generator,
     controller: Controller,
     terrain: Terrain,
+    body: Body,
+    requests: Requests,
+    manifest: Option<Manifest>,
+    /// A random avatar was asked for before the manifest arrived.
+    wants_random_avatar: bool,
+    /// The asset reference of the avatar asked for last.
+    wanted_avatar: Option<String>,
     events: Vec<Event>,
     /// Width over height of the view, for culling.
     aspect: f32,
@@ -49,6 +61,11 @@ impl Client {
             generator,
             controller,
             terrain: Terrain::default(),
+            body: Body::default(),
+            requests: Requests::default(),
+            manifest: None,
+            wants_random_avatar: false,
+            wanted_avatar: None,
             events: vec![Event::Ready {
                 generator_version: GENERATOR_VERSION,
             }],
@@ -59,6 +76,9 @@ impl Client {
             frames_since_stats: 0,
             entropy: 0,
         };
+        client
+            .requests
+            .ask(MANIFEST_PATH.to_owned(), Purpose::Manifest);
         client.face_the_sun();
         client.events.push(Event::RecipeChanged {
             recipe: client.generator.recipe().clone(),
@@ -72,6 +92,12 @@ impl Client {
 
     pub fn set_aspect(&mut self, aspect: f32) {
         self.aspect = aspect;
+    }
+
+    /// Stirs in randomness only a platform has (a clock, the browser). Without
+    /// it every random choice is reproducible, which headless shots rely on.
+    pub fn add_entropy(&mut self, bits: u64) {
+        self.entropy ^= mix(bits);
     }
 
     /// Pins the clock, for reproducible headless renders.
@@ -94,6 +120,9 @@ impl Client {
                 }),
             },
             Command::SetMode { mode } => self.set_mode(mode),
+            Command::SetAvatar { path } => self.wear(path),
+            Command::RandomAvatar => self.random_avatar(),
+            Command::NextAvatar => self.next_avatar(),
         }
     }
 
@@ -110,6 +139,113 @@ impl Client {
 
     pub fn drain_events(&mut self) -> Vec<Event> {
         core::mem::take(&mut self.events)
+    }
+
+    /// Files the client wants. The shell fetches each one and answers with
+    /// [`Client::asset_loaded`].
+    pub fn drain_asset_requests(&mut self) -> Vec<AssetRequest> {
+        self.requests.drain()
+    }
+
+    /// The answer to an [`AssetRequest`]: the bytes, or why there are none.
+    /// A bad or missing file is logged as a rejection; the box figure and the
+    /// rest pose are the fallbacks, so nothing breaks.
+    pub fn asset_loaded(&mut self, id: u64, bytes: Result<Vec<u8>, String>) {
+        let Some(purpose) = self.requests.answer(id) else {
+            return;
+        };
+        let outcome = bytes.and_then(|bytes| match purpose {
+            Purpose::Manifest => serde_json::from_slice::<Manifest>(&bytes)
+                .map(|manifest| self.adopt(manifest))
+                .map_err(|e| e.to_string()),
+            Purpose::Avatar => avatar::Avatar::from_vrm(&bytes)
+                .map(|avatar| self.worn(avatar))
+                .map_err(|e| e.to_string()),
+            Purpose::Clip(gait) => avatar::Clip::from_glb(&bytes)
+                .map(|clip| self.body.add_clip(gait, clip))
+                .map_err(|e| e.to_string()),
+        });
+        if let Err(message) = outcome {
+            self.events.push(Event::Rejected {
+                message: format!("{purpose:?}: {message}"),
+            });
+            if purpose == Purpose::Avatar {
+                self.wear_default();
+            }
+        }
+    }
+
+    /// Asks for the avatar at an asset reference. Every way of choosing an
+    /// avatar ends here, whether the reference came from the manifest, a
+    /// cookie or, later, a user's own uploads.
+    fn wear(&mut self, path: String) {
+        self.requests.ask(path.clone(), Purpose::Avatar);
+        self.wanted_avatar = Some(path);
+    }
+
+    fn worn(&mut self, avatar: avatar::Avatar) {
+        self.body.wear(avatar);
+        if let Some(path) = self.wanted_avatar.clone() {
+            self.events.push(Event::AvatarChanged { path });
+        }
+    }
+
+    /// The wanted avatar could not be loaded: there is always a default.
+    fn wear_default(&mut self) {
+        let default = self
+            .manifest
+            .as_ref()
+            .and_then(|m| m.default_avatar.clone());
+        match default {
+            Some(path) if self.wanted_avatar.as_ref() != Some(&path) => self.wear(path),
+            // The default itself failed, or there is none: the box figure stays.
+            _ => self.wanted_avatar = None,
+        }
+    }
+
+    /// The avatar on offer after the one worn, wrapping around.
+    fn next_avatar(&mut self) {
+        let Some(manifest) = &self.manifest else {
+            return;
+        };
+        if manifest.avatars.is_empty() {
+            return;
+        }
+        let current = self.wanted_avatar.as_ref();
+        let index = manifest
+            .avatars
+            .iter()
+            .position(|path| Some(path) == current);
+        let next = index.map_or(0, |i| (i + 1) % manifest.avatars.len());
+        self.wear(manifest.avatars[next].clone());
+    }
+
+    /// The manifest arrived: fetch the clips it names, and the avatar if one
+    /// was waiting for it.
+    fn adopt(&mut self, manifest: Manifest) {
+        for (gait, path) in &manifest.clips {
+            self.requests.ask(path.clone(), Purpose::Clip(*gait));
+        }
+        self.manifest = Some(manifest);
+        if core::mem::take(&mut self.wants_random_avatar) {
+            self.random_avatar();
+        }
+    }
+
+    fn random_avatar(&mut self) {
+        let Some(manifest) = &self.manifest else {
+            self.wants_random_avatar = true;
+            return;
+        };
+        if manifest.avatars.is_empty() {
+            return;
+        }
+        let pick = mix(self.entropy) as usize % manifest.avatars.len();
+        self.wear(manifest.avatars[pick].clone());
+    }
+
+    pub fn drain_skinned_changes(&mut self) -> Vec<SkinnedChange> {
+        self.body.drain_changes()
     }
 
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
@@ -130,6 +266,7 @@ impl Client {
                     let recipe = Recipe::new(mix(self.recipe().seed ^ self.entropy));
                     self.command(Command::SetRecipe { recipe });
                 }
+                Key::NextAvatar => self.next_avatar(),
                 _ => {}
             }
         }
@@ -146,6 +283,7 @@ impl Client {
             zoom,
         };
         self.controller.update(dt, wish, &self.generator);
+        self.body.update(dt, &self.controller);
         self.stats(dt);
 
         let camera = self.controller.camera(&self.generator);
@@ -169,7 +307,12 @@ impl Client {
             sun_direction: sun.as_vec3(),
             planet_radius_m: RADIUS_M,
             patches,
-            boxes: avatar::parts(&self.controller),
+            boxes: if self.body.is_worn() {
+                Vec::new()
+            } else {
+                box_figure::parts(&self.controller)
+            },
+            skinned: self.body.instance(&self.controller).into_iter().collect(),
         }
     }
 

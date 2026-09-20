@@ -25,6 +25,15 @@ pub enum Command {
     SetMode {
         mode: Mode,
     },
+    /// Wear the avatar at this asset reference: a path under the asset root
+    /// (`avatars/Kyle.vrm`) or an absolute URL (a user's own avatar).
+    SetAvatar {
+        path: String,
+    },
+    /// Wear any avatar the manifest offers.
+    RandomAvatar,
+    /// Wear the next avatar on offer, after the current one.
+    NextAvatar,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]
@@ -39,6 +48,10 @@ pub enum Event {
     },
     ModeChanged {
         mode: Mode,
+    },
+    /// The avatar now worn. A UI persists this as the person's choice.
+    AvatarChanged {
+        path: String,
     },
     /// Sent about twice a second.
     Stats {

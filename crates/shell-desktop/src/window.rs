@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use client::{Client, Event, Input, Key};
+
+use crate::assets;
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -15,8 +17,11 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 use worldgen::{Recipe, format_seed};
 
-pub fn run(recipe: Recipe) -> Result<(), String> {
-    let client = Client::new(recipe).map_err(|e| e.to_string())?;
+pub fn run(recipe: Recipe, avatar: Option<String>) -> Result<(), String> {
+    let mut client = Client::new(recipe).map_err(|e| e.to_string())?;
+    let since_epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    client.add_entropy(since_epoch.map_or(0, |elapsed| elapsed.as_nanos() as u64));
+    assets::wear(&mut client, avatar.as_deref());
     let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let mut app = App {
         client,
@@ -108,14 +113,17 @@ impl Stage {
         self.last_frame = now;
 
         client.set_aspect(self.config.width as f32 / self.config.height as f32);
+        assets::serve(client);
         let frame = client.update(dt, input);
         self.renderer.apply(client.drain_terrain_changes());
+        self.renderer.apply_skinned(client.drain_skinned_changes());
         for event in client.drain_events() {
             match event {
                 Event::RecipeChanged { recipe } => {
                     self.window
                         .set_title(&format!("planet {}", format_seed(recipe.seed)));
                 }
+                Event::AvatarChanged { path } => log::info!("avatar: {path}"),
                 Event::Stats { .. } | Event::Ready { .. } | Event::ModeChanged { .. } => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
@@ -230,6 +238,7 @@ fn binding(code: KeyCode) -> Option<Key> {
         KeyCode::ShiftLeft | KeyCode::ShiftRight => Key::Sprint,
         KeyCode::KeyF => Key::ToggleMode,
         KeyCode::KeyR => Key::NewSeed,
+        KeyCode::KeyV => Key::NextAvatar,
         _ => return None,
     })
 }

@@ -1,7 +1,7 @@
-//! The placeholder avatar: a figure of boxes with a walk cycle.
+//! The fallback body: a figure of boxes with a walk cycle.
 //!
-//! Real avatars (VRM, voxel, both) are an open question in docs/OPEN.md. Until
-//! it is settled the avatar is procedural, which also keeps it dependency free.
+//! Shown until a VRM avatar is loaded, and when none can be (no assets, a bad
+//! file). Procedural, so it is always there.
 
 use glam::{DAffine3, DMat3, DQuat, DVec3, Vec3};
 use scene::BoxPart;
