@@ -14,6 +14,7 @@ publish = false
 topology = { path = "crates/topology" }
 worldgen = { path = "crates/worldgen" }
 scene = { path = "crates/scene" }
+avatar = { path = "crates/avatar" }
 client = { path = "crates/client" }
 render = { path = "crates/render" }
 

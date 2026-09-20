@@ -8,7 +8,10 @@
 //! a nearby `f64` origin (camera-relative rendering, CLAUDE.md invariants).
 
 use bytemuck::{Pod, Zeroable};
-use glam::{DAffine3, DQuat, DVec3, Vec3};
+use std::ops::Range;
+use std::sync::Arc;
+
+use glam::{DAffine3, DQuat, DVec3, Mat4, Vec3};
 
 /// Quads per side of a terrain patch. Every patch shares one index buffer.
 pub const PATCH_GRID: u32 = 32;
@@ -90,6 +93,68 @@ pub struct BoxPart {
     pub color: Vec3,
 }
 
+/// Most joints a skinned mesh may have: what fits the smallest uniform buffer
+/// every target offers (WebGL2, 16 KiB).
+pub const MAX_JOINTS: usize = 128;
+
+/// Stable identity of a skinned mesh while it is in the scene.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct SkinnedMeshId(pub u64);
+
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct SkinnedVertex {
+    /// Metres, in the space of the mesh at rest.
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub uv: [f32; 2],
+    pub joints: [u16; 4],
+    /// Sum to 1.
+    pub weights: [f32; 4],
+}
+
+/// An RGBA8 sRGB image, top row first.
+#[derive(Clone, Debug)]
+pub struct Image {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// A run of indices drawn with one texture.
+#[derive(Clone, Debug)]
+pub struct SkinnedPrimitive {
+    pub indices: Range<u32>,
+    /// Index into [`SkinnedMesh::images`]. `None` draws white.
+    pub image: Option<usize>,
+}
+
+/// A mesh deformed by joints: an avatar.
+#[derive(Clone, Debug)]
+pub struct SkinnedMesh {
+    pub vertices: Vec<SkinnedVertex>,
+    pub indices: Vec<u32>,
+    pub primitives: Vec<SkinnedPrimitive>,
+    pub images: Vec<Image>,
+}
+
+/// A change to the set of skinned meshes a renderer holds.
+#[derive(Clone, Debug)]
+pub enum SkinnedChange {
+    Add(SkinnedMeshId, Arc<SkinnedMesh>),
+    Remove(SkinnedMeshId),
+}
+
+/// One posed skinned mesh in the world.
+#[derive(Clone, Debug)]
+pub struct SkinnedInstance {
+    pub mesh: SkinnedMeshId,
+    /// World from mesh space.
+    pub transform: DAffine3,
+    /// Mesh space from rest space, per joint: at most [`MAX_JOINTS`].
+    pub joints: Vec<Mat4>,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Camera {
     pub position: DVec3,
@@ -113,4 +178,5 @@ pub struct Frame {
     /// Patches to draw this frame. All were announced by a [`TerrainChange::Add`].
     pub patches: Vec<PatchId>,
     pub boxes: Vec<BoxPart>,
+    pub skinned: Vec<SkinnedInstance>,
 }
