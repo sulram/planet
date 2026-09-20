@@ -14,8 +14,9 @@ const server = serve();
 // Mailpit catches dev email (http://localhost:8025) when SMTP_HOST points at it.
 // Without it the server prints each magic link to this console instead.
 const mailpitBin = process.env.SMTP_HOST ? Bun.which('mailpit') : null;
-const mailpit = mailpitBin ? Bun.spawn([mailpitBin], { stdout: 'ignore', stderr: 'inherit' }) : null;
+const mailpit = mailpitBin ? Bun.spawn([mailpitBin], { stdout: 'ignore', stderr: 'ignore' }) : null;
 if (mailpit) console.log('mail -> http://localhost:8025');
+else if (process.env.SMTP_HOST) console.warn('mailpit not found: emails will fail (brew install mailpit)');
 
 const web = Bun.spawn(['bun', 'run', 'dev'], {
 	cwd: `${ROOT}/apps/web`,
