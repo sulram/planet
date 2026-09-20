@@ -199,6 +199,9 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The march runs at half size from the scene depth (two paces: strides in
   clear air, short steps in cloud, both growing with distance), and a full
   size stage lays it over the scene, cut where terrain stands in front.
+- At night clouds take the starlight and moonlight the land takes
+  (`STARLIGHT`, `moonlight` in `common.wgsl`): pale over dark ground, never
+  a hole in it.
 - Weather turns about the planet's axis with the clock (the wind), and the
   noise rises through the layer along the local up, so clouds reshape in
   place as they travel. The angle wraps and the rise swings, both on the

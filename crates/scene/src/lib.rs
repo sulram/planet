@@ -128,7 +128,8 @@ pub struct Effects {
     pub clouds: bool,
     /// How much of the sky the weather may fill, 0 to 1.
     pub cloud_cover: f32,
-    /// How thick a cloud is to light, as a factor of the usual.
+    /// How thick a cloud is to light: 1 is a storm deck, the default a soft
+    /// fair weather cloud.
     pub cloud_density: f32,
     /// How fast the weather turns, metres a second at the equator.
     pub wind_m_s: f32,
@@ -154,7 +155,7 @@ impl Default for Effects {
             grass: true,
             clouds: true,
             cloud_cover: 0.5,
-            cloud_density: 1.0,
+            cloud_density: 0.1,
             wind_m_s: 14.0,
             cloud_change: 1.0,
             exposure: 1.0,

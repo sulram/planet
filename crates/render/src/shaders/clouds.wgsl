@@ -59,6 +59,9 @@ fn cloud_march(dir: vec3<f32>, span: vec2<f32>, jitter: f32, carry: vec4<f32>) -
     let light = vec4<f32>(
         mix(vec3<f32>(1.0, 0.96, 0.90), SUNSET * vec3<f32>(1.0, 0.8, 0.7), warm),
         daylight(place));
+    // The night the land has: stars from all around, the moon when it is up.
+    // Without it a cloud at night is a hole in the ground, not a cloud.
+    let night = STARLIGHT + moonlight(place) * 0.6;
     let toward_sun = dot(dir, view.sun.xyz);
     let phase = mix(henyey_greenstein(toward_sun, 0.78), henyey_greenstein(toward_sun, -0.28), 0.45);
 
@@ -97,7 +100,7 @@ fn cloud_march(dir: vec3<f32>, span: vec2<f32>, jitter: f32, carry: vec4<f32>) -
             let sun = light.rgb * (beer * mix(1.0, powder, 0.6) * phase * 28.0) * sunlight(relative);
             // Sky from above, the dim ground from below.
             let sky = (SKY * 0.55 + 0.10) * mix(0.35, 1.0, h) * light.a
-                + vec3<f32>(0.010, 0.013, 0.022);
+                + night * mix(0.5, 1.0, h);
             let source = sun + sky;
 
             let extinction = density * CLOUD_EXTINCTION * view.post.w;

@@ -195,6 +195,18 @@ fn snell_window(facing: f32) -> f32 {
     return smoothstep(0.03, 0.30, facing);
 }
 
+// What the stars alone give a surface open to the sky.
+const STARLIGHT: vec3<f32> = vec3<f32>(0.045, 0.058, 0.095);
+
+// Moonlight where `up` points: faint, and only as much as the moon is lit and
+// up over there.
+fn moonlight(up: vec3<f32>) -> vec3<f32> {
+    let moon = view.moon_light.xyz;
+    let moon_up = smoothstep(-0.05, 0.15, dot(up, moon));
+    let moon_lit = 0.5 - 0.5 * dot(moon, view.sun.xyz);
+    return moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
+}
+
 // Sun and sky light on a surface, then the medium between it and the camera.
 fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) -> vec3<f32> {
     return lit_surface(albedo,normal,gloss,relative,normal);
@@ -218,14 +230,10 @@ fn lit_surface(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<
     let fill = mix(0.45, 1.0, visibility);
     let ambient = mix(vec3<f32>(0.10, 0.09, 0.07), SKY * 0.38 + 0.06, facing_sky) * day * fill
         // Starlight: nights are dark, never blind.
-        + vec3<f32>(0.045, 0.058, 0.095) * facing_sky;
+        + STARLIGHT * facing_sky;
     var color = albedo * (direct * vec3<f32>(1.75, 1.66, 1.5) + ambient);
 
-    // Moonlight: faint, and only as much as the moon is lit and up.
-    let moon = view.moon_light.xyz;
-    let moon_up = smoothstep(-0.05, 0.15, dot(up, moon));
-    let moon_lit = 0.5 - 0.5 * dot(moon, sun);
-    color += albedo * max(dot(normal, moon), 0.0) * moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
+    color += albedo * max(dot(normal, view.moon_light.xyz), 0.0) * moonlight(up);
 
     let half_vector = normalize(sun - dir);
     color += gloss * day * visibility * pow(max(dot(normal, half_vector), 0.0), 90.0) * 1.5;
