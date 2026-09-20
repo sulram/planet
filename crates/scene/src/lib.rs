@@ -72,7 +72,9 @@ pub const GRASS_TIER_0_REACH_M: f32 = 20.0;
 pub struct GrassInstance {
     pub root: [f32; 3],
     pub height: f32,
-    pub up: [f32; 3],
+    /// Of the ground at the root. A tuft is lit as the slope it grows on;
+    /// it grows along the planet's up, which a renderer knows.
+    pub normal: [f32; 3],
     /// The tuft has faded into the ground this far from the eye.
     pub reach_m: f32,
     /// Linear albedo, and rotation about radial up.

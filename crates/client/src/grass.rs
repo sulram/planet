@@ -100,14 +100,15 @@ pub fn build(
                     normal += Vec3::from(vertices[id].normal) * w;
                 }
                 let up = (origin + root.as_dvec3()).normalize().as_vec3();
-                if normal.normalize().dot(up) < 0.85 {
+                let normal = normal.normalize();
+                if normal.dot(up) < 0.85 {
                     continue;
                 }
                 let tint = random(16);
                 grass.push(GrassInstance {
                     root: (root - up * 0.015).to_array(),
                     height: 0.55 + tint * 0.50,
-                    up: up.to_array(),
+                    normal: normal.to_array(),
                     reach_m,
                     color: [0.10 + tint * 0.05, 0.20 + tint * 0.09, 0.035 + tint * 0.02],
                     angle: random(24) * core::f32::consts::TAU,

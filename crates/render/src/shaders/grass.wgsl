@@ -4,7 +4,7 @@ struct Patch { offset: vec4<f32>, anchor: vec4<f32> }
 
 struct Instance {
     @location(0) root_height: vec4<f32>,
-    @location(1) up_reach: vec4<f32>,
+    @location(1) normal_reach: vec4<f32>,
     @location(2) color_angle: vec4<f32>,
 }
 struct Varying {
@@ -23,8 +23,9 @@ fn vs(in: Instance, @builtin(vertex_index) index: u32) -> Varying {
         vec2<f32>(1.0,0.0), vec2<f32>(0.65,0.55), vec2<f32>(-0.65,0.55),
         vec2<f32>(-0.65,0.55), vec2<f32>(0.65,0.55), vec2<f32>(0.0,1.0));
     let p = shape[index % 9u];
-    let up = normalize(in.up_reach.xyz);
     let root = in.root_height.xyz + placement.offset.xyz;
+    // Grass grows on the planet only: up is away from its centre.
+    let up = normalize(view.camera.xyz + root);
     let helper = select(vec3<f32>(0.0,1.0,0.0), vec3<f32>(1.0,0.0,0.0), abs(up.y) > 0.9);
     let east = normalize(cross(helper,up));
     let north = cross(up,east);
@@ -32,7 +33,7 @@ fn vs(in: Instance, @builtin(vertex_index) index: u32) -> Varying {
     let side = east*cos(angle)+north*sin(angle);
     let forward = cross(side,up);
     let distance = length(root);
-    let fade = 1.0-smoothstep(in.up_reach.w*0.68,in.up_reach.w,distance);
+    let fade = 1.0-smoothstep(in.normal_reach.w*0.68,in.normal_reach.w,distance);
     // Far tufts stand for the meadow between them: taller and wider, so the
     // field keeps its cover while the count falls.
     let far = smoothstep(35.0,400.0,distance);
@@ -53,7 +54,9 @@ fn vs(in: Instance, @builtin(vertex_index) index: u32) -> Varying {
     var out: Varying;
     out.relative = root+offset;
     out.clip = view.clip_from_relative * vec4<f32>(out.relative,1.0);
-    out.normal = normalize(up*0.7+forward*0.3);
+    // Lit as the slope it grows on, or a field on a dark hillside glitters.
+    let ground = normalize(in.normal_reach.xyz);
+    out.normal = normalize(mix(ground*0.8+forward*0.2, ground, far));
     out.color = in.color_angle.xyz;
     out.tip = p.y;
     out.far = far;
