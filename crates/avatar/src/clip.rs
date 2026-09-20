@@ -142,6 +142,14 @@ impl Clip {
 }
 
 impl Pose {
+    /// Every bone at rest: what an avatar wears before any clip is loaded.
+    pub fn rest() -> Pose {
+        Pose {
+            rotations: vec![None; BONES.len()],
+            hips: None,
+        }
+    }
+
     /// Moves this pose toward `other` by `amount` in `0..=1`.
     fn blend(&mut self, other: &Pose, amount: f32) {
         for (mine, theirs) in self.rotations.iter_mut().zip(&other.rotations) {

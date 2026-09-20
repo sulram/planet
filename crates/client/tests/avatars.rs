@@ -60,3 +60,22 @@ fn a_random_avatar_waits_for_the_manifest() {
     serve(&mut client);
     assert_eq!(worn(&mut client).len(), 1);
 }
+
+/// In a browser the avatar can land before any clip does.
+#[test]
+fn an_avatar_without_clips_stands_at_rest() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command(Command::SetAvatar {
+        path: "avatars/Kyle.vrm".into(),
+    });
+    serve(&mut client); // manifest and the avatar; the clips stay unanswered
+    client.drain_asset_requests();
+    let frame = client.settled_frame();
+    assert_eq!(frame.skinned.len(), 1);
+    assert!(
+        frame.skinned[0]
+            .joints
+            .iter()
+            .all(|joint| joint.is_finite())
+    );
+}

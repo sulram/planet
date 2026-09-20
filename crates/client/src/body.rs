@@ -125,14 +125,8 @@ impl Body {
                 * DAffine3::from_translation(-hips);
         }
         let pose = self.animator.pose(|gait| self.clips.get(&gait));
-        let joints = match pose {
-            Some(pose) => avatar.joint_matrices(&pose),
-            // No clip yet: the rest pose.
-            None => avatar.joint_matrices(&avatar::Pose {
-                rotations: Vec::new(),
-                hips: None,
-            }),
-        };
+        // Clips arrive after the avatar over a network: until then, the rest pose.
+        let joints = avatar.joint_matrices(&pose.unwrap_or_else(avatar::Pose::rest));
         Some(SkinnedInstance {
             mesh: *id,
             transform,

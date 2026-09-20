@@ -66,7 +66,8 @@ impl Avatar {
     pub fn joint_matrices(&self, pose: &Pose) -> Vec<Mat4> {
         let mut local = self.hierarchy.rest.clone();
         for (bone, node) in self.humanoid.iter().enumerate() {
-            let (Some(node), Some(rotation)) = (node, pose.rotations[bone]) else {
+            let (Some(node), Some(rotation)) = (node, pose.rotations.get(bone).copied().flatten())
+            else {
                 continue;
             };
             // VRM 0.x bones rest with no rotation, so the pose is the local
