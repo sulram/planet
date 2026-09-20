@@ -227,3 +227,29 @@ the map (both on the ROADMAP). The box figure stays as the fallback while
 assets load. This settles the OPEN avatar format question for VRM; custom voxel
 avatars stay a wish. Hyperfy is read for architecture only. Its clip files (GPL) are
 committed as a temporary default set by Marlus's call, to be replaced (see OPEN).
+
+## 29. Generator v2; the sea is a surface of its own (decided)
+
+Marlus found v1's mountains needle like and wanted a sea to swim and dive in.
+v1 stays frozen for the worlds that use it; new worlds get v2: massifs from a
+slope damped fractal sum (after Quilez) whose first octaves stay smooth, a sea
+floor with shelf, plain and seamounts, and sampling filtered by the footprint
+of the mesh that asks, so coarse patches neither alias nor pop. Collision and
+anything saved sample at full detail. The terrain mesh now carries the real
+ground, and each patch that dips under sea level carries a water surface too:
+blended, double sided, coloured by per channel absorption, Fresnel to the sky,
+Snell's window from below. Underwater is a medium, not a fog colour: red dies
+first. Rejected: tinting the terrain mesh blue (v1's look, not penetrable), and
+a single planet sized water sphere (no depth per vertex, no shoreline). Next
+step, on the ROADMAP: refraction from the scene depth and colour.
+
+## 30. Terrain look: procedural detail anchored to the planet (proposed)
+
+From docs/TERRAIN_RENDER_BRIEF.md, deliveries 1 and 2, without texture files
+yet: gloss is explicit in the vertex contract, rock is exposed per pixel from
+the slope (the same at every LOD), and three scales of value noise shade and
+bump the ground. The noise lattice repeats every 1024 m and each patch passes
+its origin wrapped to that period in f64, so detail is fixed to the planet and
+no large f32 position is ever built. Light gained a sky and ground ambient, a
+filmic tone curve, starlight and moonlight. Textures with recorded provenance,
+shadows and grass remain on the ROADMAP.

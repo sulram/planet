@@ -56,6 +56,9 @@ Numbers marked (p) are proposed and not yet confirmed.
   collection: `{seed, generator_version, params}`. The seed is a u64 written
   as 16 lowercase hex digits (JSON numbers stop at 2^53).
 - The recipe of a stored world is frozen by a validate hook, superusers too.
+- Generator v2 (new worlds): eroded massifs, a sea floor, and
+  `sample_at(direction, footprint_m)` which fades detail finer than the mesh
+  that asks. Collision and saves use full detail. v1 stays frozen beside it.
 - Generator v1: continents, ridged mountains and detail as 3D simplex noise;
   materials water, sand, grass, forest, rock, snow. Params: `relief_m`,
   `ocean_depth_m`, `continent_scale`, `sea_share`.
@@ -148,6 +151,20 @@ Numbers marked (p) are proposed and not yet confirmed.
   platform shell fetches (disk on desktop, `fetch` in the browser) and answers.
 - `V` wears the next avatar on offer. The engine reports `avatar_changed`; the
   web app keeps it as the visitor's choice (`POST /avatar`).
+
+## Sea, sky and light
+
+- The terrain mesh is the real ground, sea floor included. A patch that dips
+  under sea level also carries a water surface: same grid, same indices.
+- Water is drawn last, blended, from both sides: per channel absorption by
+  depth, Fresnel to the sky, foam at the shore, Snell's window from below.
+- A camera under sea level sees through water as a medium (red dies first).
+- Swimming is part of walking: in water too deep to stand you float at chest
+  depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
+- Sky: a shell atmosphere, a sun, stars fixed to the world, and a moon on
+  rails shaded by the real sun direction (phases), with faint moonlight.
+- Ground detail is procedural noise anchored to the planet: patch origins are
+  wrapped to 1024 m in f64 on the CPU. Rock shows by slope, per pixel.
 
 ## Gravity
 

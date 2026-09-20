@@ -23,7 +23,7 @@ bun run check      # everything CI runs
 
 - Sign in at `/login`. With `SMTP_HOST` empty the magic link prints in the
   server log. `PLANET_OPERATOR_EMAIL` may open `/backoffice`.
-- Keys: `W A S D` move, `Space` jump or rise, `C` descend, `Shift` run,
+- Keys: `W A S D` move, `Space` jump, rise or leap from the water, `C` descend or dive, `Shift` run,
   `F` walk or fly, `V` next avatar, `R` new seed (desktop), wheel zoom, `Esc` release the pointer.
 
 ## Releases

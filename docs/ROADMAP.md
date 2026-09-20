@@ -31,6 +31,24 @@ Every milestone ends runnable end to end.
 - [ ] User avatars: `users.avatar` default, own VRM uploads (with M5 assets)
 - [x] Design system v0: JetBrains Mono 10px, black and white, light and dark, `/ds`
 
+## M1.5: a planet worth looking at (from docs/TERRAIN_RENDER_BRIEF.md)
+
+- [x] Generator v2: eroded mountains, sea floor relief, LOD filtered sampling
+- [x] Water as its own surface: Fresnel, depth colour, waves; the sea is penetrable
+- [x] Underwater: fog, the surface seen from below, the sea floor
+- [x] Swim at the surface, leap, dive by key or by looking down
+- [ ] A swim clip (the fly clip stands in)
+- [x] Night sky: stars fixed to the world, a moon on rails with real phases, moonlight
+- [ ] Water refraction and absorption from the scene depth and colour (needs an offscreen pass); caustics; the waterline when the camera straddles the surface
+- [x] Material contract: explicit gloss, rock by slope in the shader, stable across LOD
+- [x] Ground detail anchored to the planet (procedural first, textures with provenance later)
+- [x] Lighting: sky and ground ambient, tone mapping
+- [ ] Directional shadow map near the player: terrain and avatars cast and receive
+- [ ] Grass: instanced tufts, wind in the vertex shader, bends away from the avatar
+- [ ] LOD by projected error with hysteresis; geomorph between levels
+- [ ] Patch building behind a job queue (workers native and web), measured budget
+- [ ] MSAA or filtered edges, after measuring cost
+
 ## M2: create world, two people see each other
 
 - [x] `server/`: PocketBase embedded, `worlds` collection, "create world" writes the recipe

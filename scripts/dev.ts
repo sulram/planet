@@ -1,11 +1,11 @@
 // Everything at once: server (PocketBase inside) + Mailpit + web. Ctrl+C stops all.
-// The engine is built first when missing; rebuild it with `bun run wasm`.
-import { existsSync } from 'node:fs';
+// The engine is rebuilt first, every time: cargo is incremental, and a stale
+// WASM package silently shows an older world than the desktop does.
 import { ROOT } from './lib';
 import { build, ensureSuperuser, serve } from './server';
 import { buildWasm } from './wasm';
 
-if (!existsSync(`${ROOT}/apps/web/src/lib/engine/pkg/shell_web.js`)) await buildWasm();
+await buildWasm();
 
 await build();
 await ensureSuperuser();
