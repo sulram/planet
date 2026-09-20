@@ -153,11 +153,17 @@ impl Renderer {
             ],
         });
         let scene = compose::SCENE_FORMAT;
-        let terrain = terrain::Terrain::new(&device, &view_layout, &shadow_layout, scene);
+        let composer = compose::Composer::new(&device, &view_layout, format);
+        let terrain = terrain::Terrain::new(
+            &device,
+            &view_layout,
+            &shadow_layout,
+            composer.behind_layout(),
+            scene,
+        );
         let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, scene);
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
-        let composer = compose::Composer::new(&device, &view_layout, format);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
         Renderer {
             weather: clouds::Weather::default(),
@@ -345,16 +351,53 @@ impl Renderer {
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
-        // Last: the sea blends over the world and the sky behind it.
+        drop(pass);
+
+        // Then the sea and the clouds, the nearer last: a camera under the
+        // sea sees the clouds through its surface, any other sees them over it.
+        let mut at = compose::Cursor::default();
+        let submerged = uniform.flags[2] < 0.0;
+        if frame.effects.clouds && submerged {
+            self.composer
+                .clouds(encoder, &resources.bind_group, targets, &mut at);
+        }
+        // The sea reads a copy of the picture so far and the depth, to refract
+        // and absorb what lies behind it, so it tests depth itself: a texture
+        // cannot be read while it is written.
+        let (over, behind) = self.composer.behind(encoder, targets, &at);
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("sea"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: over,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_bind_group(0, &resources.bind_group, &[]);
+        pass.set_bind_group(2, behind, &[]);
         self.terrain
             .draw_water(&mut pass, &resources.patches, &drawn);
         drop(pass);
-        let chain = compose::Chain {
-            clouds: frame.effects.clouds,
-            bloom: frame.effects.bloom > 0.0,
-        };
-        self.composer
-            .run(encoder, &resources.bind_group, targets, chain, view.target);
+        if frame.effects.clouds && !submerged {
+            self.composer
+                .clouds(encoder, &resources.bind_group, targets, &mut at);
+        }
+        self.composer.finish(
+            encoder,
+            &resources.bind_group,
+            targets,
+            at,
+            frame.effects.bloom > 0.0,
+            view.target,
+        );
     }
 
     fn view_uniform(
@@ -407,7 +450,7 @@ impl Renderer {
             grade: [
                 frame.effects.haze,
                 frame.effects.tone_map.index() as f32,
-                0.0,
+                frame.effects.water_clarity,
                 0.0,
             ],
             bloom: [
@@ -561,7 +604,8 @@ fn pipeline(
             cull_mode: (spec.surface == Surface::Solid || shadow).then_some(wgpu::Face::Back),
             ..Default::default()
         },
-        depth_stencil: Some(wgpu::DepthStencilState {
+        // The sea reads the depth, so it cannot also be tested against it.
+        depth_stencil: (spec.surface != Surface::Translucent).then_some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
             depth_write_enabled: Some(
                 spec.surface == Surface::Solid || spec.surface == Surface::Foliage || shadow,

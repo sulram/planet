@@ -102,6 +102,7 @@ export const en = {
 	'engine.settings.cloudChange': 'Cloud change',
 	'engine.settings.exposure': 'Exposure',
 	'engine.settings.haze': 'Haze',
+	'engine.settings.waterClarity': 'Water clarity',
 	'engine.settings.bloom': 'Bloom',
 	'engine.settings.bloomThreshold': 'Bloom from',
 	'engine.settings.toneMap': 'Tone map',

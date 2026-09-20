@@ -3,6 +3,10 @@
 //! the colour and depth before it and writes the next target. The last stage
 //! is always `output`: exposure, tone map and encoding, into the view's target.
 //!
+//! The sea is drawn between the two: the opaque world is copied aside, and the
+//! water reads that copy and the depth to refract and absorb what lies behind
+//! it ([`Composer::behind`]).
+//!
 //! An effect is a stage: a WGSL fragment entry over [`STAGE_PRELUDE`]. Adding
 //! one (bloom, grading) is a shader and a line in [`Composer::run`]. A costly
 //! effect works at half size into an auxiliary target and a second stage lays
@@ -92,12 +96,10 @@ impl Stage {
     }
 }
 
-/// Which optional stages run this frame.
-#[derive(Clone, Copy)]
-pub struct Chain {
-    pub clouds: bool,
-    pub bloom: bool,
-}
+/// Which of the two scene colours holds the picture so far. The world is drawn
+/// into the first; each stage reads one and writes the other.
+#[derive(Default)]
+pub struct Cursor(usize);
 
 pub struct Composer {
     input_layout: wgpu::BindGroupLayout,
@@ -215,38 +217,71 @@ impl Composer {
         }
     }
 
-    /// Runs the chain over a drawn scene and leaves the picture in `target`.
-    pub fn run(
+    /// The clouds over what is drawn so far. Before the sea for a camera under
+    /// it, which sees them through its surface; after it for any other.
+    pub fn clouds(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::BindGroup,
         targets: &Targets,
-        chain: Chain,
+        at: &mut Cursor,
+    ) {
+        // Marched at half size from the depth alone, laid at full size.
+        Self::pass(
+            encoder,
+            &self.cloud_march,
+            view,
+            &targets.marching[at.0],
+            &targets.half,
+        );
+        let write = 1 - at.0;
+        Self::pass(
+            encoder,
+            &self.cloud_lay,
+            view,
+            &targets.inputs[at.0],
+            &targets.color[write],
+        );
+        at.0 = write;
+    }
+
+    /// Copies the picture so far aside and returns where the sea is to be
+    /// drawn, over the original, and what it reads: the copy and the depth.
+    pub fn behind<'a>(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        targets: &'a Targets,
+        at: &Cursor,
+    ) -> (&'a wgpu::TextureView, &'a wgpu::BindGroup) {
+        let whole = |texture| wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        };
+        encoder.copy_texture_to_texture(
+            whole(&targets.textures[at.0]),
+            whole(&targets.textures[1 - at.0]),
+            wgpu::Extent3d {
+                width: targets.size[0],
+                height: targets.size[1],
+                depth_or_array_layers: 1,
+            },
+        );
+        (&targets.color[at.0], &targets.inputs[1 - at.0])
+    }
+
+    /// The rest of the chain, and the picture into `target`.
+    pub fn finish(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::BindGroup,
+        targets: &Targets,
+        mut at: Cursor,
+        bloom: bool,
         target: &wgpu::TextureView,
     ) {
-        // The scene is in colour 0; each stage reads one and writes the other.
-        let mut read = 0;
-        // In order. Bloom enters after the clouds it should catch.
-        if chain.clouds {
-            // Marched at half size from the depth alone, laid at full size.
-            Self::pass(
-                encoder,
-                &self.cloud_march,
-                view,
-                &targets.marching,
-                &targets.half,
-            );
-            let write = 1 - read;
-            Self::pass(
-                encoder,
-                &self.cloud_lay,
-                view,
-                &targets.inputs[read],
-                &targets.color[write],
-            );
-            read = write;
-        }
-        if chain.bloom {
+        if bloom {
             // What is bright, halved down a pyramid, then summed back up it:
             // each level adds a wider, fainter glow. Laid over the scene last.
             let glow = &targets.glow;
@@ -254,7 +289,7 @@ impl Composer {
                 encoder,
                 &self.bloom_bright,
                 view,
-                &targets.inputs[read],
+                &targets.inputs[at.0],
                 &glow[0].0,
             );
             for level in 1..BLOOM_LEVELS {
@@ -275,17 +310,17 @@ impl Composer {
                     &glow[level - 1].0,
                 );
             }
-            let write = 1 - read;
+            let write = 1 - at.0;
             Self::pass(
                 encoder,
                 &self.bloom_lay,
                 view,
-                &targets.glowing[read],
+                &targets.glowing[at.0],
                 &targets.color[write],
             );
-            read = write;
+            at.0 = write;
         }
-        Self::pass(encoder, &self.output, view, &targets.inputs[read], target);
+        Self::pass(encoder, &self.output, view, &targets.inputs[at.0], target);
     }
 
     fn pass(
@@ -321,31 +356,41 @@ impl Composer {
         pass.draw(0..3, 0..1);
     }
 
+    /// The layout of what the sea reads: the scene behind it and its depth.
+    pub fn behind_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.input_layout
+    }
+
     /// The targets of one view, at its size.
     pub fn targets(&self, device: &wgpu::Device, size: [u32; 2]) -> Targets {
+        let raw = |label, format, usage, divide: u32| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: size[0].div_ceil(divide).max(1),
+                    height: size[1].div_ceil(divide).max(1),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage,
+                view_formats: &[],
+            })
+        };
         let texture = |label, format, usage, divide: u32| {
-            device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: size[0].div_ceil(divide).max(1),
-                        height: size[1].div_ceil(divide).max(1),
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
-                .create_view(&wgpu::TextureViewDescriptor::default())
+            raw(label, format, usage, divide).create_view(&wgpu::TextureViewDescriptor::default())
         };
         let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        let color = [
-            texture("scene colour", SCENE_FORMAT, usage, 1),
-            texture("stage colour", SCENE_FORMAT, usage, 1),
+        // Either is copied to the other for the sea to read.
+        let copied = usage | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST;
+        let textures = [
+            raw("scene colour", SCENE_FORMAT, copied, 1),
+            raw("stage colour", SCENE_FORMAT, copied, 1),
         ];
+        let color =
+            [0, 1].map(|i| textures[i].create_view(&wgpu::TextureViewDescriptor::default()));
         let half = texture("half size stage", SCENE_FORMAT, usage, 2);
         let depth = texture("scene depth", crate::DEPTH_FORMAT, usage, 1);
         let input = |color: &wgpu::TextureView, aux: &wgpu::TextureView| {
@@ -383,9 +428,10 @@ impl Composer {
         // The scene with the summed glow beside it, for the stage that lays it.
         let glowing = [input(&color[0], &glow[0].0), input(&color[1], &glow[0].0)];
         // The half size target cannot be read while it is written.
-        let marching = input(&color[0], &color[1]);
+        let marching = [input(&color[0], &color[1]), input(&color[1], &color[0])];
         Targets {
             size,
+            textures,
             color,
             half,
             depth,
@@ -400,14 +446,15 @@ impl Composer {
 /// Where one view's world is drawn and its stages run.
 pub struct Targets {
     pub size: [u32; 2],
+    textures: [wgpu::Texture; 2],
     /// 0 takes the scene; the stages alternate between the two.
     pub color: [wgpu::TextureView; 2],
     pub depth: wgpu::TextureView,
     /// Where a costly stage works, half the size each way.
     half: wgpu::TextureView,
     inputs: [wgpu::BindGroup; 2],
-    /// The scene's inputs for the stage that writes `half`.
-    marching: wgpu::BindGroup,
+    /// The picture's inputs for the stage that writes `half`.
+    marching: [wgpu::BindGroup; 2],
     glow: [(wgpu::TextureView, wgpu::BindGroup); BLOOM_LEVELS],
     glowing: [wgpu::BindGroup; 2],
 }

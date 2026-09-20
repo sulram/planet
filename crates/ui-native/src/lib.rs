@@ -212,6 +212,9 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
             });
             ui.separator();
             ui.add(egui::Slider::new(&mut effects.haze, 0.0..=6.0).text("Haze"));
+            ui.add(
+                egui::Slider::new(&mut effects.water_clarity, 0.25..=12.0).text("Water clarity"),
+            );
             ui.add(egui::Slider::new(&mut effects.bloom, 0.0..=3.0).text("Bloom"));
             ui.add_enabled(
                 effects.bloom > 0.0,

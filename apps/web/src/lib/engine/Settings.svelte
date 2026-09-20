@@ -53,6 +53,7 @@
 			</Stack>
 			<Stack>
 				<Slider label={t('engine.settings.haze')} value={effects.haze} min={0} max={6} step={0.05} oninput={(value) => set('haze', value)} />
+				<Slider label={t('engine.settings.waterClarity')} value={effects.water_clarity} min={0.25} max={12} step={0.25} oninput={(value) => set('water_clarity', value)} />
 				<Slider label={t('engine.settings.bloom')} value={effects.bloom} min={0} max={3} oninput={(value) => set('bloom', value)} />
 				<Slider
 					label={t('engine.settings.bloomThreshold')}

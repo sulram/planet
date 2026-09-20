@@ -142,6 +142,8 @@ pub struct Effects {
     pub bloom_threshold: f32,
     /// How thick the air is, as a factor of the usual: distance fades sooner.
     pub haze: f32,
+    /// How far a swimmer sees under the sea, as a factor of plain sea water.
+    pub water_clarity: f32,
     pub tone_map: ToneMap,
 }
 
@@ -159,6 +161,7 @@ impl Default for Effects {
             bloom: 0.5,
             bloom_threshold: 1.1,
             haze: 1.0,
+            water_clarity: 3.0,
             tone_map: ToneMap::Aces,
         }
     }

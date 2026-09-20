@@ -119,6 +119,7 @@ impl Client {
             bloom: sane(effects.bloom, 0.0, 3.0, usual.bloom),
             bloom_threshold: sane(effects.bloom_threshold, 0.2, 8.0, usual.bloom_threshold),
             haze: sane(effects.haze, 0.0, 6.0, usual.haze),
+            water_clarity: sane(effects.water_clarity, 0.25, 12.0, usual.water_clarity),
             ..effects
         };
         self.events.push(Event::EffectsChanged {

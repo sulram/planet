@@ -45,6 +45,7 @@ impl Terrain {
         device: &wgpu::Device,
         view_layout: &wgpu::BindGroupLayout,
         shadow_layout: &wgpu::BindGroupLayout,
+        behind_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> Terrain {
         let patch_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -110,7 +111,7 @@ impl Terrain {
             PipelineSpec {
                 label: "water",
                 source: include_str!("shaders/water.wgsl"),
-                layouts: &[view_layout, &patch_layout],
+                layouts: &[view_layout, &patch_layout, behind_layout],
                 buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: size_of::<WaterVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,

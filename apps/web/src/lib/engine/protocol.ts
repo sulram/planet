@@ -23,6 +23,7 @@ export interface Effects {
 	bloom: number;
 	bloom_threshold: number;
 	haze: number;
+	water_clarity: number;
 	tone_map: ToneMap;
 }
 

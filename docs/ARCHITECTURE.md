@@ -158,7 +158,19 @@ Numbers marked (p) are proposed and not yet confirmed.
   under sea level also carries a water surface: same grid, same indices.
 - Water is drawn last, blended, from both sides: per channel absorption by
   depth, Fresnel to the sky, foam at the shore, Snell's window from below.
+- The sea is drawn after the opaque world and the sky, in a pass of its own:
+  the picture so far is copied aside and the water reads that copy and the
+  depth (`Composer::behind`). It tests depth itself, having none attached.
+- From above it refracts what lies under it and colours it by the water
+  actually crossed (down to the floor, back along the ray), so shallows go
+  turquoise. It takes sun, cast shadows and cloud shade as the land does.
 - A camera under sea level sees through water as a medium (red dies first).
+  What lies past the surface is drawn with its air alone; the surface lays the
+  water between, and shows the world above straight through, rippled by
+  the swell; it mirrors the sea only at a glancing look. Only what lies past
+  the surface along its own ray may be seen through it.
+- Clouds and sea are drawn nearer last: clouds first for a camera under the
+  sea, after it for any other. `water_clarity` stretches a swimmer's sight.
 - Swimming is part of walking: in water too deep to stand you float at chest
   depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
 - Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world.

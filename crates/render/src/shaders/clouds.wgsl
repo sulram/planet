@@ -168,10 +168,6 @@ fn scene_limit(ndc: vec2<f32>, dir: vec3<f32>, depth: f32) -> f32 {
 @fragment
 fn fs_march(in: Screen) -> @location(0) vec4<f32> {
     let clear = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    // Under the sea the water is all there is to see through.
-    if view.flags.z < 0.0 {
-        return clear;
-    }
     let dir = screen_dir(in.ndc);
     var spans = cloud_spans(dir);
     if !spans.any {
@@ -195,6 +191,8 @@ fn fs_march(in: Screen) -> @location(0) vec4<f32> {
     cloud = cloud_march(dir, spans.second, jitter, cloud);
     // Air between the camera and the cloud hazes it like any far thing.
     let air = atmosphere(dir, spans.enter + 400.0);
+    // From under the sea this runs before the surface is drawn, which bends
+    // and tints the clouds with the rest of the world above.
     return vec4<f32>(cloud.rgb * air.a + air.rgb * (1.0 - cloud.a), cloud.a);
 }
 
@@ -205,7 +203,7 @@ fn fs_lay(in: Screen) -> @location(0) vec4<f32> {
     let scene = textureLoad(stage_color, pixel, 0);
     let dir = screen_dir(in.ndc);
     let spans = cloud_spans(dir);
-    if !spans.any || view.flags.z < 0.0 {
+    if !spans.any {
         return scene;
     }
     let limit = scene_limit(in.ndc, dir, textureLoad(stage_depth, pixel, 0));

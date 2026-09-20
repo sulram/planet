@@ -45,12 +45,13 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     let near = view.relative_from_clip * vec4<f32>(in.ndc, 1.0, 1.0);
     let dir = normalize(near.xyz / near.w);
 
-    // Under the sea there is no sky, only water all the way.
+    // From under the sea the sky begins where the ray leaves the water; the
+    // surface, drawn after, lays that water over it.
+    var origin = view.camera.xyz;
     if view.flags.z < 0.0 {
-        return vec4<f32>(through_medium(vec3<f32>(0.0), dir, 1.0e6), 1.0);
+        origin += dir * ray_sphere(origin, dir, view.camera.w).y;
     }
-
-    let air = atmosphere(dir, 1.0e9);
+    let air = atmosphere_from(origin, dir, 1.0e9);
     let toward_sun = max(dot(dir, view.sun.xyz), 0.0);
     let disc = smoothstep(0.99985, 0.99995, toward_sun) * 20.0;
     let glow = pow(toward_sun, 64.0) * 0.25;

@@ -103,6 +103,7 @@ export const pt: Messages = {
 	'engine.settings.cloudChange': 'Mudança das nuvens',
 	'engine.settings.exposure': 'Exposição',
 	'engine.settings.haze': 'Névoa',
+	'engine.settings.waterClarity': 'Clareza da água',
 	'engine.settings.bloom': 'Bloom',
 	'engine.settings.bloomThreshold': 'Bloom a partir de',
 	'engine.settings.toneMap': 'Tone map',

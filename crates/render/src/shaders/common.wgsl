@@ -29,6 +29,7 @@ struct View {
     // x: strength of the glow. y: the brightness it starts at. z: its knee.
     bloom: vec4<f32>,
     // x: how thick the air is, as a factor. y: which tone map, by index.
+    // z: how clear the sea is to a swimmer, as a factor.
     grade: vec4<f32>,
 }
 
@@ -91,7 +92,12 @@ fn ray_sphere(origin: vec3<f32>, dir: vec3<f32>, radius: f32) -> vec2<f32> {
 // Light scattered toward the camera along a ray of `length` metres (rgb), and
 // how much of what lies behind survives (a).
 fn atmosphere(dir: vec3<f32>, length: f32) -> vec4<f32> {
-    let origin = view.camera.xyz;
+    return atmosphere_from(view.camera.xyz, dir, length);
+}
+
+// The same along a ray that starts anywhere, given from the planet's centre:
+// a ray that leaves the sea starts its air at the surface.
+fn atmosphere_from(origin: vec3<f32>, dir: vec3<f32>, length: f32) -> vec4<f32> {
     let shell = ray_sphere(origin, dir, view.sun.w);
     let enter = max(shell.x, 0.0);
     let leave = min(shell.y, length);
@@ -154,16 +160,38 @@ fn daylight(up: vec3<f32>) -> f32 {
 // What the medium between the camera and a surface does to its colour: air
 // above the sea, water below it.
 fn through_medium(color: vec3<f32>, dir: vec3<f32>, distance: f32) -> vec3<f32> {
-    if view.flags.z < 0.0 {
-        let day = daylight(normalize(view.camera.xyz));
-        // Each colour dies at its own rate along the way, and the sea's own
-        // glow fills in. Both dim with the depth of the camera.
-        let survive = exp(-WATER_ABSORB * distance);
-        let glow = WATER_SCATTER * (0.08 + day) * exp(view.flags.z * 0.025);
-        return color * survive + glow * (1.0 - survive);
+    if view.flags.z >= 0.0 {
+        let air = atmosphere(dir, distance);
+        return color * air.a + air.rgb;
     }
-    let air = atmosphere(dir, distance);
-    return color * air.a + air.rgb;
+    // From under the sea. What lies past the surface is seen through the
+    // surface, which is drawn after it and lays the water between over it
+    // (water.wgsl): here it gets its air alone, from the surface on.
+    let surface = ray_sphere(view.camera.xyz, dir, view.camera.w).y;
+    if distance > surface {
+        let air = atmosphere_from(view.camera.xyz + dir * surface, dir, distance - surface);
+        return color * air.a + air.rgb;
+    }
+    return through_water(color, distance);
+}
+
+// What `wet` metres of sea between do to a colour, for a camera under it: each
+// colour dies at its own rate, and the sea's own glow fills in. Both dim with
+// the depth of the camera.
+fn through_water(color: vec3<f32>, wet: f32) -> vec3<f32> {
+    let day = daylight(normalize(view.camera.xyz));
+    // Clarity stretches how far a swimmer sees; the sea seen from the air
+    // keeps its colour.
+    let survive = exp(-WATER_ABSORB * wet / view.grade.z);
+    let glow = WATER_SCATTER * (0.08 + day) * exp(view.flags.z * 0.025);
+    return color * survive + glow * (1.0 - survive);
+}
+
+// How much of the world above shows through the sea's surface from below, by
+// how steeply it is met. Wider by far than the 48 degrees of still water: a
+// swimmer should see the shore they swim to.
+fn snell_window(facing: f32) -> f32 {
+    return smoothstep(0.03, 0.30, facing);
 }
 
 // Sun and sky light on a surface, then the medium between it and the camera.
