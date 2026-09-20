@@ -290,3 +290,26 @@ fn value_noise(p: vec3<f32>, period: i32) -> f32 {
     let x11 = mix(lattice(cell + vec3<i32>(0, 1, 1), period), lattice(cell + vec3<i32>(1, 1, 1), period), w.x);
     return mix(mix(x00, x10, w.y), mix(x01, x11, w.y), w.z);
 }
+
+// The same noise with its slope: x is the value, yzw how it changes along
+// each axis, per cell. One look where a finite difference takes three.
+fn value_noise_slope(p: vec3<f32>, period: i32) -> vec4<f32> {
+    let cell = vec3<i32>(floor(p));
+    let f = fract(p);
+    let w = f * f * (3.0 - 2.0 * f);
+    let dw = 6.0 * f * (1.0 - f);
+    let c000 = lattice(cell, period);
+    let c100 = lattice(cell + vec3<i32>(1, 0, 0), period);
+    let c010 = lattice(cell + vec3<i32>(0, 1, 0), period);
+    let c110 = lattice(cell + vec3<i32>(1, 1, 0), period);
+    let c001 = lattice(cell + vec3<i32>(0, 0, 1), period);
+    let c101 = lattice(cell + vec3<i32>(1, 0, 1), period);
+    let c011 = lattice(cell + vec3<i32>(0, 1, 1), period);
+    let c111 = lattice(cell + vec3<i32>(1, 1, 1), period);
+    let value = mix(mix(mix(c000, c100, w.x), mix(c010, c110, w.x), w.y),
+        mix(mix(c001, c101, w.x), mix(c011, c111, w.x), w.y), w.z);
+    let dx = mix(mix(c100 - c000, c110 - c010, w.y), mix(c101 - c001, c111 - c011, w.y), w.z);
+    let dy = mix(mix(c010 - c000, c110 - c100, w.x), mix(c011 - c001, c111 - c101, w.x), w.z);
+    let dz = mix(mix(c001 - c000, c101 - c100, w.x), mix(c011 - c010, c111 - c110, w.x), w.y);
+    return vec4<f32>(value, vec3<f32>(dx, dy, dz) * dw);
+}

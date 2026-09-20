@@ -67,7 +67,7 @@ this file in the same change.
 | Site | The body an avatar's position is stored relative to. Changes at a sphere of influence. |
 | Frame | An avatar's own up, view and facing. Turns toward gravity by rotation; in flight it wins. |
 | Figure | What an avatar looks like in the client: a worn VRM and its clips, or the box figure. |
-| Footprint | The spacing of the mesh asking the generator for terrain. Detail finer than it is faded out. |
+| Footprint | What one sample covers: the spacing of the mesh asking the generator, or what a pixel covers of the sea. Detail finer than it is faded out. |
 | Anchor | A patch origin wrapped to the detail period in f64: what fixes shader detail to the planet. |
 | Entity | A placed thing that is not a voxel: GLB, part, light, field, portal, media frame, script. |
 | Asset | A file, global, named by its content hash. |

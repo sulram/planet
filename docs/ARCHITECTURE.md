@@ -158,6 +158,13 @@ Numbers marked (p) are proposed and not yet confirmed.
   under sea level also carries a water surface: same grid, same indices.
 - Water is drawn last, blended, from both sides: per channel absorption by
   depth, Fresnel to the sky, foam at the shore, Snell's window from below.
+- The sea's waves are six octaves of drifting noise, a hand wide to a quarter
+  of a kilometre long, anchored to the planet like the ground's detail. Each
+  is kept only while a pixel can show it, as the generator keeps an octave
+  only while the mesh can: near, all of them; from the sky, the long swell
+  alone. What a pixel can no longer show becomes roughness, which widens and
+  dims the sun's mirror, so a spark at hand is a road of light from above.
+  One noise lookup an octave, value and slope together.
 - The sea is drawn after the opaque world and the sky, in a pass of its own:
   the picture so far is copied aside and the water reads that copy and the
   depth (`Composer::behind`). It tests depth itself, having none attached.
@@ -168,8 +175,9 @@ Numbers marked (p) are proposed and not yet confirmed.
   turquoise. It takes sun, cast shadows and cloud shade as the land does.
 - A camera under sea level sees through water as a medium (red dies first).
   What lies past the surface is drawn with its air alone; the surface lays the
-  water between, and shows the world above straight through, rippled by
-  the swell; it mirrors the sea only at a glancing look. Only what lies past
+  water between, and shows the world above straight through, bent by the
+  waves' slope as an angle (so a far ridge swims as much as a near one); it
+  mirrors the sea only at a glancing look. Only what lies past
   the surface along its own ray may be seen through it.
 - Clouds and sea are drawn nearer last: clouds first for a camera under the
   sea, after it for any other. `water_clarity` stretches a swimmer's sight.

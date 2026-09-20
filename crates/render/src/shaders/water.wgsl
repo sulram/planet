@@ -16,6 +16,9 @@ struct Patch {
 @group(2) @binding(2) var behind_sampler: sampler;
 
 const ANCHOR_M: f32 = 1024.0;
+// The sun in still water: how tight its mirror is, and how bright.
+const GLINT_SHARP: f32 = 900.0;
+const GLINT: f32 = 12.0;
 
 struct Vertex {
     @location(0) position: vec3<f32>,
@@ -39,13 +42,56 @@ fn vs(in: Vertex) -> Varying {
     return out;
 }
 
-// Height of the swell at a place and time: two drifting layers of noise.
-fn swell(p: vec3<f32>, t: f32) -> f32 {
-    let a = value_noise((p + vec3<f32>(t * 0.9, t * 0.3, t * 0.6)) / 4.0, 256);
-    let b = value_noise((p - vec3<f32>(t * 0.5, t * 0.8, -t * 0.4)) / 1.0, 1024);
-    // Chop: what breaks the sun's reflection into sparkle instead of blobs.
-    let c = value_noise((p + vec3<f32>(-t * 0.7, t * 0.5, t * 0.9)) / 0.25, 4096);
-    return a * 0.55 + b * 0.10 + c * 0.018;
+// The sea's waves: six octaves of drifting noise, from chop a hand wide to a
+// swell a quarter of a kilometre long, each kept only while a pixel can show
+// it (as the generator keeps an octave only while the mesh can). Near, all of
+// them; from the sky, the long swell alone: the sea never shimmers and never
+// goes flat.
+struct Waves {
+    // How the surface leans, metres per metre, in planet axes.
+    slope: vec3<f32>,
+    // Of the short waves, for the foam's lap.
+    height: f32,
+    // Variance of the slopes a pixel can no longer show: they still scatter
+    // the sun, as roughness.
+    rough: f32,
+}
+
+const WAVE_OCTAVES: i32 = 6;
+
+fn waves(p: vec3<f32>, t: f32, footprint_m: f32) -> Waves {
+    // Metres per cell; every one divides ANCHOR_M.
+    var cell_m = array<f32, 6>(0.25, 1.0, 4.0, 16.0, 64.0, 256.0);
+    // Slope of each at its steepest: chop is steep, swell is long and low.
+    var steep = array<f32, 6>(0.072, 0.10, 0.1375, 0.10, 0.07, 0.05);
+    // Height of each, metres. Only the short ones lap at a shore.
+    var tall = array<f32, 6>(0.018, 0.10, 0.55, 0.0, 0.0, 0.0);
+    // Long waves run faster, each its own way.
+    var drift = array<vec3<f32>, 6>(
+        vec3<f32>(-0.7, 0.5, 0.9),
+        vec3<f32>(-0.5, -0.8, 0.4),
+        vec3<f32>(0.9, 0.3, 0.6),
+        vec3<f32>(-1.4, 1.1, -0.8),
+        vec3<f32>(2.2, -1.6, 1.9),
+        vec3<f32>(-3.1, 2.4, 2.8));
+    var out: Waves;
+    out.slope = vec3<f32>(0.0);
+    out.height = 0.0;
+    out.rough = 0.0;
+    for (var i = 0; i < WAVE_OCTAVES; i++) {
+        // Shown in full at three pixels a cell, gone at one.
+        let shown = smoothstep(1.0, 3.0, cell_m[i] / max(footprint_m, 1.0e-4));
+        // A noise's slope is about 0.75 of its steepest, all told.
+        let spread = steep[i] * 0.75;
+        out.rough += (1.0 - shown) * spread * spread;
+        if shown <= 0.0 {
+            continue;
+        }
+        let noise = value_noise_slope((p + drift[i] * t) / cell_m[i], i32(ANCHOR_M / cell_m[i]));
+        out.slope += noise.yzw * (steep[i] * shown);
+        out.height += noise.x * tall[i] * shown;
+    }
+    return out;
 }
 
 // Where a point given from the camera lands in the copy of the scene.
@@ -86,6 +132,9 @@ fn on_screen(uv: vec2<f32>) -> bool {
 
 @fragment
 fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4<f32> {
+    // What one pixel covers of the sea, metres. Asked before any discard:
+    // a derivative wants every neighbour alive.
+    let footprint_m = max(length(dpdx(in.relative)), length(dpdy(in.relative)));
     // Dry land pokes through the grid: nothing to draw there.
     if in.depth_m < -0.05 {
         discard;
@@ -107,14 +156,13 @@ fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4
     let up = normalize(view.camera.xyz + in.relative);
     let t = view.flags.y;
 
-    // Normal from the slope of the swell along the two surface directions.
+    // The surface leans as its waves do, along the sea, never into it.
+    let sea = waves(in.anchored, t, footprint_m);
+    let lean = sea.slope - up * dot(sea.slope, up);
+    let normal = normalize(up - lean);
+    let h = sea.height;
+    // Foam and lapping are for a shore at hand.
     let calm = 1.0 - smoothstep(60.0, 400.0, distance);
-    let east = normalize(cross(up, vec3<f32>(0.0, 1.0, 0.0)) + vec3<f32>(1e-4, 0.0, 0.0));
-    let north = cross(east, up);
-    let h = swell(in.anchored, t);
-    let hx = swell(in.anchored + east * 0.25, t);
-    let hy = swell(in.anchored + north * 0.25, t);
-    var normal = normalize(up - (east * (hx - h) + north * (hy - h)) * 4.0 * calm);
 
     let day = daylight(up);
     let facing = abs(dot(normal, dir));
@@ -126,8 +174,10 @@ fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4
         // shore in the sky.)
         let window = snell_window(facing);
         let mirror = WATER_SCATTER * (0.35 + 1.6 * day);
-        let ripple = (normal - up * dot(normal, up)) * min(scene_m - distance, 6.0) * 0.5;
-        var uv = behind_uv(in.relative + dir * min(scene_m - distance, 6.0) + ripple);
+        // The surface bends the look by an angle, so what is far swims as much
+        // as what is near: a ridge a kilometre off ripples with the swell.
+        let beyond = min(scene_m - distance, 4000.0);
+        var uv = behind_uv(in.relative + normalize(dir - lean * 0.5) * beyond);
         // Never a swimmer in front of the surface, nor off the picture.
         if !on_screen(uv) || !past_surface(uv) {
             uv = here;
@@ -169,7 +219,13 @@ fn fs(in: Varying, @builtin(front_facing) from_above: bool) -> @location(0) vec4
     let fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
     let mirrored = reflect(dir, normal);
     let sky = atmosphere(mirrored, 1.0e9).rgb + SKY * 0.08 * day;
-    let glint = pow(max(dot(mirrored, view.sun.xyz), 0.0), 900.0) * 1.6 * day * sun_reach;
+    // Waves too small for the pixel still scatter the sun: the mirror's lobe
+    // widens by their slopes (a reflection turns twice what the surface
+    // does) and dims as it spreads. A spark at hand, a road of light from
+    // the sky.
+    let lobe = 1.0 / (1.0 / GLINT_SHARP + 4.0 * sea.rough);
+    let glint = pow(max(dot(mirrored, view.sun.xyz), 0.0), lobe) * GLINT * (lobe / GLINT_SHARP)
+        * day * sun_reach;
 
     // Foam where the water runs out. Coarse patches far away cannot resolve a
     // shoreline: no foam there.
