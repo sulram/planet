@@ -82,6 +82,7 @@ export const pt: Messages = {
 	'engine.hint.down': 'descer',
 	'engine.hint.sprint': 'correr',
 	'engine.hint.mode': 'andar ou voar',
+	'engine.hint.avatar': 'próximo avatar',
 	'engine.hint.zoom.keys': 'Roda',
 	'engine.hint.zoom': 'zoom',
 	'engine.hint.release': 'soltar o ponteiro',

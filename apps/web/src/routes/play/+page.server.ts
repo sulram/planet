@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { translate } from '$lib/i18n/config';
 import { loginPath } from '$lib/server/auth';
+import { visitorAvatar } from '$lib/server/avatar';
 import { pbStatus } from '$lib/server/pb';
 import { createWorld } from '$lib/server/worlds';
 import { isGeneratorVersion, normalizeSeed, randomSeed, WORLD_NAME_MAX } from '$lib/world';
@@ -8,10 +9,11 @@ import type { Actions, PageServerLoad } from './$types';
 
 // The offline preview. The seed lives in the URL so a planet can be shared;
 // arriving without a valid one lands on a fresh random planet.
-export const load: PageServerLoad = ({ url }) => {
+export const load: PageServerLoad = async (event) => {
+	const { url } = event;
 	const seed = normalizeSeed(url.searchParams.get('seed'));
 	if (!seed || seed !== url.searchParams.get('seed')) redirect(303, `/play?seed=${seed ?? randomSeed()}`);
-	return { seed };
+	return { seed, avatar: await visitorAvatar(event) };
 };
 
 export const actions: Actions = {

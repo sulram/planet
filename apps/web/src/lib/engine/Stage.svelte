@@ -12,12 +12,14 @@
 	interface Props {
 		title: string;
 		recipe: Recipe | null;
+		/** Asset path of the visitor's avatar, from the page load. */
+		avatar: string | null;
 		/** Called once the engine reports which generator version it runs. */
 		onready?: (generatorVersion: number) => void;
 		children: Snippet;
 	}
 
-	let { title, recipe, onready, children }: Props = $props();
+	let { title, recipe, avatar, onready, children }: Props = $props();
 
 	let mode = $state<Mode>('walk');
 	let stats = $state<Extract<EngineEvent, { type: 'stats' }>>();
@@ -30,6 +32,7 @@
 		{ keys: 'C', does: t('engine.hint.down') },
 		{ keys: 'Shift', does: t('engine.hint.sprint') },
 		{ keys: 'F', does: t('engine.hint.mode') },
+		{ keys: 'V', does: t('engine.hint.avatar') },
 		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },
 		{ keys: 'Esc', does: t('engine.hint.release') }
 	]);
@@ -38,11 +41,22 @@
 		if (event.type === 'ready') onready?.(event.generator_version);
 		else if (event.type === 'mode_changed') mode = event.mode;
 		else if (event.type === 'stats') stats = event;
+		else if (event.type === 'avatar_changed' && event.path !== avatar) remember(event.path);
+	}
+
+	// An avatar picked in the world becomes the visitor's choice. Best effort:
+	// a failure only means the next visit starts from the previous choice.
+	function remember(path: string) {
+		fetch('/avatar', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ path })
+		}).catch(() => {});
 	}
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {mode} onevent={receive} />
+	<EngineView {recipe} {mode} {avatar} onevent={receive} />
 	<Panel {title}>
 		{#snippet aside()}
 			<a class="home" href="/">{t('common.appName')}</a>

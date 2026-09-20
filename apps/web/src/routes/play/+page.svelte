@@ -45,7 +45,7 @@
 	<title>{t('play.title')} · {t('common.appName')}</title>
 </svelte:head>
 
-<Stage title={t('play.title')} {recipe} onready={(version) => (generatorVersion = version)}>
+<Stage title={t('play.title')} {recipe} avatar={data.avatar} onready={(version) => (generatorVersion = version)}>
 	<form method="GET" action="/play" onsubmit={regenerate}>
 		<Stack>
 			<Field label={t('world.seed')} for="seed" hint={t('play.seed.hint')} error={seedError}>

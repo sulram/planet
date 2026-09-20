@@ -12,10 +12,12 @@
 		/** Null until the caller knows the whole recipe; nothing is sent meanwhile. */
 		recipe: Recipe | null;
 		mode: Mode;
+		/** Asset path of the avatar to wear. Null wears any the manifest offers. */
+		avatar: string | null;
 		onevent?: (event: EngineEvent) => void;
 	}
 
-	let { recipe, mode, onevent }: Props = $props();
+	let { recipe, mode, avatar, onevent }: Props = $props();
 
 	type Status = 'loading' | 'running' | 'missing' | 'unsupported' | 'failed';
 
@@ -27,10 +29,12 @@
 	// a real difference, so an event echoed back by the parent sends nothing.
 	let engineRecipe = '';
 	let engineMode: Mode | undefined;
+	let engineAvatar: string | undefined;
 
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') engineRecipe = JSON.stringify(event.recipe);
 		if (event.type === 'mode_changed') engineMode = event.mode;
+		if (event.type === 'avatar_changed') engineAvatar = event.path;
 		onevent?.(event);
 	}
 
@@ -72,6 +76,12 @@
 		if (next === engineRecipe) return;
 		engineRecipe = next;
 		engine.command({ type: 'set_recipe', recipe });
+	});
+
+	$effect(() => {
+		if (!engine || (avatar && avatar === engineAvatar)) return;
+		if (avatar) engineAvatar = avatar;
+		engine.command(avatar ? { type: 'set_avatar', path: avatar } : { type: 'random_avatar' });
 	});
 
 	$effect(() => {
