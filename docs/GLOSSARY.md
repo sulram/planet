@@ -47,6 +47,11 @@ this file in the same change.
 | Scene | The plain data a client hands a renderer each frame. Crate `scene`. |
 | Patch | One quadtree node of far terrain, meshed as 32x32 quads. |
 | Tangent warp | The quad sphere mapping: `tan(s * pi / 4)` on the cube face. |
+| Avatar | The VRM body a person wears. Named by an asset reference, never by index. |
+| Asset reference | A path under the asset root, or an absolute URL. How the client names any file it wants. |
+| Manifest | `assets/manifest.json`: the instance's default set. Default avatar, avatars on offer, clip per gait. |
+| Gait | How a body moves right now: idle, walk, run, jump, fall, fly. One clip each. |
+| Clip | A humanoid animation, retargeted at load so every avatar shares it. |
 | Entity | A placed thing that is not a voxel: GLB, part, light, field, portal, media frame, script. |
 | Asset | A file, global, named by its content hash. |
 | Placement | The use of an asset by an entity in a world. Counts against budgets. |

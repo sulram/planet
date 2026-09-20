@@ -23,6 +23,11 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 
 ## Later
 
+- **Default asset set.** `assets/` is committed for now, imported from `refs/`
+  by `bun run assets`. Avatars are CC0. The locomotion clips come from Hyperfy
+  (GPL-3.0-only, Mixamo rig) and are temporary: replace them with clips from
+  Mixamo or our own before choosing a license that GPL does not fit. Where the
+  default set is hosted later (repo, LFS, bucket) is open too.
 - **License.** "Free software end to end" names no license yet.
 - Account deletion: superuser only today; `worlds.owner` has no cascade.
 - World ownership transfer: the update rule allows it with no consent step.
@@ -37,7 +42,6 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - How much building is possible outside the browser (Pi, headset).
 - Cubes on sloped smooth terrain: auto-flatten on build, or leave gaps.
 - Scripting model: server-side; language and sandbox undecided.
-- Avatar format: VRM, custom voxel avatars, both.
 - Chain for assets and deeds (leaning Tezos); when to anchor snapshots in Bitcoin.
 - Opening the map: which region first, how fast.
 - Meta store policy on crypto features (only matters if wallets ship on Quest).

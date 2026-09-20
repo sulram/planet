@@ -70,6 +70,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   - `worldgen`: the generator. Deterministic. Also built to WASM for the server.
   - `protocol`: wire messages, generated from `proto/`. Not yet.
   - `scene`: the plain data a client hands a renderer. No GPU, no generator.
+  - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
   - `render`: all of wgpu lives here.
   - `client`: controller, streaming, tools, media manager. No window, no DOM.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
@@ -79,8 +80,10 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `apps/web/`: Svelte + Bun. Builder and player UI; hosts the WASM client.
 - `packages/`: shared TypeScript (protocol bindings, UI kit). Not yet.
 - `proto/`: the protocol schema. Single source for Rust, Go and TS. Not yet.
+- `assets/`: the instance's default set (avatars, clips) and its
+  `manifest.json`, the config that names them.
 - `scripts/`: every repeated command is a script here. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | desktop | shot | check`.
+  `bun run setup | dev | server | web | wasm | assets | desktop | shot | check`.
 - `docs/`: see top of this file.
 - `refs/`: gitignored. Reference projects for reading (see below).
 

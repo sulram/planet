@@ -130,6 +130,25 @@ Numbers marked (p) are proposed and not yet confirmed.
 - `VideoSource` seam: browser decoder on web, GStreamer on desktop and Pi,
   MediaCodec on Quest and Pico.
 
+## Avatars
+
+- An avatar is a VRM, named by an **asset reference**: a path under the asset
+  root (`avatars/Kyle.vrm`) or an absolute URL (a user's own upload, M5). The
+  client never tells them apart; nothing addresses an avatar by index.
+- `assets/manifest.json` is the config of the instance's default set:
+  `default_avatar`, `avatars` on offer, `clips` per gait. Edited by hand.
+- Which avatar a person wears: the user's default avatar (future
+  `users.avatar`), else the visitor's earlier choice (cookie), else a random
+  one from the offer, which becomes the choice. A failed load wears
+  `default_avatar`; the box figure covers the time nothing is loaded.
+- Clips are authored once on a Mixamo rig and retargeted at load to the VRM
+  humanoid (crate `avatar`), so every avatar shares every clip. Gaits: idle,
+  walk, run, jump, fall, fly. VRM 0.x, one skin, PNG textures for now.
+- Asset seam: the client does no IO. It queues requests by reference, the
+  platform shell fetches (disk on desktop, `fetch` in the browser) and answers.
+- `V` wears the next avatar on offer. The engine reports `avatar_changed`; the
+  web app keeps it as the visitor's choice (`POST /avatar`).
+
 ## Gravity
 
 - Gravity is a field, decoupled from geometry. Shapes: sphere, box, parallel,
@@ -151,7 +170,7 @@ Numbers marked (p) are proposed and not yet confirmed.
   and render events. Tool logic stays in Rust so every client shares it.
   JSON tagged by `type`: `client::Command`, `client::Event`.
 - Crates: `topology` and `worldgen` (deterministic, `libm`), `scene` (plain
-  data a client hands a renderer), `client`, `render`, `shell-desktop`,
+  data a client hands a renderer), `avatar` (VRM + clips, no GPU), `client`, `render`, `shell-desktop`,
   `shell-web`. `voxel` and `protocol` appear when a milestone pulls them.
 - The controller keeps its state in address space; a wish direction in metres
   becomes an address delta through the local tangents. Tangent vectors are

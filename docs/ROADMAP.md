@@ -27,6 +27,8 @@ Every milestone ends runnable end to end.
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [ ] Params as knobs in the panel
 - [x] Third person placeholder avatar (boxes, walk cycle)
+- [x] VRM avatars with shared locomotion clips; random per visitor; `V` for the next
+- [ ] User avatars: `users.avatar` default, own VRM uploads (with M5 assets)
 - [x] Design system v0: JetBrains Mono 10px, black and white, light and dark, `/ds`
 
 ## M2: create world, two people see each other
@@ -69,6 +71,10 @@ Every milestone ends runnable end to end.
 - [ ] Quest and Pico: OpenXR, two views, code login
 
 ## Wishes (unordered)
+
+- [ ] Interactive grass: implementation scope in [terrain rendering brief](TERRAIN_RENDER_BRIEF.md#delivery-4-interactive-grass-after-ground-materials)
+- [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
+- [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 
 - [ ] Moon as a second body (Cartesian ball), travel between bodies
 - [ ] Rockets, satellites on rails, buildable orbital grids
