@@ -1,0 +1,94 @@
+//! The command/event seam between the core and any UI.
+//!
+//! Svelte panels and the native UI send [`Command`]s and render [`Event`]s.
+//! Both travel as JSON tagged by `type`, so the same seam serves a WASM
+//! boundary, a native panel and tests. Tool logic never leaks past this file.
+
+use serde::{Deserialize, Serialize};
+use worldgen::Recipe;
+
+/// How the avatar moves.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    Walk,
+    Fly,
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Command {
+    /// Regenerate the world from this recipe and respawn.
+    SetRecipe {
+        recipe: Recipe,
+    },
+    SetMode {
+        mode: Mode,
+    },
+}
+
+#[derive(Clone, PartialEq, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Event {
+    /// Sent once, first. `generator_version` is what new worlds should use.
+    Ready {
+        generator_version: u32,
+    },
+    RecipeChanged {
+        recipe: Recipe,
+    },
+    ModeChanged {
+        mode: Mode,
+    },
+    /// Sent about twice a second.
+    Stats {
+        fps: f32,
+        altitude_m: f64,
+        speed_mps: f64,
+        sector: u8,
+    },
+    /// A command was refused. `message` is for logs, not for end users.
+    Rejected {
+        message: String,
+    },
+}
+
+impl Command {
+    pub fn from_json(json: &str) -> Result<Command, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+}
+
+impl Event {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("events are plain data")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commands_parse_from_the_documented_json() {
+        let json = r#"{"type":"set_recipe","recipe":{"seed":"00000000deadbeef","generator_version":1,"params":{}}}"#;
+        assert_eq!(
+            Command::from_json(json).unwrap(),
+            Command::SetRecipe {
+                recipe: Recipe::new(0xdead_beef)
+            }
+        );
+        assert_eq!(
+            Command::from_json(r#"{"type":"set_mode","mode":"fly"}"#).unwrap(),
+            Command::SetMode { mode: Mode::Fly }
+        );
+    }
+
+    #[test]
+    fn events_serialize_tagged() {
+        assert_eq!(
+            Event::ModeChanged { mode: Mode::Walk }.to_json(),
+            r#"{"type":"mode_changed","mode":"walk"}"#
+        );
+    }
+}

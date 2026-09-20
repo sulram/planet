@@ -1,0 +1,328 @@
+//! Terrain streaming: a quadtree per sector, ground to orbit.
+//!
+//! Each node is a square of address space meshed as one patch of
+//! `PATCH_GRID^2` quads. Near the camera nodes split, so triangles stay about
+//! the same size on screen from the ground to orbit. Patches are generated a
+//! few per frame, closest first; until its children are ready a node keeps
+//! drawing itself, so there are never holes.
+//!
+//! This is the far field of the terrain layer: a heightfield of the
+//! generator's surface. Editable terrain near the player (density + surface
+//! nets, ROADMAP M1/M3) will replace the deepest levels, not this structure.
+
+use std::collections::HashMap;
+
+use glam::{DVec3, Vec3};
+use scene::{
+    Camera, PATCH_GRID, PATCH_VERTICES, PatchId, TerrainChange, TerrainMesh, TerrainVertex,
+};
+use topology::{RADIUS_M, SECTOR_BITS, SECTOR_SIDE, Sector, SurfacePoint};
+use worldgen::{Generator, Material, Sample};
+
+/// Deepest level: patches of 32 blocks, one vertex per block.
+const MAX_DEPTH: u32 = SECTOR_BITS - 5;
+/// A node splits when the camera is closer than this many node widths.
+const SPLIT_DISTANCE: f64 = 2.4;
+/// Patches generated per update. Each costs about a millisecond or two.
+const BUILDS_PER_UPDATE: usize = 4;
+/// Patches kept before the least recently used ones are dropped.
+const CACHE_PATCHES: usize = 1400;
+
+const G: i32 = PATCH_GRID as i32;
+
+/// A quadtree node: a square of `SECTOR_SIDE >> depth` blocks.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+struct Node {
+    sector: Sector,
+    depth: u32,
+    x: u32,
+    y: u32,
+}
+
+impl Node {
+    fn id(self) -> PatchId {
+        let bits = (self.sector.index() as u64) << 60
+            | u64::from(self.depth) << 52
+            | u64::from(self.x) << 26
+            | u64::from(self.y);
+        PatchId(bits)
+    }
+
+    fn side_blocks(self) -> f64 {
+        f64::from(SECTOR_SIDE >> self.depth)
+    }
+
+    fn children(self) -> [Node; 4] {
+        let (depth, x, y) = (self.depth + 1, self.x * 2, self.y * 2);
+        [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(i, j)| Node {
+            sector: self.sector,
+            depth,
+            x: x + i,
+            y: y + j,
+        })
+    }
+
+    /// A point of the node, `s` and `t` in `0..=1`. Values outside reach past
+    /// the node, and past the sector: the projection stays continuous there,
+    /// which is all the mesher needs for normals at the rim.
+    fn point(self, s: f64, t: f64) -> SurfacePoint {
+        let side = self.side_blocks();
+        SurfacePoint::new(
+            self.sector,
+            (f64::from(self.x) + s) * side,
+            (f64::from(self.y) + t) * side,
+        )
+    }
+}
+
+/// What the streamer remembers about a built patch.
+struct Built {
+    center: DVec3,
+    /// Bounding sphere radius around `center`, metres.
+    radius_m: f64,
+    last_used: u64,
+}
+
+pub struct Terrain {
+    built: HashMap<Node, Built>,
+    changes: Vec<TerrainChange>,
+    frame: u64,
+}
+
+impl Default for Terrain {
+    fn default() -> Terrain {
+        Terrain {
+            built: HashMap::new(),
+            changes: vec![TerrainChange::Clear],
+            frame: 0,
+        }
+    }
+}
+
+impl Terrain {
+    /// Forgets everything: the recipe changed.
+    pub fn clear(&mut self) {
+        self.built.clear();
+        self.changes = vec![TerrainChange::Clear];
+    }
+
+    /// Mesh uploads and removals since the last call, in order.
+    pub fn drain_changes(&mut self) -> Vec<TerrainChange> {
+        core::mem::take(&mut self.changes)
+    }
+
+    /// Picks the patches to draw from `camera`, building missing ones within
+    /// the per update budget. `aspect` is width over height.
+    pub fn update(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
+        self.select(generator, camera, aspect, BUILDS_PER_UPDATE)
+    }
+
+    /// Like [`Terrain::update`], but builds until nothing is missing. For
+    /// headless renders, where the first frame is the only frame.
+    pub fn settle(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
+        loop {
+            let before = self.built.len();
+            let patches = self.select(generator, camera, aspect, usize::MAX);
+            if self.built.len() == before {
+                return patches;
+            }
+        }
+    }
+
+    fn select(
+        &mut self,
+        generator: &Generator,
+        camera: &Camera,
+        aspect: f32,
+        budget: usize,
+    ) -> Vec<PatchId> {
+        self.frame += 1;
+        let mut draw = Vec::new();
+        let mut missing: Vec<(f64, Node)> = Vec::new();
+
+        let mut stack: Vec<Node> = Sector::ALL
+            .into_iter()
+            .map(|sector| Node {
+                sector,
+                depth: 0,
+                x: 0,
+                y: 0,
+            })
+            .collect();
+        while let Some(node) = stack.pop() {
+            let Some(built) = self.built.get_mut(&node) else {
+                // Only roots get here unbuilt: children are visited once ready.
+                missing.push((0.0, node));
+                continue;
+            };
+            built.last_used = self.frame;
+            let (center, radius_m) = (built.center, built.radius_m);
+
+            let distance = (center - camera.position).length();
+            let side_m = node.side_blocks() / f64::from(SECTOR_SIDE)
+                * RADIUS_M
+                * core::f64::consts::FRAC_PI_2;
+            if node.depth < MAX_DEPTH && distance < side_m * SPLIT_DISTANCE {
+                let children = node.children();
+                let mut ready = true;
+                for child in children {
+                    match self.built.get_mut(&child) {
+                        // Siblings of a drawn node must not age out under it.
+                        Some(built) => built.last_used = self.frame,
+                        None => {
+                            ready = false;
+                            missing.push((distance, child));
+                        }
+                    }
+                }
+                if ready {
+                    stack.extend(children);
+                    continue;
+                }
+            }
+            if visible(camera, aspect, center, radius_m) {
+                draw.push(node.id());
+            }
+        }
+
+        // Coarse before fine, near before far: the picture sharpens evenly.
+        missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
+        for (_, node) in missing.into_iter().take(budget) {
+            let mesh = build(generator, node);
+            let radius_m = mesh
+                .vertices
+                .iter()
+                .map(|v| Vec3::from(v.position).length())
+                .fold(0.0, f32::max);
+            self.built.insert(
+                node,
+                Built {
+                    center: mesh.origin,
+                    radius_m: f64::from(radius_m),
+                    last_used: self.frame,
+                },
+            );
+            self.changes.push(TerrainChange::Add(node.id(), mesh));
+        }
+        self.evict();
+        draw
+    }
+
+    /// Drops the patches unused for the longest while the cache is over size.
+    fn evict(&mut self) {
+        if self.built.len() <= CACHE_PATCHES {
+            return;
+        }
+        let mut idle: Vec<(u64, Node)> = self
+            .built
+            .iter()
+            .filter(|(_, built)| built.last_used < self.frame)
+            .map(|(node, built)| (built.last_used, *node))
+            .collect();
+        idle.sort_by_key(|(last_used, node)| (*last_used, core::cmp::Reverse(node.depth)));
+        let excess = self.built.len() - CACHE_PATCHES;
+        for (_, node) in idle.into_iter().take(excess) {
+            self.built.remove(&node);
+            self.changes.push(TerrainChange::Remove(node.id()));
+        }
+    }
+}
+
+/// Inside the view frustum and not behind the horizon.
+fn visible(camera: &Camera, aspect: f32, center: DVec3, radius_m: f64) -> bool {
+    // Horizon: compare angles at the planet centre. Terrain never sits below
+    // sea level, so the sea sphere is the occluder.
+    let eye = camera.position.length();
+    let reach = center.length() + radius_m;
+    let angle = (camera.position / eye)
+        .dot(center.normalize())
+        .clamp(-1.0, 1.0)
+        .acos();
+    let horizon = (RADIUS_M / eye).min(1.0).acos() + (RADIUS_M / reach).min(1.0).acos();
+    if angle - radius_m / RADIUS_M > horizon {
+        return false;
+    }
+
+    // Frustum: four side planes through the eye, in camera space.
+    let p = camera.rotation.inverse() * (center - camera.position);
+    let half_y = f64::from(camera.fov_y / 2.0);
+    let half_x = (half_y.tan() * f64::from(aspect)).atan();
+    let outside = |lateral: f64, half: f64| {
+        // Signed distance to the plane tilted `half` from the view axis.
+        lateral.abs() * half.cos() + p.z * half.sin() > radius_m
+    };
+    !(outside(p.x, half_x) || outside(p.y, half_y))
+}
+
+/// Meshes one node.
+fn build(generator: &Generator, node: Node) -> TerrainMesh {
+    // One ring of samples past the rim, so rim normals match the neighbours'.
+    let stride = (G + 3) as usize;
+    let mut samples: Vec<(DVec3, Sample)> = Vec::with_capacity(stride * stride);
+    for j in -1..=G + 1 {
+        for i in -1..=G + 1 {
+            let point = node.point(f64::from(i) / f64::from(G), f64::from(j) / f64::from(G));
+            let direction = point.direction();
+            let sample = generator.sample(direction);
+            samples.push((
+                DVec3::from(direction) * (RADIUS_M + sample.surface_m()),
+                sample,
+            ));
+        }
+    }
+    let at = |i: i32, j: i32| &samples[(j + 1) as usize * stride + (i + 1) as usize];
+
+    let origin = at(G / 2, G / 2).0;
+    let mut vertices = Vec::with_capacity(PATCH_VERTICES as usize);
+    for j in 0..=G {
+        for i in 0..=G {
+            let (position, sample) = *at(i, j);
+            let along_u = at(i + 1, j).0 - at(i - 1, j).0;
+            let along_v = at(i, j + 1).0 - at(i, j - 1).0;
+            let normal = along_u.cross(along_v).normalize();
+            let steepness = 1.0 - normal.dot(position.normalize());
+            vertices.push(TerrainVertex {
+                position: (position - origin).as_vec3().to_array(),
+                normal: normal.as_vec3().to_array(),
+                color: color(sample, steepness),
+            });
+        }
+    }
+
+    // Skirts hide the cracks between neighbours of different depth.
+    let drop_m = node.side_blocks() * topology::BLOCK_M / f64::from(G) * 2.0;
+    let runs = [
+        (0..=G).map(|k| (k, 0)).collect::<Vec<_>>(),
+        (0..=G).map(|k| (k, G)).collect(),
+        (0..=G).map(|k| (0, k)).collect(),
+        (0..=G).map(|k| (G, k)).collect(),
+    ];
+    for (i, j) in runs.into_iter().flatten() {
+        let mut vertex = vertices[(j * (G + 1) + i) as usize];
+        let down = -(at(i, j).0.normalize() * drop_m).as_vec3();
+        vertex.position = (Vec3::from(vertex.position) + down).to_array();
+        vertices.push(vertex);
+    }
+    TerrainMesh { origin, vertices }
+}
+
+/// The look of the ground. Flat colours per material for now; the terrain
+/// style is an open question (docs/OPEN.md, Look).
+fn color(sample: Sample, steepness: f64) -> [u8; 4] {
+    let rgb: [u8; 3] = match sample.material {
+        Material::Water => {
+            // Shallow water is lighter.
+            let depth = (-sample.height_m / 120.0).clamp(0.0, 1.0);
+            let mix = |a: f64, b: f64| (a + (b - a) * depth) as u8;
+            [mix(58.0, 12.0), mix(128.0, 38.0), mix(148.0, 84.0)]
+        }
+        Material::Snow => [236, 238, 240],
+        // Anything steep shows its rock.
+        _ if steepness > 0.22 => [96, 92, 88],
+        Material::Sand => [206, 192, 150],
+        Material::Grass => [104, 138, 70],
+        Material::Forest => [54, 96, 56],
+        Material::Rock => [118, 112, 106],
+    };
+    [rgb[0], rgb[1], rgb[2], 255]
+}

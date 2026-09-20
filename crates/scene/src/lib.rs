@@ -1,0 +1,116 @@
+//! The scene: what a client hands to a renderer, as plain data.
+//!
+//! The client decides *what* is visible; a renderer decides *how* it looks.
+//! An agent is a client without a renderer, so nothing here touches the GPU,
+//! and the renderer never learns about recipes or addresses.
+//!
+//! World space is `f64`. Anything that reaches the GPU as `f32` is relative to
+//! a nearby `f64` origin (camera-relative rendering, CLAUDE.md invariants).
+
+use bytemuck::{Pod, Zeroable};
+use glam::{DAffine3, DQuat, DVec3, Vec3};
+
+/// Quads per side of a terrain patch. Every patch shares one index buffer.
+pub const PATCH_GRID: u32 = 32;
+/// Vertices of the patch surface: a `(PATCH_GRID + 1)^2` grid, row major,
+/// `u` along the row.
+pub const PATCH_SURFACE_VERTICES: u32 = (PATCH_GRID + 1) * (PATCH_GRID + 1);
+/// Surface plus the skirt: one lowered copy of every edge vertex, four runs of
+/// `PATCH_GRID + 1` in the order `v = 0`, `v = max`, `u = 0`, `u = max`.
+pub const PATCH_VERTICES: u32 = PATCH_SURFACE_VERTICES + 4 * (PATCH_GRID + 1);
+
+/// Stable identity of a terrain patch while it is in the scene.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct PatchId(pub u64);
+
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct TerrainVertex {
+    /// Metres from [`TerrainMesh::origin`].
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    /// sRGB, alpha unused.
+    pub color: [u8; 4],
+}
+
+/// One terrain patch: [`PATCH_VERTICES`] vertices around an `f64` origin.
+#[derive(Clone, Debug)]
+pub struct TerrainMesh {
+    pub origin: DVec3,
+    pub vertices: Vec<TerrainVertex>,
+}
+
+/// The index buffer shared by every patch. Counter clockwise seen from
+/// outside the planet; skirt walls face away from the patch.
+pub fn patch_indices() -> Vec<u16> {
+    let g = PATCH_GRID;
+    let at = |i: u32, j: u32| (j * (g + 1) + i) as u16;
+    let mut out = Vec::with_capacity((6 * g * g + 4 * 6 * g) as usize);
+    for j in 0..g {
+        for i in 0..g {
+            out.extend([at(i, j), at(i + 1, j), at(i, j + 1)]);
+            out.extend([at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]);
+        }
+    }
+    // (edge vertex k, skirt run, flipped winding) for the four edges.
+    let skirt = |run: u32, k: u32| (PATCH_SURFACE_VERTICES + run * (g + 1) + k) as u16;
+    for k in 0..g {
+        let edges = [
+            (at(k, 0), at(k + 1, 0), 0, false),
+            (at(k, g), at(k + 1, g), 1, true),
+            (at(0, k), at(0, k + 1), 2, true),
+            (at(g, k), at(g, k + 1), 3, false),
+        ];
+        for (a, b, run, flipped) in edges {
+            let (a_low, b_low) = (skirt(run, k), skirt(run, k + 1));
+            if flipped {
+                out.extend([b, b_low, a_low, b, a_low, a]);
+            } else {
+                out.extend([a, a_low, b_low, a, b_low, b]);
+            }
+        }
+    }
+    out
+}
+
+/// A change to the set of terrain patches a renderer holds.
+#[derive(Clone, Debug)]
+pub enum TerrainChange {
+    Add(PatchId, TerrainMesh),
+    Remove(PatchId),
+    Clear,
+}
+
+/// A unit cube (`-0.5..=0.5`) placed in world space. Avatars are made of these
+/// until real models arrive.
+#[derive(Clone, Copy, Debug)]
+pub struct BoxPart {
+    pub transform: DAffine3,
+    /// Linear RGB.
+    pub color: Vec3,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Camera {
+    pub position: DVec3,
+    /// World from camera. The camera looks down its `-Z`, `+Y` is up.
+    pub rotation: DQuat,
+    /// Vertical field of view, radians.
+    pub fov_y: f32,
+    /// Near plane, metres. There is no far plane (reversed infinite depth).
+    pub near: f32,
+}
+
+/// Everything a renderer needs for one frame, besides the patch meshes it
+/// already holds.
+#[derive(Clone, Debug)]
+pub struct Frame {
+    pub camera: Camera,
+    /// Unit vector toward the sun.
+    pub sun_direction: Vec3,
+    /// Radius of the sea level sphere, metres. The atmosphere sits on it.
+    pub planet_radius_m: f64,
+    /// Patches to draw this frame. All were announced by a [`TerrainChange::Add`].
+    pub patches: Vec<PatchId>,
+    pub boxes: Vec<BoxPart>,
+}

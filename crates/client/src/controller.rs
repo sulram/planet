@@ -1,0 +1,274 @@
+//! The avatar controller: walk with radial gravity, fly like superman.
+//!
+//! State lives in address space (`SurfacePoint` + height), the one place where
+//! blocks are unit cubes and where collision with the build layer will run.
+//! World space enters only as velocities: a wish direction in metres is
+//! converted to an address space delta through the local tangents, so speed
+//! feels the same everywhere although blocks are not perfectly square.
+
+use glam::{DMat3, DQuat, DVec3};
+use scene::Camera;
+use topology::{RADIUS_M, SurfacePoint};
+use worldgen::Generator;
+
+use crate::seam::Mode;
+
+const WALK_MPS: f64 = 5.0;
+const SPRINT_FACTOR: f64 = 4.0;
+const JUMP_MPS: f64 = 6.0;
+const GRAVITY_MPS2: f64 = 14.0;
+/// Flight speed grows with altitude so orbit is a short trip.
+const FLY_MIN_MPS: f64 = 12.0;
+const FLY_PER_ALTITUDE: f64 = 0.8;
+const EYE_M: f64 = 1.5;
+const LOOK_RAD_PER_PX: f64 = 0.0025;
+const PITCH_LIMIT: f64 = 1.45;
+const TURN_PER_S: f64 = 12.0;
+
+/// What the controller wants this frame, already free of key codes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Wish {
+    /// `[right, forward]`, each `-1..=1`.
+    pub movement: [f32; 2],
+    pub up: bool,
+    pub down: bool,
+    pub sprint: bool,
+    pub look: [f32; 2],
+    pub zoom: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct Controller {
+    pub mode: Mode,
+    point: SurfacePoint,
+    /// Feet, metres above the datum sphere.
+    height_m: f64,
+    vertical_mps: f64,
+    grounded: bool,
+    /// Where the avatar faces: a unit tangent in world space.
+    facing: DVec3,
+    /// Where the camera looks, flattened on the tangent plane.
+    view: DVec3,
+    /// Camera pitch, radians, positive looks up.
+    pitch: f64,
+    /// Camera distance behind the avatar, metres.
+    boom_m: f64,
+    /// Speed over the last step, metres per second.
+    speed_mps: f64,
+    /// Distance walked, for the walk cycle.
+    stride_m: f64,
+}
+
+impl Controller {
+    /// Stands on the ground at `point`, looking along the sector's `u` axis.
+    pub fn spawn(point: SurfacePoint, generator: &Generator) -> Controller {
+        let tangents = point.tangents();
+        let view = DVec3::from(tangents.du).normalize();
+        Controller {
+            mode: Mode::Walk,
+            point,
+            height_m: generator.sample(point.direction()).surface_m(),
+            vertical_mps: 0.0,
+            grounded: true,
+            facing: view,
+            view,
+            pitch: -0.25,
+            boom_m: 6.0,
+            speed_mps: 0.0,
+            stride_m: 0.0,
+        }
+    }
+
+    pub fn point(&self) -> SurfacePoint {
+        self.point
+    }
+
+    pub fn up(&self) -> DVec3 {
+        DVec3::from(self.point.direction())
+    }
+
+    /// Feet in world space.
+    pub fn position(&self) -> DVec3 {
+        self.up() * (RADIUS_M + self.height_m)
+    }
+
+    pub fn facing(&self) -> DVec3 {
+        self.facing
+    }
+
+    pub fn speed_mps(&self) -> f64 {
+        self.speed_mps
+    }
+
+    pub fn stride_m(&self) -> f64 {
+        self.stride_m
+    }
+
+    pub fn grounded(&self) -> bool {
+        self.grounded
+    }
+
+    /// Places the avatar and the camera for a preview shot: `altitude_m` above
+    /// the ground (flying when positive), camera `pitch` in radians, `boom_m`
+    /// behind the avatar.
+    pub fn pose(&mut self, altitude_m: f64, pitch: f64, boom_m: f64, generator: &Generator) {
+        let ground = generator.sample(self.point.direction()).surface_m();
+        self.height_m = ground + altitude_m.max(0.0);
+        self.mode = if altitude_m > 0.0 {
+            Mode::Fly
+        } else {
+            Mode::Walk
+        };
+        self.grounded = altitude_m <= 0.0;
+        self.pitch = pitch.clamp(-PITCH_LIMIT, PITCH_LIMIT);
+        self.boom_m = boom_m;
+    }
+
+    /// Metres above the ground or the sea.
+    pub fn altitude_m(&self, generator: &Generator) -> f64 {
+        self.height_m - generator.sample(self.point.direction()).surface_m()
+    }
+
+    pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator) {
+        let up = self.up();
+        self.look(wish, up);
+
+        let right = self.view.cross(up);
+        let [x, y] = wish.movement.map(f64::from);
+        let flat = (right * x + self.view * y).normalize_or_zero();
+        let sprint = if wish.sprint { SPRINT_FACTOR } else { 1.0 };
+
+        let velocity = match self.mode {
+            Mode::Walk => {
+                if self.grounded && wish.up {
+                    self.vertical_mps = JUMP_MPS;
+                    self.grounded = false;
+                }
+                if !self.grounded {
+                    self.vertical_mps -= GRAVITY_MPS2 * dt;
+                }
+                flat * WALK_MPS * sprint + up * self.vertical_mps
+            }
+            Mode::Fly => {
+                self.vertical_mps = 0.0;
+                self.grounded = false;
+                // Forward follows the camera pitch: look up, fly up.
+                let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
+                let lift = f64::from(u8::from(wish.up)) - f64::from(u8::from(wish.down));
+                let wish_dir = (right * x + forward * y + up * lift).normalize_or_zero();
+                let altitude = self.altitude_m(generator).max(0.0);
+                wish_dir * (FLY_MIN_MPS + altitude * FLY_PER_ALTITUDE) * sprint
+            }
+        };
+
+        self.step(velocity * dt, generator);
+        self.speed_mps = velocity.length();
+        if self.grounded {
+            self.stride_m += flat.length() * WALK_MPS * sprint * dt;
+        }
+
+        // Turn the body toward where it goes; in flight, where the camera looks.
+        let target = match self.mode {
+            Mode::Walk => flat,
+            Mode::Fly => self.view,
+        };
+        if target != DVec3::ZERO {
+            let blend = 1.0 - (-TURN_PER_S * dt).exp();
+            self.facing = self.facing.lerp(target, blend);
+        }
+        self.transport();
+    }
+
+    /// Applies pointer look and zoom.
+    fn look(&mut self, wish: Wish, up: DVec3) {
+        let yaw = -f64::from(wish.look[0]) * LOOK_RAD_PER_PX;
+        self.view = DQuat::from_axis_angle(up, yaw) * self.view;
+        self.pitch = (self.pitch - f64::from(wish.look[1]) * LOOK_RAD_PER_PX)
+            .clamp(-PITCH_LIMIT, PITCH_LIMIT);
+        self.boom_m = (self.boom_m * (1.0 - f64::from(wish.zoom) * 0.1)).clamp(2.0, 400.0);
+    }
+
+    /// Moves by a world space displacement, resolved in address space.
+    fn step(&mut self, delta: DVec3, generator: &Generator) {
+        let tangents = self.point.tangents();
+        let up = DVec3::from(tangents.up);
+        let radius = RADIUS_M + self.height_m;
+        // Metres per block along each address axis, at this height.
+        let (tu, tv) = (
+            DVec3::from(tangents.du) * radius,
+            DVec3::from(tangents.dv) * radius,
+        );
+
+        // Solve `du * tu + dv * tv = delta` on the tangent plane. The axes are
+        // not orthogonal, so this is a 2x2 system, not two dot products.
+        let (a, b, c) = (tu.dot(tu), tu.dot(tv), tv.dot(tv));
+        let (p, q) = (tu.dot(delta), tv.dot(delta));
+        let det = a * c - b * b;
+        let (du, dv) = ((c * p - b * q) / det, (a * q - b * p) / det);
+
+        self.point =
+            SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv).wrapped();
+        self.height_m += up.dot(delta);
+
+        let ground = generator.sample(self.point.direction()).surface_m();
+        let floor = match self.mode {
+            Mode::Walk => ground,
+            Mode::Fly => ground + 0.5,
+        };
+        if self.height_m <= floor {
+            self.height_m = floor;
+            if self.mode == Mode::Walk {
+                self.grounded = true;
+                self.vertical_mps = 0.0;
+            }
+        } else if self.mode == Mode::Walk && self.grounded {
+            // Walking downhill: stay glued to the ground over small drops
+            // (auto step), fall off real ledges.
+            if self.height_m - ground < 0.6 {
+                self.height_m = ground;
+            } else {
+                self.grounded = false;
+            }
+        }
+    }
+
+    /// Keeps the tangent vectors tangent after the avatar moved: up changed,
+    /// so they are projected back on the new tangent plane. This is parallel
+    /// transport, and it is why seams and corners need no special case.
+    fn transport(&mut self) {
+        let up = self.up();
+        let flatten = |v: DVec3, fallback: DVec3| {
+            let flat = (v - up * v.dot(up)).normalize_or_zero();
+            if flat == DVec3::ZERO { fallback } else { flat }
+        };
+        let any = up.any_orthonormal_vector();
+        self.view = flatten(self.view, any);
+        self.facing = flatten(self.facing, self.view);
+    }
+
+    /// The third person camera: behind and above the avatar, never underground.
+    pub fn camera(&self, generator: &Generator) -> Camera {
+        let up = self.up();
+        let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
+        let target = self.position() + up * EYE_M;
+        let mut position = target - forward * self.boom_m;
+
+        let camera_up = position.normalize();
+        let ground = generator.sample(camera_up.to_array()).surface_m();
+        let min_radius = RADIUS_M + ground + 0.4;
+        if position.length() < min_radius {
+            position = camera_up * min_radius;
+        }
+
+        // Aim at the target from wherever the camera ended up.
+        let look = (target - position).normalize();
+        let right = look.cross(up).normalize();
+        let rotation = DQuat::from_mat3(&DMat3::from_cols(right, right.cross(look), -look));
+        Camera {
+            position,
+            rotation,
+            fov_y: 60f32.to_radians(),
+            near: 0.1,
+        }
+    }
+}
