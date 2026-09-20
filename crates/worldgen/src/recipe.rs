@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn empty_params_are_defaults() {
-        let json = r#"{"seed":"0000000000000001","generator_version":1,"params":{}}"#;
+        let json = r#"{"seed":"0000000000000001","generator_version":2,"params":{}}"#;
         assert_eq!(
             serde_json::from_str::<Recipe>(json).unwrap(),
             Recipe::new(1)

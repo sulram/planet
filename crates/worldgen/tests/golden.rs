@@ -24,8 +24,12 @@ fn directions() -> Vec<[f64; 3]> {
 }
 
 /// FNV-1a over the exact bits of every sample.
-fn fingerprint(seed: u64) -> u64 {
-    let generator = Generator::new(Recipe::new(seed)).unwrap();
+fn fingerprint(generator_version: u32, seed: u64) -> u64 {
+    let recipe = Recipe {
+        generator_version,
+        ..Recipe::new(seed)
+    };
+    let generator = Generator::new(recipe).unwrap();
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     for d in directions() {
         let sample = generator.sample(d);
@@ -39,11 +43,24 @@ fn fingerprint(seed: u64) -> u64 {
 
 #[test]
 fn v1_is_frozen() {
-    let got: Vec<u64> = [0, 1, 0x0000_0000_dead_beef, u64::MAX]
-        .map(fingerprint)
-        .to_vec();
+    let got: Vec<u64> = SEEDS.map(|seed| fingerprint(1, seed)).to_vec();
     assert_eq!(got, GOLDEN_V1, "generator v1 changed its output");
 }
+
+const SEEDS: [u64; 4] = [0, 1, 0x0000_0000_dead_beef, u64::MAX];
+
+#[test]
+fn v2_is_frozen() {
+    let got: Vec<u64> = SEEDS.map(|seed| fingerprint(2, seed)).to_vec();
+    assert_eq!(got, GOLDEN_V2, "generator v2 changed its output");
+}
+
+const GOLDEN_V2: [u64; 4] = [
+    0xa8e6_9797_1a3e_5005,
+    0xc797_b223_bb9d_74ee,
+    0xd314_7448_0b4f_f2d4,
+    0xcf7c_b5e9_b72f_cd56,
+];
 
 const GOLDEN_V1: [u64; 4] = [
     0xfae5_97aa_cb18_73bf,
@@ -65,5 +82,6 @@ fn terrain_is_plausible() {
     println!("sea share {sea:.2}, heights {bottom:.0} m to {top:.0} m");
     assert!((0.3..0.8).contains(&sea));
     assert!(top > 200.0 && top < 1600.0);
-    assert!((-500.0..-100.0).contains(&bottom));
+    // v2 adds relief to the sea floor, so it dips a little under the nominal depth.
+    assert!((-600.0..-100.0).contains(&bottom));
 }

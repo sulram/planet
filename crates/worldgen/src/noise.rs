@@ -122,3 +122,87 @@ pub fn smoothstep(lo: f64, hi: f64, x: f64) -> f64 {
     let t = ((x - lo) / (hi - lo)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
+
+// ---------------------------------------------------------------------------
+// Added for generator v2. Nothing above this line may change: v1 depends on it.
+// ---------------------------------------------------------------------------
+
+/// Contribution of one simplex corner and its gradient.
+fn corner_d(seed: u64, i: i64, j: i64, k: i64, x: f64, y: f64, z: f64) -> (f64, [f64; 3]) {
+    let t = 0.6 - x * x - y * y - z * z;
+    if t <= 0.0 {
+        return (0.0, [0.0; 3]);
+    }
+    let g = GRADIENTS[(hash(seed, i, j, k) % 12) as usize];
+    let dot = g[0] * x + g[1] * y + g[2] * z;
+    let (t2, t3) = (t * t, t * t * t);
+    let t4 = t2 * t2;
+    // d/dx of t^4 * (g . x), with dt/dx = -2x.
+    let slope = -8.0 * t3 * dot;
+    (
+        t4 * dot,
+        [
+            slope * x + t4 * g[0],
+            slope * y + t4 * g[1],
+            slope * z + t4 * g[2],
+        ],
+    )
+}
+
+/// Simplex noise with its analytic gradient: `(value, d value / d p)`.
+pub fn simplex_d(seed: u64, p: [f64; 3]) -> (f64, [f64; 3]) {
+    let [x, y, z] = p;
+    let s = (x + y + z) * F3;
+    let (fi, fj, fk) = (libm::floor(x + s), libm::floor(y + s), libm::floor(z + s));
+    let t = (fi + fj + fk) * G3;
+    let (x0, y0, z0) = (x - (fi - t), y - (fj - t), z - (fk - t));
+    let (i, j, k) = (fi as i64, fj as i64, fk as i64);
+
+    let (o1, o2): ([i64; 3], [i64; 3]) = if x0 >= y0 {
+        if y0 >= z0 {
+            ([1, 0, 0], [1, 1, 0])
+        } else if x0 >= z0 {
+            ([1, 0, 0], [1, 0, 1])
+        } else {
+            ([0, 0, 1], [1, 0, 1])
+        }
+    } else if y0 < z0 {
+        ([0, 0, 1], [0, 1, 1])
+    } else if x0 < z0 {
+        ([0, 1, 0], [0, 1, 1])
+    } else {
+        ([0, 1, 0], [1, 1, 0])
+    };
+
+    let mut value = 0.0;
+    let mut gradient = [0.0; 3];
+    for (o, shift) in [
+        ([0, 0, 0], 0.0),
+        (o1, G3),
+        (o2, 2.0 * G3),
+        ([1, 1, 1], 3.0 * G3),
+    ] {
+        let (v, g) = corner_d(
+            seed,
+            i + o[0],
+            j + o[1],
+            k + o[2],
+            x0 - o[0] as f64 + shift,
+            y0 - o[1] as f64 + shift,
+            z0 - o[2] as f64 + shift,
+        );
+        value += v;
+        for axis in 0..3 {
+            gradient[axis] += g[axis];
+        }
+    }
+    (32.0 * value, gradient.map(|g| 32.0 * g))
+}
+
+/// How much of an octave survives when the surface is sampled every
+/// `footprint` units: all of it while its wavelength is over four samples,
+/// none under two. Meshes of any density then see the same terrain, only
+/// smoother, and nothing aliases.
+pub fn band(wavelength: f64, footprint: f64) -> f64 {
+    smoothstep(2.0, 4.0, wavelength / footprint.max(1e-9))
+}
