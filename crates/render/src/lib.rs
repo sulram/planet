@@ -26,9 +26,7 @@ pub use wgpu;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Top of the atmosphere above sea level, metres.
-const ATMOSPHERE_M: f64 = 2500.0;
-/// Angular radius of the moon in the sky. Three times ours: it is a small sky.
-const MOON_RADIUS_RAD: f32 = 0.014;
+const ATMOSPHERE_M: f64 = 5000.0;
 
 /// One camera drawing into one target.
 pub struct View<'a> {
@@ -45,6 +43,7 @@ struct ViewUniform {
     camera: [f32; 4],
     sun: [f32; 4],
     moon: [f32; 4],
+    moon_light: [f32; 4],
     flags: [f32; 4],
 }
 
@@ -227,7 +226,17 @@ impl Renderer {
                 .sun_direction
                 .extend((radius + ATMOSPHERE_M) as f32)
                 .to_array(),
-            moon: frame.moon_direction.extend(MOON_RADIUS_RAD).to_array(),
+            // Centre relative to the camera, in f64 first: it is far away.
+            moon: relative(frame.moon.position, camera.position)
+                .extend(frame.moon.radius_m as f32)
+                .to_array(),
+            moon_light: frame
+                .moon
+                .position
+                .normalize()
+                .as_vec3()
+                .extend(0.0)
+                .to_array(),
             flags: [
                 f32::from(u8::from(self.encode_srgb)),
                 // Wrapped so f32 keeps sub millisecond steps all day.

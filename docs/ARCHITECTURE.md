@@ -161,8 +161,12 @@ Numbers marked (p) are proposed and not yet confirmed.
 - A camera under sea level sees through water as a medium (red dies first).
 - Swimming is part of walking: in water too deep to stand you float at chest
   depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
-- Sky: a shell atmosphere, a sun, stars fixed to the world, and a moon on
-  rails shaded by the real sun direction (phases), with faint moonlight.
+- Sky: a shell atmosphere (5 km), a sun, stars fixed to the world.
+- The moon is a real sphere on an orbit on rails (160 km out, 8 km radius),
+  drawn by ray and sphere in the sky pass: real phases, faint moonlight.
+- It is the first gravity field: inside its range the controller stores the
+  avatar relative to the moon, down is its centre, gravity is a fifth, and the
+  shown up eases round. Fly in, turn flight off, land, walk, jump high.
 - Ground detail is procedural noise anchored to the planet: patch origins are
   wrapped to 1024 m in f64 on the CPU. Rock shows by slope, per pixel.
 

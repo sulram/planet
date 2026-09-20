@@ -9,8 +9,10 @@ struct View {
     camera: vec4<f32>,
     // xyz: unit vector to the sun, w: radius of the top of the atmosphere.
     sun: vec4<f32>,
-    // xyz: unit vector to the moon, w: its angular radius.
+    // xyz: centre of the moon relative to the camera, w: its radius, metres.
     moon: vec4<f32>,
+    // xyz: unit vector from the planet to the moon, for moonlight.
+    moon_light: vec4<f32>,
     // x: 1 when the target is not sRGB and the shader must encode.
     // y: world clock, seconds, wrapped. z: camera height over the sea, metres.
     flags: vec4<f32>,
@@ -20,7 +22,7 @@ struct View {
 
 const SKY: vec3<f32> = vec3<f32>(0.30, 0.55, 1.00);
 const SUNSET: vec3<f32> = vec3<f32>(1.00, 0.45, 0.18);
-const DENSITY_PER_M: f32 = 0.00005;
+const DENSITY_PER_M: f32 = 0.000032;
 
 // Distances along the ray to a sphere at the planet centre. x > y is a miss.
 fn ray_sphere(origin: vec3<f32>, dir: vec3<f32>, radius: f32) -> vec2<f32> {
@@ -102,7 +104,11 @@ fn through_medium(color: vec3<f32>, dir: vec3<f32>, distance: f32) -> vec3<f32> 
 fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) -> vec3<f32> {
     let distance = length(relative);
     let dir = relative / distance;
-    let up = normalize(view.camera.xyz + relative);
+    // Up is away from whichever body holds this surface: the moon inside its
+    // gravity field, the planet everywhere else.
+    let from_moon = relative - view.moon.xyz;
+    let on_moon = length(from_moon) < view.moon.w * 1.9;
+    let up = select(normalize(view.camera.xyz + relative), normalize(from_moon), on_moon);
     let sun = view.sun.xyz;
 
     // The planet shadows itself: daylight fades as the sun sets on this spot.
@@ -117,7 +123,7 @@ fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) ->
     var color = albedo * (direct * vec3<f32>(1.75, 1.66, 1.5) + ambient);
 
     // Moonlight: faint, and only as much as the moon is lit and up.
-    let moon = view.moon.xyz;
+    let moon = view.moon_light.xyz;
     let moon_up = smoothstep(-0.05, 0.15, dot(up, moon));
     let moon_lit = 0.5 - 0.5 * dot(moon, sun);
     color += albedo * max(dot(normal, moon), 0.0) * moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);

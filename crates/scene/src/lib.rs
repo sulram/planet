@@ -180,6 +180,14 @@ pub struct Camera {
     pub near: f32,
 }
 
+/// The moon: a sphere somewhere in world space. Scenery with a real place, so
+/// it grows as you fly to it and shows its phases from any side.
+#[derive(Clone, Copy, Debug)]
+pub struct Moon {
+    pub position: DVec3,
+    pub radius_m: f64,
+}
+
 /// Everything a renderer needs for one frame, besides the patch meshes it
 /// already holds.
 #[derive(Clone, Debug)]
@@ -187,9 +195,7 @@ pub struct Frame {
     pub camera: Camera,
     /// Unit vector toward the sun.
     pub sun_direction: Vec3,
-    /// Unit vector toward the moon. It is scenery on rails for now: a place
-    /// in the sky that is a function of the clock.
-    pub moon_direction: Vec3,
+    pub moon: Moon,
     /// Radius of the sea level sphere, metres. The atmosphere sits on it.
     pub planet_radius_m: f64,
     /// World clock, seconds: moves water and wind.

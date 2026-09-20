@@ -94,7 +94,8 @@ Every milestone ends runnable end to end.
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 
-- [ ] Moon as a second body (Cartesian ball), travel between bodies
+- [x] A moon you can fly to: a real sphere in orbit, its own gravity field, walk and jump on it
+- [ ] The moon as a voxel body (Cartesian ball topology): terrain, craters you can stand in, building
 - [ ] Rockets, satellites on rails, buildable orbital grids
 - [ ] Vehicles: hover first, raycast wheels later
 - [ ] Destruction: ops + local debris; protected, ephemeral, permanent modes

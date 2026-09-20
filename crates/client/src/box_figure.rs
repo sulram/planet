@@ -3,7 +3,7 @@
 //! Shown until a VRM avatar is loaded, and when none can be (no assets, a bad
 //! file). Procedural, so it is always there.
 
-use glam::{DAffine3, DMat3, DQuat, DVec3, Vec3};
+use glam::{DAffine3, DQuat, DVec3, Vec3};
 use scene::BoxPart;
 
 use crate::controller::Controller;
@@ -74,12 +74,7 @@ const PARTS: [Part; 6] = [
 
 /// The avatar's boxes in world space for the controller's current pose.
 pub fn parts(controller: &Controller) -> Vec<BoxPart> {
-    let up = controller.up();
-    let back = -controller.facing();
-    let body = DAffine3::from_mat3_translation(
-        DMat3::from_cols(up.cross(back), up, back),
-        controller.position(),
-    );
+    let body = DAffine3::from_mat3_translation(controller.body_basis(), controller.position());
 
     let flying = controller.mode == Mode::Fly;
     // Superman: the whole figure tips forward around the hips, arms ahead.

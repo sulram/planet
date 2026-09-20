@@ -15,8 +15,11 @@ pub fn run(shot: Shot) -> Result<(), String> {
     if let Some([u, v]) = shot.at {
         client.teleport(u, v);
     }
-    client.pose(shot.altitude_m, shot.pitch_deg.to_radians(), shot.boom_m);
-
+    let (pitch, boom_m) = (shot.pitch_deg.to_radians(), shot.boom_m);
+    match shot.moon_gap_m {
+        Some(gap_m) => client.visit_moon(gap_m, pitch, boom_m),
+        None => client.pose(shot.altitude_m, pitch, boom_m),
+    }
     assets::wear(&mut client, shot.avatar.as_deref());
     // Manifest first, then what it names: two rounds.
     assets::serve(&mut client);

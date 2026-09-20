@@ -31,6 +31,9 @@ use terrain::Terrain;
 const DAY_S: f64 = 1200.0;
 /// Turns of the moon per turn of the sun.
 const MOON_PACE: f64 = 0.93;
+/// Centre of the planet to centre of the moon, metres.
+const MOON_ORBIT_M: f64 = 160_000.0;
+const MOON_RADIUS_M: f64 = 8_000.0;
 const STATS_EVERY_S: f64 = 0.5;
 
 pub struct Client {
@@ -113,6 +116,19 @@ impl Client {
         let side = f64::from(SECTOR_SIDE);
         let point = SurfacePoint::new(Sector::ALL[0], u * side, v * side);
         self.controller.teleport(point, &self.generator);
+    }
+
+    /// Flies to `gap_m` metres under the moon, on the side that faces the
+    /// planet, and aims the camera. For previews.
+    pub fn visit_moon(&mut self, gap_m: f64, pitch: f64, boom_m: f64) {
+        self.controller.pose_view(pitch, boom_m);
+        let moon = self.moon_position();
+        let below = moon.normalize() * (moon.length() - MOON_RADIUS_M - gap_m);
+        self.controller.set_moon(controller::MoonBody {
+            center: moon,
+            radius_m: MOON_RADIUS_M,
+        });
+        self.controller.fly_to(below);
     }
 
     /// Poses the avatar and camera for a preview: see [`Controller::pose`].
@@ -292,6 +308,13 @@ impl Client {
             look,
             zoom,
         };
+        // The moon has a gravity field of its own: fly into it and it becomes
+        // down; turn flight off there and you fall to it, walk and jump high.
+        let moon = self.moon_position();
+        self.controller.set_moon(controller::MoonBody {
+            center: moon,
+            radius_m: MOON_RADIUS_M,
+        });
         self.controller.update(dt, wish, &self.generator);
         self.body.update(dt, &self.controller);
         self.stats(dt);
@@ -309,18 +332,26 @@ impl Client {
         self.frame(camera, patches)
     }
 
+    /// Where the moon is now: an orbit on rails, a function of the clock. It
+    /// laps the sky a little slower than the sun on a tilted path, so its
+    /// phase changes from night to night.
+    fn moon_position(&self) -> DVec3 {
+        let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
+        let lunar = angle * MOON_PACE + 2.4;
+        let tilt = -0.25 + 0.3 * (lunar * 0.37).sin();
+        DVec3::new(lunar.cos(), tilt, lunar.sin()).normalize() * MOON_ORBIT_M
+    }
+
     fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchId>) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
-        // The moon laps the sky a little slower than the sun on a tilted
-        // path, so its phase changes from night to night.
-        let lunar = angle * MOON_PACE + 2.4;
-        let moon =
-            DVec3::new(lunar.cos(), -0.25 + 0.3 * (lunar * 0.37).sin(), lunar.sin()).normalize();
         Frame {
             camera,
             sun_direction: sun.as_vec3(),
-            moon_direction: moon.as_vec3(),
+            moon: scene::Moon {
+                position: self.moon_position(),
+                radius_m: MOON_RADIUS_M,
+            },
             planet_radius_m: RADIUS_M,
             clock_s: self.clock_s,
             patches,

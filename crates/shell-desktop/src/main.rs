@@ -3,7 +3,7 @@
 //! ```text
 //! planet [--seed HEX] [--avatar NAME]
 //! planet shot --out FILE [--seed HEX] [--avatar NAME] [--size WxH] [--clock S]
-//!             [--altitude M] [--pitch DEG] [--boom M] [--walk S] [--at U,V]
+//!             [--altitude M] [--pitch DEG] [--boom M] [--walk S] [--at U,V] [--moon M]
 //! ```
 
 mod args;

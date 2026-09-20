@@ -27,6 +27,8 @@ pub struct Shot {
     pub walk_s: f64,
     /// Where to stand in sector 0, each `0..=1`. Default: the world's spawn.
     pub at: Option<[f64; 2]>,
+    /// Fly to this many metres under the moon instead.
+    pub moon_gap_m: Option<f64>,
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -48,6 +50,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         boom_m: 6.0,
         walk_s: 0.0,
         at: None,
+        moon_gap_m: None,
     };
 
     while let Some(flag) = args.next() {
@@ -69,6 +72,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
                 let (u, v) = text.split_once(',').ok_or("--at wants U,V")?;
                 shot.at = Some([number(u, "--at")?, number(v, "--at")?]);
             }
+            "--moon" if is_shot => shot.moon_gap_m = Some(number(&value()?, "--moon")?),
             "--walk" if is_shot => shot.walk_s = number(&value()?, "--walk")?,
             "--boom" if is_shot => shot.boom_m = number(&value()?, "--boom")?,
             other => return Err(format!("unknown argument {other}")),

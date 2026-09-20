@@ -39,25 +39,34 @@ fn stars(dir: vec3<f32>) -> vec3<f32> {
     return tint * (1.0 - smoothstep(0.0, radius, spot)) * (0.25 + 5.0 * brightness);
 }
 
-// The moon: a sphere shaded by the real sun direction, so it has real phases.
+// The moon: a real sphere, hit by the view ray and shaded by the real sun, so
+// it has phases from any side and fills the sky as you fly to it.
 // rgb: its light, a: how much of the pixel it covers.
 fn moon_disc(dir: vec3<f32>) -> vec4<f32> {
-    let toward = view.moon.xyz;
+    let center = view.moon.xyz;
     let radius = view.moon.w;
-    let cosine = dot(dir, toward);
-    if cosine < cos(radius * 1.05) {
+    let along = dot(center, dir);
+    let miss2 = dot(center, center) - along * along;
+    // Derivatives must be taken before any branch (uniform control flow).
+    let edge = sqrt(max(miss2, 0.0)) / radius;
+    let rim = 1.5 * fwidth(edge);
+    if along < 0.0 || miss2 > radius * radius {
         return vec4<f32>(0.0);
     }
-    // Where on the disc, as a point of a unit sphere facing the camera.
-    let flat = (dir - toward * cosine) / sin(radius);
-    let r2 = dot(flat, flat);
-    let cover = 1.0 - smoothstep(0.92, 1.0, r2);
-    let normal = normalize(flat - toward * sqrt(max(1.0 - r2, 0.0)));
+    let hit = dir * (along - sqrt(radius * radius - miss2));
+    let normal = (hit - center) / radius;
+    // Soft rim: about a pixel wide, from orbit or standing on it.
+    let cover = 1.0 - smoothstep(1.0 - rim, 1.0, edge);
     let lit = smoothstep(-0.02, 0.12, dot(normal, view.sun.xyz));
-    // Maria: two scales of blotches fixed to the moon's face.
-    let face = flat * 3.0 + toward * 17.0;
-    let maria = 0.72 + 0.28 * value_noise(face + 40.0, 64) - 0.22 * value_noise(face * 2.7 + 9.0, 64);
-    let shine = vec3<f32>(0.95, 0.93, 0.86) * maria * (lit * 1.3 + 0.012);
+    // Maria and craters fixed to the surface, finer ones as it comes close.
+    let face = normal * 4.0;
+    let maria = value_noise(face + 40.0, 64);
+    // Regolith shows only up close: finer grain as the surface nears.
+    let near = 1.0 - smoothstep(200.0, 3000.0, length(hit));
+    let grain = value_noise(normal * radius / 8.0, 4096) * 0.6 + value_noise(normal * radius / 0.7, 65536) * 0.4;
+    let rough = value_noise(face * 6.0 + 9.0, 256) * 0.5 + value_noise(face * 40.0, 1024) * 0.25 + (grain - 0.5) * 1.1 * near;
+    let albedo = 0.16 + 0.34 * smoothstep(0.35, 0.65, maria) - 0.16 * rough;
+    let shine = vec3<f32>(0.95, 0.93, 0.86) * albedo * (lit * 1.05 + 0.010);
     return vec4<f32>(shine, cover);
 }
 

@@ -52,6 +52,7 @@ this file in the same change.
 | Manifest | `assets/manifest.json`: the instance's default set. Default avatar, avatars on offer, clip per gait. |
 | Gait | How a body moves right now: idle, walk, run, jump, fall, fly. One clip each. |
 | Clip | A humanoid animation, retargeted at load so every avatar shares it. |
+| Site | The body whose gravity field holds an avatar. Decides down and what the position is relative to. |
 | Footprint | The spacing of the mesh asking the generator for terrain. Detail finer than it is faded out. |
 | Anchor | A patch origin wrapped to the detail period in f64: what fixes shader detail to the planet. |
 | Entity | A placed thing that is not a voxel: GLB, part, light, field, portal, media frame, script. |

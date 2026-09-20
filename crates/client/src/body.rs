@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use avatar::{Animator, Avatar, Clip};
-use glam::{DAffine3, DMat3, DQuat};
+use glam::{DAffine3, DQuat};
 use scene::{SkinnedChange, SkinnedInstance, SkinnedMeshId};
 
 use crate::controller::Controller;
@@ -149,13 +149,9 @@ impl Body {
     /// The posed avatar, when one is worn.
     pub fn instance(&self, controller: &Controller) -> Option<SkinnedInstance> {
         let (id, avatar) = self.avatar.as_ref()?;
-        let up = controller.up();
-        let back = -controller.facing();
         // VRM 0.x looks down its `-Z`, the same way the body frame does.
-        let mut transform = DAffine3::from_mat3_translation(
-            DMat3::from_cols(up.cross(back), up, back),
-            controller.position(),
-        );
+        let mut transform =
+            DAffine3::from_mat3_translation(controller.body_basis(), controller.position());
         if self.lean > 1e-4 {
             let hips = glam::DVec3::new(0.0, 0.9, 0.0);
             transform = transform
