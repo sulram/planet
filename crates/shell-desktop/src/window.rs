@@ -140,11 +140,15 @@ impl Stage {
             match event {
                 // The title bar is the native HUD until there is a native UI.
                 Event::Stats {
-                    fps, altitude_m, ..
+                    fps,
+                    altitude_m,
+                    ref place,
+                    ..
                 } => {
                     let seed = format_seed(client.recipe().seed);
-                    self.window
-                        .set_title(&format!("planet {seed} | {fps:.0} fps | {altitude_m:.0} m"));
+                    self.window.set_title(&format!(
+                        "planet {seed} | {place} | {altitude_m:.0} m | {fps:.0} fps"
+                    ));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
                 Event::RecipeChanged { .. }

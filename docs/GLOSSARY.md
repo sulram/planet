@@ -26,6 +26,8 @@ this file in the same change.
 | Build band | The slice of the outer shell where editing is allowed. Bedrock at its floor. |
 | Address | Integer location: sector, u, v, h, then chunk and block index. The save format. |
 | Address space | The flat grid view where every block is a unit cube. Where simulation runs. |
+| Place code | The address as a person says it: a sector digit and up to seven base32 characters, `4-K7M42Q`. A prefix is a box, length is precision. Crockford's alphabet, so it survives being read out. |
+| Bearing | Degrees clockwise from north, `0..360`. North is the `+Y` pole, the axis the sun turns about. Undefined at a pole. |
 | World space | True 3D coordinates. For rendering and flight above the band. |
 | Chunk | A 16x16x16 block of cells. Unit of storage, streaming and meshing. |
 | Footing | What holds a body up at one direction: the ground under its feet, and any roof over them. Read from the generator, never from a mesh of it. Over nature there is no roof. |

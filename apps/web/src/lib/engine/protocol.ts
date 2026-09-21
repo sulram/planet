@@ -43,7 +43,16 @@ export type EngineEvent =
 	| { type: 'mode_changed'; mode: Mode }
 	| { type: 'avatar_changed'; path: string }
 	| { type: 'effects_changed'; effects: Effects }
-	| { type: 'stats'; fps: number; altitude_m: number; speed_mps: number; sector: number };
+	| {
+			type: 'stats';
+			fps: number;
+			altitude_m: number;
+			speed_mps: number;
+			/** Where the body is, as a person says it: `4-K7M42Q`. */
+			place: string;
+			/** Degrees clockwise from north, or null at a pole. */
+			bearing_deg: number | null;
+	  };
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'ready',

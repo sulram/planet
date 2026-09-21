@@ -91,9 +91,15 @@ export const pt: Messages = {
 	'engine.stats.fps': 'Quadros',
 	'engine.stats.altitude': 'Altitude',
 	'engine.stats.speed': 'Velocidade',
-	'engine.stats.sector': 'Setor',
+	'engine.stats.place': 'Lugar',
+	'engine.stats.facing': 'Olhando',
 	'engine.stats.metres': '{n} m',
 	'engine.stats.metresPerSecond': '{n} m/s',
+	'engine.stats.degrees': '{n}°',
+	// The sixteen points of the rose, clockwise from north. One key so the
+	// whole compass reads in order here, and so `t` keeps its literal keys.
+	'engine.compass.rose': 'N,NNE,NE,ENE,L,ESE,SE,SSE,S,SSO,SO,OSO,O,ONO,NO,NNO',
+	'engine.stats.atThePole': 'no polo',
 	'engine.settings': 'Ajustes',
 	'engine.settings.shadows': 'Sombras',
 	'engine.settings.grass': 'Grama',

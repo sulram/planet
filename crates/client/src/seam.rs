@@ -68,7 +68,14 @@ pub enum Event {
         fps: f32,
         altitude_m: f64,
         speed_mps: f64,
-        sector: u8,
+        /// Where the body is, as a person says it: `"4-K7M42Q"`. The sector is
+        /// its first character, so it is not sent twice.
+        place: String,
+        /// Degrees clockwise from north, `0..360`. `None` at a pole, where a
+        /// bearing is not a thing that exists. The letters are the front
+        /// end's: N and S are English, and a user visible string belongs to
+        /// whoever holds the locale.
+        bearing_deg: Option<f64>,
     },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {

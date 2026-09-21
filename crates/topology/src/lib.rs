@@ -17,6 +17,7 @@
 
 mod address;
 mod grid;
+mod place;
 mod project;
 mod quad_sphere;
 mod sector;
@@ -26,6 +27,7 @@ pub mod vec3;
 pub use address::{Address, Column, Step};
 pub use project::Tangents;
 pub use grid::{Grid, MAX_BITS};
+pub use place::{CODE_MAX, Place, PlaceError, bearing_deg, code, place};
 pub use quad_sphere::{MIN_BITS, QuadSphere};
 pub use sector::{Dir, Sector};
 pub use surface::SurfacePoint;

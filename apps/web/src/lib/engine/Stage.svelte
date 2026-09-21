@@ -11,6 +11,16 @@
 	// The full viewport engine with its floating panel: what `/play` and
 	// `/w/[id]` share. The page supplies the top of the panel; mode, key hints
 	// and the stats line are the same everywhere.
+	// The compass point a bearing lands on, and the angle beside it. A rose has
+	// sixteen points, so each is 22.5 degrees wide. `null` is a pole, where a
+	// bearing is not a thing that exists.
+	function facing(deg: number | null): string {
+		if (deg === null) return t('engine.stats.atThePole');
+		const rose = t('engine.compass.rose').split(',');
+		const point = rose[Math.round(deg / 22.5) % rose.length];
+		return `${point} ${t('engine.stats.degrees', { n: deg.toFixed(0) })}`;
+	}
+
 	interface Props {
 		title: string;
 		recipe: Recipe | null;
@@ -106,10 +116,11 @@
 		</ul>
 		{#if stats}
 			<dl>
-				<Stat label={t('engine.stats.fps')} value={stats.fps.toFixed(0)} />
+				<Stat label={t('engine.stats.place')} value={stats.place} />
+				<Stat label={t('engine.stats.facing')} value={facing(stats.bearing_deg)} />
 				<Stat label={t('engine.stats.altitude')} value={t('engine.stats.metres', { n: stats.altitude_m.toFixed(1) })} />
 				<Stat label={t('engine.stats.speed')} value={t('engine.stats.metresPerSecond', { n: stats.speed_mps.toFixed(1) })} />
-				<Stat label={t('engine.stats.sector')} value={String(stats.sector)} />
+				<Stat label={t('engine.stats.fps')} value={stats.fps.toFixed(0)} />
 			</dl>
 		{/if}
 	</Panel>

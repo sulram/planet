@@ -530,11 +530,20 @@ impl Client {
         self.stats_timer_s += dt;
         self.frames_since_stats += 1;
         if self.stats_timer_s >= STATS_EVERY_S {
+            let grid = self.generator.sphere().blocks();
             self.events.push(Event::Stats {
                 fps: (f64::from(self.frames_since_stats) / self.stats_timer_s) as f32,
                 altitude_m: self.controller.altitude_m(&self.generator),
                 speed_mps: self.controller.speed_mps(),
-                sector: self.controller.point().sector.index() as u8,
+                place: topology::code(
+                    grid,
+                    grid.column_of(self.controller.point()),
+                    topology::CODE_MAX,
+                ),
+                bearing_deg: topology::bearing_deg(
+                    self.controller.up().to_array(),
+                    self.controller.facing().to_array(),
+                ),
             });
             self.stats_timer_s = 0.0;
             self.frames_since_stats = 0;
