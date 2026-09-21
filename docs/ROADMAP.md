@@ -17,7 +17,17 @@ Every milestone ends runnable end to end.
 - [x] `topology`: address, neighbours, sector seams, address <-> position, property tests
 - [x] `worldgen`: layered 3D noise on the sphere, params as knobs, golden hashes
 - [ ] Golden hashes also run on WASM in CI (wasmtime)
-- [ ] Terrain layer + surface nets mesher, in address space
+- [ ] Terrain layer + surface nets mesher, in address space. The step that turns the ground from a height into a volume, and the only one that makes a horizontal tunnel possible at all
+  - [ ] Density + material per cell, 16x16x16 chunks, surface nets. The heightfield quadtree stays for distance and for ground nobody has touched; volume replaces the deepest levels near the player. Not optional: the build band is 512 cells tall at half a metre, so volume everywhere would not fit on a Pi or in a tab
+  - [ ] The generator grows a 3D density beside `sample_at`. Seeding density from a height gives a solid planet by construction: no cave, no arch, no overhang, and a blocky world with nothing under its crust. A dug tunnel works without this; a found one does not
+  - [ ] **Collision is the smooth surface, always, whatever is drawn.** People and vehicles travel on the isosurface and never on cubes, so nothing hammers on half metre steps and everyone in a world walks on the same ground. Auto-step takes one block; two is a wall, to be jumped or flown
+  - [ ] Collision is a representation of its own, coarser than the render and built only where someone is, the way Voxel Plugin builds it around invokers. A car does not need the triangles a camera does
+  - [ ] **Blocky is a cosmetic toggle**, one viewer's choice in the settings, never the world's: the same density, a cubic mesher in place of surface nets. Its greedy face merging is the build layer's mesher of M3, so it is written once. On a slope a cube face sits up to a quarter metre off where the feet are, and that is the whole price of it being cosmetic
+  - [ ] **Nothing here may bring the far shimmer back.** What the generator and the water already earned is the hardest thing to keep through this, and it has to be said before the work starts, not after:
+    - [ ] A heightfield is filtered by the footprint of the mesh that asks (29). A volume has no footprint: its cells are its cells. Near the player that is fine, because a cell is larger than a pixel. The filtering therefore has to come back somewhere else for anything far, and a stored chunk seen from a distance is exactly that case
+    - [ ] A stored chunk's reduced levels are the volume's `band`. They have to keep the mean, the way a mip chain does and the way the field's ruggedness does, so a hill does not grow or shrink because the camera moved
+    - [ ] Cubes are the worst case there is for range: a hard edge in every cell. The cubic mesher needs its own answer past a few hundred metres, and the one the project already uses twice is that **what is lost becomes roughness** (43): a face too small to draw should widen the lobe and dim it, not disappear
+    - [ ] The shore is painted per pixel, by height (41), and snow and forest are meant to follow it. None of that may go back to being decided per vertex because the ground became a volume
 - [x] Camera-relative rendering, reversed-Z depth, quadtree LOD ground to orbit
 - [ ] Motion vector target; patch building on worker threads
 - [x] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
