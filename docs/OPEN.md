@@ -98,3 +98,16 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - Open: whether to widen `DENSITY_REACH`, to store the crossing rather than the
   distance, or to filter the normals. Each costs something different and none
   is measured yet.
+
+## The generator cannot bound the ground, so half the pyramid is generated to be thrown away
+
+- Measured, seed 1: 46% of the chunks held at `2^16` are one value all through,
+  7,785 of 16,924, and each cost 256 generator columns to discover (56).
+- A hierarchy carries that as a value on the parent and never descends (VDB
+  tiles, refs/dust). We cannot, because deciding it needs a bound on the ground
+  inside a footprint and `sample_at` returns a height, not a range.
+- A field already has the bound: `Ground.ruggedness_m` is how far elevation
+  ranges inside one texel. A generated world has nothing equivalent.
+- Open: whether the generator grows a `bounds_at(direction, footprint)`, what it
+  costs per sample, and whether the same bound is what lets a far level be
+  honestly hollow (48).

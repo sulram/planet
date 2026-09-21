@@ -89,6 +89,7 @@ Every milestone ends runnable end to end.
 - [x] Chunks around a body: generate, mesh, stream by distance, with the build band whole. A tunnel and a well work by construction rather than by a window. Frame in WASM: worst 3.75 ms of a 12 ms budget, median 1.89
 - [ ] What the ground lost with the heightfield and has to win back as voxels: the sea, the grass, and the moon as a body of its own
 - [x] Reduced chunks and the level pyramid, to orbit. Thirteen levels at `2^16`, the coarsest six chunks for the whole body. Generated at their own footprint, not built from the level under them (52)
+- [ ] A bound on the ground in a footprint, so a chunk can be known empty without being generated: 46% of what is held at `2^16` is (56)
 - [ ] What the pyramid still owes: whether a level boundary cracks under a cliff, whether a hill pops when a level changes, and the memory a full pyramid holds (16,642 chunks at `2^16`)
 - [ ] Shells, when depth distortion earns them: the blocks per layer quadruple at fixed steps so a block keeps its width going down (the reference, and the one part of its design the glossary names and nothing builds)
 - [ ] A body is a body: the moon stops being a second sampling path in the generator and becomes another recipe with another size

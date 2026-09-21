@@ -146,6 +146,11 @@ impl Terrain {
         self.chunks.len()
     }
 
+    /// Of those, how many say one thing all through.
+    pub fn uniform_chunks(&self) -> usize {
+        self.chunks.uniform()
+    }
+
     /// How much is still waiting to be built.
     pub fn queued(&self) -> usize {
         self.queue.len()

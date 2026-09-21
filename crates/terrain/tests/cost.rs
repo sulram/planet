@@ -55,10 +55,11 @@ fn what_one_update_costs() {
         let queued = terrain.queued();
 
         println!(
-            "bits {bits:2}: {} levels, {:4} drawn, {:5} held | cold {cold_ms:7.1} ms ({:.2} ms a chunk) | still {warm_ms:5.2} ms | scan {scan_ms:5.2} ms | a chunk over {step_ms:5.2} ms, {queued} queued",
+            "bits {bits:2}: {} levels, {:4} drawn, {:5} held ({:2.0}% uniform) | cold {cold_ms:7.1} ms ({:.2} ms a chunk) | still {warm_ms:5.2} ms | scan {scan_ms:5.2} ms | a chunk over {step_ms:5.2} ms, {queued} queued",
             coarsest(sphere) + 1,
             drawn.len(),
             terrain.held_chunks(),
+            100.0 * terrain.uniform_chunks() as f64 / terrain.held_chunks().max(1) as f64,
             cold_ms / built as f64,
         );
         assert!(

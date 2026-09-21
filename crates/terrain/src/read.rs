@@ -42,6 +42,16 @@ impl Chunks {
         self.held.len()
     }
 
+    /// How many held chunks say one thing: all rock, or all sky. A hierarchy
+    /// would carry each of these as one value on a parent instead of as a
+    /// chunk of its own (VDB's tiles, refs/dust).
+    pub fn uniform(&self) -> usize {
+        self.held
+            .values()
+            .filter(|chunk| matches!(chunk, Chunk::Uniform(_)))
+            .count()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.held.is_empty()
     }
