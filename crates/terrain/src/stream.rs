@@ -65,6 +65,10 @@ pub struct Terrain {
     /// Chunks that were meshed and had no surface in them. Remembered, or
     /// every frame would build the solid rock under the ground again.
     blank: HashSet<ChunkAddr>,
+    /// Chunks the pyramid no longer wants, still drawn because what replaces
+    /// them is not ready. Nothing is ever taken away before its replacement
+    /// is up: that is what a hole at a level boundary is made of.
+    retiring: HashMap<ChunkAddr, PatchId>,
     /// What is wanted and not built yet, nearest last: a frame pops from the
     /// end, so what appears first is what you are standing next to.
     queue: Vec<ChunkAddr>,
@@ -80,6 +84,7 @@ impl Terrain {
             sphere,
             chunks: Chunks::new(),
             drawn: HashMap::new(),
+            retiring: HashMap::new(),
             blank: HashSet::new(),
             queue: Vec::new(),
             levels,
@@ -98,9 +103,29 @@ impl Terrain {
         topology::BLOCK_M
     }
 
-    /// Everything a renderer holds, in no particular order.
+    /// Everything a renderer holds, in no particular order: what the pyramid
+    /// wants, and what it has not finished replacing.
     pub fn drawn(&self) -> Vec<PatchId> {
-        self.drawn.values().copied().collect()
+        self.drawn
+            .values()
+            .chain(self.retiring.values())
+            .copied()
+            .collect()
+    }
+
+    /// How many chunks are still up only because their replacement is not.
+    pub fn retiring(&self) -> usize {
+        self.retiring.len()
+    }
+
+    /// Every chunk a renderer holds, with the address behind it. For tests
+    /// that have to know what a patch id stands for.
+    pub fn named(&self) -> Vec<(PatchId, ChunkAddr)> {
+        self.drawn
+            .iter()
+            .chain(self.retiring.iter())
+            .map(|(addr, id)| (*id, *addr))
+            .collect()
     }
 
     pub fn held_chunks(&self) -> usize {
@@ -118,10 +143,11 @@ impl Terrain {
 
     /// Drops everything, so a new recipe starts from nothing.
     pub fn clear(&mut self) {
-        for id in self.drawn.values() {
+        for id in self.drawn.values().chain(self.retiring.values()) {
             self.changes.push(TerrainChange::Remove(*id));
         }
         self.drawn.clear();
+        self.retiring.clear();
         self.blank.clear();
         self.queue.clear();
         for level in &mut self.levels {
@@ -138,6 +164,7 @@ impl Terrain {
             self.requeue(eye);
         }
         self.build(generator, budget);
+        self.retire();
         self.drawn()
     }
 
@@ -150,6 +177,7 @@ impl Terrain {
         self.resettle(generator, eye);
         self.requeue(eye);
         self.build(generator, usize::MAX);
+        self.retire();
         self.drawn()
     }
 
@@ -192,7 +220,10 @@ impl Terrain {
             .flat_map(|level| level.wanted.iter().copied())
             .collect();
 
-        // Gone first, so a move never holds both sets at once.
+        // What the pyramid stopped wanting stays up, and joins the set that
+        // is waiting to be replaced. Taking it away here is what opened a hole
+        // every time a level boundary moved: the chunk that covers the same
+        // ground at the other level is still in the queue, frames away.
         let stale: Vec<ChunkAddr> = self
             .drawn
             .keys()
@@ -201,7 +232,19 @@ impl Terrain {
             .collect();
         for addr in stale {
             if let Some(id) = self.drawn.remove(&addr) {
-                self.changes.push(TerrainChange::Remove(id));
+                self.retiring.insert(addr, id);
+            }
+        }
+        // Something wanted again is no longer retiring.
+        let returned: Vec<ChunkAddr> = self
+            .retiring
+            .keys()
+            .filter(|addr| union.contains(*addr))
+            .copied()
+            .collect();
+        for addr in returned {
+            if let Some(id) = self.retiring.remove(&addr) {
+                self.drawn.insert(addr, id);
             }
         }
         self.blank.retain(|addr| union.contains(addr));
@@ -330,6 +373,82 @@ impl Terrain {
             self.drawn.insert(addr, id);
             self.changes.push(TerrainChange::Add(id, mesh));
         }
+    }
+}
+
+impl Terrain {
+    /// Takes down what the pyramid stopped wanting, but only once the ground
+    /// it covered is drawn at the level that replaced it.
+    ///
+    /// A stale chunk is replaced by its parent when the eye moves away and by
+    /// its eight children when it moves closer, because the shells that meet
+    /// are always one level apart. When neither is coming - the band moved, or
+    /// the world was left behind - the queue running dry is what says so.
+    fn retire(&mut self) {
+        if self.retiring.is_empty() {
+            return;
+        }
+        let settled = self.queue.is_empty();
+        let ready: Vec<ChunkAddr> = self
+            .retiring
+            .keys()
+            .filter(|addr| settled || self.replaced(**addr))
+            .copied()
+            .collect();
+        for addr in ready {
+            if let Some(id) = self.retiring.remove(&addr) {
+                self.changes.push(TerrainChange::Remove(id));
+            }
+        }
+    }
+
+    /// Whether the ground a chunk covers is drawn at another level now.
+    fn replaced(&self, addr: ChunkAddr) -> bool {
+        if let Some(parent) = self.parent(addr) {
+            if self.settled(parent) {
+                return true;
+            }
+        }
+        match self.children(addr) {
+            Some(children) => children.iter().all(|child| self.settled(*child)),
+            None => false,
+        }
+    }
+
+    /// Built one way or the other: drawn, or known to hold no surface.
+    fn settled(&self, addr: ChunkAddr) -> bool {
+        self.drawn.contains_key(&addr) || self.blank.contains(&addr)
+    }
+
+    /// The chunk one level coarser that covers the same ground.
+    fn parent(&self, addr: ChunkAddr) -> Option<ChunkAddr> {
+        let level = addr.level + 1;
+        chunk_grid(self.sphere, level)?;
+        Some(ChunkAddr::new(
+            level,
+            Column::new(addr.column.sector, addr.column.u >> 1, addr.column.v >> 1),
+            addr.h.div_euclid(2),
+        ))
+    }
+
+    /// The eight chunks one level finer that cover the same ground.
+    fn children(&self, addr: ChunkAddr) -> Option<[ChunkAddr; 8]> {
+        let level = addr.level.checked_sub(1)?;
+        let (u, v) = (addr.column.u * 2, addr.column.v * 2);
+        let h = addr.h.checked_mul(2)?;
+        let mut all = [addr; 8];
+        for (i, slot) in all.iter_mut().enumerate() {
+            *slot = ChunkAddr::new(
+                level,
+                Column::new(
+                    addr.column.sector,
+                    u + (i & 1) as u16,
+                    v + ((i >> 1) & 1) as u16,
+                ),
+                h + ((i >> 2) & 1) as i16,
+            );
+        }
+        Some(all)
     }
 }
 
