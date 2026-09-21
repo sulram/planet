@@ -82,6 +82,9 @@ Every milestone ends runnable end to end.
 - [ ] `world.db` per world, world actor per active world
 - [x] Email login: magic link (web); anonymous visitor
 - [ ] One-time code login on native
+- [ ] The cold plane moves behind the command and event seam: `list_worlds`, `create_world`, `enter_world`, with the clamping `+page.server.ts` does today living in `client` where both front ends reach it (DECISIONS 46)
+- [ ] Desktop screens over that seam: sign in, a list of worlds, enter one, preview a planet with its knobs and create from it. The backoffice stays on the web
+- [ ] Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - [x] Backoffice for operators: worlds and users
 - [ ] Binary WebSocket protocol; presence; avatars (default set)
 - [ ] Generator as WASM inside Go (wazero)

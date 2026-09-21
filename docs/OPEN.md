@@ -7,7 +7,7 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 
 - **Name.** `planet` is a codename. Crate, repo and domain names wait on this.
 - **Confirm the proposed entries in DECISIONS.md**: 03 (raw wgpu), 05 (numbers),
-  06, 09, 19, 20.
+  06, 09, 19, 20, 46 (the desktop is a whole player).
 
 ## Blocks M1 (the address is the save format)
 
@@ -46,6 +46,10 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - The magic link is consumed on GET; mail scanners that prefetch could burn
   it. Hardened variant: a confirm button page.
 
+- **How much of a world a signed out desktop may reach.** Offline preview is
+  permanent, so a picker of seeds and fields visited before could work with no
+  account at all. Whether it should, and whether a world list is worth caching
+  for a flight, is open (DECISIONS 46).
 - ECS crate: `hecs` or `bevy_ecs` standalone.
 - Protocol schema language: protobuf or flatbuffers.
 - How much building is possible outside the browser (Pi, headset).
