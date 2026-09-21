@@ -9,6 +9,7 @@
 mod args;
 mod assets;
 mod shot;
+mod slice;
 mod window;
 
 use std::process::ExitCode;

@@ -147,7 +147,9 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 
 - **Milestones pull features, never speculation.**
 - **Every change ends runnable and visible.** Look at what you built:
-  headless render to PNG with a fixed clock and seed, then read the PNG.
+  headless render to PNG with a fixed clock and seed, then read the PNG. What
+  is behind the ground needs `bun run shot --slice M`, a vertical cut through
+  the density: a cave is not something a camera can be pointed at.
 - A change to `render` is also looked at in the browser: `bun run webshot`
   prints the page's console and saves a PNG. WebGPU rejects what Metal lets by.
 - Each crate stays **LLM-sized**. Too big for one context: split by dependency.

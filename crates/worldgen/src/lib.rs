@@ -139,6 +139,24 @@ impl Generator {
         }
     }
 
+    /// How far a point is from the ground, metres, positive inside it.
+    ///
+    /// The surface is where this crosses zero, and it crosses at exactly the
+    /// height [`Generator::sample_at`] reports, so the volume layer and the
+    /// heightfield draw the same ground and the handover between them has
+    /// nothing to reconcile.
+    ///
+    /// This is also the only place a cave can exist: a height has no room for
+    /// one. Worlds on generator v1 and v2 are frozen without them, and their
+    /// ground is solid all the way down.
+    pub fn density_m(&self, direction: Direction, height_m: f64, footprint_m: f64) -> f64 {
+        let ground_m = self.sample_at(direction, footprint_m).height_m;
+        match self.recipe.generator_version {
+            1 | 2 => ground_m - height_m,
+            _ => v3::density_m(&self.recipe, direction, height_m, ground_m, footprint_m),
+        }
+    }
+
     /// Terrain as a mesh with one sample every `footprint_m` metres should see
     /// it: detail finer than the mesh can carry is faded out instead of
     /// aliasing. Presentation only. Generator v1 predates this and ignores it.

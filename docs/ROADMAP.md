@@ -19,7 +19,7 @@ Every milestone ends runnable end to end.
 - [ ] Golden hashes also run on WASM in CI (wasmtime)
 - [ ] Terrain layer + surface nets mesher, in address space. The step that turns the ground from a height into a volume, and the only one that makes a horizontal tunnel possible at all
   - [ ] Density + material per cell, 16x16x16 chunks, surface nets. The heightfield quadtree stays for distance and for ground nobody has touched; volume replaces the deepest levels near the player. Not optional: the build band is 512 cells tall at half a metre, so volume everywhere would not fit on a Pi or in a tab
-  - [ ] The generator grows a 3D density beside `sample_at`. Seeding density from a height gives a solid planet by construction: no cave, no arch, no overhang, and a blocky world with nothing under its crust. A dug tunnel works without this; a found one does not
+  - [x] The generator grows a 3D density beside `sample_at`. Seeding density from a height gives a solid planet by construction: no cave, no arch, no overhang, and a blocky world with nothing under its crust. A dug tunnel works without this; a found one does not
   - [ ] **Collision is the smooth surface, always, whatever is drawn.** People and vehicles travel on the isosurface and never on cubes, so nothing hammers on half metre steps and everyone in a world walks on the same ground. Auto-step takes one block; two is a wall, to be jumped or flown
   - [ ] Collision is a representation of its own, coarser than the render and built only where someone is, the way Voxel Plugin builds it around invokers. A car does not need the triangles a camera does
   - [ ] **Blocky is a cosmetic toggle**, one viewer's choice in the settings, never the world's: the same density, a cubic mesher in place of surface nets. Its greedy face merging is the build layer's mesher of M3, so it is written once. On a slope a cube face sits up to a quarter metre off where the feet are, and that is the whole price of it being cosmetic
@@ -34,7 +34,7 @@ Every milestone ends runnable end to end.
 - [x] Sun as rotating directional light; first atmosphere (uniform shell)
 - [ ] Atmosphere with real scattering
 - [x] Atmospheric clouds: a volumetric layer seen from the ground, from above and from orbit, with shadows on the ground
-- [x] Headless render to PNG (fixed clock + seed)
+- [x] Headless render to PNG (fixed clock + seed), and `--slice M` for a vertical cut through the density, which is the only way to look at a cave
 - [x] Browser build with a minimal Svelte panel: seed, regenerate
 - [x] Generator v3: the shape is a source; plates for a seed world, a baked field for a real one (DECISIONS 44)
 - [x] "Earth or generated" when a planet is made, in `/play` and in the recipe

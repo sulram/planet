@@ -2304,6 +2304,7 @@ dependencies = [
  "log",
  "pollster",
  "render",
+ "topology",
  "ui-native",
  "winit",
  "worldgen",

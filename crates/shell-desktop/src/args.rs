@@ -38,6 +38,9 @@ pub struct Shot {
     pub panel: bool,
     /// Effects as the seam takes them: `{"tone_map":"agx","bloom":1}`.
     pub effects: Option<String>,
+    /// Paint a vertical cut through the ground instead of rendering it, this
+    /// many metres wide. Zero renders the world as usual.
+    pub slice_m: f64,
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -65,6 +68,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         measure: 0,
         panel: false,
         effects: None,
+        slice_m: 0.0,
     };
 
     while let Some(flag) = args.next() {
@@ -91,6 +95,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
                 shot.measure = number::<usize>(&value()?, "--measure")?.min(1000)
             }
             "--panel" if is_shot => shot.panel = true,
+            "--slice" if is_shot => shot.slice_m = number(&value()?, "--slice")?,
             "--effects" if is_shot => shot.effects = Some(value()?),
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,

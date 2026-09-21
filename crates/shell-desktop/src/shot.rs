@@ -8,6 +8,16 @@ use crate::args::Shot;
 use crate::assets;
 
 pub fn run(shot: Shot) -> Result<(), String> {
+    // A cut through the ground needs the generator and nothing else: no GPU,
+    // no avatar, no clock.
+    if shot.slice_m > 0.0 {
+        let generator = match shot.field.clone() {
+            Some(field) => worldgen::Generator::with_field(shot.recipe.clone(), field),
+            None => worldgen::Generator::new(shot.recipe.clone()),
+        }
+        .map_err(|e| e.to_string())?;
+        return crate::slice::run(shot, &generator);
+    }
     let [width, height] = shot.size;
     let mut client = match shot.field {
         Some(field) => Client::with_field(shot.recipe, field),

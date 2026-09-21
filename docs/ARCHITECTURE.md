@@ -79,6 +79,19 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The generator is written once in Rust: native in clients, WASM in the
   browser, the same WASM inside Go through wazero (pure Go, no CGO).
 - 3D noise sampled on the sphere: no seams, no projection distortion.
+- `density_m(direction, height_m, footprint)` is the volume's reading of the
+  same ground: it crosses zero at exactly the height `sample_at` reports, so
+  a volume chunk and a heightfield patch have nothing to reconcile where they
+  meet. A cave lives only here, because a height has no room for one; v1 and
+  v2 are frozen solid all the way down.
+- A cave is taken out of the ground, not subtracted from it: the density is
+  the nearer of the rock above and the nearest tunnel wall. Subtracting a
+  carving depth would make a cave something that must beat the weight of rock
+  over it, so caves would only ever open a few metres down. Two ridged sums
+  crest along surfaces and meet in a line, and a line is a passage; a region
+  field decides where cave country is, so how common a cave is and how wide it
+  is are two knobs and not one. Caves stop at the sea and at the floor of the
+  build band.
 - A **field** is a cube map of ground, one face per sector, with a mip pyramid
   and a one texel gutter across each seam. Two channels: elevation (`i16`,
   metres on the source body) and ruggedness (a byte of 16 m steps, the spread

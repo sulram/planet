@@ -28,10 +28,32 @@ const HILL: u64 = 0x4_2000;
 const DETAIL: u64 = 0x4_3000;
 const MOISTURE: u64 = 0x4_4000;
 const SEABED: u64 = 0x4_5000;
+const CAVE: u64 = 0x4_6000;
 
 /// Radius the wavelengths below are quoted against, metres. A constant of the
 /// generator, not of the topology: changing it would change the terrain.
 const RADIUS_M: f64 = 20_860.0;
+
+/// How wide a cave system's turns are, metres. Also the wavelength the
+/// footprint fades it against.
+const CAVE_M: f64 = 70.0;
+/// How near a ridged sum's crest counts as inside a tunnel, where a world has
+/// no cave country at all. Nothing reaches it.
+const CAVE_CREST: f64 = 0.94;
+/// How far cave country lowers that bar. One threshold could not do both jobs:
+/// a shade lower and the surface is fringed with mouths everywhere, a shade
+/// higher and a world has no caves at all. So how *common* a cave is and how
+/// *wide* it is became two knobs, and the first is a region.
+const CAVE_COUNTRY: f64 = 0.085;
+/// Cave country, in cycles per radius: limestone here, granite there.
+const CAVE_REGION: f64 = 9.0;
+/// Metres the wall of a tunnel stands from its middle, at the widest. What
+/// decides the shape is `CAVE_CREST`; this only says how sharply the wall
+/// arrives, which is what a mesher places its vertex against.
+const CAVE_WIDTH_M: f64 = 60.0;
+/// How deep a cave may reach, metres under the ground. Below this is the
+/// bedrock at the floor of the build band, which nobody digs through.
+const CAVE_FLOOR_M: f64 = 120.0;
 
 /// How hard accumulated slope damps the finer octaves.
 const EROSION: f64 = 0.06;
@@ -255,4 +277,66 @@ fn material(recipe: &Recipe, d: Direction, height_m: f64) -> Material {
     } else {
         Material::Grass
     }
+}
+
+/// How far a point is from the ground, metres, positive inside it.
+///
+/// The ground is `sample_at`'s height, exactly, and a cave is taken out of it
+/// the way a chisel is: the distance to the nearest tunnel wall, whichever of
+/// the two is nearer. Subtracting a carving depth instead would make a cave
+/// something that has to beat the weight of rock over it, so caves would only
+/// ever appear a few metres under the surface. A cave is a place, not a dent.
+///
+/// Two ridged sums crest along surfaces; where both crest at once the surfaces
+/// meet in a line, and a line is a passage. One would give sheets, three would
+/// give beads, and this is the cheapest shape that is a tunnel.
+///
+/// The field is read at the world position, so a cave turns as much going down
+/// as going along, and the `footprint_m` that fades an octave fades a cave the
+/// mesh could not carry.
+pub fn density_m(
+    recipe: &Recipe,
+    d: Direction,
+    height_m: f64,
+    ground_m: f64,
+    footprint_m: f64,
+) -> f64 {
+    let solid_m = ground_m - height_m;
+    let weight = band(CAVE_M, footprint_m);
+    if weight <= 0.0 {
+        return solid_m;
+    }
+    // Under the sea a cave is a flood, and past the floor of the build band it
+    // is below the bedrock nobody digs through.
+    let depth_m = solid_m;
+    let allowed = weight
+        * smoothstep(0.0, 40.0, ground_m)
+        * smoothstep(CAVE_FLOOR_M, CAVE_FLOOR_M * 0.7, depth_m);
+    if allowed <= 0.0 {
+        return solid_m;
+    }
+    let k = (RADIUS_M + height_m) / CAVE_M;
+    let p = [d[0] * k, d[1] * k, d[2] * k];
+    let seed = recipe.seed ^ CAVE;
+    // Caves keep company. Where the rock takes them the bar is low and the
+    // ground is riddled; elsewhere nothing reaches it.
+    let country = smoothstep(
+        0.05,
+        0.45,
+        fbm(
+            seed ^ 2,
+            [d[0] * CAVE_REGION, d[1] * CAVE_REGION, d[2] * CAVE_REGION],
+            3,
+            0.5,
+        ),
+    );
+    let crest = CAVE_CREST - CAVE_COUNTRY * country;
+    let ridge = |salt: u64| 1.0 - libm::fabs(fbm(seed ^ salt, p, 3, 0.5));
+    // Positive inside both crests, and the smaller of the two is the nearer
+    // wall.
+    let inside = (ridge(0) - crest).min(ridge(1) - crest);
+    // Where a cave is not allowed the wall is pushed away until it is gone,
+    // rather than cut off, so the ground has no seam at the edge of the rule.
+    let wall_m = -inside * CAVE_WIDTH_M + (1.0 - allowed) * CAVE_WIDTH_M;
+    solid_m.min(wall_m)
 }
