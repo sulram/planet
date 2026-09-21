@@ -7,15 +7,6 @@
 use proptest::prelude::*;
 use topology::{Column, Dir, Grid, MAX_BITS, MIN_BITS, QuadSphere, Sector, SurfacePoint, vec3};
 
-/// Sizes the design is proved at, plus any other legal one.
-fn sphere() -> impl Strategy<Value = QuadSphere> {
-    prop_oneof![
-        3 => prop_oneof![Just(4u32), Just(8), Just(10), Just(16)],
-        1 => MIN_BITS..=MAX_BITS,
-    ]
-    .prop_map(|bits| QuadSphere::new(bits).unwrap())
-}
-
 fn sector() -> impl Strategy<Value = Sector> {
     (0u8..6).prop_map(|i| Sector::new(i).unwrap())
 }
@@ -175,7 +166,11 @@ fn every_edge_round_trips() {
                     for d in Dir::ALL {
                         let there = grid.step(c, d);
                         let back = grid.step(there.column, there.dir.opposite());
-                        assert_eq!((back.column, back.dir), (c, d.opposite()), "{bits} {c:?} {d:?}");
+                        assert_eq!(
+                            (back.column, back.dir),
+                            (c, d.opposite()),
+                            "{bits} {c:?} {d:?}"
+                        );
                     }
                 }
             }
@@ -231,7 +226,10 @@ fn block_distortion_is_bounded() {
                 }
             }
         }
-        println!("bits {bits}: block edge {min:.4} m to {max:.4} m, ratio {:.4}", max / min);
+        println!(
+            "bits {bits}: block edge {min:.4} m to {max:.4} m, ratio {:.4}",
+            max / min
+        );
         assert!(max / min < 1.5, "bits {bits}");
     }
 }

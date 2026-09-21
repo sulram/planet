@@ -35,7 +35,13 @@ export type Command =
 	| { type: 'random_avatar' }
 	| { type: 'next_avatar' }
 	/** Fields left out take the engine's default. */
-	| { type: 'set_effects'; effects: Partial<Effects> };
+	| { type: 'set_effects'; effects: Partial<Effects> }
+	/**
+	 * Stand at a place code, `4-K7M42Q`. Arrival, not travel: it is how a
+	 * shared address opens where it says. A short code names a box and you
+	 * land in the middle of it.
+	 */
+	| { type: 'go_to'; place: string };
 
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }

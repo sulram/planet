@@ -181,12 +181,33 @@ impl Client {
         self.clock_s = seconds;
     }
 
-    /// Moves the avatar to a place in sector 0, `u` and `v` in `0..=1`. For
-    /// previews; travel in a world is walking, flying and portals.
-    pub fn teleport(&mut self, u: f64, v: f64) {
-        let side = f64::from(self.generator.sphere().blocks().side());
-        let point = SurfacePoint::new(Sector::ALL[0], u * side, v * side);
+    /// The body this world is printed at: its size, and everything in metres
+    /// that follows from it. Frozen with the recipe.
+    pub fn sphere(&self) -> topology::QuadSphere {
+        self.generator.sphere()
+    }
+
+    /// Stands the avatar at a point of any sector. Arrival, not travel.
+    pub fn teleport(&mut self, point: SurfacePoint) {
         self.controller.teleport(point, &self.generator);
+    }
+
+    /// Stands the avatar at a place code, `"4-K7M42Q"`.
+    ///
+    /// A code shorter than full precision names a box, so the middle of that
+    /// box is where you land: a person who quotes four characters means the
+    /// neighbourhood, and the middle of it is the least surprising answer.
+    pub fn go_to(&mut self, place: &str) -> Result<(), topology::PlaceError> {
+        let grid = self.generator.sphere().blocks();
+        let found = topology::place(grid, place)?;
+        let [su, sv] = found.span(grid).map(f64::from);
+        let point = SurfacePoint::new(
+            found.column.sector,
+            f64::from(found.column.u) + su / 2.0,
+            f64::from(found.column.v) + sv / 2.0,
+        );
+        self.teleport(point);
+        Ok(())
     }
 
     /// Flies to `gap_m` metres under the moon, on the side that faces the
@@ -221,6 +242,13 @@ impl Client {
             Command::RandomAvatar => self.random_avatar(),
             Command::NextAvatar => self.next_avatar(),
             Command::SetEffects { effects } => self.set_effects(effects),
+            Command::GoTo { place } => {
+                if let Err(error) = self.go_to(&place) {
+                    self.events.push(Event::Rejected {
+                        message: format!("place {place}: {error:?}"),
+                    });
+                }
+            }
         }
     }
 

@@ -133,7 +133,14 @@ pub fn footings(count: i32) -> f64 {
 #[wasm_bindgen]
 pub fn walk_start() {
     let mut client = Client::new(Recipe::new(CAVE_SEED)).expect("the current generator version");
-    client.teleport(CAVE_AT[0], CAVE_AT[1]);
+    {
+        let side = f64::from(client.sphere().blocks().side());
+        client.teleport(topology::SurfacePoint::new(
+            topology::Sector::ALL[0],
+            CAVE_AT[0] * side,
+            CAVE_AT[1] * side,
+        ));
+    }
     client.pose(0.0, -0.2, 6.0);
     let mut input = Input::default();
     input.key(Key::Forward, true);

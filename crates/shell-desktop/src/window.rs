@@ -21,15 +21,17 @@ pub fn run(
     recipe: Recipe,
     field: Option<Field>,
     avatar: Option<String>,
-    at: Option<[f64; 2]>,
+    at: Option<String>,
 ) -> Result<(), String> {
     let mut client = match field {
         Some(field) => Client::with_field(recipe, field),
         None => Client::new(recipe),
     }
     .map_err(|e| e.to_string())?;
-    if let Some([u, v]) = at {
-        client.teleport(u, v);
+    if let Some(place) = &at {
+        client
+            .go_to(place)
+            .map_err(|e| format!("--at {place}: {e:?}"))?;
     }
     let since_epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
     client.add_entropy(since_epoch.map_or(0, |elapsed| elapsed.as_nanos() as u64));

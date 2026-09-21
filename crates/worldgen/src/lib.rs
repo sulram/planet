@@ -107,9 +107,7 @@ impl Column {
     pub fn density_m(self, height_m: f64) -> f64 {
         match &self.caves {
             None => self.ground.height_m - height_m,
-            Some(caves) => {
-                v3::density_m(caves, self.direction, height_m / self.scale) * self.scale
-            }
+            Some(caves) => v3::density_m(caves, self.direction, height_m / self.scale) * self.scale,
         }
     }
 

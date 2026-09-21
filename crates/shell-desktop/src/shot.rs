@@ -29,8 +29,10 @@ pub fn run(shot: Shot) -> Result<(), String> {
     if let Some(effects) = &shot.effects {
         client.command_json(&format!(r#"{{"type":"set_effects","effects":{effects}}}"#));
     }
-    if let Some([u, v]) = shot.at {
-        client.teleport(u, v);
+    if let Some(place) = &shot.at {
+        client
+            .go_to(place)
+            .map_err(|e| format!("--at {place}: {e:?}"))?;
     }
     let (pitch, boom_m) = (shot.pitch_deg.to_radians(), shot.boom_m);
     match shot.moon_gap_m {

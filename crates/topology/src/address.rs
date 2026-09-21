@@ -52,7 +52,7 @@ impl Grid {
 
     /// Inverse of [`Grid::cube_point`]. Cell centres are odd on the two
     /// in-face axes, so exactly one component has magnitude `side`.
-    fn from_cube_point(self, p: [i32; 3]) -> Column {
+    fn column_at(self, p: [i32; 3]) -> Column {
         let n_side = self.side() as i32;
         let axis = p
             .iter()
@@ -95,7 +95,7 @@ impl Grid {
         );
         let t = [0, 1, 2].map(|i| ua[i] * du + va[i] * dv);
         let p = self.cube_point(column);
-        let landed = self.from_cube_point([0, 1, 2].map(|i| p[i] + t[i] - n[i]));
+        let landed = self.column_at([0, 1, 2].map(|i| p[i] + t[i] - n[i]));
 
         // Straight ahead now runs down the new face, against the old normal.
         let heading = n.map(|c| -c);

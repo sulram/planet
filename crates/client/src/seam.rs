@@ -39,6 +39,15 @@ pub enum Command {
     SetEffects {
         effects: Effects,
     },
+    /// Stand at a place, named by its code: `"4-K7M42Q"`. A code shorter than
+    /// full precision names a box, and the middle of it is where you land.
+    ///
+    /// This is arrival, not travel: it is how a shared address opens where it
+    /// says, and how `--at` aims a headless render. Moving about a world is
+    /// walking, flying and, later, portals.
+    GoTo {
+        place: String,
+    },
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]

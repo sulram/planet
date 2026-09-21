@@ -18,10 +18,20 @@
 		avatar: string | null;
 		/** How the picture is made. Undefined leaves the engine as it is. */
 		effects?: Effects;
+		/**
+		 * Where to stand after any respawn: the place from the address bar on
+		 * arrival, and wherever the person is once they are in the world.
+		 *
+		 * Setting a recipe regenerates and respawns, and the engine sets one of
+		 * its own before the page sets the real one, so this cannot be a single
+		 * shot after the first world: it is sent after every one. The gain is
+		 * that turning a knob keeps you where you were standing.
+		 */
+		stand?: string | null;
 		onevent?: (event: EngineEvent) => void;
 	}
 
-	let { recipe, fieldPath, mode, avatar, effects, onevent }: Props = $props();
+	let { recipe, fieldPath, mode, avatar, effects, stand, onevent }: Props = $props();
 
 	type Status = 'loading' | 'shaping' | 'running' | 'missing' | 'unsupported' | 'failed';
 
@@ -39,7 +49,12 @@
 	let engineField: string | undefined;
 
 	function receive(event: EngineEvent) {
-		if (event.type === 'recipe_changed') engineRecipe = JSON.stringify(event.recipe);
+		if (event.type === 'recipe_changed') {
+			engineRecipe = JSON.stringify(event.recipe);
+			// The world just respawned the avatar, so this is the moment
+			// standing somewhere else survives.
+			if (stand && engine) engine.command({ type: 'go_to', place: stand });
+		}
 		if (event.type === 'mode_changed') engineMode = event.mode;
 		if (event.type === 'avatar_changed') engineAvatar = event.path;
 		if (event.type === 'effects_changed') engineEffects = JSON.stringify(event.effects);

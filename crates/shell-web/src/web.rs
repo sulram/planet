@@ -150,7 +150,13 @@ async fn fetch(url: &str) -> Result<Vec<u8>, String> {
 }
 
 impl State {
-    fn frame(&mut self) {
+    /// One frame. Returns the events it produced rather than handing them to
+    /// JS here: the whole of this runs inside a `RefCell` borrow of the state,
+    /// and a handler that answers an event with a command, which is the most
+    /// natural thing a front end does, would re-enter that borrow and panic.
+    /// The caller dispatches them once the borrow is gone.
+    #[must_use]
+    fn frame(&mut self) -> Vec<JsValue> {
         let now = now_ms();
         let dt = (now - self.last_frame_ms) / 1000.0;
         self.last_frame_ms = now;
@@ -172,18 +178,23 @@ impl State {
         self.renderer.apply(self.client.drain_terrain_changes());
         self.renderer
             .apply_skinned(self.client.drain_skinned_changes());
-        for event in self.client.drain_events() {
-            let json = JsValue::from_str(&event.to_json());
-            if let Err(error) = self.on_event.call1(&JsValue::NULL, &json) {
-                log::error!("event handler threw: {error:?}");
-            }
-        }
+        let events: Vec<JsValue> = self
+            .client
+            .drain_events()
+            .iter()
+            .map(|event| JsValue::from_str(&event.to_json()))
+            .collect();
 
         use wgpu::CurrentSurfaceTexture::{Lost, Outdated, Suboptimal, Success};
         let texture = match self.surface.get_current_texture() {
             Success(texture) | Suboptimal(texture) => texture,
-            Outdated | Lost => return self.surface.configure(&self.gpu.device, &self.config),
-            _ => return,
+            // No picture this frame, but the world still moved and still has
+            // things to say, so the events go out either way.
+            Outdated | Lost => {
+                self.surface.configure(&self.gpu.device, &self.config);
+                return events;
+            }
+            _ => return events,
         };
         let target = texture
             .texture
@@ -195,6 +206,7 @@ impl State {
         };
         self.renderer.render(&frame, &[view]);
         self.gpu.queue.present(texture);
+        events
     }
 }
 
@@ -212,7 +224,17 @@ fn run(state: Rc<RefCell<State>>, alive: Rc<RefCell<bool>>) {
             return;
         }
         fetch_assets(&state);
-        state.borrow_mut().frame();
+        let (events, on_event) = {
+            let mut held = state.borrow_mut();
+            let events = held.frame();
+            (events, held.on_event.clone())
+        };
+        // Outside the borrow: a handler is free to answer with a command.
+        for json in events {
+            if let Err(error) = on_event.call1(&JsValue::NULL, &json) {
+                log::error!("event handler threw: {error:?}");
+            }
+        }
         request_frame(again.borrow().as_ref().expect("the loop closure"));
     }));
     request_frame(tick.borrow().as_ref().expect("the loop closure"));

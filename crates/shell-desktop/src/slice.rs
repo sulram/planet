@@ -19,11 +19,23 @@ const DEEP_M: f64 = 220.0;
 pub fn run(shot: Shot, generator: &Generator) -> Result<(), String> {
     let [width, height] = shot.size;
     let span_m = shot.slice_m;
-    let sector = Sector::new(0).expect("sector 0");
     let sphere = generator.sphere();
-    let side = f64::from(sphere.blocks().side());
-    let [u, v] = shot.at.unwrap_or([0.5, 0.5]);
-    let (middle_u, v) = (u * side, v * side);
+    let grid = sphere.blocks();
+    let half = f64::from(grid.side()) / 2.0;
+    // Where the cut is taken, from the same place code a picture is aimed
+    // with. The middle of sector 0 when nobody said.
+    let (sector, middle_u, v) = match &shot.at {
+        None => (Sector::new(0).expect("sector 0"), half, half),
+        Some(place) => {
+            let found = topology::place(grid, place).map_err(|e| format!("--at {place}: {e:?}"))?;
+            let [su, sv] = found.span(grid).map(f64::from);
+            (
+                found.column.sector,
+                f64::from(found.column.u) + su / 2.0,
+                f64::from(found.column.v) + sv / 2.0,
+            )
+        }
+    };
 
     // The ground under the middle of the cut sets where the window sits, so
     // the picture is about the surface wherever on the planet it is taken.

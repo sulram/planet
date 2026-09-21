@@ -19,10 +19,10 @@
 //! radius there is a great deal of world under one of its texels.
 
 use crate::field::Field;
-use topology::QuadSphere;
 use crate::noise::{band, fbm, simplex_d, smoothstep};
 use crate::plates::{Plates, Shape};
 use crate::{Direction, Material, Recipe, Sample};
+use topology::QuadSphere;
 
 const MOUNTAIN: u64 = 0x4_1000;
 const HILL: u64 = 0x4_2000;

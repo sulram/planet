@@ -651,7 +651,11 @@ impl Controller {
         self.point = if self.stopped_by_rock(generator) {
             self.walk_to(du, dv, generator)
         } else {
-            self.sphere.blocks().wrapped(SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv))
+            self.sphere.blocks().wrapped(SurfacePoint::new(
+                self.point.sector,
+                self.point.u + du,
+                self.point.v + dv,
+            ))
         };
         self.height_m += up.dot(delta);
     }
@@ -677,11 +681,16 @@ impl Controller {
             if du == 0.0 && dv == 0.0 {
                 continue;
             }
-            let point = self
-                .sphere
-                .blocks()
-                .wrapped(SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv));
-            let there = collision::footing(generator, self.sphere.blocks().direction(point), self.height_m);
+            let point = self.sphere.blocks().wrapped(SurfacePoint::new(
+                self.point.sector,
+                self.point.u + du,
+                self.point.v + dv,
+            ));
+            let there = collision::footing(
+                generator,
+                self.sphere.blocks().direction(point),
+                self.height_m,
+            );
             if collision::admits(here, there, self.height_m) {
                 return point;
             }

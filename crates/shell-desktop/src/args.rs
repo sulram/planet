@@ -10,7 +10,7 @@ pub enum Invocation {
         field: Option<Field>,
         avatar: Option<String>,
         /// Where to stand in sector 0, each `0..=1`. `None` is the spawn.
-        at: Option<[f64; 2]>,
+        at: Option<String>,
     },
     Shot(Shot),
 }
@@ -31,7 +31,7 @@ pub struct Shot {
     /// Seconds of walking forward before the shot, to catch a gait mid stride.
     pub walk_s: f64,
     /// Where to stand in sector 0, each `0..=1`. Default: the world's spawn.
-    pub at: Option<[f64; 2]>,
+    pub at: Option<String>,
     /// Fly to this many metres under the moon instead.
     pub moon_gap_m: Option<f64>,
     /// Fixed-scene render timing, with effects toggled for comparison.
@@ -107,11 +107,10 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
             "--pitch" if is_shot => shot.pitch_deg = number(&value()?, "--pitch")?,
             // The one place flag both invocations take: a picture and a walk
             // are worth nothing to each other if they cannot be aimed alike.
-            "--at" => {
-                let text = value()?;
-                let (u, v) = text.split_once(',').ok_or("--at wants U,V")?;
-                shot.at = Some([number(u, "--at")?, number(v, "--at")?]);
-            }
+            // A place code, as the HUD and the address bar show it. Two
+            // fractions of sector 0 used to go here, which could not name the
+            // other five and which nobody could read back off a screenshot.
+            "--at" => shot.at = Some(value()?),
             "--moon" if is_shot => shot.moon_gap_m = Some(number(&value()?, "--moon")?),
             "--walk" if is_shot => shot.walk_s = number(&value()?, "--walk")?,
             "--boom" if is_shot => shot.boom_m = number(&value()?, "--boom")?,

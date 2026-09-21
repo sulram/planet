@@ -3,7 +3,7 @@
 use client::{Client, Input, Key, Recipe};
 
 /// A point of sector 0 well under water, found by scanning the generator.
-fn open_sea() -> [f64; 2] {
+fn open_sea() -> topology::SurfacePoint {
     let generator = worldgen::Generator::new(Recipe::new(1)).unwrap();
     let grid = generator.sphere().blocks();
     let side = f64::from(grid.side());
@@ -12,7 +12,7 @@ fn open_sea() -> [f64; 2] {
             let (u, v) = (f64::from(i) / 40.0, f64::from(j) / 40.0);
             let point = topology::SurfacePoint::new(topology::Sector::ALL[0], u * side, v * side);
             if generator.sample(grid.direction(point)).height_m < -40.0 {
-                return [u, v];
+                return point;
             }
         }
     }
@@ -34,10 +34,17 @@ fn run(client: &mut Client, input: &mut Input, seconds: f64) -> f64 {
 
 #[test]
 fn a_swimmer_floats_dives_and_surfaces() {
-    let [u, v] = open_sea();
-    println!("open sea at {u},{v}");
+    let point = open_sea();
+    let grid = worldgen::Generator::new(Recipe::new(1))
+        .unwrap()
+        .sphere()
+        .blocks();
+    println!(
+        "open sea at {}",
+        topology::code(grid, grid.column_of(point), topology::CODE_MAX)
+    );
     let mut client = Client::new(Recipe::new(1)).unwrap();
-    client.teleport(u, v);
+    client.teleport(point);
     client.pose(-20.0, 0.0, 6.0); // released twenty metres down
     let mut input = Input::default();
 

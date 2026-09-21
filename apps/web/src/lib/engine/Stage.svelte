@@ -4,6 +4,7 @@
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
 	import { onMount } from 'svelte';
+	import { replaceState } from '$app/navigation';
 	import EngineView from './EngineView.svelte';
 	import Settings from './Settings.svelte';
 	import { modes, type Effects, type EngineEvent, type Mode } from './index';
@@ -37,6 +38,23 @@
 
 	let mode = $state<Mode>('walk');
 	let stats = $state<Extract<EngineEvent, { type: 'stats' }>>();
+
+	// The address bar is where you are. Read once, synchronously, because the
+	// engine asks for it as soon as its first world is built; `null` on the
+	// server, where there is no address bar to read.
+	const arrivedAt = typeof location === 'undefined' ? null : location.hash.slice(1) || null;
+	/** Where a respawn puts you back: the address on arrival, then wherever you are. */
+	const stand = $derived(stats?.place ?? arrivedAt);
+	/** The last place written, so standing still writes nothing. */
+	let written = '';
+
+	// Replaced and never pushed: the back button is the way out of the world,
+	// not a trail of every step taken in it.
+	$effect(() => {
+		if (!stats || stats.place === written) return;
+		written = stats.place;
+		replaceState(`#${stats.place}`, {});
+	});
 
 	// How the picture is made belongs to the machine, not to the account: a
 	// phone and a desktop want different answers. It stays in this browser.
@@ -101,7 +119,7 @@
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {fieldPath} {mode} {avatar} effects={wanted} onevent={receive} />
+	<EngineView {recipe} {fieldPath} {mode} {avatar} {stand} effects={wanted} onevent={receive} />
 	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}

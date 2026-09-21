@@ -109,8 +109,8 @@ pub fn place(grid: Grid, text: &str) -> Result<Place, PlaceError> {
         .filter(|c| !c.is_whitespace() && *c != '-')
         .map(|c| c.to_ascii_uppercase());
     let first = chars.next().ok_or(PlaceError::Sector)?;
-    let sector = Sector::new(value_of(first).ok_or(PlaceError::Sector)? as u8)
-        .ok_or(PlaceError::Sector)?;
+    let sector =
+        Sector::new(value_of(first).ok_or(PlaceError::Sector)? as u8).ok_or(PlaceError::Sector)?;
 
     let mut stream = 0u64;
     let mut given = 0usize;
@@ -177,7 +177,11 @@ pub fn bearing_deg(up: Vec3, facing: Vec3) -> Option<f64> {
         return None;
     }
     let degrees = libm::atan2(vec3::dot(flat, east), vec3::dot(flat, north)).to_degrees();
-    Some(if degrees < 0.0 { degrees + 360.0 } else { degrees })
+    Some(if degrees < 0.0 {
+        degrees + 360.0
+    } else {
+        degrees
+    })
 }
 
 fn value_of(c: char) -> Option<u32> {
@@ -261,7 +265,11 @@ mod tests {
         let g = grid(16);
         let column = Column::new(Sector::ALL[1], 1234, 43210);
         let text = code(g, column, CODE_MAX);
-        for variant in [text.to_lowercase(), text.replace('-', ""), format!(" {text} ")] {
+        for variant in [
+            text.to_lowercase(),
+            text.replace('-', ""),
+            format!(" {text} "),
+        ] {
             assert_eq!(place(g, &variant).expect("reads back").column, column);
         }
     }
