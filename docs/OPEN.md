@@ -27,6 +27,10 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - **Relief against the build band**: generator v1 raises peaks to 1400 m while
   the band is about +-128 m. Does the band follow the terrain surface?
 - **Look**: terrain material style (flat colors, pixel textures, triplanar)?
+- **"Volume" names two things.** In GLOSSARY it is an address box where
+  building is granted; in `client::volume` and in ROADMAP it is the ground
+  meshed from density at the deepest quadtree level. One of the two needs
+  another word before either reaches the wire protocol.
 
 ## Later
 

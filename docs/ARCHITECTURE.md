@@ -238,6 +238,26 @@ Numbers marked (p) are proposed and not yet confirmed.
   sea, after it for any other. `water_clarity` stretches a swimmer's sight.
 - Swimming is part of walking: in water too deep to stand you float at chest
   depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
+- What holds a body up is a **footing** (`client::collision`): the top of the
+  solid at or under its feet, and the bottom of the solid over its head, read
+  from one column of the density field. The surface out in the open, the
+  cave's own floor and roof inside one. No mesh: a footing costs 2 us, and a
+  step, which asks for four, costs 8 (DECISIONS 47).
+- A rise of one block is taken in stride and two is a wall, to be jumped or
+  flown, going up and coming down. A body needs its own height of room to walk
+  into a place, unless it already has less, so a tight place is not a trap.
+  Blocked, a step is tried along one address axis and then the other, which is
+  what slides a body along a wall.
+- Rock at knee height means the body is in rock rather than on it, and then
+  the floor is the ground itself: a wall is not walked into, a buried body is
+  let out upward, and nothing falls through the planet.
+- Collision is the ground in full detail, never the filtered one: what a body
+  stands on may not change with where the camera is. It reaches as deep as the
+  field does, which is deeper than the volume is drawn.
+- Inside the ground the third person boom is cut by the rock behind it instead
+  of lifted over the terrain, so the camera stays in the cave with the body.
+  Flight keeps its own floor over the drawn ground, except under the ground,
+  where the footing takes over.
 - Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world.
 - Bodies: the planet and the moon share one terrain quadtree (`Body`). Patches
   are built around their body's centre; the renderer adds where the body is

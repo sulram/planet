@@ -200,6 +200,7 @@ name = "bench"
 version = "0.0.0"
 dependencies = [
  "client",
+ "topology",
  "wasm-bindgen",
  "worldgen",
 ]

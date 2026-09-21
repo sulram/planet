@@ -11,6 +11,7 @@ use scene::Camera;
 use topology::{RADIUS_M, SurfacePoint};
 use worldgen::Generator;
 
+use crate::collision::{self, BODY_M, Footing, STEP_M};
 use crate::seam::Mode;
 
 const WALK_MPS: f64 = 4.8;
@@ -225,6 +226,28 @@ impl Controller {
                 generator.moon_sample_at(direction.to_array(), 0.0).height_m
             }
         }
+    }
+
+    /// What the body at this direction stands on, and what is over its head.
+    /// Out in the open the floor is the surface and there is no roof; in a
+    /// cave both are the cave's own, which is the whole reason the ground
+    /// under the feet is a volume and not a height.
+    fn footing(&self, generator: &Generator) -> Footing {
+        match self.site {
+            Site::Planet => collision::footing(generator, self.point.direction(), self.height_m),
+            // The moon is a height all the way down, and so is any world on a
+            // generator version frozen before caves.
+            Site::Moon { direction } => {
+                Footing::solid(generator.moon_sample_at(direction.to_array(), 0.0).height_m)
+            }
+        }
+    }
+
+    /// Whether the body is under the ground as the heightfield draws it: in a
+    /// cave, or in the rock around one. Rules that keep a body over the
+    /// terrain point the wrong way there.
+    fn underground(&self, ground_m: f64) -> bool {
+        self.site == Site::Planet && self.height_m < ground_m
     }
 
     /// Tells the controller how coarse the mesh around the avatar is this frame.
@@ -533,7 +556,7 @@ impl Controller {
     /// over a plain sphere on the moon.
     fn step(&mut self, delta: DVec3, generator: &Generator) {
         match self.site {
-            Site::Planet => self.step_on_planet(delta),
+            Site::Planet => self.step_on_planet(delta, generator),
             Site::Moon { direction } => {
                 let radius = self.body().1 + self.height_m;
                 let along = delta - direction * direction.dot(delta);
@@ -550,28 +573,51 @@ impl Controller {
             self.height_m = self.height_m.min(FLOAT_M).max(ground);
             return;
         }
-        let floor = match self.mode {
-            Mode::Walk => ground,
-            Mode::Fly => self.shown_ground_m(generator, self.radial()) + 0.5,
-        };
-        if self.height_m <= floor {
-            self.height_m = floor;
-            if self.mode == Mode::Walk {
-                self.grounded = true;
-                self.vertical_mps = 0.0;
+        let footing = self.footing(generator);
+        let floor_m = match self.mode {
+            // A flyer is held over the ground as it is drawn, so it never
+            // ends up looking at the terrain from underneath. Under the
+            // ground that rule points the wrong way, and the footing, which
+            // knows about the cave, takes over.
+            Mode::Fly if !self.underground(ground) => {
+                Some(self.shown_ground_m(generator, self.radial()) + 0.5)
             }
-        } else if self.mode == Mode::Walk && self.grounded {
-            // Walking downhill: stay glued to the ground over small drops
-            // (auto step), fall off real ledges.
-            if self.height_m - ground < 0.6 {
-                self.height_m = ground;
-            } else {
-                self.grounded = false;
+            _ => footing.floor_m,
+        };
+        match floor_m {
+            // Nothing within reach under the feet: keep falling.
+            None => self.grounded = false,
+            Some(floor_m) if self.height_m <= floor_m => {
+                self.height_m = floor_m;
+                if self.mode == Mode::Walk {
+                    self.grounded = true;
+                    self.vertical_mps = 0.0;
+                }
+            }
+            Some(floor_m) if self.mode == Mode::Walk && self.grounded => {
+                // Walking downhill: stay glued to the ground over a step
+                // (auto step), fall off anything deeper.
+                if self.height_m - floor_m < STEP_M {
+                    self.height_m = floor_m;
+                } else {
+                    self.grounded = false;
+                }
+            }
+            Some(_) => {}
+        }
+
+        // A roof stops a rise the way the ground stops a fall. Squeezed into
+        // a gap thinner than a body, the floor wins: better low than sunk.
+        if let Some(ceiling_m) = footing.ceiling_m {
+            let head_m = (ceiling_m - BODY_M).max(floor_m.unwrap_or(f64::MIN));
+            if self.height_m > head_m {
+                self.height_m = head_m;
+                self.vertical_mps = self.vertical_mps.min(0.0);
             }
         }
     }
 
-    fn step_on_planet(&mut self, delta: DVec3) {
+    fn step_on_planet(&mut self, delta: DVec3, generator: &Generator) {
         let tangents = self.point.tangents();
         let up = DVec3::from(tangents.up);
         let radius = RADIUS_M + self.height_m;
@@ -588,9 +634,43 @@ impl Controller {
         let det = a * c - b * b;
         let (du, dv) = ((c * p - b * q) / det, (a * q - b * p) / det);
 
-        self.point =
-            SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv).wrapped();
+        self.point = if self.stopped_by_rock(generator) {
+            self.walk_to(du, dv, generator)
+        } else {
+            SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv).wrapped()
+        };
         self.height_m += up.dot(delta);
+    }
+
+    /// Whether rock in the way stops this body. A walker, always; a flyer
+    /// only inside the ground, where it is in a cave and the walls are real.
+    /// Swimmers pass: the sea has no walls, and its floor is a height.
+    fn stopped_by_rock(&self, generator: &Generator) -> bool {
+        !self.swimming && (self.mode == Mode::Walk || self.underground(self.ground_m(generator)))
+    }
+
+    /// Where a step of `du, dv` in address space ends: where it asked, or
+    /// short of whatever stopped it.
+    ///
+    /// A rise of one block is taken in stride and more is a wall, so a cave
+    /// wall stops a body exactly the way a cliff does and the only way past
+    /// either is to jump or to fly. Blocked, the step is tried one address
+    /// axis at a time, which is what slides a body along a wall instead of
+    /// sticking it to one.
+    fn walk_to(&self, du: f64, dv: f64, generator: &Generator) -> SurfacePoint {
+        let here = self.footing(generator);
+        for (du, dv) in [(du, dv), (du, 0.0), (0.0, dv)] {
+            if du == 0.0 && dv == 0.0 {
+                continue;
+            }
+            let point = SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv)
+                .wrapped();
+            let there = collision::footing(generator, point.direction(), self.height_m);
+            if collision::admits(here, there, self.height_m) {
+                return point;
+            }
+        }
+        self.point
     }
 
     /// Keeps the tangent vectors tangent to the frame: projected back on the
@@ -615,13 +695,21 @@ impl Controller {
         let target = self.position() + up * EYE_M;
         let mut position = target - forward * self.boom_m;
 
-        // Never inside the body the avatar stands on, as drawn.
+        // Never inside the body the avatar stands on, as drawn. In a cave
+        // that rule would yank the camera out through the roof, so there the
+        // boom is cut by the rock behind it instead: the camera stays in the
+        // cave with the body, as near to it as the walls allow.
         let (center, datum_m) = self.body();
-        let from_center = position - center;
-        let ground = self.shown_ground_m(generator, from_center.normalize());
-        let min_radius = datum_m + ground + 0.4;
-        if from_center.length() < min_radius {
-            position = center + from_center.normalize() * min_radius;
+        if self.underground(self.ground_m(generator)) {
+            let run_m = collision::clear_run_m(generator, target, -forward, self.boom_m);
+            position = target - forward * run_m;
+        } else {
+            let from_center = position - center;
+            let ground = self.shown_ground_m(generator, from_center.normalize());
+            let min_radius = datum_m + ground + 0.4;
+            if from_center.length() < min_radius {
+                position = center + from_center.normalize() * min_radius;
+            }
         }
 
         // Aim at the target from wherever the camera ended up.

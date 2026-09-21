@@ -4,7 +4,9 @@
 
 use std::cell::RefCell;
 
+use client::collision;
 use client::{Client, Input, Key, Recipe};
+use topology::{SECTOR_SIDE, Sector, SurfacePoint};
 use wasm_bindgen::prelude::wasm_bindgen;
 use worldgen::{Field, Generator, Source};
 
@@ -85,6 +87,66 @@ pub fn volume(patches: i32, columns: i32, cells: i32) -> f64 {
         }
     }
     sum
+}
+
+thread_local! {
+    static WALK: RefCell<Option<(Client, Input)>> = const { RefCell::new(None) };
+}
+
+/// The seed and the place the caves were found in (docs/ROADMAP.md).
+const CAVE_SEED: u64 = 0x0000_0000_cafe_0007;
+const CAVE_AT: [f64; 2] = [0.405, 0.58];
+
+/// Footings across cave country: what one body costs the frame it walks in.
+/// A step takes one where the body stands and up to three more for where it
+/// might go, so this is multiplied by four, and again by every agent in a
+/// world. The columns here are the expensive kind: a column with no cave in
+/// it answers from its height and never probes.
+#[wasm_bindgen]
+pub fn footings(count: i32) -> f64 {
+    let generator = Generator::new(Recipe::new(CAVE_SEED)).expect("the current generator version");
+    let side = f64::from(SECTOR_SIDE);
+    let mut sum = 0.0;
+    for i in 0..count {
+        let spread = f64::from(i) * 1e-5;
+        let point = SurfacePoint::new(
+            Sector::ALL[0],
+            (CAVE_AT[0] + spread) * side,
+            (CAVE_AT[1] + spread) * side,
+        );
+        let direction = point.direction();
+        let ground_m = generator.sample(direction).height_m;
+        sum += collision::footing(&generator, direction, ground_m)
+            .floor_m
+            .unwrap_or_default();
+    }
+    sum
+}
+
+/// Stands a body in cave country and starts it running. This is the frame
+/// that reads the density field under the feet: a footing where the body is,
+/// and one for each step it tries before it takes one.
+#[wasm_bindgen]
+pub fn walk_start() {
+    let mut client = Client::new(Recipe::new(CAVE_SEED)).expect("the current generator version");
+    client.teleport(CAVE_AT[0], CAVE_AT[1]);
+    client.pose(0.0, -0.2, 6.0);
+    let mut input = Input::default();
+    input.key(Key::Forward, true);
+    input.key(Key::Sprint, true);
+    WALK.with(|walk| *walk.borrow_mut() = Some((client, input)));
+}
+
+/// One frame of the walk. The host times the call.
+#[wasm_bindgen]
+pub fn walk_frame() {
+    WALK.with(|walk| {
+        let mut walk = walk.borrow_mut();
+        let (client, input) = walk.as_mut().expect("walk_start comes first");
+        client.update(1.0 / 60.0, input);
+        client.drain_events();
+        client.drain_terrain_changes();
+    });
 }
 
 /// Starts a descent from 3 km over a body to its ground: the streamer's

@@ -7,6 +7,7 @@
 
 mod assets;
 mod box_figure;
+pub mod collision;
 mod controller;
 mod figure;
 mod grass;

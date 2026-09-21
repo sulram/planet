@@ -56,6 +56,35 @@ for (const [body, name] of runs) {
 	report(`${name}: worst frame of a 10 s descent`, worst, FRAME_BUDGET_MS);
 }
 
+// What one body's collision costs, apart from the frame it lands in: a
+// footing is what holds it up, and a step asks for up to four of them.
+// A world full of agents is what the budget leaves room for: at this one,
+// twenty of them walking cost a millisecond between them.
+const FOOTING_BUDGET_MS = 0.05;
+{
+	const rounds = 2000;
+	bench.footings(rounds);
+	const start = performance.now();
+	bench.footings(rounds);
+	const ms = (performance.now() - start) / rounds;
+	report('planet: four footings, one body one step', ms * 4, FOOTING_BUDGET_MS);
+	console.log(`     ${(ms * 1000).toFixed(1)} us a footing`);
+}
+
+// A body running across cave country, where every frame reads the density
+// field for what holds it up and for what stops it. Terrain keeps streaming
+// under it, so this is the whole frame and not only the collision in it.
+{
+	bench.walk_start();
+	let worst = 0;
+	for (let frame = 0; frame < 600; frame++) {
+		const before = performance.now();
+		bench.walk_frame();
+		worst = Math.max(worst, performance.now() - before);
+	}
+	report('planet: worst frame of a 10 s walk in cave country', worst, FRAME_BUDGET_MS);
+}
+
 // One patch of the finest quadtree level, as a volume instead of a height:
 // 32 x 32 columns and a 32 m window of cells up each. What this costs against
 // `samples` is what says whether the volume layer can be meshed in a frame.

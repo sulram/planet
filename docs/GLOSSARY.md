@@ -25,6 +25,7 @@ this file in the same change.
 | Address space | The flat grid view where every block is a unit cube. Where simulation runs. |
 | World space | True 3D coordinates. For rendering and flight above the band. |
 | Chunk | A 16x16x16 block of cells. Unit of storage, streaming and meshing. |
+| Footing | What holds a body up at one direction: the top of the solid under its feet, and the bottom of the solid over its head. Read from the density field, never from a mesh. |
 | Terrain layer | Smooth voxels: density + material, meshed by surface nets. |
 | Build layer | Cubic voxels: block types, plus ramp, wedge and half slab shapes. |
 | Brush | A terrain edit tool: dig, add, smooth, flatten, paint. |
