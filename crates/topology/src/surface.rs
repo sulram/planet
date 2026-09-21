@@ -1,15 +1,13 @@
 //! Continuous positions in address space.
 
 use crate::address::Column;
+use crate::grid::Grid;
 use crate::sector::Sector;
-use crate::{SECTOR_SIDE, vec3};
+use crate::vec3;
 
-const SIDE: f64 = SECTOR_SIDE as f64;
-const HALF: f64 = SIDE / 2.0;
-
-/// A point on the surface in address space: block units, `0..=SECTOR_SIDE`.
+/// A point on the surface in address space: block units, `0..=side`.
 ///
-/// Coordinates outside the range are legal input to [`SurfacePoint::wrapped`],
+/// Coordinates outside the range are legal input to [`Grid::wrapped`],
 /// which unfolds them across the seam onto the neighbouring sector.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct SurfacePoint {
@@ -31,33 +29,37 @@ impl SurfacePoint {
             v: f64::from(column.v) + 0.5,
         }
     }
+}
 
-    /// The column that contains this point. The point must be in range.
-    pub fn column(self) -> Column {
-        let cell = |x: f64| (libm::floor(x) as i64).clamp(0, i64::from(SECTOR_SIDE) - 1) as u16;
+impl Grid {
+    /// The column that contains a point. The point must be in range.
+    pub fn column_of(self, point: SurfacePoint) -> Column {
+        let last = i64::from(self.side()) - 1;
+        let cell = |x: f64| (libm::floor(x) as i64).clamp(0, last) as u16;
         Column {
-            sector: self.sector,
-            u: cell(self.u),
-            v: cell(self.v),
+            sector: point.sector,
+            u: cell(point.u),
+            v: cell(point.v),
         }
     }
 
     /// Brings an out of range point back in range by folding it over the seam
     /// it crossed. Distances in address space are preserved: the overshoot past
     /// the edge becomes the distance from the edge on the neighbouring sector.
-    pub fn wrapped(self) -> SurfacePoint {
-        let mut point = self;
+    pub fn wrapped(self, point: SurfacePoint) -> SurfacePoint {
+        let half = self.half();
+        let mut point = point;
         // Two folds cover a corner crossing; more means an absurd step.
         for _ in 0..4 {
-            let (a, b) = (point.u - HALF, point.v - HALF);
-            let (du, dv, over) = if a > HALF {
-                (1.0, 0.0, a - HALF)
-            } else if a < -HALF {
-                (-1.0, 0.0, -HALF - a)
-            } else if b > HALF {
-                (0.0, 1.0, b - HALF)
-            } else if b < -HALF {
-                (0.0, -1.0, -HALF - b)
+            let (a, b) = (point.u - half, point.v - half);
+            let (du, dv, over) = if a > half {
+                (1.0, 0.0, a - half)
+            } else if a < -half {
+                (-1.0, 0.0, -half - a)
+            } else if b > half {
+                (0.0, 1.0, b - half)
+            } else if b < -half {
+                (0.0, -1.0, -half - b)
             } else {
                 return point;
             };
@@ -67,18 +69,18 @@ impl SurfacePoint {
             let t = vec3::add(vec3::scale(ua, du), vec3::scale(va, dv));
             let along = vec3::add(vec3::scale(ua, a * dv.abs()), vec3::scale(va, b * du.abs()));
             let p = vec3::add(
-                vec3::add(vec3::scale(n, HALF - over), vec3::scale(t, HALF)),
+                vec3::add(vec3::scale(n, half - over), vec3::scale(t, half)),
                 along,
             );
             let sector = Sector::containing(t);
             let [_, ub, vb] = frame(sector);
             point = SurfacePoint {
                 sector,
-                u: vec3::dot(p, ub) + HALF,
-                v: vec3::dot(p, vb) + HALF,
+                u: vec3::dot(p, ub) + half,
+                v: vec3::dot(p, vb) + half,
             };
         }
-        panic!("surface point too far out of range to wrap: {self:?}");
+        panic!("surface point too far out of range to wrap: {point:?}");
     }
 }
 

@@ -27,10 +27,20 @@ Numbers marked (p) are proposed and not yet confirmed.
 - Seams are computed, not tabled: a column is an integer point on a cube, a
   step over an edge is one vector sum, swaps and flips fall out of the frames.
 - Address: `sector (0..5), u, v, h` then chunk index and block index.
-- Block edge 0.5 m (p). `2^16` blocks per sector side (p): u and v fit in 16
-  bits. Radius about 20.9 km, surface about 5,500 km2.
-- Build band: about +-128 m around the surface (p), bedrock at the bottom.
-  Inside it a column tapers 0.6%, so the band is a regular grid in practice.
+- Two levels: a `Grid` is six square faces at one grain and owns seams,
+  neighbours and the warp; a `QuadSphere` is one body, a block grid plus the
+  radius that turns cells into metres. The chunk grid is the block grid
+  coarsened by `CHUNK_BITS`, so chunk seams are block seams (49).
+- Block edge 0.5 m (p). Blocks per sector side is `2^sector_bits`, a recipe
+  field frozen per world, `4..=16`: 16 because u and v fill a `u16`, 4 because
+  a sector must hold a chunk. Radius follows, four sector sides to a great
+  circle: 5.09 m at `2^4`, 326 m at `2^10`, 20.9 km at `2^16`.
+- Build band: `+-min(256 blocks, radius / 4)` around **the surface**, not the
+  datum, bedrock at its floor. The 256 is a human measure, a cellar and a
+  tower, and is the same on any body; the quarter of the radius is the hollow
+  core keeping its share. At `2^16` that is the +-128 m it has always been (p),
+  and a column tapers 0.6%, so the band is a regular grid in practice. On a
+  small body the radius wins and the taper is the price shells will pay (49).
 - The 8 sector corners are zoned as nature. No volume may include them.
 - Small bodies (moons, micro worlds) use a second topology: a Cartesian ball
   of cubes, diggable to the core. Both sit behind one `Topology` trait.

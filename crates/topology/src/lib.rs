@@ -6,27 +6,30 @@
 //! - **world space**: `f64` metres from the planet centre. Rendering and
 //!   flight live here.
 //!
+//! Two levels of structure. A [`Grid`] is six square faces at one grain, and
+//! owns everything that is pure arithmetic: seams, neighbours, the warp. A
+//! [`QuadSphere`] is one body: a block grid plus the radius that turns cells
+//! into metres. A chunk grid is the block grid coarsened, so it inherits the
+//! seams rather than repeating them.
+//!
 //! All transcendental math goes through `libm`, so results are bit identical
 //! on native, WASM and ARM (the generator depends on it).
 
 mod address;
+mod grid;
 mod project;
+mod quad_sphere;
 mod sector;
 mod surface;
 pub mod vec3;
 
 pub use address::{Address, Column, Step};
 pub use project::Tangents;
+pub use grid::{Grid, MAX_BITS};
+pub use quad_sphere::{MIN_BITS, QuadSphere};
 pub use sector::{Dir, Sector};
 pub use surface::SurfacePoint;
 pub use vec3::Vec3;
 
-/// Blocks per sector side, as a power of two: `u` and `v` fit in 16 bits.
-pub const SECTOR_BITS: u32 = 16;
-/// Blocks per sector side.
-pub const SECTOR_SIDE: u32 = 1 << SECTOR_BITS;
-/// Edge of one block, in metres.
+/// Edge of one block at a sector centre, in metres.
 pub const BLOCK_M: f64 = 0.5;
-/// Radius of the datum sphere (`h = 0`), in metres. Four sector sides make
-/// one great circle.
-pub const RADIUS_M: f64 = SECTOR_SIDE as f64 * BLOCK_M * 4.0 / core::f64::consts::TAU;

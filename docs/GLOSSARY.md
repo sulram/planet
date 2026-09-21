@@ -15,6 +15,8 @@ this file in the same change.
 | Body | A celestial object in a world: the planet, a moon, a micro world. Each has a topology. |
 | Topology | The rule set mapping addresses to positions and neighbours. Two kinds: quad sphere, ball. |
 | Quad sphere | Six square grids projected on a sphere. Topology of the planet. |
+| Grid | Six square faces at one grain. Owns seams, neighbours and the warp; knows no metres. The chunk grid is the block grid coarsened. |
+| Sector bits | A body's size: blocks per sector side as a power of two, `4..=16`. A recipe field, frozen per world like the generator version. |
 | Ball | A sphere carved from a plain Cartesian grid. Topology of moons and micro worlds. |
 | Sector | One of the six faces of the quad sphere. |
 | Seam | The edge where two sectors meet. May swap or flip u and v. |

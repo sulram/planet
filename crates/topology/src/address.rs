@@ -1,18 +1,19 @@
 //! Integer addresses and neighbours across sector seams.
 //!
 //! Seams are not a lookup table. A column maps to an integer point on the
-//! surface of a cube with edge `2 * SECTOR_SIDE` (doubled coordinates, so cell
-//! centres are odd integers and faces sit at the even `+-SECTOR_SIDE`). A step
-//! over an edge is one vector sum on that cube, and the point maps back to a
+//! surface of a cube with edge `2 * side` (doubled coordinates, so cell
+//! centres are odd integers and faces sit at the even `+-side`). A step over
+//! an edge is one vector sum on that cube, and the point maps back to a
 //! column. Swaps and flips of `u` and `v` fall out of the sector frames.
+//!
+//! A [`Column`] carries no size. The same integers name a cell on any grid,
+//! and what they mean is the [`Grid`] they are asked about.
 
-use crate::SECTOR_SIDE;
+use crate::grid::Grid;
 use crate::sector::{Dir, Sector, idot};
 
-const N: i32 = SECTOR_SIDE as i32;
-
 /// A surface cell: one column of blocks.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Column {
     pub sector: Sector,
     pub u: u16,
@@ -33,25 +34,29 @@ impl Column {
     pub fn new(sector: Sector, u: u16, v: u16) -> Column {
         Column { sector, u, v }
     }
+}
 
+impl Grid {
     /// Centre of the cell on the doubled integer cube.
-    fn cube_point(self) -> [i32; 3] {
+    fn cube_point(self, column: Column) -> [i32; 3] {
+        let n_side = self.side() as i32;
         let (n, ua, va) = (
-            self.sector.normal(),
-            self.sector.u_axis(),
-            self.sector.v_axis(),
+            column.sector.normal(),
+            column.sector.u_axis(),
+            column.sector.v_axis(),
         );
-        let a = 2 * i32::from(self.u) + 1 - N;
-        let b = 2 * i32::from(self.v) + 1 - N;
-        [0, 1, 2].map(|i| n[i] * N + ua[i] * a + va[i] * b)
+        let a = 2 * i32::from(column.u) + 1 - n_side;
+        let b = 2 * i32::from(column.v) + 1 - n_side;
+        [0, 1, 2].map(|i| n[i] * n_side + ua[i] * a + va[i] * b)
     }
 
-    /// Inverse of [`Column::cube_point`]. Cell centres are odd on the two
-    /// in-face axes, so exactly one component has magnitude `N`.
-    fn from_cube_point(p: [i32; 3]) -> Column {
+    /// Inverse of [`Grid::cube_point`]. Cell centres are odd on the two
+    /// in-face axes, so exactly one component has magnitude `side`.
+    fn from_cube_point(self, p: [i32; 3]) -> Column {
+        let n_side = self.side() as i32;
         let axis = p
             .iter()
-            .position(|c| c.abs() == N)
+            .position(|c| c.abs() == n_side)
             .expect("a point on the cube surface");
         let mut n = [0; 3];
         n[axis] = p[axis].signum();
@@ -60,19 +65,20 @@ impl Column {
         let b = idot(p, sector.v_axis());
         Column {
             sector,
-            u: ((a + N - 1) / 2) as u16,
-            v: ((b + N - 1) / 2) as u16,
+            u: ((a + n_side - 1) / 2) as u16,
+            v: ((b + n_side - 1) / 2) as u16,
         }
     }
 
     /// One step along the grid, resolved across seams.
-    pub fn step(self, dir: Dir) -> Step {
+    pub fn step(self, column: Column, dir: Dir) -> Step {
+        let n_side = self.side() as i32;
         let (du, dv) = dir.delta();
-        let (u, v) = (i32::from(self.u) + du, i32::from(self.v) + dv);
-        if (0..N).contains(&u) && (0..N).contains(&v) {
+        let (u, v) = (i32::from(column.u) + du, i32::from(column.v) + dv);
+        if (0..n_side).contains(&u) && (0..n_side).contains(&v) {
             return Step {
                 column: Column {
-                    sector: self.sector,
+                    sector: column.sector,
                     u: u as u16,
                     v: v as u16,
                 },
@@ -83,26 +89,29 @@ impl Column {
         // Over the edge: the travel direction `t` becomes the new normal, and
         // the cell lands one step down the new face: `p + t - n`.
         let (n, ua, va) = (
-            self.sector.normal(),
-            self.sector.u_axis(),
-            self.sector.v_axis(),
+            column.sector.normal(),
+            column.sector.u_axis(),
+            column.sector.v_axis(),
         );
         let t = [0, 1, 2].map(|i| ua[i] * du + va[i] * dv);
-        let p = self.cube_point();
-        let column = Column::from_cube_point([0, 1, 2].map(|i| p[i] + t[i] - n[i]));
+        let p = self.cube_point(column);
+        let landed = self.from_cube_point([0, 1, 2].map(|i| p[i] + t[i] - n[i]));
 
         // Straight ahead now runs down the new face, against the old normal.
         let heading = n.map(|c| -c);
         let dir = Dir::from_delta(
-            idot(heading, column.sector.u_axis()),
-            idot(heading, column.sector.v_axis()),
+            idot(heading, landed.sector.u_axis()),
+            idot(heading, landed.sector.v_axis()),
         );
-        Step { column, dir }
+        Step {
+            column: landed,
+            dir,
+        }
     }
 
-    /// The four edge neighbours, in [`Dir::ALL`] order.
-    pub fn neighbours(self) -> [Column; 4] {
-        Dir::ALL.map(|dir| self.step(dir).column)
+    /// The four edge neighbours of a column, in [`Dir::ALL`] order.
+    pub fn neighbours(self, column: Column) -> [Column; 4] {
+        Dir::ALL.map(|dir| self.step(column, dir).column)
     }
 }
 

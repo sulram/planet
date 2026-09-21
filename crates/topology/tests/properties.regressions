@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7a11bf643b348a90885eba80099c8119281a06e3dcee27f980bf901d72baf05c # shrinks to (grid, p) = (Grid { bits: 0 }, SurfacePoint { sector: Sector(0), u: 0.0, v: 0.0 })
+cc bc73302e9fb479a0f10c5af26db299d026b70b003f2886bb2e16f6ea24baa75f # shrinks to grid = Grid { bits: 0 }, s = Sector(0), t = 0.0, over = 0.0, edge = 0
