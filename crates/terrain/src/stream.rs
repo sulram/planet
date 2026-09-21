@@ -113,11 +113,18 @@ impl Terrain {
             .collect()
     }
 
-    /// What casts a shadow: what the pyramid wants, and not what is on its way
-    /// out. A retiring chunk is up so the ground has no hole in it; letting it
-    /// cast as well would double every shadow through the handover.
+    /// What casts a shadow: the near levels of what the pyramid wants.
+    ///
+    /// Not what is retiring, which is up only so the ground has no hole in it
+    /// and would double every shadow through the handover. And not ground
+    /// coarser than [`scene::SHADOW_CASTER_CELL_M`], whose triangles are wider
+    /// than a shadow texel and turn black on themselves.
     pub fn casters(&self) -> Vec<PatchId> {
-        self.drawn.values().copied().collect()
+        self.drawn
+            .iter()
+            .filter(|(addr, _)| addr.cell_m() <= scene::SHADOW_CASTER_CELL_M)
+            .map(|(_, id)| *id)
+            .collect()
     }
 
     /// How many chunks are still up only because their replacement is not.

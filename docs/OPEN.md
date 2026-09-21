@@ -85,3 +85,16 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - Meta store policy on crypto features (only matters if wallets ship on Quest).
 - Hyperfy license: confirm GPL-3.0.
 - Terms of use for uploaded content.
+
+## The ground is rough at sub-cell scale
+
+- A fine speckle on lit slopes, measured as what the shadow pass adds over the
+  same frame unshadowed: 14.7 with our depth bias, 14.99 casting only faces
+  turned from the sun, and gone only under a bias that detaches shadows (55).
+- So it is geometry, not shadow: the surface nets vertices wobble under one
+  cell. The suspect is the density byte, which saturates past `DENSITY_REACH`
+  of 2 cells, so an edge with one saturated end interpolates its crossing from
+  a number that carries no distance.
+- Open: whether to widen `DENSITY_REACH`, to store the crossing rather than the
+  distance, or to filter the normals. Each costs something different and none
+  is measured yet.

@@ -224,6 +224,16 @@ pub struct PatchDraw {
     pub body_center: DVec3,
 }
 
+/// The coarsest ground that may cast a shadow, metres across one cell.
+///
+/// The furthest shadow cascade has a texel of `2 * 4000 / 1024`, about 7.8 m
+/// (`render::shadow`). A triangle whose cells are wider than that spans many
+/// texels at once, and its depth varies across one of them by far more than
+/// any bias can lift, so the whole triangle shadows itself and goes black.
+/// Ground coarser than this is lit by the sun's angle alone, which is what a
+/// body seen from a distance is lit by anyway.
+pub const SHADOW_CASTER_CELL_M: f64 = 4.0;
+
 /// A change to the set of terrain patches a renderer holds.
 #[derive(Clone, Debug)]
 pub enum TerrainChange {
