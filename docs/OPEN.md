@@ -50,6 +50,12 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - Protocol schema language: protobuf or flatbuffers.
 - How much building is possible outside the browser (Pi, headset).
 - Cubes on sloped smooth terrain: auto-flatten on build, or leave gaps.
+- **How fine per-user rollback has to be.** Per cell attribution costs an owner
+  byte in every cell, which doubles a terrain chunk. Rollback at chunk
+  granularity is nearly free but takes a neighbour's edits in the same chunk
+  with it. With volumes (M4) a chunk usually has one owner, so chunk
+  granularity is probably enough, but that is a choice and not a fact. It
+  decides what the op log's digest tier has to carry (ROADMAP, M3).
 - Scripting model: server-side; language and sandbox undecided.
 - Chain for assets and deeds (leaning Tezos); when to anchor snapshots in Bitcoin.
 - Opening the map: which region first, how fast.

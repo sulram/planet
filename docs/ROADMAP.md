@@ -89,7 +89,13 @@ Every milestone ends runnable end to end.
 - [ ] Build layer: cubes + ramp, wedge, half slab; greedy mesher
 - [ ] Terrain brushes: dig, add, smooth, flatten
 - [ ] Copy on first write, chunk versions, reduced LOD levels on save
-- [ ] Op log; undo; per-user rollback
+- [ ] Op log; undo; per-user rollback. It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
+  - [ ] **An op is a gesture, not a cell.** One brush stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote. This is the only lever that bounds the volume at the source, and it is what makes an op cheap enough to keep
+  - [ ] **The log is not the world.** Stored chunks are, by copy on first write, so the log is never replayed to rebuild anything: it exists for undo, audit and rollback. That is what makes it safe to compact, and it should be written down where someone will read it before they build on it
+  - [ ] **Two tiers.** Inside the undo window an op is kept whole, with the chunk versions it bumped, and undo is restoring those versions. Past the window it collapses to a digest: who, when, which chunks, how many cells. Moderation and rollback still work; per cell before and after does not survive
+  - [ ] **Chunk version retention is the real knob**, because undo depth is bounded by how many versions of a chunk are kept, not by how many ops are. Keep the last few, or those newer than the window
+  - [ ] **Compaction runs in the world actor**, off the hot path, on a schedule. The hot plane never waits for it
+  - [ ] Measure before choosing the window: bytes per op, and bytes per stored chunk version after zstd. Those two numbers decide the rest
 - [ ] Delta sync on reconnect; client chunk cache (SQLite native, OPFS web)
 
 ## M4: land
