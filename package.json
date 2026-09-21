@@ -13,7 +13,7 @@
 		"wasm": "bun scripts/wasm.ts",
 		"assets": "bun scripts/assets.ts",
 		"field": "bun scripts/field.ts",
-		"desktop": "cargo run --release -p shell-desktop",
+		"desktop": "cargo run --release -p shell-desktop --",
 		"shot": "bun scripts/shot.ts",
 		"webshot": "bun scripts/webshot.ts",
 		"bench": "bun scripts/bench.ts",
