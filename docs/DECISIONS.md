@@ -667,8 +667,27 @@ into a binary that also has to run on a Raspberry Pi, a Quest and a Pico
 UI that stays a panel survives that; a native UI that is a whole application
 does not. That is the argument for holding the line at player screens.
 
+**How a world is opened, and it is a URL rather than an id.** An id alone
+assumes there is one instance, and this is self hostable free software, so
+which instance is never optional. The web already addresses a world at
+`/w/<id>`, so the desktop takes the same string a person copies out of the
+browser: `bun run desktop <url>`, with a bare id meaning the instance it is
+configured for. One address works in both, pasting a link becomes the natural
+gesture, and it is the same scheme that will carry a place inside a world
+(ROADMAP, M1) rather than a second one. It also gives `bun run shot --world`,
+which the backoffice and CI both want.
+
+That flag is not a cheap one, and saying so is the point: a recipe lives on the
+server, so `--world` is already the thin end of this entry rather than a
+sibling of `--seed`. It needs the seam, an HTTP client, and a local cache of
+recipes, which permanent offline mode wants anyway.
+
+**An instance's main world is not a desktop concept.** What the front door
+opens is a property of the instance, read by the web and the desktop alike, so
+it belongs in the cold plane beside `worlds` and not in a native flag.
+
 Rejected: the desktop as a viewer with flags (what we have, and the complaint
 that opened this); the desktop as a full peer including the backoffice (two
 admin UIs, forever, for the few); a webview shell (no Pi, no headset); two
-string tables (rot).
+string tables (rot); a world id with no instance (one host, forever).
 
