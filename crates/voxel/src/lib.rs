@@ -18,8 +18,10 @@
 //! write the same bytes, so the rounding goes through `libm`.
 
 mod codec;
+mod nets;
 
 pub use codec::ChunkError;
+pub use nets::{Ground, Mesh, Vertex, mesh};
 
 /// A chunk is `2^CHUNK_BITS` cells on a side.
 pub const CHUNK_BITS: u32 = 4;
