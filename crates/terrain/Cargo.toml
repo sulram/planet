@@ -1,0 +1,20 @@
+[package]
+name = "terrain"
+description = "Voxel ground around a body: the read path, the mesher and the streamer. No GPU, no IO."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+topology.workspace = true
+voxel.workspace = true
+worldgen.workspace = true
+scene.workspace = true
+glam.workspace = true
+
+[dev-dependencies]
+glam.workspace = true
+
+[lints]
+workspace = true
