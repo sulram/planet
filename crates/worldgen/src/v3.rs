@@ -251,6 +251,40 @@ pub fn sample(
     }
 }
 
+/// TEMPORARY, for diagnosis only: the land terms at one direction.
+#[doc(hidden)]
+pub fn debug_terms(
+    recipe: &Recipe,
+    sphere: QuadSphere,
+    plates: &Plates,
+    field: Option<&Field>,
+    d: Direction,
+    footprint_m: f64,
+) -> [f64; 6] {
+    let seed = recipe.seed;
+    let params = &recipe.params;
+    let footprint = footprint_m / RADIUS_M;
+    let scale = params.continent_scale;
+    let shape = match field {
+        Some(field) => field_shape(recipe, sphere, field, d, footprint_m),
+        None => plates.shape(seed, d, params.sea_share),
+    };
+    let Shape { land, lift, ranges } = shape;
+    let inland = smoothstep(0.0, 0.22, land);
+    let coast = smoothstep(0.0, 0.05, land);
+    let mountains = 0.5 + 0.5 * eroded(seed ^ MOUNTAIN, d, scale * 5.0, 12, 0.9, footprint);
+    let hills = filtered(seed ^ HILL, d, scale * 30.0, 8, footprint);
+    let detail = filtered(seed ^ DETAIL, d, 1800.0, 5, footprint);
+    [
+        params.relief_m * inland * 0.03,
+        params.relief_m * inland * 0.30 * lift,
+        params.relief_m * inland * 0.80 * ranges * mountains,
+        inland * (1.0 - 0.6 * ranges) * 22.0 * hills,
+        coast * 0.5 * detail + 0.6 * coast,
+        land,
+    ]
+}
+
 fn material(recipe: &Recipe, d: Direction, height_m: f64) -> Material {
     let seed = recipe.seed;
     let relief = recipe.params.relief_m;

@@ -282,6 +282,19 @@ impl Generator {
         sample
     }
 
+    /// TEMPORARY, for diagnosis only.
+    #[doc(hidden)]
+    pub fn debug_terms(&self, direction: Direction, footprint_m: f64) -> [f64; 6] {
+        v3::debug_terms(
+            &self.recipe,
+            self.sphere,
+            &self.plates,
+            self.field.as_ref(),
+            direction,
+            footprint_m / self.scale,
+        )
+    }
+
     /// The ground as the reference body has it, in reference metres.
     fn reference_sample(&self, direction: Direction, footprint_m: f64) -> Sample {
         match self.recipe.generator_version {

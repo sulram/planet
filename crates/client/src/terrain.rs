@@ -345,6 +345,16 @@ impl Terrain {
             {
                 stack.extend(children);
             } else {
+                // Ground coarser than a shadow texel cannot be in a shadow map
+                // at all (DECISIONS 55): one of its triangles spans hundreds of
+                // texels and its depth varies across a single one by more than
+                // any bias can lift, so every one of them fails its own depth
+                // test and turns black. Nothing is lost by leaving it out,
+                // because ground seen from that far is lit by the angle of the
+                // sun, which is what lights a body from space anyway.
+                if node.side_m() / f64::from(PATCH_GRID) > scene::SHADOW_CASTER_CELL_M {
+                    continue;
+                }
                 self.casters.push(node.id());
                 self.built
                     .get_mut(&node)
