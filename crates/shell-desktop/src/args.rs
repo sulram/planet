@@ -9,6 +9,8 @@ pub enum Invocation {
         recipe: Recipe,
         field: Option<Field>,
         avatar: Option<String>,
+        /// Where to stand in sector 0, each `0..=1`. `None` is the spawn.
+        at: Option<[f64; 2]>,
     },
     Shot(Shot),
 }
@@ -100,7 +102,9 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,
             "--pitch" if is_shot => shot.pitch_deg = number(&value()?, "--pitch")?,
-            "--at" if is_shot => {
+            // The one place flag both invocations take: a picture and a walk
+            // are worth nothing to each other if they cannot be aimed alike.
+            "--at" => {
                 let text = value()?;
                 let (u, v) = text.split_once(',').ok_or("--at wants U,V")?;
                 shot.at = Some([number(u, "--at")?, number(v, "--at")?]);
@@ -117,6 +121,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
             recipe,
             field,
             avatar: shot.avatar,
+            at: shot.at,
         });
     }
     if shot.out.as_os_str().is_empty() {

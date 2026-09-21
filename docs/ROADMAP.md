@@ -49,7 +49,7 @@ Every milestone ends runnable end to end.
   - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
   - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (DECISIONS 45); this side needs its own answer
 - [x] Params as knobs in the panel, and in the address, so a planet stays shareable
-- [ ] A place in the address, not only a planet: sector and surface coordinates in the URL, written as the avatar settles and read on arrival, in the form `bun run shot --at` already takes
+- [ ] A place in the address, not only a planet: sector and surface coordinates in the URL, written as the avatar settles and read on arrival, in the form `bun run shot --at` and `bun run desktop --at` already take
 - [ ] Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out. The whole Atlas waits for M4
 - [ ] A coordinate system and a compass on screen, as Cryptovoxels has: the address in words a person can read out, say and paste. Until there is one, nobody can report where anything went wrong, which is how the wall above took three renders to find
 - [x] Third person placeholder avatar (boxes, walk cycle)

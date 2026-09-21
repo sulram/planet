@@ -17,12 +17,20 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 use worldgen::{Recipe, format_seed};
 
-pub fn run(recipe: Recipe, field: Option<Field>, avatar: Option<String>) -> Result<(), String> {
+pub fn run(
+    recipe: Recipe,
+    field: Option<Field>,
+    avatar: Option<String>,
+    at: Option<[f64; 2]>,
+) -> Result<(), String> {
     let mut client = match field {
         Some(field) => Client::with_field(recipe, field),
         None => Client::new(recipe),
     }
     .map_err(|e| e.to_string())?;
+    if let Some([u, v]) = at {
+        client.teleport(u, v);
+    }
     let since_epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
     client.add_entropy(since_epoch.map_or(0, |elapsed| elapsed.as_nanos() as u64));
     assets::wear(&mut client, avatar.as_deref());

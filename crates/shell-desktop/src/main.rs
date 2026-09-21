@@ -1,7 +1,7 @@
 //! The desktop shell: the offline explorer in a window, or a headless shot.
 //!
 //! ```text
-//! planet [--seed HEX] [--avatar NAME]
+//! planet [--seed HEX] [--avatar NAME] [--at U,V]
 //! planet shot --out FILE [--seed HEX] [--avatar NAME] [--size WxH] [--clock S]
 //!             [--altitude M] [--pitch DEG] [--boom M] [--walk S] [--at U,V] [--moon M]
 //! ```
@@ -22,7 +22,8 @@ fn main() -> ExitCode {
             recipe,
             field,
             avatar,
-        }) => window::run(recipe, field, avatar),
+            at,
+        }) => window::run(recipe, field, avatar, at),
         Ok(args::Invocation::Shot(shot)) => shot::run(shot),
         Err(message) => Err(message),
     };
