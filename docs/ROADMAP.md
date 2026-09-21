@@ -74,7 +74,8 @@ Every milestone ends runnable end to end.
   the order of work and the numbers to beat.
 - [x] World size in the recipe: `sector_bits` per world, `4..=16`, frozen like the generator version. A size is the scale the shape is printed at, so a small world is the same world (49, 50). `--bits N` on the desktop shell
 - [x] The heightfield restored on top of it: the quadtree, the sea, the grass, the moon. `crates/voxel` and `crates/terrain` deleted, `client::collision` reading the ground rather than a density column, `client::tests::caves` gone with the feature
-- [ ] Fix the generated shape: the four faults in `plates.rs` named under M1, and the peaks, which come out too sharp to read as mountains
+- [x] The peaks: a coast range came out as a plateau with a wall, because the gate on the relief was read at the mesh's resolution and amplified the source's own gradient. On land, p99 slope 93.8% to 65.8% and max 160% to 88%, with the range keeping its height (60)
+- [ ] Fix the generated shape: the four faults in `plates.rs` named under M1
 - [ ] The far field as baked field textures rather than a generator call per patch: alt, ruggedness, horizon and colour per sector, frozen with the recipe. Measure the settle against the 7.4 s the pyramid took (57)
 - [ ] A horizon map in the shader, so terrain self shadows at any range and nothing coarse enters a cascade (55, 57)
 - [ ] Per pixel voxelization of the far ground, so it reads as the same world as the near cubes without being the same data (57)

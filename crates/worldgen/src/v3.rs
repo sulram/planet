@@ -92,6 +92,11 @@ const BELT_FLOOR_M: f64 = 60.0;
 const BELT_M: f64 = 600.0;
 /// As far inland as the body below is willing to read.
 const INLAND_MAX: f64 = 1.6;
+/// Metres of *broad* source elevation over which the land's own relief fades
+/// in from the coast, and metres of the mesh's own elevation over which it is
+/// pinned to zero at the shore.
+const INLAND_M: f64 = 550.0;
+const SHORE_M: f64 = 40.0;
 
 /// A fractal sum whose octaves are damped by the slope gathered so far (after
 /// Quilez), and faded by `band` below the sampling footprint. About `-1..=1`.
@@ -195,6 +200,15 @@ fn field_shape(
         land,
         lift: smoothstep(0.0, LIFT_M, lift.elevation_m),
         ranges: smoothstep(BELT_FLOOR_M, BELT_M, belt.ruggedness_m),
+        // Broad, for the reason written on `Shape::inland`, and off the belt
+        // sample because this gate multiplies more than either of the others.
+        // The fine factor is there because a broad sample averages land with
+        // sea and does not know exactly where the line is: it pins the gate to
+        // zero at the shore the mesh actually draws, so no relief ever stands
+        // out of the water. Near the shore the broad factor is itself near
+        // zero, so the fine one's steepness never reaches the relief.
+        inland: smoothstep(0.0, INLAND_M, belt.elevation_m - params.sea_level_m)
+            * smoothstep(0.0, SHORE_M, elevation_m),
     }
 }
 
@@ -215,7 +229,12 @@ pub fn sample(
         Some(field) => field_shape(recipe, sphere, field, d, footprint_m),
         None => plates.shape(seed, d, params.sea_share),
     };
-    let Shape { land, lift, ranges } = shape;
+    let Shape {
+        land,
+        lift,
+        ranges,
+        inland,
+    } = shape;
 
     let height_m = if land < 0.0 {
         let sea = -land;
@@ -233,8 +252,10 @@ pub fn sample(
             + smoothstep(0.0, 0.02, sea) * 0.6 * ripples
             - 0.4
     } else {
-        // Ease in from the coast so beaches are wide and flat.
-        let inland = smoothstep(0.0, 0.22, land);
+        // Ease in from the coast so beaches are wide and flat. The gate is
+        // the shape's, not a smoothstep of `land`: read at the mesh's own
+        // resolution it makes every metre of relief follow the source's
+        // gradient, and a coast range comes out as a cliff (58).
         let coast = smoothstep(0.0, 0.05, land);
         let mountains = 0.5 + 0.5 * eroded(seed ^ MOUNTAIN, d, scale * 5.0, 12, 0.9, footprint);
         let hills = filtered(seed ^ HILL, d, scale * 30.0, 8, footprint);
@@ -249,40 +270,6 @@ pub fn sample(
         height_m,
         material: material(recipe, d, height_m),
     }
-}
-
-/// TEMPORARY, for diagnosis only: the land terms at one direction.
-#[doc(hidden)]
-pub fn debug_terms(
-    recipe: &Recipe,
-    sphere: QuadSphere,
-    plates: &Plates,
-    field: Option<&Field>,
-    d: Direction,
-    footprint_m: f64,
-) -> [f64; 6] {
-    let seed = recipe.seed;
-    let params = &recipe.params;
-    let footprint = footprint_m / RADIUS_M;
-    let scale = params.continent_scale;
-    let shape = match field {
-        Some(field) => field_shape(recipe, sphere, field, d, footprint_m),
-        None => plates.shape(seed, d, params.sea_share),
-    };
-    let Shape { land, lift, ranges } = shape;
-    let inland = smoothstep(0.0, 0.22, land);
-    let coast = smoothstep(0.0, 0.05, land);
-    let mountains = 0.5 + 0.5 * eroded(seed ^ MOUNTAIN, d, scale * 5.0, 12, 0.9, footprint);
-    let hills = filtered(seed ^ HILL, d, scale * 30.0, 8, footprint);
-    let detail = filtered(seed ^ DETAIL, d, 1800.0, 5, footprint);
-    [
-        params.relief_m * inland * 0.03,
-        params.relief_m * inland * 0.30 * lift,
-        params.relief_m * inland * 0.80 * ranges * mountains,
-        inland * (1.0 - 0.6 * ranges) * 22.0 * hills,
-        coast * 0.5 * detail + 0.6 * coast,
-        land,
-    ]
 }
 
 fn material(recipe: &Recipe, d: Direction, height_m: f64) -> Material {

@@ -51,6 +51,13 @@ pub struct Shape {
     pub lift: f64,
     /// Where mountain belts may rise, `0..=1`. Broad for the same reason.
     pub ranges: f64,
+    /// How much of the land's own relief stands here, `0..=1`. Broad, like
+    /// lift and ranges, and for a reason those two never had to say: this one
+    /// multiplies every metre of `relief_m`. Read at the mesh's resolution it
+    /// makes the relief follow the source's own gradient, so a steep coast
+    /// becomes a cliff of the whole relief. Saturating in height is not
+    /// enough when what is gated is a thousand metres.
+    pub inland: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -241,9 +248,11 @@ impl Plates {
         let land = land - (sea_share - 0.5) * 0.9;
         Shape {
             land,
-            // Plate crust is already broad: its own height is the lift.
+            // Plate crust is already broad: its own height is the lift, and
+            // the gate may be read straight off it.
             lift: smoothstep(0.0, 0.9, land),
             ranges: ranges.clamp(0.0, 1.0),
+            inland: smoothstep(0.0, 0.22, land),
         }
     }
 }
