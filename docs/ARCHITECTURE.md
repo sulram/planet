@@ -47,6 +47,12 @@ Numbers marked (p) are proposed and not yet confirmed.
 - Both live in the same chunk and address. Chunk 16x16x16 (p).
 - Chunk blob: palette + bit-packed indices (build), quantized density
   (terrain), zstd. The same blob serves disk, wire and client cache.
+- `crates/voxel` carries the terrain blob today: a chunk is either one
+  repeated cell, which most of a world is and which costs 4 bytes, or its
+  cells. Density is the signed distance to the ground in cells, a byte over
+  +-2 cells; the material palette spends one bit a cell where a chunk is rock
+  and air, and none where the cover does not change. zstd wraps it as a second
+  kind when the wire path arrives, which the format's version byte allows.
 - Each stored chunk carries a version number and its reduced LOD levels.
 
 ## The world is a recipe
