@@ -13,6 +13,7 @@ mod grass;
 mod input;
 mod seam;
 mod terrain;
+mod volume;
 
 use glam::DVec3;
 use scene::{SkinnedChange, TerrainChange};

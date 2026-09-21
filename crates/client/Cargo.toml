@@ -8,6 +8,8 @@ publish.workspace = true
 
 [dependencies]
 topology.workspace = true
+libm.workspace = true
+voxel.workspace = true
 worldgen.workspace = true
 scene.workspace = true
 avatar.workspace = true

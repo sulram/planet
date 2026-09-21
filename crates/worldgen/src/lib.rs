@@ -48,6 +48,24 @@ pub enum Material {
     Regolith = 7,
 }
 
+impl Material {
+    /// The material a stored byte names, or `None` for a byte no version of
+    /// this generator ever wrote.
+    pub fn from_id(id: u8) -> Option<Material> {
+        Some(match id {
+            0 => Material::Water,
+            1 => Material::Sand,
+            2 => Material::Grass,
+            3 => Material::Forest,
+            4 => Material::Rock,
+            5 => Material::Snow,
+            6 => Material::Seabed,
+            7 => Material::Regolith,
+            _ => return None,
+        })
+    }
+}
+
 /// The terrain under one direction.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Sample {

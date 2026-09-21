@@ -12,6 +12,9 @@ use crate::{PipelineSpec, Surface, pipeline, relative};
 struct Patch {
     origin: DVec3,
     vertices: wgpu::Buffer,
+    /// A volume patch's own indices and their count. `None` uses the shared
+    /// grid every heightfield patch shares.
+    indices: Option<(wgpu::Buffer, u32)>,
     water: Option<wgpu::Buffer>,
     grass: Option<Grass>,
     radius_m: f32,
@@ -150,6 +153,16 @@ impl Terrain {
                     contents: bytemuck::cast_slice(&mesh.vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
+                let indices = (!mesh.indices.is_empty()).then(|| {
+                    (
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("patch indices"),
+                            contents: bytemuck::cast_slice(&mesh.indices),
+                            usage: wgpu::BufferUsages::INDEX,
+                        }),
+                        mesh.indices.len() as u32,
+                    )
+                });
                 let water = mesh.water.map(|water| {
                     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("patch water"),
@@ -186,6 +199,7 @@ impl Terrain {
                     Patch {
                         origin: mesh.origin,
                         vertices,
+                        indices,
                         water,
                         grass,
                         radius_m,
@@ -238,12 +252,27 @@ impl Terrain {
         indices: u32,
     ) {
         pass.set_pipeline(pipeline);
-        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
+        // The grid is shared until a patch says otherwise, so a heightfield
+        // patch still binds nothing of its own and a volume patch binds once.
+        let mut shared = false;
         for (slot, id) in drawn.iter().enumerate() {
             let patch = &self.patches[id];
             pass.set_bind_group(1, &uniforms.bind_group, &[slot as u32 * uniforms.stride]);
             pass.set_vertex_buffer(0, patch.vertices.slice(..));
-            pass.draw_indexed(0..indices, 0, 0..1);
+            match &patch.indices {
+                Some((buffer, count)) => {
+                    pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    shared = false;
+                    pass.draw_indexed(0..*count, 0, 0..1);
+                }
+                None => {
+                    if !shared {
+                        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
+                        shared = true;
+                    }
+                    pass.draw_indexed(0..indices, 0, 0..1);
+                }
+            }
         }
     }
 

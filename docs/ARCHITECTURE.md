@@ -126,6 +126,15 @@ Numbers marked (p) are proposed and not yet confirmed.
   terrain: heightfield patches of 32x32 quads with skirts, down to one vertex
   per block, a few built per frame, nearest and coarsest first. Surface nets
   chunks will replace the deepest levels near the player.
+- The deepest quadtree level meshes its ground from the density by surface
+  nets instead of from the height, so a cave, an arch and an overhang exist
+  there. A patch of that level is exactly `2 x 2` chunks across and one block
+  a cell. The level above is still a heightfield with its skirt, and the two
+  agree on where the ground is, so the handover is the LOD boundary that was
+  already there: nothing new streams and nothing is suppressed.
+- A heightfield patch is `PATCH_VERTICES` in a grid every patch shares; a
+  volume patch brings its own indices. The streamer's budget counts work
+  rather than patches, because a volume patch costs about six of a height.
 - Client cache: SQLite on native, OPFS in the browser.
 
 ## Identity and permissions

@@ -29,8 +29,14 @@ use worldgen::{Generator, MOON_RADIUS_M, Material, Sample};
 
 /// A node splits when the camera is closer than this many node widths.
 const SPLIT_DISTANCE: f64 = 2.4;
-/// Patches generated per update. Each costs about a millisecond or two.
-const BUILDS_PER_UPDATE: usize = 6;
+/// Work generated per update, in units of a heightfield patch, each of which
+/// costs about a millisecond.
+const BUILD_BUDGET: usize = 6;
+/// What a volume patch costs in those units. It carries fifty times the
+/// samples of the height it replaces, so counting patches instead of work let
+/// six of them into one frame: the descent blew from 9 ms to 42 against a
+/// budget of 12, which is what the bench is for.
+const VOLUME_COST: usize = 6;
 /// Patches kept before the least recently used ones are dropped.
 const CACHE_PATCHES: usize = 1400;
 
@@ -186,7 +192,7 @@ impl Terrain {
     /// the per update budget. The camera is relative to the body's centre;
     /// `aspect` is width over height.
     pub fn update(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
-        self.select(generator, camera, aspect, BUILDS_PER_UPDATE)
+        self.select(generator, camera, aspect, BUILD_BUDGET)
     }
 
     /// Like [`Terrain::update`], but builds until nothing is missing. For
@@ -259,7 +265,12 @@ impl Terrain {
 
         // Coarse before fine, near before far: the picture sharpens evenly.
         missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
-        for (_, node) in missing.into_iter().take(budget) {
+        let mut spent = 0usize;
+        for (_, node) in missing {
+            if spent >= budget {
+                break;
+            }
+            spent = spent.saturating_add(cost(node));
             let mesh = build(generator, node);
             // The sea counts: over deep water the ground is far below the surface
             // that is actually in view.
@@ -408,6 +419,17 @@ fn visible(body: Body, camera: &Camera, aspect: f32, center: DVec3, radius_m: f6
     !(outside(p.x, half_x) || outside(p.y, half_y))
 }
 
+/// What building one node costs, in units of a heightfield patch.
+fn cost(node: Node) -> usize {
+    if is_volume(node) { VOLUME_COST } else { 1 }
+}
+
+/// Whether this node's ground is meshed from its density rather than its
+/// height. Only the deepest level, and only where a cell is a block.
+fn is_volume(node: Node) -> bool {
+    node.body == Body::Planet && node.depth == node.body.max_depth()
+}
+
 /// Meshes one node.
 fn build(generator: &Generator, node: Node) -> TerrainMesh {
     let body = node.body;
@@ -449,7 +471,7 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
             vertices.push(TerrainVertex {
                 position: (position - origin).as_vec3().to_array(),
                 normal: normal.as_vec3().to_array(),
-                color: color(cover),
+                color: color(cover.material),
             });
         }
     }
@@ -505,10 +527,32 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
     } else {
         Vec::new()
     };
+    // The deepest level of the quadtree meshes the ground from its density
+    // instead of its height, so a cave, an arch and an overhang can exist at
+    // all. The level above is still a heightfield and still carries a skirt,
+    // and the two agree on where the ground is, so the boundary between them
+    // is the one the LOD already had.
+    let volume = is_volume(node)
+        .then(|| {
+            let side = i64::from(SECTOR_SIDE >> node.depth);
+            debug_assert_eq!(side, crate::volume::PATCH_BLOCKS);
+            crate::volume::build(
+                generator,
+                node.sector,
+                [i64::from(node.x) * side, i64::from(node.y) * side],
+                radius,
+                origin,
+                color,
+            )
+        })
+        .filter(|(_, indices)| !indices.is_empty());
+    let (vertices, indices) = volume.unwrap_or((vertices, Vec::new()));
+
     TerrainMesh {
         grass,
         origin,
         vertices,
+        indices,
         water,
     }
 }
@@ -525,8 +569,8 @@ fn shore(sample: Sample) -> bool {
 /// sea floor) are the renderer's job: it sees the slope and the height per
 /// pixel, the same at every LOD. A shore color here only shows where no land
 /// is near, under the renderer's own.
-fn color(sample: Sample) -> [u8; 4] {
-    match sample.material {
+fn color(material: Material) -> [u8; 4] {
+    match material {
         Material::Snow => [236, 238, 240, 70],
         Material::Sand => [206, 192, 150, 8],
         Material::Grass => [104, 138, 70, 0],

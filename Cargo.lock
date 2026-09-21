@@ -358,10 +358,12 @@ version = "0.0.0"
 dependencies = [
  "avatar",
  "glam",
+ "libm",
  "scene",
  "serde",
  "serde_json",
  "topology",
+ "voxel",
  "worldgen",
 ]
 

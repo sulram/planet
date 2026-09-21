@@ -19,7 +19,8 @@ Every milestone ends runnable end to end.
 - [ ] Golden hashes also run on WASM in CI (wasmtime)
 - [ ] Terrain layer + surface nets mesher, in address space. The step that turns the ground from a height into a volume, and the only one that makes a horizontal tunnel possible at all
   - [x] Surface nets, in `crates/voxel`: one vertex a cell, quads off the grid edges, and a low border so two chunks meet without a crack
-  - [ ] The handover: the deepest quadtree level builds a volume instead of a height, so the existing LOD boundary and its skirts are where the two meet and no new streaming is needed. Measured first: a volume patch is 65,536 cells against a height's 1,225, and costs 4.94 ms in WASM against 0.74. That is two patches a frame, which the streamer's budget already understands
+  - [x] The handover: the deepest quadtree level builds a volume instead of a height, so the existing LOD boundary and its skirts are where the two meet and nothing new streams
+  - [ ] How far down the volume reaches is what a frame affords: two chunks, about 8 m under the lowest ground of a patch. Enough to see a cave from its mouth, not to follow one down. The job queue below is what lifts it, not a cleverer mesher
   - [ ] Density + material per cell, 16x16x16 chunks. The heightfield quadtree stays for distance and for ground nobody has touched. Not optional: the build band is 512 cells tall at half a metre, so volume everywhere would not fit on a Pi or in a tab
   - [x] The generator grows a 3D density beside `sample_at`. Seeding density from a height gives a solid planet by construction: no cave, no arch, no overhang, and a blocky world with nothing under its crust. A dug tunnel works without this; a found one does not
   - [ ] **Collision is the smooth surface, always, whatever is drawn.** People and vehicles travel on the isosurface and never on cubes, so nothing hammers on half metre steps and everyone in a world walks on the same ground. Auto-step takes one block; two is a wall, to be jumped or flown
@@ -75,7 +76,7 @@ Every milestone ends runnable end to end.
 - [x] Sun shadow cascades: terrain and avatars cast and receive, contact to horizon
 - [x] Grass: instanced tufts in reach tiers to 640 m, wind in the vertex shader, bends away from the avatar
 - [ ] LOD by projected error with hysteresis; geomorph between levels
-- [ ] Patch building behind a job queue (workers native and web), measured budget
+- [ ] Patch building behind a job queue (workers native and web), measured budget. Now load bearing: one volume patch is 10.7 ms of a 12 ms frame, so the volume's depth is bounded by the frame it is built in
 - [ ] MSAA or filtered edges, after measuring cost
 
 ## M2: create world, two people see each other

@@ -47,12 +47,19 @@ pub struct WaterVertex {
     pub depth_m: f32,
 }
 
-/// One terrain patch: [`PATCH_VERTICES`] vertices around an `f64` origin. The
-/// origin is relative to the centre of the patch's body: see [`PatchDraw`].
+/// One terrain patch around an `f64` origin, relative to the centre of its
+/// body (see [`PatchDraw`]).
+///
+/// A patch of the heightfield is [`PATCH_VERTICES`] vertices in the grid
+/// [`patch_indices`] describes, and brings no indices of its own. A patch of
+/// the volume layer has as many vertices as its surface needs and brings the
+/// indices that join them.
 #[derive(Clone, Debug)]
 pub struct TerrainMesh {
     pub origin: DVec3,
     pub vertices: Vec<TerrainVertex>,
+    /// Empty for a heightfield patch, which uses the shared grid.
+    pub indices: Vec<u32>,
     /// Present when any of the patch is under the sea. Same layout and index
     /// buffer as `vertices`.
     pub water: Option<Vec<WaterVertex>>,
