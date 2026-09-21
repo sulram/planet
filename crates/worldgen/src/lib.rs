@@ -63,6 +63,38 @@ impl Sample {
     }
 }
 
+/// One direction of a world, from the ground down.
+#[derive(Clone, Copy, Debug)]
+pub struct Column {
+    direction: Direction,
+    ground: Sample,
+    /// `None` on a generator version that has no caves.
+    caves: Option<v3::Column>,
+}
+
+impl Column {
+    /// The ground this column stands under.
+    pub fn ground(self) -> Sample {
+        self.ground
+    }
+
+    /// How far a height is from the ground, metres, positive inside it. Zero
+    /// at exactly [`Column::ground`], so a volume chunk and a heightfield
+    /// patch have nothing to reconcile where they meet.
+    pub fn density_m(self, height_m: f64) -> f64 {
+        match &self.caves {
+            None => self.ground.height_m - height_m,
+            Some(caves) => v3::density_m(caves, self.direction, height_m),
+        }
+    }
+
+    /// True when nothing in this column is hollow, so a mesher can take the
+    /// ground straight from the height and never ask again.
+    pub fn solid(self) -> bool {
+        self.caves.is_none_or(|caves| caves.solid())
+    }
+}
+
 /// A generator bound to one recipe.
 #[derive(Clone, Debug)]
 pub struct Generator {
@@ -150,10 +182,31 @@ impl Generator {
     /// one. Worlds on generator v1 and v2 are frozen without them, and their
     /// ground is solid all the way down.
     pub fn density_m(&self, direction: Direction, height_m: f64, footprint_m: f64) -> f64 {
-        let ground_m = self.sample_at(direction, footprint_m).height_m;
-        match self.recipe.generator_version {
-            1 | 2 => ground_m - height_m,
-            _ => v3::density_m(&self.recipe, direction, height_m, ground_m, footprint_m),
+        self.column(direction, footprint_m).density_m(height_m)
+    }
+
+    /// Everything about a direction that does not change with height, worked
+    /// out once.
+    ///
+    /// A volume walks up a line asking for tens of samples, and the ground
+    /// under that line is the same for all of them. This is the difference
+    /// between a volume that fits in a frame and one that does not: a column
+    /// with no cave in it answers from two numbers.
+    pub fn column(&self, direction: Direction, footprint_m: f64) -> Column {
+        let ground = self.sample_at(direction, footprint_m);
+        let caves = match self.recipe.generator_version {
+            1 | 2 => None,
+            _ => Some(v3::column(
+                &self.recipe,
+                direction,
+                ground.height_m,
+                footprint_m,
+            )),
+        };
+        Column {
+            direction,
+            ground,
+            caves,
         }
     }
 

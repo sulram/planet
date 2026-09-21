@@ -128,6 +128,37 @@ fn a_frozen_world_is_solid_all_the_way_down() {
 }
 
 #[test]
+fn a_column_answers_exactly_what_asking_one_at_a_time_would() {
+    // The hoist is only allowed if it changes nothing: a volume and a single
+    // probe have to agree to the bit, or the ground a mesher draws is not the
+    // ground collision uses.
+    let generator = Generator::new(Recipe::new(7)).unwrap();
+    for d in directions() {
+        let column = generator.column(d, 0.0);
+        assert_eq!(column.ground(), generator.sample(d));
+        for step in -20..=220 {
+            let at = column.ground().height_m - f64::from(step);
+            assert_eq!(column.density_m(at), generator.density_m(d, at, 0.0));
+        }
+    }
+}
+
+#[test]
+fn a_column_with_no_cave_in_it_says_so() {
+    // The whole point of the hoist: most columns are solid, and a solid one
+    // must never make a mesher ask again.
+    let generator = Generator::new(Recipe::new(7)).unwrap();
+    let solid = directions()
+        .into_iter()
+        .filter(|d| generator.column(*d, 0.0).solid())
+        .count();
+    assert!(
+        solid > directions().len() / 2,
+        "only {solid} columns are solid"
+    );
+}
+
+#[test]
 fn a_mesh_too_coarse_for_a_cave_is_not_shown_one() {
     // The same rule every octave follows: what a mesh cannot carry fades out
     // instead of aliasing.

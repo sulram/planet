@@ -279,6 +279,67 @@ fn material(recipe: &Recipe, d: Direction, height_m: f64) -> Material {
     }
 }
 
+/// Everything a cave needs of a direction that does not change with height.
+///
+/// A volume asks for tens of samples up one line, and the rock under that line
+/// is the same for all of them. Working it out per cell is the difference
+/// between a volume that fits in a frame and one that does not, and most
+/// columns turn out to want no cave at all, which is then free.
+#[derive(Clone, Copy, Debug)]
+pub struct Column {
+    seed: u64,
+    ground_m: f64,
+    /// How near a crest counts as inside a tunnel here. `1` is unreachable.
+    crest: f64,
+    /// The share of a cave this column may have at all, before depth.
+    allowed: f64,
+}
+
+impl Column {
+    /// True when no height in this column can hold a cave, so the ground is
+    /// the ground and nothing else need be asked.
+    pub fn solid(&self) -> bool {
+        self.crest >= 1.0
+    }
+}
+
+pub fn column(recipe: &Recipe, d: Direction, ground_m: f64, footprint_m: f64) -> Column {
+    let seed = recipe.seed ^ CAVE;
+    let solid = Column {
+        seed,
+        ground_m,
+        crest: 1.0,
+        allowed: 0.0,
+    };
+    // Under the sea a cave is a flood, and a mesh this coarse could not carry
+    // one anyway.
+    let allowed = band(CAVE_M, footprint_m) * smoothstep(0.0, 40.0, ground_m);
+    if allowed <= 0.0 {
+        return solid;
+    }
+    // Caves keep company. Where the rock takes them the bar is low and the
+    // ground is riddled; elsewhere nothing reaches it.
+    let country = smoothstep(
+        0.05,
+        0.45,
+        fbm(
+            seed ^ 2,
+            [d[0] * CAVE_REGION, d[1] * CAVE_REGION, d[2] * CAVE_REGION],
+            3,
+            0.5,
+        ),
+    );
+    if country <= 0.0 {
+        return solid;
+    }
+    Column {
+        seed,
+        ground_m,
+        crest: CAVE_CREST - CAVE_COUNTRY * country,
+        allowed,
+    }
+}
+
 /// How far a point is from the ground, metres, positive inside it.
 ///
 /// The ground is `sample_at`'s height, exactly, and a cave is taken out of it
@@ -292,49 +353,23 @@ fn material(recipe: &Recipe, d: Direction, height_m: f64) -> Material {
 /// give beads, and this is the cheapest shape that is a tunnel.
 ///
 /// The field is read at the world position, so a cave turns as much going down
-/// as going along, and the `footprint_m` that fades an octave fades a cave the
-/// mesh could not carry.
-pub fn density_m(
-    recipe: &Recipe,
-    d: Direction,
-    height_m: f64,
-    ground_m: f64,
-    footprint_m: f64,
-) -> f64 {
-    let solid_m = ground_m - height_m;
-    let weight = band(CAVE_M, footprint_m);
-    if weight <= 0.0 {
+/// as going along.
+pub fn density_m(column: &Column, d: Direction, height_m: f64) -> f64 {
+    let solid_m = column.ground_m - height_m;
+    if column.solid() {
         return solid_m;
     }
-    // Under the sea a cave is a flood, and past the floor of the build band it
-    // is below the bedrock nobody digs through.
-    let depth_m = solid_m;
-    let allowed = weight
-        * smoothstep(0.0, 40.0, ground_m)
-        * smoothstep(CAVE_FLOOR_M, CAVE_FLOOR_M * 0.7, depth_m);
+    // Past the floor of the build band is the bedrock nobody digs through.
+    let allowed = column.allowed * smoothstep(CAVE_FLOOR_M, CAVE_FLOOR_M * 0.7, solid_m);
     if allowed <= 0.0 {
         return solid_m;
     }
     let k = (RADIUS_M + height_m) / CAVE_M;
     let p = [d[0] * k, d[1] * k, d[2] * k];
-    let seed = recipe.seed ^ CAVE;
-    // Caves keep company. Where the rock takes them the bar is low and the
-    // ground is riddled; elsewhere nothing reaches it.
-    let country = smoothstep(
-        0.05,
-        0.45,
-        fbm(
-            seed ^ 2,
-            [d[0] * CAVE_REGION, d[1] * CAVE_REGION, d[2] * CAVE_REGION],
-            3,
-            0.5,
-        ),
-    );
-    let crest = CAVE_CREST - CAVE_COUNTRY * country;
-    let ridge = |salt: u64| 1.0 - libm::fabs(fbm(seed ^ salt, p, 3, 0.5));
+    let ridge = |salt: u64| 1.0 - libm::fabs(fbm(column.seed ^ salt, p, 3, 0.5));
     // Positive inside both crests, and the smaller of the two is the nearer
     // wall.
-    let inside = (ridge(0) - crest).min(ridge(1) - crest);
+    let inside = (ridge(0) - column.crest).min(ridge(1) - column.crest);
     // Where a cave is not allowed the wall is pushed away until it is gone,
     // rather than cut off, so the ground has no seam at the edge of the rule.
     let wall_m = -inside * CAVE_WIDTH_M + (1.0 - allowed) * CAVE_WIDTH_M;

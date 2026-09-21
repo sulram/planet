@@ -65,6 +65,28 @@ pub fn samples(body: i32, count: i32) -> f64 {
     sum
 }
 
+/// One patch of volume: the columns of the finest quadtree patch, and a
+/// window of cells up each of them. The heightfield patch it would replace is
+/// `samples`, so the two numbers are what decide whether a volume can be
+/// meshed inside a frame at all.
+#[wasm_bindgen]
+pub fn volume(patches: i32, columns: i32, cells: i32) -> f64 {
+    let generator = Generator::new(Recipe::new(1)).expect("the current generator version");
+    let mut sum = 0.0;
+    for patch in 0..patches {
+        for i in 0..columns {
+            let a = f64::from(patch) * 1e-3 + f64::from(i) * 1e-5;
+            let direction = [a.cos(), a.sin() * 0.8, a.sin() * 0.6];
+            let column = generator.column(direction, 0.5);
+            let ground_m = column.ground().height_m;
+            for k in 0..cells {
+                sum += column.density_m(ground_m - f64::from(k) * 0.5);
+            }
+        }
+    }
+    sum
+}
+
 /// Starts a descent from 3 km over a body to its ground: the streamer's
 /// hardest moment, every level of the quadtree arriving at once.
 #[wasm_bindgen]

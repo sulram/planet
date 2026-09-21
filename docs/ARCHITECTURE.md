@@ -84,6 +84,10 @@ Numbers marked (p) are proposed and not yet confirmed.
   a volume chunk and a heightfield patch have nothing to reconcile where they
   meet. A cave lives only here, because a height has no room for one; v1 and
   v2 are frozen solid all the way down.
+- `column(direction, footprint)` works out everything that does not change
+  with height, and a column with no cave in it answers from two numbers. A
+  volume walks one line asking for tens of samples: paid per cell, a patch of
+  65,536 cells costs 40 ms in WASM, and paid per column it costs 4.94.
 - A cave is taken out of the ground, not subtracted from it: the density is
   the nearer of the rock above and the nearest tunnel wall. Subtracting a
   carving depth would make a cave something that must beat the weight of rock

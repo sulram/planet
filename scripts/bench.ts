@@ -8,6 +8,9 @@ import { ROOT } from './lib';
 const PATCH_SAMPLES = 35 * 35;
 const PATCH_BUDGET_MS = 1.5;
 const FRAME_BUDGET_MS = 12;
+// A volume patch carries 50 times the samples of the height it replaces, so it
+// gets its own budget: a handful of them a frame, not one a millisecond.
+const VOLUME_BUDGET_MS = 8;
 
 $.cwd(ROOT);
 const OUT = `${ROOT}/target/bench-pkg`;
@@ -51,6 +54,24 @@ for (const [body, name] of runs) {
 		worst = Math.max(worst, performance.now() - before);
 	}
 	report(`${name}: worst frame of a 10 s descent`, worst, FRAME_BUDGET_MS);
+}
+
+// One patch of the finest quadtree level, as a volume instead of a height:
+// 32 x 32 columns and a 32 m window of cells up each. What this costs against
+// `samples` is what says whether the volume layer can be meshed in a frame.
+const VOLUME_COLUMNS = 32 * 32;
+const VOLUME_CELLS = 64;
+{
+	const rounds = 4;
+	bench.volume(rounds, VOLUME_COLUMNS, VOLUME_CELLS);
+	const start = performance.now();
+	bench.volume(rounds, VOLUME_COLUMNS, VOLUME_CELLS);
+	const ms = (performance.now() - start) / rounds;
+	report('planet: one patch as a volume', ms, VOLUME_BUDGET_MS);
+	console.log(
+		`     ${(VOLUME_COLUMNS * VOLUME_CELLS).toLocaleString()} cells, ` +
+			`${((ms * 1e6) / (VOLUME_COLUMNS * VOLUME_CELLS)).toFixed(0)} ns a cell`
+	);
 }
 
 if (failed) process.exit(1);
