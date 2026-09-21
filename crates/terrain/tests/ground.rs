@@ -39,7 +39,7 @@ fn a_chunk_at_the_ground_has_a_surface() {
         let (generator, sphere) = body(bits);
         let addr = ground_chunk(&generator, sphere, somewhere(sphere));
         let mut chunks = Chunks::new();
-        chunks.warm(&generator, sphere, addr);
+        chunks.warm(&generator, sphere, addr, usize::MAX);
         let mesh = mesh(&chunks, sphere, addr)
             .unwrap_or_else(|| panic!("bits {bits}: no surface where the ground is"));
         assert!(!mesh.vertices.is_empty(), "bits {bits}");
@@ -61,7 +61,7 @@ fn vertices_land_on_the_body() {
         let (generator, sphere) = body(bits);
         let addr = ground_chunk(&generator, sphere, somewhere(sphere));
         let mut chunks = Chunks::new();
-        chunks.warm(&generator, sphere, addr);
+        chunks.warm(&generator, sphere, addr, usize::MAX);
         let mesh = mesh(&chunks, sphere, addr).expect("a surface");
         // A vertex belongs to the chunk that made it: inside its own height
         // span, plus the one cell of border the mesher reads.
@@ -101,7 +101,7 @@ fn the_lattice_reads_across_a_seam() {
 
         let addr = ChunkAddr::new(column, 0);
         let mut chunks = Chunks::new();
-        chunks.warm(&generator, sphere, addr);
+        chunks.warm(&generator, sphere, addr, usize::MAX);
 
         let side = CHUNK_SIDE as i32;
         let lattice = terrain::Lattice {

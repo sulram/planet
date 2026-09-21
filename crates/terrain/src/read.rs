@@ -4,19 +4,33 @@
 //! otherwise, and a caller never learns which. Nothing is stored yet, so today
 //! every answer is generated once and kept.
 
+use glam::DVec3;
 use std::collections::HashMap;
 
-use topology::{Column, Grid, QuadSphere};
+use topology::{Column, QuadSphere};
 use voxel::{CHUNK_BITS, CHUNK_SIDE, Chunk, Material};
 use worldgen::Generator;
 
 use crate::address::ChunkAddr;
 use crate::generate::{cell_point, generate};
 
+/// What one call to [`Chunks::warm`] did.
+pub struct Warmth {
+    /// Chunks generated, which is what a frame's budget is spent on.
+    pub made: usize,
+    /// Whether everything a mesh will read is now held.
+    pub whole: bool,
+}
+
 /// Every chunk this client is holding, by address.
+///
+/// A chunk is kept with where it is, because working that out means folding a
+/// point over a seam and a tangent: cheap once, ruinous once per comparison of
+/// a sort (measured: it was the whole frame).
 #[derive(Default)]
 pub struct Chunks {
     held: HashMap<ChunkAddr, Chunk>,
+    centres: HashMap<ChunkAddr, DVec3>,
 }
 
 impl Chunks {
@@ -35,24 +49,66 @@ impl Chunks {
     /// The chunk at an address, generating it if it is not held. The one read
     /// path: a caller never knows whether the world was stored or made.
     pub fn chunk(&mut self, generator: &Generator, sphere: QuadSphere, addr: ChunkAddr) -> &Chunk {
+        self.centres
+            .entry(addr)
+            .or_insert_with(|| crate::stream::chunk_centre(sphere, addr));
         self.held
             .entry(addr)
             .or_insert_with(|| generate(generator, sphere, addr))
     }
 
+    /// Where a held chunk sits, metres from the body's centre.
+    pub fn centre(&self, addr: &ChunkAddr) -> Option<DVec3> {
+        self.centres.get(addr).copied()
+    }
+
     /// Brings in everything [`Lattice`] will ask for around one chunk: itself
     /// and the 26 chunks it touches, because a mesh reads one cell past its
     /// own on every side.
-    pub fn warm(&mut self, generator: &Generator, sphere: QuadSphere, addr: ChunkAddr) {
+    ///
+    /// Generates at most `limit` of them and says whether the neighbourhood is
+    /// now whole. A frame must be able to stop in the middle: a fresh chunk
+    /// wants 27 of these, and a budget that cannot cut inside one of them is
+    /// not a budget (measured: one chunk cost a whole frame and a half).
+    pub fn warm(
+        &mut self,
+        generator: &Generator,
+        sphere: QuadSphere,
+        addr: ChunkAddr,
+        limit: usize,
+    ) -> Warmth {
+        let mut made = 0;
+        let mut whole = true;
         for offset in NEIGHBOURHOOD {
-            if let Some(at) = self.neighbour(sphere, addr, offset) {
-                self.chunk(generator, sphere, at);
+            let Some(at) = self.neighbour(sphere, addr, offset) else {
+                continue;
+            };
+            if self.held.contains_key(&at) {
+                continue;
             }
+            if made == limit {
+                whole = false;
+                break;
+            }
+            self.chunk(generator, sphere, at);
+            made += 1;
         }
+        Warmth { made, whole }
     }
 
     pub fn forget(&mut self, addr: &ChunkAddr) {
         self.held.remove(addr);
+        self.centres.remove(addr);
+    }
+
+    /// Drops every chunk further than `reach_m` from `eye`.
+    pub fn retain_near(&mut self, eye: DVec3, reach_m: f64) {
+        let centres = &mut self.centres;
+        self.held.retain(|addr, _| match centres.get(addr) {
+            Some(centre) => centre.distance(eye) <= reach_m,
+            None => false,
+        });
+        centres.retain(|addr, _| self.held.contains_key(addr));
     }
 
     /// The chunk one step away, over a seam if that is where it is.
@@ -92,8 +148,19 @@ const NEIGHBOURHOOD: [[i32; 3]; 27] = {
 /// what an `i16` height can name.
 pub fn locate(sphere: QuadSphere, addr: ChunkAddr, offset: [i32; 3]) -> Option<(Column, i32)> {
     let blocks = sphere.blocks();
-    let point = blocks.wrapped(cell_point(addr, offset[0], offset[1]));
     let h = addr.low_h().checked_add(offset[2])?;
+    let low = addr.low_column();
+    let side = blocks.side() as i32;
+    let (u, v) = (
+        i32::from(low.u) + offset[0],
+        i32::from(low.v) + offset[1],
+    );
+    // Still inside the sector, which nearly every border cell is: plain
+    // integers, and no fold to pay for.
+    if (0..side).contains(&u) && (0..side).contains(&v) {
+        return Some((Column::new(low.sector, u as u16, v as u16), h));
+    }
+    let point = blocks.wrapped(cell_point(addr, offset[0], offset[1]));
     Some((blocks.column_of(point), h))
 }
 
@@ -136,25 +203,27 @@ pub struct Lattice<'a> {
 impl Lattice<'_> {
     fn cell(&self, at: [i32; 3]) -> voxel::Cell {
         let side = CHUNK_SIDE as i32;
-        let inside = at.iter().all(|k| (0..side).contains(k));
-        let held = if inside {
-            self.chunks.held.get(&self.addr)
-        } else {
-            match locate(self.sphere, self.addr, at) {
-                None => None,
-                Some((column, h)) => self.chunks.held.get(&chunk_of(column, h)),
+        if at.iter().all(|k| (0..side).contains(k)) {
+            if let Some(chunk) = self.chunks.held.get(&self.addr) {
+                return chunk.cell([at[0] as usize, at[1] as usize, at[2] as usize]);
             }
+            return self.sky();
+        }
+        // Outside: find the cell once, then the chunk that holds it.
+        let Some((column, h)) = locate(self.sphere, self.addr, at) else {
+            return self.sky();
         };
-        match held {
-            Some(chunk) if inside => chunk.cell([at[0] as usize, at[1] as usize, at[2] as usize]),
-            Some(chunk) => {
-                let (column, h) = locate(self.sphere, self.addr, at).expect("a located cell");
-                chunk.cell(cell_of(column, h))
-            }
-            None => voxel::Cell {
-                density: voxel::Density::from_cells(f64::from(self.outside)),
-                material: 0,
-            },
+        match self.chunks.held.get(&chunk_of(column, h)) {
+            Some(chunk) => chunk.cell(cell_of(column, h)),
+            None => self.sky(),
+        }
+    }
+
+    /// What a cell nobody holds reads as.
+    fn sky(&self) -> voxel::Cell {
+        voxel::Cell {
+            density: voxel::Density::from_cells(f64::from(self.outside)),
+            material: 0,
         }
     }
 }
@@ -167,9 +236,4 @@ impl voxel::Ground for Lattice<'_> {
     fn material(&self, at: [i32; 3]) -> Material {
         self.cell(at).material
     }
-}
-
-/// The grid chunks are addressed on.
-pub fn grid(sphere: QuadSphere) -> Grid {
-    crate::address::chunk_grid(sphere)
 }

@@ -12,8 +12,10 @@ mod address;
 mod generate;
 mod mesh;
 mod read;
+mod stream;
 
 pub use address::{ChunkAddr, band_chunks, band_h, chunk_grid};
 pub use generate::{FOOTPRINT_M, generate};
 pub use mesh::mesh;
 pub use read::{Chunks, Lattice};
+pub use stream::{BUDGET, CHUNK_M, REACH_M, Terrain};
