@@ -39,8 +39,10 @@ pub enum Command {
     SetEffects {
         effects: Effects,
     },
-    /// Stand at a place, named by its code: `"4-K7M42Q"`. A code shorter than
-    /// full precision names a box, and the middle of it is where you land.
+    /// Stand where a pose says, and look the way it says: `"4-K7M42Q"`, or
+    /// `"m4-K7M42Q@40,180,-5"` for a body on the moon, forty blocks up,
+    /// facing south and looking a little down. A code shorter than full
+    /// precision names a box, and the middle of it is where you land.
     ///
     /// This is arrival, not travel: it is how a shared address opens where it
     /// says, and how `--at` aims a headless render. Moving about a world is
@@ -77,9 +79,15 @@ pub enum Event {
         fps: f32,
         altitude_m: f64,
         speed_mps: f64,
-        /// Where the body is, as a person says it: `"4-K7M42Q"`. The sector is
-        /// its first character, so it is not sent twice.
+        /// Where the body is, as a person says it: `"4-K7M42Q"`, or
+        /// `"m4-K7M42Q@40"` on the moon, off the ground. The sector is a
+        /// character of it, so it is not sent twice.
         place: String,
+        /// The same, plus the way of looking: what a link carries, so someone
+        /// who opens it stands where you stood seeing what you saw. A front
+        /// end puts this in the address bar and hands it back as `GoTo`
+        /// without ever taking it apart.
+        pose: String,
         /// Degrees clockwise from north, `0..360`. `None` at a pole, where a
         /// bearing is not a thing that exists. The letters are the front
         /// end's: N and S are English, and a user visible string belongs to

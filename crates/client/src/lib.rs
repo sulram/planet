@@ -12,6 +12,7 @@ mod controller;
 mod figure;
 mod grass;
 mod input;
+mod place;
 mod seam;
 mod terrain;
 
@@ -26,6 +27,7 @@ use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use controller::{Controller, Wish};
 use figure::Figure;
 pub use input::{Input, Key};
+pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Command, Event, Mode};
 use terrain::{Body, Terrain};
@@ -192,21 +194,80 @@ impl Client {
         self.controller.teleport(point, &self.generator);
     }
 
-    /// Stands the avatar at a place code, `"4-K7M42Q"`.
+    /// Local up where the avatar stands: out of the body it is on.
+    pub fn up(&self) -> [f64; 3] {
+        self.controller.up().to_array()
+    }
+
+    /// Where the avatar is and which way it looks, as a link carries it.
+    pub fn here(&self) -> place::Pose {
+        let grid = self.generator.sphere().blocks();
+        // Every body is parametrised on the planet's sector grid, so the moon
+        // has a column too: the one its radial passes through.
+        let point = if self.controller.on_moon() {
+            grid.surface_point(self.controller.radial().to_array())
+        } else {
+            self.controller.point()
+        };
+        place::Pose {
+            on_moon: self.controller.on_moon(),
+            column: grid.column_of(point),
+            // Standing on the ground is what leaves the height out: the ground
+            // is a function of the recipe, so it says itself.
+            h: (!self.controller.grounded())
+                .then(|| (self.controller.height_m() / topology::BLOCK_M) as i16),
+            bearing_deg: topology::bearing_deg(
+                self.controller.up().to_array(),
+                self.controller.view().to_array(),
+            ),
+            pitch_deg: Some(self.controller.pitch().to_degrees()),
+            chars: topology::CODE_MAX,
+        }
+    }
+
+    /// Stands the avatar where a pose says and looks the way it says:
+    /// `"4-K7M42Q"`, or `"m4-K7M42Q@40,180,-5"`.
     ///
     /// A code shorter than full precision names a box, so the middle of that
     /// box is where you land: a person who quotes four characters means the
     /// neighbourhood, and the middle of it is the least surprising answer.
-    pub fn go_to(&mut self, place: &str) -> Result<(), topology::PlaceError> {
+    pub fn go_to(&mut self, text: &str) -> Result<(), String> {
         let grid = self.generator.sphere().blocks();
-        let found = topology::place(grid, place)?;
+        let pose = place::Pose::parse(grid, text)?;
+        let found = topology::Place {
+            column: pose.column,
+            h: pose.h,
+            chars: pose.chars,
+        };
         let [su, sv] = found.span(grid).map(f64::from);
         let point = SurfacePoint::new(
-            found.column.sector,
-            f64::from(found.column.u) + su / 2.0,
-            f64::from(found.column.v) + sv / 2.0,
+            pose.column.sector,
+            f64::from(pose.column.u) + su / 2.0,
+            f64::from(pose.column.v) + sv / 2.0,
         );
+        // The point first, because it is what the body stands on and what the
+        // moon's radial is read from; then the body, then the height, then the
+        // way of looking. Each step reads the one before it.
         self.teleport(point);
+        if pose.on_moon {
+            let moon = self.moon_position();
+            self.controller.set_moon(controller::MoonBody {
+                center: moon,
+                radius_m: MOON_RADIUS_M,
+            });
+            let direction = DVec3::from(grid.direction(point));
+            self.controller.stand_on_moon(direction, &self.generator);
+        }
+        self.controller.stand_at(
+            pose.h.map(|h| f64::from(h) * topology::BLOCK_M),
+            &self.generator,
+        );
+        if let Some(bearing) = pose.bearing_deg {
+            self.controller.face(bearing);
+        }
+        if let Some(pitch) = pose.pitch_deg {
+            self.controller.set_pitch(pitch.to_radians());
+        }
         Ok(())
     }
 
@@ -243,10 +304,8 @@ impl Client {
             Command::NextAvatar => self.next_avatar(),
             Command::SetEffects { effects } => self.set_effects(effects),
             Command::GoTo { place } => {
-                if let Err(error) = self.go_to(&place) {
-                    self.events.push(Event::Rejected {
-                        message: format!("place {place}: {error:?}"),
-                    });
+                if let Err(message) = self.go_to(&place) {
+                    self.events.push(Event::Rejected { message });
                 }
             }
         }
@@ -559,19 +618,14 @@ impl Client {
         self.frames_since_stats += 1;
         if self.stats_timer_s >= STATS_EVERY_S {
             let grid = self.generator.sphere().blocks();
+            let pose = self.here();
             self.events.push(Event::Stats {
                 fps: (f64::from(self.frames_since_stats) / self.stats_timer_s) as f32,
                 altitude_m: self.controller.altitude_m(&self.generator),
                 speed_mps: self.controller.speed_mps(),
-                place: topology::code(
-                    grid,
-                    grid.column_of(self.controller.point()),
-                    topology::CODE_MAX,
-                ),
-                bearing_deg: topology::bearing_deg(
-                    self.controller.up().to_array(),
-                    self.controller.facing().to_array(),
-                ),
+                place: pose.place(grid),
+                pose: pose.text(grid),
+                bearing_deg: pose.bearing_deg,
             });
             self.stats_timer_s = 0.0;
             self.frames_since_stats = 0;

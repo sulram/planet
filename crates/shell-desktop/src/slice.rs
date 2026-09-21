@@ -27,12 +27,20 @@ pub fn run(shot: Shot, generator: &Generator) -> Result<(), String> {
     let (sector, middle_u, v) = match &shot.at {
         None => (Sector::new(0).expect("sector 0"), half, half),
         Some(place) => {
-            let found = topology::place(grid, place).map_err(|e| format!("--at {place}: {e:?}"))?;
+            // The same string a link carries, read by the same parser: a cut
+            // and a picture are worth nothing to each other if they cannot be
+            // aimed alike.
+            let pose = client::Pose::parse(grid, place).map_err(|e| format!("--at {e}"))?;
+            let found = topology::Place {
+                column: pose.column,
+                h: pose.h,
+                chars: pose.chars,
+            };
             let [su, sv] = found.span(grid).map(f64::from);
             (
-                found.column.sector,
-                f64::from(found.column.u) + su / 2.0,
-                f64::from(found.column.v) + sv / 2.0,
+                pose.column.sector,
+                f64::from(pose.column.u) + su / 2.0,
+                f64::from(pose.column.v) + sv / 2.0,
             )
         }
     };

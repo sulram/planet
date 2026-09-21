@@ -36,7 +36,7 @@ Every milestone ends runnable end to end.
   - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
   - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (DECISIONS 45); this side needs its own answer
 - [x] Params as knobs in the panel, and in the address, so a planet stays shareable
-- [x] The place in the URL, replaced as the avatar settles and read on arrival, and `--at` taking a place code instead of two fractions. A respawn stands you back where you were, so turning a knob keeps your spot
+- [x] The pose in the URL, replaced as the avatar settles and read on arrival, and `--at` taking one: body, place, height and aim, `m4-K7M42Q@40,180,-5`. A link opens where you stood looking at what you looked at, which is how a gallery gets shared. A respawn stands you back where you were, so turning a knob keeps your spot
 - [ ] Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out. The whole Atlas waits for M4
 - [x] A coordinate system and a compass on screen, as Cryptovoxels has: `4-K7M42Q`, a prefix is a box and length is precision, plus a sixteen point bearing and the altitude. In `topology`, so every front end says the same thing, and the rose is i18n because N and S are English
 - [x] Third person placeholder avatar (boxes, walk cycle)

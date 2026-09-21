@@ -29,9 +29,7 @@ pub fn run(
     }
     .map_err(|e| e.to_string())?;
     if let Some(place) = &at {
-        client
-            .go_to(place)
-            .map_err(|e| format!("--at {place}: {e:?}"))?;
+        client.go_to(place).map_err(|e| format!("--at {e}"))?;
     }
     let since_epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
     client.add_entropy(since_epoch.map_or(0, |elapsed| elapsed.as_nanos() as u64));

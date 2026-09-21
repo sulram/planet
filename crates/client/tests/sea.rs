@@ -41,7 +41,7 @@ fn a_swimmer_floats_dives_and_surfaces() {
         .blocks();
     println!(
         "open sea at {}",
-        topology::code(grid, grid.column_of(point), topology::CODE_MAX)
+        topology::code(grid, grid.column_of(point), None, topology::CODE_MAX)
     );
     let mut client = Client::new(Recipe::new(1)).unwrap();
     client.teleport(point);

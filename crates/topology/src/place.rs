@@ -11,6 +11,11 @@
 //!   format, and it survives being said out loud, written on paper by someone
 //!   else and pasted into a URL.
 //!
+//! A height rides along as `@h`, blocks from the datum, and it is left out
+//! when the ground decides it. On the surface that is nearly always, which is
+//! why the short form is the common one; inside a tower every floor is the
+//! same column, and there the height is the whole of what is being said.
+//!
 //! A body is not in here. `topology` knows one grid at a time and a world may
 //! have a planet and a moon, so whoever holds more than one body says which.
 
@@ -26,6 +31,10 @@ const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// Bits one character carries.
 const BITS_PER_CHAR: u32 = 5;
 
+/// What separates a height from the code. Reads as "at", and it is not in the
+/// alphabet, so it can never be mistaken for one more character of precision.
+pub const HEIGHT_MARK: char = '@';
+
 /// Characters that name a single block of the largest body there is. `u` and
 /// `v` are [`MAX_BITS`] each, so the interleaved stream is twice that, and the
 /// last character is padded.
@@ -40,6 +49,8 @@ pub enum PlaceError {
     Character,
     /// No characters after the sector, or more than [`CODE_MAX`].
     Length,
+    /// Something after `@` that is not a height in blocks.
+    Height,
 }
 
 /// A place and how precisely it was named.
@@ -48,6 +59,9 @@ pub struct Place {
     /// The lowest corner of the box the code names, on the grid it was read
     /// for. A code shorter than [`CODE_MAX`] names a box, not a column.
     pub column: Column,
+    /// Blocks from the datum sphere, when the code said. `None` means the
+    /// ground decides, which is what standing on it means.
+    pub h: Option<i16>,
     /// Characters given, `1..=CODE_MAX`.
     pub chars: usize,
 }
@@ -73,11 +87,14 @@ fn split(chars: usize) -> (u32, u32) {
     (bits.div_ceil(2), bits / 2)
 }
 
-/// The code for a column, to `chars` characters: `"4-K7M42Q"`.
+/// The code for a place, to `chars` characters: `"4-K7M42Q"`, or
+/// `"4-K7M42Q@128"` when a height is given.
 ///
 /// The column is read on `grid` and written against the largest body, so the
 /// same code names the same fraction of a sector whatever size a world is.
-pub fn code(grid: Grid, column: Column, chars: usize) -> String {
+/// Pass `None` for `h` when the ground decides the height, which is what
+/// standing on it means and what nearly every place outdoors is.
+pub fn code(grid: Grid, column: Column, h: Option<i16>, chars: usize) -> String {
     let chars = chars.clamp(1, CODE_MAX);
     let shift = MAX_BITS - grid.bits();
     let stream = interleave(u32::from(column.u) << shift, u32::from(column.v) << shift);
@@ -98,12 +115,54 @@ pub fn code(grid: Grid, column: Column, chars: usize) -> String {
         let high = total - (i + 1) * BITS_PER_CHAR;
         out.push(ALPHABET[((aligned >> high) & 0x1f) as usize] as char);
     }
+    if let Some(h) = h {
+        out.push(HEIGHT_MARK);
+        out.push_str(itoa(h).as_str());
+    }
+    out
+}
+
+/// `i16` as text without pulling in a formatter, so this stays cheap on the
+/// hot path a HUD sits on.
+fn itoa(value: i16) -> String {
+    let mut out = String::with_capacity(6);
+    if value < 0 {
+        out.push('-');
+    }
+    let mut digits = [0u8; 5];
+    let mut n = value.unsigned_abs();
+    let mut at = 0;
+    loop {
+        digits[at] = b'0' + (n % 10) as u8;
+        n /= 10;
+        at += 1;
+        if n == 0 {
+            break;
+        }
+    }
+    for i in (0..at).rev() {
+        out.push(digits[i] as char);
+    }
     out
 }
 
 /// Reads a code back. Case is ignored and the dash is optional, because
 /// neither survives being copied by hand.
 pub fn place(grid: Grid, text: &str) -> Result<Place, PlaceError> {
+    // The height is split off first: it is decimal and signed, and none of
+    // that survives being folded into the alphabet.
+    let (text, h) = match text.split_once(HEIGHT_MARK) {
+        None => (text, None),
+        Some((code, height)) => (
+            code,
+            Some(
+                height
+                    .trim()
+                    .parse::<i16>()
+                    .map_err(|_| PlaceError::Height)?,
+            ),
+        ),
+    };
     let mut chars = text
         .chars()
         .filter(|c| !c.is_whitespace() && *c != '-')
@@ -139,6 +198,7 @@ pub fn place(grid: Grid, text: &str) -> Result<Place, PlaceError> {
     let shift = MAX_BITS - grid.bits();
     Ok(Place {
         column: Column::new(sector, (u >> shift) as u16, (v >> shift) as u16),
+        h,
         chars: given,
     })
 }
@@ -231,7 +291,7 @@ mod tests {
                 Column::new(Sector::ALL[5], last, last),
                 Column::new(Sector::ALL[2], last / 3, last / 7),
             ] {
-                let text = code(g, column, CODE_MAX);
+                let text = code(g, column, None, CODE_MAX);
                 let back = place(g, &text).expect("reads back");
                 assert_eq!(back.column, column, "{text} on 2^{bits}");
             }
@@ -242,9 +302,9 @@ mod tests {
     fn a_shorter_code_is_the_box_around_the_longer_one() {
         let g = grid(16);
         let column = Column::new(Sector::ALL[4], 40_000, 9_001);
-        let full = code(g, column, CODE_MAX);
+        let full = code(g, column, None, CODE_MAX);
         for chars in 1..CODE_MAX {
-            let short = code(g, column, chars);
+            let short = code(g, column, None, chars);
             assert!(
                 full.starts_with(&short),
                 "{short} should be a prefix of {full}"
@@ -264,7 +324,7 @@ mod tests {
     fn a_code_survives_being_copied_by_hand() {
         let g = grid(16);
         let column = Column::new(Sector::ALL[1], 1234, 43210);
-        let text = code(g, column, CODE_MAX);
+        let text = code(g, column, None, CODE_MAX);
         for variant in [
             text.to_lowercase(),
             text.replace('-', ""),
@@ -279,6 +339,23 @@ mod tests {
     fn about(got: Option<f64>, want: f64) {
         let got = got.expect("a bearing away from the poles");
         assert!((got - want).abs() < 0.5, "bearing {got}, wanted {want}");
+    }
+
+    #[test]
+    fn a_height_rides_along_and_is_left_out_when_the_ground_decides() {
+        let g = grid(16);
+        let column = Column::new(Sector::ALL[2], 700, 800);
+        assert_eq!(place(g, &code(g, column, None, CODE_MAX)).unwrap().h, None);
+        for h in [0i16, 1, -1, 128, -256, i16::MAX, i16::MIN] {
+            let text = code(g, column, Some(h), CODE_MAX);
+            let back = place(g, &text).expect("reads back");
+            assert_eq!(back.column, column, "{text}");
+            assert_eq!(back.h, Some(h), "{text}");
+        }
+        // A tower is one column and many floors, which is the whole point.
+        let ground = code(g, column, None, CODE_MAX);
+        assert!(code(g, column, Some(40), CODE_MAX).starts_with(&ground));
+        assert_eq!(place(g, "4-K7M42Q@up"), Err(PlaceError::Height));
     }
 
     #[test]

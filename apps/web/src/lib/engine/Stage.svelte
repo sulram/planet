@@ -44,16 +44,16 @@
 	// server, where there is no address bar to read.
 	const arrivedAt = typeof location === 'undefined' ? null : location.hash.slice(1) || null;
 	/** Where a respawn puts you back: the address on arrival, then wherever you are. */
-	const stand = $derived(stats?.place ?? arrivedAt);
+	const stand = $derived(stats?.pose ?? arrivedAt);
 	/** The last place written, so standing still writes nothing. */
 	let written = '';
 
 	// Replaced and never pushed: the back button is the way out of the world,
 	// not a trail of every step taken in it.
 	$effect(() => {
-		if (!stats || stats.place === written) return;
-		written = stats.place;
-		replaceState(`#${stats.place}`, {});
+		if (!stats || stats.pose === written) return;
+		written = stats.pose;
+		replaceState(`#${stats.pose}`, {});
 	});
 
 	// How the picture is made belongs to the machine, not to the account: a

@@ -54,8 +54,14 @@ export type EngineEvent =
 			fps: number;
 			altitude_m: number;
 			speed_mps: number;
-			/** Where the body is, as a person says it: `4-K7M42Q`. */
+			/** Where the body is, as a person says it: `4-K7M42Q`, `m4-K7M42Q@40` on the moon. */
 			place: string;
+			/**
+			 * The same, plus the way of looking: what a link carries, so whoever
+			 * opens it stands where you stood seeing what you saw. Put it in the
+			 * address bar and hand it back whole; never take it apart here.
+			 */
+			pose: string;
 			/** Degrees clockwise from north, or null at a pole. */
 			bearing_deg: number | null;
 	  };

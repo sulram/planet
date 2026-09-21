@@ -224,6 +224,72 @@ impl Controller {
         self.site != Site::Planet
     }
 
+    /// Feet, metres above the datum sphere of whichever body holds them.
+    pub fn height_m(&self) -> f64 {
+        self.height_m
+    }
+
+    /// Camera pitch, radians, positive looks up.
+    pub fn pitch(&self) -> f64 {
+        self.pitch
+    }
+
+    /// Turns the avatar and the camera to a bearing, degrees clockwise from
+    /// north. The same convention `topology::bearing_deg` reads, so a bearing
+    /// written down and handed back points the same way.
+    pub fn face(&mut self, bearing_deg: f64) {
+        const NORTH: DVec3 = DVec3::Y;
+        let up = self.up();
+        let north = NORTH - up * up.dot(NORTH);
+        if north.length() < 1e-6 {
+            // At a pole there is no bearing to honour, so nothing turns.
+            return;
+        }
+        let north = north.normalize();
+        let east = north.cross(up);
+        let radians = bearing_deg.to_radians();
+        let heading = north * radians.cos() + east * radians.sin();
+        self.view = heading.normalize();
+        self.facing = self.view;
+    }
+
+    /// Stands the avatar at a height of its own rather than on the ground.
+    /// `None` puts it back on the ground, which is what standing means.
+    pub fn stand_at(&mut self, height_m: Option<f64>, generator: &Generator) {
+        let ground = self.ground_m(generator);
+        match height_m {
+            None => {
+                self.height_m = ground;
+                self.grounded = true;
+                self.mode = Mode::Walk;
+            }
+            Some(wanted) => {
+                self.height_m = wanted.max(ground);
+                self.grounded = self.height_m <= ground + 1e-6;
+                if !self.grounded {
+                    self.mode = Mode::Fly;
+                }
+            }
+        }
+        self.vertical_mps = 0.0;
+    }
+
+    /// Puts the avatar on the moon, at a direction from its centre. The moon
+    /// has to be where the clock says before this, because a body without one
+    /// has nothing to stand on.
+    pub fn stand_on_moon(&mut self, direction: DVec3, generator: &Generator) {
+        self.site = Site::Moon {
+            direction: direction.normalize_or(DVec3::Y),
+        };
+        self.height_m = self.ground_m(generator);
+        self.grounded = true;
+        self.mode = Mode::Walk;
+        self.vertical_mps = 0.0;
+        let tangents = self.sphere.blocks().tangents(self.point);
+        self.view = DVec3::from(tangents.du).normalize();
+        self.facing = self.view;
+    }
+
     /// Centre and datum radius of the body that holds the avatar.
     fn body(&self) -> (DVec3, f64) {
         match (self.site, self.moon) {
@@ -299,6 +365,15 @@ impl Controller {
     pub fn position(&self) -> DVec3 {
         let (center, radius_m) = self.body();
         center + self.radial() * (radius_m + self.height_m)
+    }
+
+    /// Where the camera looks, flattened on the tangent plane.
+    ///
+    /// This, and not [`Controller::facing`], is what a compass reads: standing
+    /// still and turning the mouse moves the view and leaves the body where it
+    /// was, and "which way am I looking" is a question about the eyes.
+    pub fn view(&self) -> DVec3 {
+        self.view
     }
 
     pub fn facing(&self) -> DVec3 {
@@ -422,6 +497,12 @@ impl Controller {
             boom_m: self.boom_m,
             ..Controller::spawn(point, generator)
         };
+    }
+
+    /// Aims the camera up or down, radians, positive looks up. The boom is
+    /// left where it was: how far back someone watches from is theirs.
+    pub fn set_pitch(&mut self, pitch: f64) {
+        self.pitch = pitch.clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
 
     /// Aims the preview camera: `pitch` in radians, `boom_m` behind the avatar.
