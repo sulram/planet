@@ -95,7 +95,10 @@ thread_local! {
 
 /// The seed and the place the caves were found in (docs/ROADMAP.md).
 const CAVE_SEED: u64 = 0x0000_0000_cafe_0007;
-const CAVE_AT: [f64; 2] = [0.405, 0.58];
+/// A mouth: walking forward from here goes under the ground inside five
+/// seconds, so the walk below pays for the footings and for the patches the
+/// body asks to be meshed deeper.
+const CAVE_AT: [f64; 2] = [0.3105, 0.6585];
 
 /// Footings across cave country: what one body costs the frame it walks in.
 /// A step takes one where the body stands and up to three more for where it

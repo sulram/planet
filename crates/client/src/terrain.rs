@@ -24,7 +24,8 @@ use scene::{
     Camera, PATCH_GRID, PATCH_VERTICES, PatchId, TerrainChange, TerrainMesh, TerrainVertex,
     WaterVertex,
 };
-use topology::{RADIUS_M, SECTOR_BITS, SECTOR_SIDE, Sector, SurfacePoint};
+use topology::{BLOCK_M, RADIUS_M, SECTOR_BITS, SECTOR_SIDE, Sector, SurfacePoint};
+use voxel::CHUNK_SIDE;
 use worldgen::{Generator, MOON_RADIUS_M, Material, Sample};
 
 /// A node splits when the camera is closer than this many node widths.
@@ -37,6 +38,12 @@ const BUILD_BUDGET: usize = 6;
 /// six of them into one frame: the descent blew from 9 ms to 42 against a
 /// budget of 12, which is what the bench is for.
 const VOLUME_COST: usize = 6;
+/// Patches around a body under the ground that are meshed down to it, as a
+/// Chebyshev radius in patches of the deepest level, each 16 m across. The
+/// frame does not feel it (the budget still spends one volume patch a frame),
+/// so what it costs is how long the ground takes to arrive and how many
+/// patches are held.
+const UNDER_RING: i64 = 4;
 /// Patches kept before the least recently used ones are dropped.
 const CACHE_PATCHES: usize = 1400;
 
@@ -149,6 +156,9 @@ struct Built {
     /// Bounding sphere radius around `center`, metres.
     radius_m: f64,
     last_used: u64,
+    /// The chunk a body was in when this patch was meshed, if one was under
+    /// it. A body that goes a chunk deeper asks for the patch again.
+    under_chunk: Option<i64>,
 }
 
 pub struct Terrain {
@@ -216,8 +226,12 @@ impl Terrain {
     ) -> Vec<PatchId> {
         self.frame += 1;
         self.casters.clear();
+        let under = Under::of(self.body, generator, camera);
         let mut draw = Vec::new();
         let mut missing: Vec<(f64, Node)> = Vec::new();
+        // Patches that exist but stop above the body standing in them. They
+        // go first: the ground under somebody's feet beats any new patch.
+        let mut deepen: Vec<Node> = Vec::new();
 
         let body = self.body;
         let mut stack: Vec<Node> = Sector::ALL
@@ -238,6 +252,19 @@ impl Terrain {
             };
             built.last_used = self.frame;
             let (center, radius_m) = (built.center, built.radius_m);
+            // Somebody went a chunk deeper than this patch was meshed for:
+            // it is missing the ground they are standing on, so it is built
+            // again. Measured by the chunk, so walking about never remeshes.
+            let shallow = |built: &Built, under: &Under| {
+                built.under_chunk.is_none_or(|had| had > under.chunk())
+            };
+            if is_volume(node)
+                && under.is_some_and(|under| {
+                    under.reaches(node).is_some() && shallow(built, &under)
+                })
+            {
+                deepen.push(node);
+            }
 
             let distance = (center - camera.position).length();
             if node.depth < body.max_depth() && distance < node.side_m() * SPLIT_DISTANCE {
@@ -266,12 +293,13 @@ impl Terrain {
         // Coarse before fine, near before far: the picture sharpens evenly.
         missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
         let mut spent = 0usize;
-        for (_, node) in missing {
+        for node in deepen.into_iter().chain(missing.into_iter().map(|(_, n)| n)) {
             if spent >= budget {
                 break;
             }
+            let under_m = under.and_then(|under| under.reaches(node));
             spent = spent.saturating_add(cost(node));
-            let mesh = build(generator, node);
+            let mesh = build(generator, node, under_m);
             // The sea counts: over deep water the ground is far below the surface
             // that is actually in view.
             let ground = mesh.vertices.iter().map(|v| v.position);
@@ -286,6 +314,9 @@ impl Terrain {
                     center: mesh.origin,
                     radius_m: f64::from(radius_m),
                     last_used: self.frame,
+                    under_chunk: under
+                        .filter(|_| under_m.is_some())
+                        .map(|under| under.chunk()),
                 },
             );
             self.changes.push(TerrainChange::Add(node.id(), mesh));
@@ -419,7 +450,63 @@ fn visible(body: Body, camera: &Camera, aspect: f32, center: DVec3, radius_m: f6
     !(outside(p.x, half_x) || outside(p.y, half_y))
 }
 
-/// What building one node costs, in units of a heightfield patch.
+/// Where somebody is, when they are under the ground: the patch of the
+/// deepest level that holds them, and their height over the datum.
+///
+/// This is the invoker of Voxel Plugin by another name. A patch nobody is
+/// inside of is meshed for a camera looking at its surface; the patches
+/// around a body have to hold the cave or the shaft it is standing in.
+#[derive(Clone, Copy, Debug)]
+struct Under {
+    sector: Sector,
+    patch: [i64; 2],
+    height_m: f64,
+}
+
+impl Under {
+    /// `None` over the ground, where the surface window already covers the
+    /// eye, and on any body without a volume layer.
+    fn of(body: Body, generator: &Generator, camera: &Camera) -> Option<Under> {
+        if body != Body::Planet {
+            return None;
+        }
+        let height_m = camera.position.length() - RADIUS_M;
+        let point = SurfacePoint::from_direction(camera.position.to_array());
+        let ground_m = generator.sample(point.direction()).height_m;
+        if height_m > ground_m {
+            return None;
+        }
+        let side = crate::volume::PATCH_BLOCKS;
+        Some(Under {
+            sector: point.sector,
+            patch: [
+                libm::floor(point.u / side as f64) as i64,
+                libm::floor(point.v / side as f64) as i64,
+            ],
+            height_m,
+        })
+    }
+
+    /// The height a node has to reach down to, if this body is near enough to
+    /// it. A cave is wider than one patch and a body sees its walls, so this
+    /// is a ring and not a square of one.
+    fn reaches(self, node: Node) -> Option<f64> {
+        let near = node.sector == self.sector
+            && (i64::from(node.x) - self.patch[0]).abs() <= UNDER_RING
+            && (i64::from(node.y) - self.patch[1]).abs() <= UNDER_RING;
+        near.then_some(self.height_m)
+    }
+
+    /// Which chunk of the stack the body is in: what a rebuild is measured
+    /// against, so walking about does not remesh, and descending does.
+    fn chunk(self) -> i64 {
+        libm::floor(self.height_m / (CHUNK_SIDE as f64 * BLOCK_M)) as i64
+    }
+}
+
+/// What building one node costs, in units of a heightfield patch. A patch
+/// that reaches down to a body costs the same as one that does not: it may
+/// look further, but it meshes no more chunks (`volume::MOST_CHUNKS`).
 fn cost(node: Node) -> usize {
     if is_volume(node) { VOLUME_COST } else { 1 }
 }
@@ -430,8 +517,9 @@ fn is_volume(node: Node) -> bool {
     node.body == Body::Planet && node.depth == node.body.max_depth()
 }
 
-/// Meshes one node.
-fn build(generator: &Generator, node: Node) -> TerrainMesh {
+/// Meshes one node. `under_m` is the height of a body inside it, which a
+/// volume patch has to reach down to.
+fn build(generator: &Generator, node: Node, under_m: Option<f64>) -> TerrainMesh {
     let body = node.body;
     let radius = body.radius_m();
     // One ring of samples past the rim, so rim normals match the neighbours'.
@@ -543,6 +631,7 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
                 radius,
                 origin,
                 color,
+                under_m,
             )
         })
         .filter(|(_, indices)| !indices.is_empty());
