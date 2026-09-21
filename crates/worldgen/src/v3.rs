@@ -19,6 +19,7 @@
 //! radius there is a great deal of world under one of its texels.
 
 use crate::field::Field;
+use topology::QuadSphere;
 use crate::noise::{band, fbm, simplex_d, smoothstep};
 use crate::plates::{Plates, Shape};
 use crate::{Direction, Material, Recipe, Sample};
@@ -165,9 +166,15 @@ fn filtered(seed: u64, d: Direction, frequency: f64, octaves: u32, footprint: f6
 /// because zero maps to zero, and where the ground is rough, which is where
 /// a belt belongs. The relief itself is the generator's, and `relief_m` sets
 /// how tall it grows.
-fn field_shape(recipe: &Recipe, field: &Field, d: Direction, footprint_m: f64) -> Shape {
+fn field_shape(
+    recipe: &Recipe,
+    sphere: QuadSphere,
+    field: &Field,
+    d: Direction,
+    footprint_m: f64,
+) -> Shape {
     let params = &recipe.params;
-    let ground = field.sample(d, footprint_m);
+    let ground = field.sample(sphere, d, footprint_m);
     // Where the shore is, is a choice: the body's own sea level, or higher,
     // or lower.
     let elevation_m = ground.elevation_m - params.sea_level_m;
@@ -182,8 +189,8 @@ fn field_shape(recipe: &Recipe, field: &Field, d: Direction, footprint_m: f64) -
     };
     // Never finer than the mesh that asked: a coarse patch pays for the level
     // it is already reading, not for a finer one.
-    let lift = field.sample(d, footprint_m.max(LIFT_FOOTPRINT_M));
-    let belt = field.sample(d, footprint_m.max(BELT_FOOTPRINT_M));
+    let lift = field.sample(sphere, d, footprint_m.max(LIFT_FOOTPRINT_M));
+    let belt = field.sample(sphere, d, footprint_m.max(BELT_FOOTPRINT_M));
     Shape {
         land,
         lift: smoothstep(0.0, LIFT_M, lift.elevation_m),
@@ -193,6 +200,7 @@ fn field_shape(recipe: &Recipe, field: &Field, d: Direction, footprint_m: f64) -
 
 pub fn sample(
     recipe: &Recipe,
+    sphere: QuadSphere,
     plates: &Plates,
     field: Option<&Field>,
     d: Direction,
@@ -204,7 +212,7 @@ pub fn sample(
     let scale = params.continent_scale;
 
     let shape = match field {
-        Some(field) => field_shape(recipe, field, d, footprint_m),
+        Some(field) => field_shape(recipe, sphere, field, d, footprint_m),
         None => plates.shape(seed, d, params.sea_share),
     };
     let Shape { land, lift, ranges } = shape;

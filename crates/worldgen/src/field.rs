@@ -24,7 +24,7 @@
 //! already whole. Sampling is integer fetches and `+ - * /`, so a field world
 //! is as deterministic as a generated one.
 
-use topology::{BLOCK_M, SECTOR_SIDE, SurfacePoint, Vec3};
+use topology::{BLOCK_M, QuadSphere, Vec3};
 
 /// Fields start with this, so a wrong file is refused instead of decoded.
 const MAGIC: [u8; 8] = *b"PLFIELD1";
@@ -34,8 +34,6 @@ const HEADER: usize = 8 + 32 + 4 + 4;
 /// ranges under a few hundred metres inside a texel, so the step is small and
 /// the top of the byte is the Himalaya, not headroom nobody uses.
 const RUGGED_STEP: f64 = 16.0;
-/// Metres along one sector side: the width of a face on our planet.
-const FACE_M: f64 = SECTOR_SIDE as f64 * BLOCK_M;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum FieldError {
@@ -143,27 +141,29 @@ impl Field {
         self.id
     }
 
-    /// Metres of ground one texel of the finest level covers.
-    pub fn texel_m(&self) -> f64 {
-        FACE_M / f64::from(self.levels[0].side)
+    /// Metres of ground one texel of the finest level covers, on the body
+    /// the field is stretched over. A field is a shape, so the same bytes
+    /// cover a small world at a proportionally finer grain.
+    pub fn texel_m(&self, sphere: QuadSphere) -> f64 {
+        f64::from(sphere.blocks().side()) * BLOCK_M / f64::from(self.levels[0].side)
     }
 
     /// The ground under a direction, as a mesh sampled every `footprint_m`
     /// metres should see it: levels finer than the mesh are blended out, the
     /// way `band` fades an octave, so no level change ever pops.
-    pub fn sample(&self, d: Vec3, footprint_m: f64) -> Ground {
+    pub fn sample(&self, sphere: QuadSphere, d: Vec3, footprint_m: f64) -> Ground {
         // Levels double in size, so the level that matches a footprint is its
         // log. Below the finest level there is nothing coarser to fall back
         // on: the generator's noise takes over there.
-        let wanted = libm::log2((footprint_m / self.texel_m()).max(1.0));
+        let wanted = libm::log2((footprint_m / self.texel_m(sphere)).max(1.0));
         let last = (self.levels.len() - 1) as f64;
         let coarse = libm::floor(wanted).min(last);
         let blend = (wanted - coarse).clamp(0.0, 1.0);
-        let near = self.level(coarse as usize, d);
+        let near = self.level(sphere, coarse as usize, d);
         if blend <= 0.0 {
             return near;
         }
-        let far = self.level(coarse as usize + 1, d);
+        let far = self.level(sphere, coarse as usize + 1, d);
         Ground {
             elevation_m: near.elevation_m + (far.elevation_m - near.elevation_m) * blend,
             ruggedness_m: near.ruggedness_m + (far.ruggedness_m - near.ruggedness_m) * blend,
@@ -172,10 +172,10 @@ impl Field {
 
     /// Bilinear fetch inside one level. The gutter makes the face edge an
     /// ordinary texel, so nothing here knows what a seam is.
-    fn level(&self, index: usize, d: Vec3) -> Ground {
+    fn level(&self, sphere: QuadSphere, index: usize, d: Vec3) -> Ground {
         let level = self.levels[index.min(self.levels.len() - 1)];
-        let point = SurfacePoint::from_direction(d);
-        let span = f64::from(level.side) / f64::from(SECTOR_SIDE);
+        let point = sphere.blocks().surface_point(d);
+        let span = f64::from(level.side) / f64::from(sphere.blocks().side());
         // Texel `t` has its centre at `t + 0.5` across the face and lives at
         // `t + 1` in the array: adding 0.5 puts a texel centre on an integer.
         let x = point.u * span + 0.5;
@@ -272,10 +272,16 @@ mod tests {
         assert_eq!(Field::parse(short).unwrap_err(), FieldError::Truncated);
     }
 
+    /// The body a field is stretched over in these tests: today's planet.
+    fn planet() -> QuadSphere {
+        QuadSphere::new(topology::MAX_BITS).expect("a legal size")
+    }
+
     #[test]
     fn every_direction_reads_the_level_its_footprint_asks_for() {
         let field = constant(64, 4, |level| 100 * (level as i16 + 1));
-        let texel_m = field.texel_m();
+        let sphere = planet();
+        let texel_m = field.texel_m(sphere);
         for (footprint_m, want) in [
             (0.0, 100.0),
             (texel_m, 100.0),
@@ -285,7 +291,7 @@ mod tests {
             (texel_m * 1024.0, 400.0),
         ] {
             for d in directions() {
-                let ground = field.sample(d, footprint_m);
+                let ground = field.sample(sphere, d, footprint_m);
                 assert!(
                     libm::fabs(ground.elevation_m - want) < 1e-9,
                     "{d:?} at {footprint_m} m: want {want}, got {}",
@@ -298,7 +304,8 @@ mod tests {
     #[test]
     fn a_footprint_between_levels_blends_them() {
         let field = constant(64, 3, |level| 100 * (level as i16 + 1));
-        let ground = field.sample([1.0, 0.0, 0.0], field.texel_m() * 3.0);
+        let sphere = planet();
+        let ground = field.sample(sphere, [1.0, 0.0, 0.0], field.texel_m(sphere) * 3.0);
         // log2(3) is 1.585: most of the way from level 1 to level 2.
         assert!(
             (258.0..259.0).contains(&ground.elevation_m),
@@ -310,9 +317,10 @@ mod tests {
     #[test]
     fn ruggedness_comes_back_in_metres() {
         let field = constant(32, 2, |_| 0);
-        let ground = field.sample([0.0, 1.0, 0.0], 0.0);
+        let sphere = planet();
+        let ground = field.sample(sphere, [0.0, 1.0, 0.0], 0.0);
         assert_eq!(ground.ruggedness_m, 0.0);
-        let coarse = field.sample([0.0, 1.0, 0.0], field.texel_m() * 2.0);
+        let coarse = field.sample(sphere, [0.0, 1.0, 0.0], field.texel_m(sphere) * 2.0);
         assert_eq!(coarse.ruggedness_m, RUGGED_STEP);
     }
 
@@ -327,7 +335,7 @@ mod tests {
             // A path that crosses the +X / +Z seam.
             let angle = core::f64::consts::FRAC_PI_4 + f64::from(i) * step;
             let d = [libm::cos(angle), 0.0, libm::sin(angle)];
-            let here = field.sample(d, 0.0).elevation_m;
+            let here = field.sample(planet(), d, 0.0).elevation_m;
             if let Some(before) = previous {
                 assert!(libm::fabs(here - before) < 1e-9, "{before} -> {here}");
             }

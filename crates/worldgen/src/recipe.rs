@@ -3,6 +3,7 @@
 use core::fmt;
 
 use serde::{Deserialize, Serialize};
+use topology::QuadSphere;
 
 use crate::GENERATOR_VERSION;
 
@@ -14,8 +15,18 @@ pub struct Recipe {
     #[serde(with = "seed_hex")]
     pub seed: u64,
     pub generator_version: u32,
+    /// Blocks per sector side, as a power of two: the body's size. Frozen per
+    /// world like the generator version, because it decides the address and
+    /// the address is the save format. Absent means today's planet.
+    #[serde(default = "default_sector_bits")]
+    pub sector_bits: u32,
     #[serde(default)]
     pub params: Params,
+}
+
+/// What a recipe written before worlds had a size means.
+fn default_sector_bits() -> u32 {
+    topology::MAX_BITS
 }
 
 impl Recipe {
@@ -24,8 +35,15 @@ impl Recipe {
         Recipe {
             seed,
             generator_version: GENERATOR_VERSION,
+            sector_bits: default_sector_bits(),
             params: Params::default(),
         }
+    }
+
+    /// The body this recipe describes, or `None` if the size is not one a
+    /// quad sphere can have.
+    pub fn sphere(&self) -> Option<QuadSphere> {
+        QuadSphere::new(self.sector_bits)
     }
 }
 
@@ -94,6 +112,8 @@ pub enum RecipeError {
     /// A seed is exactly 16 lowercase hex digits.
     InvalidSeed(String),
     UnknownGeneratorVersion(u32),
+    /// A sector side outside `MIN_BITS..=MAX_BITS`.
+    UnsupportedSectorBits(u32),
     /// The recipe names a field and none was handed to the generator.
     FieldRequired([u8; 32]),
     /// The field handed over is not the one the recipe names.
@@ -110,6 +130,12 @@ impl fmt::Display for RecipeError {
                 write!(f, "invalid seed {s:?}: want 16 lowercase hex digits")
             }
             RecipeError::UnknownGeneratorVersion(v) => write!(f, "unknown generator version {v}"),
+            RecipeError::UnsupportedSectorBits(b) => write!(
+                f,
+                "sector bits {b} out of range {}..={}",
+                topology::MIN_BITS,
+                topology::MAX_BITS
+            ),
             RecipeError::FieldRequired(id) => {
                 write!(f, "this recipe needs field {}", format_id(id))
             }

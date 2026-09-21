@@ -18,6 +18,8 @@ mod v1;
 mod v2;
 mod v3;
 
+use topology::QuadSphere;
+
 pub use field::{Field, FieldError, Ground};
 pub use recipe::{
     Params, Recipe, RecipeError, Source, format_id, format_seed, parse_id, parse_seed,
@@ -88,6 +90,9 @@ pub struct Column {
     ground: Sample,
     /// `None` on a generator version that has no caves.
     caves: Option<v3::Column>,
+    /// Metres of this body per metre of the reference body. See
+    /// [`Generator::scale`].
+    scale: f64,
 }
 
 impl Column {
@@ -102,7 +107,9 @@ impl Column {
     pub fn density_m(self, height_m: f64) -> f64 {
         match &self.caves {
             None => self.ground.height_m - height_m,
-            Some(caves) => v3::density_m(caves, self.direction, height_m),
+            Some(caves) => {
+                v3::density_m(caves, self.direction, height_m / self.scale) * self.scale
+            }
         }
     }
 
@@ -113,10 +120,21 @@ impl Column {
     }
 }
 
+/// Metres of a body per metre of the reference body: the largest quad sphere
+/// there is. Both sides are powers of two, so the ratio is exact.
+fn reference_scale(sphere: QuadSphere) -> f64 {
+    f64::from(sphere.blocks().side()) / f64::from(1u32 << topology::MAX_BITS)
+}
+
 /// A generator bound to one recipe.
 #[derive(Clone, Debug)]
 pub struct Generator {
     recipe: Recipe,
+    /// The body the recipe names, validated once.
+    sphere: QuadSphere,
+    /// Metres of this body per metre of the reference body, an exact power of
+    /// two. See [`Generator::scale`].
+    scale: f64,
     moon_basins: moon::Basins,
     plates: plates::Plates,
     field: Option<Field>,
@@ -156,11 +174,16 @@ impl Generator {
     }
 
     fn build(recipe: Recipe, field: Option<Field>) -> Result<Generator, RecipeError> {
+        let sphere = recipe
+            .sphere()
+            .ok_or(RecipeError::UnsupportedSectorBits(recipe.sector_bits))?;
         match recipe.generator_version {
             1..=3 => Ok(Generator {
                 moon_basins: moon::Basins::new(&recipe),
                 plates: plates::Plates::new(&recipe),
                 field,
+                sphere,
+                scale: reference_scale(sphere),
                 recipe,
             }),
             version => Err(RecipeError::UnknownGeneratorVersion(version)),
@@ -169,6 +192,25 @@ impl Generator {
 
     pub fn recipe(&self) -> &Recipe {
         &self.recipe
+    }
+
+    /// The body this generator makes: its size, and everything derived from
+    /// it. Frozen with the recipe.
+    pub fn sphere(&self) -> QuadSphere {
+        self.sphere
+    }
+
+    /// Metres of this body per metre of the reference body, the largest a
+    /// quad sphere can be.
+    ///
+    /// A generator version is written once, in reference metres, and frozen
+    /// there forever. A world's size is not a different generator: it is the
+    /// same shape printed smaller, so the seed keeps its coastline and its
+    /// mountains and they arrive at the body's own scale. The factor is an
+    /// exact power of two and exactly `1` at the reference size, so a world
+    /// at that size is untouched, down to the bit.
+    pub fn scale(&self) -> f64 {
+        self.scale
     }
 
     /// Terrain under a unit direction, in full detail. Collision, spawning
@@ -214,17 +256,20 @@ impl Generator {
         let ground = self.sample_at(direction, footprint_m);
         let caves = match self.recipe.generator_version {
             1 | 2 => None,
+            // The cave field is the reference body's, so it is asked in
+            // reference metres and its answer comes back in them.
             _ => Some(v3::column(
                 &self.recipe,
                 direction,
-                ground.height_m,
-                footprint_m,
+                ground.height_m / self.scale,
+                footprint_m / self.scale,
             )),
         };
         Column {
             direction,
             ground,
             caves,
+            scale: self.scale,
         }
     }
 
@@ -232,11 +277,19 @@ impl Generator {
     /// it: detail finer than the mesh can carry is faded out instead of
     /// aliasing. Presentation only. Generator v1 predates this and ignores it.
     pub fn sample_at(&self, direction: Direction, footprint_m: f64) -> Sample {
+        let mut sample = self.reference_sample(direction, footprint_m / self.scale);
+        sample.height_m *= self.scale;
+        sample
+    }
+
+    /// The ground as the reference body has it, in reference metres.
+    fn reference_sample(&self, direction: Direction, footprint_m: f64) -> Sample {
         match self.recipe.generator_version {
             1 => v1::sample(&self.recipe, direction),
             2 => v2::sample(&self.recipe, direction, footprint_m),
             _ => v3::sample(
                 &self.recipe,
+                self.sphere,
                 &self.plates,
                 self.field.as_ref(),
                 direction,
