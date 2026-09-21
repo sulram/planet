@@ -5,13 +5,13 @@ use client::{Client, Input, Key, Recipe};
 /// A point of sector 0 well under water, found by scanning the generator.
 fn open_sea() -> [f64; 2] {
     let generator = worldgen::Generator::new(Recipe::new(1)).unwrap();
-    let sphere = generator.sphere();
-    let side = f64::from(sphere.blocks().side());
+    let grid = generator.sphere().blocks();
+    let side = f64::from(grid.side());
     for i in 1..40 {
         for j in 1..40 {
             let (u, v) = (f64::from(i) / 40.0, f64::from(j) / 40.0);
             let point = topology::SurfacePoint::new(topology::Sector::ALL[0], u * side, v * side);
-            if generator.sample(sphere.blocks().direction(point)).height_m < -40.0 {
+            if generator.sample(grid.direction(point)).height_m < -40.0 {
                 return [u, v];
             }
         }

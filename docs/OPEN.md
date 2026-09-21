@@ -30,22 +30,14 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - **Chunk size**: 16 or 32 per side?
 - **Confirm decision 25**: tangent warp as the quad sphere mapping.
 - **Relief against the build band**: generator v1 raises peaks to 1400 m while
-  the band is about +-128 m. Does the band follow the terrain surface?
+  the band is about +-128 m. The band now bounds where a volume may sit, so
+  the question is whether it follows the terrain surface.
+- **What a body collides with inside a GLB shell** (DECISIONS 58). 47 says
+  collision is the generator, always, and a shell is a mesh we cannot read.
+  Either the volume is the truth and the GLB is a skin over the same cells,
+  which keeps one rule and costs a voxelizer at import, or mesh collision
+  becomes a capability we build. The first is cheaper.
 - **Look**: terrain material style (flat colors, pixel textures, triplanar)?
-- **"Volume" names two things.** In GLOSSARY it is an address box where
-  building is granted; in `client::volume` and in ROADMAP it is the ground
-  meshed from density. The first survives DECISIONS 48 and the second does
-  not, so this may settle itself; if anything in the voxel POC still wants the
-  word, one of the two needs another before either reaches the wire protocol.
-- **How far orbit has to reach before a level may be hollow.** A far level
-  costs nothing to leave empty inside and a near one may not be. Where the
-  line falls is a number nobody has measured (DECISIONS 48).
-- **When shells arrive.** They keep a block's width roughly constant with
-  depth. Nothing needs them while digging stays in the build band, and the
-  term is reserved so nothing else takes it.
-- **Blocky or smooth first.** What a visitor sees on arrival, before touching
-  a setting. Both meshers read the same cells, so this is a default and not an
-  architecture, but it is the whole look of the thing.
 
 ## Later
 
@@ -85,29 +77,3 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - Meta store policy on crypto features (only matters if wallets ship on Quest).
 - Hyperfy license: confirm GPL-3.0.
 - Terms of use for uploaded content.
-
-## The ground is rough at sub-cell scale
-
-- A fine speckle on lit slopes, measured as what the shadow pass adds over the
-  same frame unshadowed: 14.7 with our depth bias, 14.99 casting only faces
-  turned from the sun, and gone only under a bias that detaches shadows (55).
-- So it is geometry, not shadow: the surface nets vertices wobble under one
-  cell. The suspect is the density byte, which saturates past `DENSITY_REACH`
-  of 2 cells, so an edge with one saturated end interpolates its crossing from
-  a number that carries no distance.
-- Open: whether to widen `DENSITY_REACH`, to store the crossing rather than the
-  distance, or to filter the normals. Each costs something different and none
-  is measured yet.
-
-## The generator cannot bound the ground, so half the pyramid is generated to be thrown away
-
-- Measured, seed 1: 46% of the chunks held at `2^16` are one value all through,
-  7,785 of 16,924, and each cost 256 generator columns to discover (56).
-- A hierarchy carries that as a value on the parent and never descends (VDB
-  tiles, refs/dust). We cannot, because deciding it needs a bound on the ground
-  inside a footprint and `sample_at` returns a height, not a range.
-- A field already has the bound: `Ground.ruggedness_m` is how far elevation
-  ranges inside one texel. A generated world has nothing equivalent.
-- Open: whether the generator grows a `bounds_at(direction, footprint)`, what it
-  costs per sample, and whether the same bound is what lets a far level be
-  honestly hollow (48).

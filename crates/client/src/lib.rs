@@ -10,12 +10,13 @@ mod box_figure;
 pub mod collision;
 mod controller;
 mod figure;
+mod grass;
 mod input;
 mod seam;
+mod terrain;
 
 use glam::DVec3;
 use scene::{SkinnedChange, TerrainChange};
-use terrain::Terrain;
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
 use worldgen::{GENERATOR_VERSION, Generator, Material};
@@ -27,6 +28,7 @@ use figure::Figure;
 pub use input::{Input, Key};
 pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Command, Event, Mode};
+use terrain::{Body, Terrain};
 
 /// Seconds for the sun to go around once.
 const DAY_S: f64 = 1200.0;
@@ -43,6 +45,7 @@ pub struct Client {
     field: Option<Field>,
     controller: Controller,
     terrain: Terrain,
+    moon_terrain: Terrain,
     figure: Figure,
     requests: Requests,
     manifest: Option<Manifest>,
@@ -78,12 +81,14 @@ impl Client {
 
     fn build(generator: Generator, field: Option<Field>) -> Result<Client, worldgen::RecipeError> {
         let controller = Controller::spawn(spawn_point(&generator), &generator);
-        let terrain = Terrain::new(generator.sphere());
+        // The body every streamer is printed at. Frozen with the recipe (49).
+        let sphere = generator.sphere();
         let mut client = Client {
             generator,
             field,
             controller,
-            terrain,
+            terrain: Terrain::new(Body::new(terrain::Kind::Planet, sphere)),
+            moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
             figure: Figure::default(),
             requests: Requests::default(),
             manifest: None,
@@ -342,7 +347,9 @@ impl Client {
     }
 
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
-        self.terrain.drain_changes()
+        let mut changes = self.terrain.drain_changes();
+        changes.extend(self.moon_terrain.drain_changes());
+        changes
     }
 
     /// Advances the simulation by `dt` seconds and returns the frame to draw.
@@ -387,23 +394,27 @@ impl Client {
             center: moon,
             radius_m: MOON_RADIUS_M,
         });
-        self.controller
-            .set_drawn_footprint(self.terrain.drawn_footprint_m());
+        let streamer = if self.controller.on_moon() {
+            &self.moon_terrain
+        } else {
+            &self.terrain
+        };
+        let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
+        self.controller.set_drawn_footprint(footprint_m);
         self.controller.update(dt, wish, &self.generator);
         self.figure.update(dt, &self.controller);
         self.stats(dt);
 
         let camera = self.controller.camera(&self.generator);
-        let patches = self.stream(false);
+        let patches = self.stream(&camera, Terrain::update);
         self.frame(camera, patches)
     }
 
-    /// The frame as it would look once streaming caught up. Builds every
-    /// wanted chunk before it answers, however long that takes: for headless
-    /// renders, where there is no next frame to finish the job.
+    /// The frame as it would look once streaming caught up. Blocks until every
+    /// patch is built: for headless renders only.
     pub fn settled_frame(&mut self) -> Frame {
         let camera = self.controller.camera(&self.generator);
-        let patches = self.stream(true);
+        let patches = self.stream(&camera, Terrain::settle);
         self.frame(camera, patches)
     }
 
@@ -417,28 +428,29 @@ impl Client {
         DVec3::new(lunar.cos(), tilt, lunar.sin()).normalize() * MOON_ORBIT_M
     }
 
-    /// Streams the planet's ground and lists what to draw.
-    ///
-    /// One body for now. The moon is still in the sky and still pulls, but its
-    /// ground was the heightfield's; it comes back as a body of its own, with
-    /// a recipe of its own (VOXEL_BRIEF, Bodies).
-    fn stream(&mut self, settle: bool) -> Vec<scene::PatchDraw> {
-        // Around the body, never around the camera. The camera is a boom that
-        // swings metres away and is free to look from orbit; the ground under
-        // the avatar's feet is not allowed to depend on where it is pointed.
-        let eye = self.controller.position();
-        let drawn = if settle {
-            self.terrain.settle(&self.generator, eye)
-        } else {
-            self.terrain.update(&self.generator, eye, terrain::BUDGET)
+    /// Streams the terrain of every body and lists what to draw. Each
+    /// streamer works around its own body's centre, so the moon's sees the
+    /// camera from where the moon is now.
+    fn stream(
+        &mut self,
+        camera: &scene::Camera,
+        select: fn(&mut Terrain, &Generator, &scene::Camera, f32) -> Vec<scene::PatchId>,
+    ) -> Vec<scene::PatchDraw> {
+        let moon = self.moon_position();
+        let from_moon = scene::Camera {
+            position: camera.position - moon,
+            ..*camera
         };
-        drawn
-            .into_iter()
-            .map(|id| scene::PatchDraw {
-                id,
-                body_center: DVec3::ZERO,
-            })
-            .collect()
+        let on_planet = select(&mut self.terrain, &self.generator, camera, self.aspect);
+        let on_moon = select(
+            &mut self.moon_terrain,
+            &self.generator,
+            &from_moon,
+            self.aspect,
+        );
+        let at = |body_center: DVec3| move |id| scene::PatchDraw { id, body_center };
+        let planet = on_planet.into_iter().map(at(DVec3::ZERO));
+        planet.chain(on_moon.into_iter().map(at(moon))).collect()
     }
 
     fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchDraw>) -> Frame {
@@ -454,16 +466,23 @@ impl Client {
             planet_radius_m: self.generator.sphere().radius_m(),
             clock_s: self.clock_s,
             patches,
-            // Everything loaded casts: the near field is small, and there is
-            // no coarser level to pick a caster from yet.
             shadow_patches: self
                 .terrain
-                .casters()
-                .into_iter()
-                .map(|id| scene::PatchDraw {
+                .shadow_patches()
+                .iter()
+                .map(|&id| scene::PatchDraw {
                     id,
                     body_center: DVec3::ZERO,
                 })
+                .chain(
+                    self.moon_terrain
+                        .shadow_patches()
+                        .iter()
+                        .map(|&id| scene::PatchDraw {
+                            id,
+                            body_center: self.moon_position(),
+                        }),
+                )
                 .collect(),
             effects: self.effects,
             interaction: scene::InteractionCapsule {
@@ -493,6 +512,7 @@ impl Client {
         self.controller = Controller::spawn(spawn_point(&self.generator), &self.generator);
         self.controller.mode = mode;
         self.terrain.clear();
+        self.moon_terrain.clear();
         self.face_the_sun();
         self.events.push(Event::RecipeChanged {
             recipe: self.generator.recipe().clone(),
@@ -525,8 +545,11 @@ impl Client {
 /// A place to stand: the first gentle, dry ground along a fixed search path
 /// over sector 0. Deterministic per recipe, so a world always opens the same.
 fn spawn_point(generator: &Generator) -> SurfacePoint {
-    let sphere = generator.sphere();
-    let side = f64::from(sphere.blocks().side());
+    let grid = generator.sphere().blocks();
+    let side = f64::from(grid.side());
+    // Heights are written in reference metres and printed at the body's own
+    // size (50), so what counts as dry ground scales with the world.
+    let scale = generator.scale();
     let sector = Sector::ALL[0];
     // A coarse lattice ordered from the sector centre outward.
     let mut cells: Vec<(i32, i32)> = (-12..=12)
@@ -542,10 +565,7 @@ fn spawn_point(generator: &Generator) -> SurfacePoint {
     });
     let mut fallback = None;
     for point in candidates {
-        let sample = generator.sample(sphere.blocks().direction(point));
-        // Heights are the body's, so the thresholds are too: a metre of dry
-        // ground on the reference body is a millimetre on a small one.
-        let scale = generator.scale();
+        let sample = generator.sample(grid.direction(point));
         let dry = sample.height_m > scale && sample.material != Material::Snow;
         if dry && sample.height_m < 300.0 * scale {
             return point;

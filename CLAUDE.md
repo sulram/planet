@@ -66,8 +66,8 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `crates/`: Rust workspace, cut **by dependency, not by platform**.
   - `topology`: address, neighbours, sector seams, address <-> position.
     Pure integer logic where possible. No GPU, no IO.
-  - `voxel`: chunk formats and codecs. Knows what a cell holds, never what it
-    means: a material is a byte the generator version gives meaning to.
+  - `voxel`: chunk formats and codecs for the build layer. Deleted with
+    DECISIONS 58; written again from scratch when volumes are built.
   - `worldgen`: the generator. Deterministic. Also built to WASM for the server.
     A world's shape is a source: plates over the seed, or a baked `field`.
   - `protocol`: wire messages, generated from `proto/`. Not yet.
@@ -170,7 +170,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `topology`: property tests are mandatory (neighbour of neighbour in the
   opposite direction is self, for every address, across seams).
 - `worldgen`: golden hashes per generator version, identical on native and WASM.
-- `voxel`: codec round trips.
+- `voxel`: codec round trips, when it comes back.
 - A test you add runs and passes in the same commit.
 
 ## Commits

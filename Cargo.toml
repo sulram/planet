@@ -12,10 +12,8 @@ publish = false
 
 [workspace.dependencies]
 topology = { path = "crates/topology" }
-voxel = { path = "crates/voxel" }
 worldgen = { path = "crates/worldgen" }
 scene = { path = "crates/scene" }
-terrain = { path = "crates/terrain" }
 avatar = { path = "crates/avatar" }
 client = { path = "crates/client" }
 render = { path = "crates/render" }

@@ -28,13 +28,10 @@ this file in the same change.
 | Address space | The flat grid view where every block is a unit cube. Where simulation runs. |
 | World space | True 3D coordinates. For rendering and flight above the band. |
 | Chunk | A 16x16x16 block of cells. Unit of storage, streaming and meshing. |
-| Footing | What holds a body up at one direction: the top of the solid under its feet, and the bottom of the solid over its head. Read from the density field, never from a mesh. |
-| Terrain layer | Smooth voxels: density + material, meshed by surface nets. |
-| Build layer | Cubic voxels: block types, plus ramp, wedge and half slab shapes. |
+| Footing | What holds a body up at one direction: the ground under its feet, and any roof over them. Read from the generator, never from a mesh of it. Over nature there is no roof. |
+| Terrain layer | Nature: one ground per direction, sampled from the recipe and meshed as quadtree patches. Not editable in world. |
+| Build layer | Cubic voxels inside a volume: block types, plus ramp, wedge and half slab shapes. The only part of a world with an inside. |
 | Brush | A terrain edit tool: dig, add, smooth, flatten, paint. |
-| Reduced chunk | A chunk standing for the eight under it, one level coarser. What a body is drawn from at a distance, and what carries the band limit into the volume. |
-| Near field | The chunks around a body, a true volume as deep as anyone can go. It has an inside. |
-| Far field | The reduced levels beyond it. May be hollow, because nobody can be inside one. |
 | Stored chunk | A chunk present in `world.db` because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |
@@ -43,7 +40,9 @@ this file in the same change.
 | Hot plane | Chunks, ops, presence, streaming. Our code, `world.db`, WebSocket. |
 | Cold plane | Accounts, worlds, volumes, roles, records. PocketBase. |
 | World actor | The single goroutine that owns one active world's state and writes. |
-| Volume | An integer address box inside one sector where building is granted. Nests. |
+| Volume | An integer address box inside one sector where building is granted. Nests. The only place voxels exist. |
+| Stamp | A volume's flatten and blend footprint, applied when the ground is sampled. How anything that is not terrain seats into terrain, at every level, without being an edit. |
+| Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
 | Landlord | Role on a volume: build, subdivide, grant roles inside. |
 | Builder | Role on a volume: build only. |
 | Admin | Role on a world: build anywhere. Still logged. |
