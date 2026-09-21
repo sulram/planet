@@ -153,7 +153,7 @@ Every milestone ends runnable end to end.
 - [x] A moon you can fly to: a second body with cratered terrain, its own gravity, walk and jump on it
 - [ ] The moon as a voxel body (Cartesian ball topology): digging and building on it
 - [ ] Rockets, satellites on rails, buildable orbital grids
-- [ ] Vehicles: hover first, raycast wheels later
+- [ ] Vehicles: hover first, raycast wheels later. An abstract vehicle first, then one that is a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes, which is why the blocky view stays cosmetic. This is on the "Do NOT add" list of M1 (CLAUDE.md), so pulling it forward is a decision to log in DECISIONS in the commit that does it, not something to let drift
 - [ ] Destruction: ops + local debris; protected, ephemeral, permanent modes
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
 - [ ] Portals between places, scales and worlds; magic as a capability
