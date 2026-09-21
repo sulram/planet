@@ -76,6 +76,14 @@ Every milestone ends runnable end to end.
 - [ ] Binary WebSocket protocol; presence; avatars (default set)
 - [ ] Generator as WASM inside Go (wazero)
 
+### The world generator: what a person picks when a world is made
+
+- [ ] **Size.** A power of two per sector side, up to `2^16`, so a world can be a moon, an island or the planet we have. Capping at today's maximum is what makes it cheap: no integer widens, `u` and `v` still fit. The cost is `topology` carrying the value instead of knowing it at compile time, and the generator quoting its wavelengths against the radius it is handed. Growing past `2^16` is a separate question with its own numbers (OPEN.md, DECISIONS 45)
+- [ ] **A list of generators, not a pair.** `Source` already names one; the create page offers the ones this instance has, and a new one is a module beside `plates` and `field` without the body of v3 knowing. `earth` reads right today, `generated` is the one being fixed above
+- [ ] **More fields than Earth.** The Moon and Mars from the same bake, a region of Earth at a kinder scale. Same code path, a different file
+- [ ] **Climate and soil as choices.** `material` today is one function: latitude, height, and a noise for moisture. A world should be able to be arid, frozen, tropical or drowned and say so at creation, which means a climate a recipe can name and a soil that follows it. Water share is already a knob and is the first of them
+- [ ] Every one of these is a recipe param, so it is in the address, previewed before it is saved, and frozen with the world
+
 ## M3: build and dig, persisted
 
 - [ ] Build layer: cubes + ramp, wedge, half slab; greedy mesher
@@ -127,8 +135,7 @@ Every milestone ends runnable end to end.
 - [ ] Portals between places, scales and worlds; magic as a capability
 - [ ] Gravity fields as placeable entities
 - [ ] Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
-- [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
-- [ ] More fields: the Moon and Mars from the same bake, a region of Earth at a kinder scale
+- [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong. What the climate choice in M2 stands on
 - [ ] Scripts, server side
 - [ ] AI agents as headless clients with API tokens
 - [ ] Animals and NPCs
