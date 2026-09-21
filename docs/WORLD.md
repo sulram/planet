@@ -32,6 +32,53 @@ ARCHITECTURE.md; how the picture is made is in RENDER.md.
 - On foot the planet reads as flat: horizon at about 260 m from eye height.
   The curve shows from altitude.
 
+## Saying where you are
+
+- The address is integers; a **place code** is those integers spelled so a
+  person can read them out, write them down and paste them. It is the address,
+  not a name beside it, so the two can never disagree.
+- `(sector, u, v)` with the bits of `u` and `v` woven together, most
+  significant first, `u` leading, spelled in **Crockford base32** (no `I`, `L`,
+  `O` or `U`, the ones misread on paper and misheard out loud). Reading one
+  back ignores case and the dash, because neither survives being copied.
+- **A prefix is a box**: codes that start alike are near each other, and
+  cutting characters widens the box around the same spot. **Length is
+  precision**: three characters name about 128 by 256 m of the reference body,
+  seven name one block. An odd length leaves the box twice as long as it is
+  wide, because a character is five bits and the stream alternates.
+- Written against the reference body, so the same code names the same fraction
+  of a sector whatever `sector_bits` a world has.
+- A **pose** is what a link carries. A place shows *where you are*; a pose puts
+  someone *where you stood, looking at what you looked at*, which is how a
+  gallery gets shared:
+
+```text
+m4-K7M42Q@40,180,-5
+│└──┬───┘ └┬┘ └┬┘ └┬┘
+│   │      │   │   └── pitch, degrees, positive looks up
+│   │      │   └────── bearing, degrees clockwise from north
+│   │      └────────── height in blocks from the datum, when not on the ground
+│   └───────────────── the place code
+└───────────────────── the body: nothing is the planet, `m` is the moon
+```
+
+- Everything is optional from the right but the code, so the common case stays
+  short: outdoors, `4-K7M42Q` is the whole of it. Leaving the height out is
+  what standing on the ground *means*, and it is why a shared link survives:
+  the ground is a function of the recipe.
+- **Two renderings, not two facts.** A HUD shows the place, which is what a
+  person reads out; the address bar carries the pose. `--at` takes the pose, so
+  what is in the address bar pastes straight into a headless render.
+- North is the `+Y` pole. Not a choice: the sun turns about `+Y`, so it is the
+  axis that gives a world its time zones, and a compass has to agree with the
+  sky. At a pole there is no bearing, and that is said rather than guessed.
+- The compass reads where the **camera** looks, not where the body points:
+  turning the mouse leaves the body where it was, and "which way am I looking"
+  is a question about the eyes.
+- The rose is not in Rust. N, S, E and W are English and the Portuguese rose
+  runs N, NNE, NE, ENE, **L**, so the engine sends the angle and the front end
+  names it.
+
 ## Two layers: a surface, and volumes
 
 | Layer | What it is | Mesher | Edited with | Where |

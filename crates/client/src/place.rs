@@ -1,24 +1,13 @@
 //! Where you are and which way you look, as a link carries it.
 //!
-//! ```text
-//! m4-K7M42Q@40,180,-5
-//! │└──┬───┘ └┬┘ └┬┘ └┬┘
-//! │   │      │   │   └── pitch, degrees, positive looks up
-//! │   │      │   └────── bearing, degrees clockwise from north
-//! │   │      └────────── height in blocks from the datum, when not on the ground
-//! │   └───────────────── the place code (`topology::place`)
-//! └───────────────────── the body: nothing is the planet, `m` is the moon
-//! ```
+//! The format, what each part means and why the short form is short: see
+//! **Saying where you are** in docs/WORLD.md. It is one fact and it lives
+//! there, because it is a fact about the world and not about this file.
 //!
-//! Everything is optional from the right but the code, so the short form stays
-//! short: outdoors on the planet, the ground decides the height and nobody
-//! cares which way you faced, and `4-K7M42Q` is the whole of it.
-//!
-//! **Two renderings, not two facts.** A HUD shows the place, which is what a
-//! person reads out; a link carries the pose, which is what puts someone
-//! exactly where you stood looking at exactly what you looked at. Sending the
-//! pose to a front end already composed is what keeps every front end from
-//! writing its own version of this.
+//! What is here and nowhere else: a pose is composed once, by the engine, and
+//! handed to a front end whole. That is what keeps the web, the desktop and
+//! the native panel from each writing their own version of this, and it is why
+//! `Stats` carries a place *and* a pose rather than the parts.
 
 use topology::{Column, Grid};
 
