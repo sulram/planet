@@ -75,6 +75,15 @@ rendering and streamed to any screen.
 
 ## Lineage
 
+The shape came from Bowerbyte's *Blocky Planet: Making Minecraft Spherical*
+(August 2025, `https://bowerbyte.com/posts/blocky-planet/`): a quad sphere of
+six sectors, shells that keep a block's width as you go down, an address that
+reads sector, shell, chunk, block, neighbours resolved across the seams, and
+gravity that points at the centre. We arrived at most of that independently
+and then found it written down, which is the useful kind of reference: it
+confirms the geometry and it shows what a planet small enough to need no LOD
+lets you skip.
+
 October 2025: an idea for managed Hyperfy hosting, born from installing it by
 hand on a VPS. September 2026: the idea turned over completely. Not hosting
 someone else's metaverse: building our own, from zero, on our own terms.

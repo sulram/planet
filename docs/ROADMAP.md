@@ -17,19 +17,18 @@ Every milestone ends runnable end to end.
 - [x] `topology`: address, neighbours, sector seams, address <-> position, property tests
 - [x] `worldgen`: layered 3D noise on the sphere, params as knobs, golden hashes
 - [ ] Golden hashes also run on WASM in CI (wasmtime)
-- [ ] Terrain layer + surface nets mesher, in address space. The step that turns the ground from a height into a volume, and the only one that makes a horizontal tunnel possible at all
+- [~] Terrain layer + surface nets mesher, in address space. Superseded in flight: the campaign below built a volume on the deepest level of the heightfield quadtree, which cannot hold a world with an inside. It continues as the voxel POC (DECISIONS 48, docs/VOXEL_BRIEF.md), and what shipped is kept because it survives that move
   - [x] Surface nets, in `crates/voxel`: one vertex a cell, quads off the grid edges, and a low border so two chunks meet without a crack
-  - [x] The handover: the deepest quadtree level builds a volume instead of a height, so the existing LOD boundary and its skirts are where the two meet and nothing new streams
-  - [ ] How far down the volume reaches is what a frame affords: two chunks, about 8 m under the lowest ground of a patch. Enough to see a cave from its mouth, not to follow one down. The job queue below is what lifts it, not a cleverer mesher
-  - [ ] Density + material per cell, 16x16x16 chunks. The heightfield quadtree stays for distance and for ground nobody has touched. Not optional: the build band is 512 cells tall at half a metre, so volume everywhere would not fit on a Pi or in a tab
   - [x] The generator grows a 3D density beside `sample_at`. Seeding density from a height gives a solid planet by construction: no cave, no arch, no overhang, and a blocky world with nothing under its crust. A dug tunnel works without this; a found one does not
   - [x] **Collision is the smooth surface, always, whatever is drawn.** People and vehicles travel on the isosurface and never on cubes, so nothing hammers on half metre steps and everyone in a world walks on the same ground. Auto-step takes one block; two is a wall, to be jumped or flown
   - [x] ~~Collision is a representation of its own, coarser than the render and built only where someone is, the way Voxel Plugin builds it around invokers~~ It reads the field itself: a footing costs 2 us and a body's step 8, so there is nothing to cache yet. The invoker comes back when a stored chunk carries an edit and the field stops being the whole truth (DECISIONS 47)
-  - [ ] Collision reaches as deep as the field does and the volume is drawn 8 m under a patch, so a shaft deeper than that drops a body out of what is drawn. The job queue below is the fix, and the same one the item above it names
+  - [x] ~~The handover: the deepest quadtree level builds a volume instead of a height, so the existing LOD boundary and its skirts are where the two meet and nothing new streams~~ The boundary is the fault, not the trick: it hands a solid over to a surface, and the world shows through under it
+  - [ ] ~~How far down the volume reaches is what a frame affords: two chunks, about 8 m under the lowest ground of a patch~~ The window was the wrong question. Parked on `feat/voxel-volume` with the invoker that follows a body down, which fixes a cave near the surface and not a shaft
+  - [ ] ~~Density + material per cell, 16x16x16 chunks. The heightfield quadtree stays for distance and for ground nobody has touched~~ It stays only as far as a level can be hollow, which is far enough that nobody can be inside it. Moved to the brief
   - [ ] **Blocky is a cosmetic toggle**, one viewer's choice in the settings, never the world's: the same density, a cubic mesher in place of surface nets. Its greedy face merging is the build layer's mesher of M3, so it is written once. On a slope a cube face sits up to a quarter metre off where the feet are, and that is the whole price of it being cosmetic
   - [ ] **Nothing here may bring the far shimmer back.** What the generator and the water already earned is the hardest thing to keep through this, and it has to be said before the work starts, not after:
-    - [ ] A heightfield is filtered by the footprint of the mesh that asks (29). A volume has no footprint: its cells are its cells. Near the player that is fine, because a cell is larger than a pixel. The filtering therefore has to come back somewhere else for anything far, and a stored chunk seen from a distance is exactly that case
-    - [ ] A stored chunk's reduced levels are the volume's `band`. They have to keep the mean, the way a mip chain does and the way the field's ruggedness does, so a hill does not grow or shrink because the camera moved
+    - [ ] A heightfield is filtered by the footprint of the mesh that asks (29). A volume has no footprint: its cells are its cells. Near the player that is fine, because a cell is larger than a pixel. The filtering therefore has to come back somewhere else for anything far, and a reduced chunk seen from a distance is exactly that case
+    - [ ] A chunk's reduced levels are the volume's `band`. They have to keep the mean, the way a mip chain does and the way the field's ruggedness does, so a hill does not grow or shrink because the camera moved
     - [ ] Cubes are the worst case there is for range: a hard edge in every cell. The cubic mesher needs its own answer past a few hundred metres, and the one the project already uses twice is that **what is lost becomes roughness** (43): a face too small to draw should widen the lobe and dim it, not disappear
     - [ ] The shore is painted per pixel, by height (41), and snow and forest are meant to follow it. None of that may go back to being decided per vertex because the ground became a volume
 - [x] Camera-relative rendering, reversed-Z depth, quadtree LOD ground to orbit
@@ -79,6 +78,19 @@ Every milestone ends runnable end to end.
 - [ ] LOD by projected error with hysteresis; geomorph between levels
 - [ ] Patch building behind a job queue (workers native and web), measured budget. Now load bearing: one volume patch is 10.7 ms of a 12 ms frame, so the volume's depth is bounded by the frame it is built in
 - [ ] MSAA or filtered edges, after measuring cost
+
+## M1.75: voxels to the core (from docs/VOXEL_BRIEF.md)
+
+- The planet, the moon and anything in orbit are voxels, drawn from a block
+  under the feet to a whole body seen from outside. Proposed in DECISIONS 48;
+  the brief carries the numbers and the order of work.
+- [ ] World size in the recipe: `SECTOR_BITS` per world, frozen like the generator version. Touches `topology::Address`, the generator, the client and the wire shape, and is what makes the design provable at 326 m before it is asked to hold 20.9 km
+- [ ] A crate of its own beside `client::terrain`, so the planet that works is never at risk while the POC is tried
+- [ ] Chunks around a body: generate, mesh, stream by distance, with the build band whole. A tunnel and a well then work by construction rather than by a window
+- [ ] Reduced chunks and the level pyramid, to orbit. Eight or nine levels for today's planet; a far level may be hollow because nobody can be inside it, a near one may not
+- [ ] Shells, when depth distortion earns them: the blocks per layer quadruple at fixed steps so a block keeps its width going down (the reference, and the one part of its design the glossary names and nothing builds)
+- [ ] A body is a body: the moon stops being a second sampling path in the generator and becomes another recipe with another size
+- [ ] What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), the frame on a Pi and in a tab, and the invariants (integer address, authoritative by address, one read path, copy on first write)
 
 ## M2: create world, two people see each other
 

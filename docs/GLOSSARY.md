@@ -29,6 +29,9 @@ this file in the same change.
 | Terrain layer | Smooth voxels: density + material, meshed by surface nets. |
 | Build layer | Cubic voxels: block types, plus ramp, wedge and half slab shapes. |
 | Brush | A terrain edit tool: dig, add, smooth, flatten, paint. |
+| Reduced chunk | A chunk standing for the eight under it, one level coarser. What a body is drawn from at a distance, and what carries the band limit into the volume. |
+| Near field | The chunks around a body, a true volume as deep as anyone can go. It has an inside. |
+| Far field | The reduced levels beyond it. May be hollow, because nobody can be inside one. |
 | Stored chunk | A chunk present in `world.db` because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |

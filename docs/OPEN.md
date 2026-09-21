@@ -12,7 +12,12 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 ## Blocks M1 (the address is the save format)
 
 - **Block edge**: 0.5 m like Cryptovoxels, or finer (0.25 m)?
-- **Sector resolution**: `2^16` per side (radius about 20.9 km)? Measured at
+- **Sector resolution**, now two questions rather than one (DECISIONS 48): the
+  size the voxel design is **proved** at, and the size a world **ships** at.
+  At `2^10` (326 m) the whole level pyramid fits and can be judged; at `2^16`
+  it is eight or nine levels deep. Either way `SECTOR_BITS` stops being a
+  compile time constant and enters the recipe. The old framing, which assumed
+  one size for everything: `2^16` per side (radius about 20.9 km)? Measured at
   `2^19` and reverted (DECISIONS 45). The trade, per bit, with `relief_m` at
   its default: `2^16` is 48 times exaggerated with Chile 590 m wide, `2^17`
   24 times and 1.2 km, `2^18` 12 times and 2.4 km, `2^19` 6 times and 4.7 km.
@@ -29,8 +34,18 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - **Look**: terrain material style (flat colors, pixel textures, triplanar)?
 - **"Volume" names two things.** In GLOSSARY it is an address box where
   building is granted; in `client::volume` and in ROADMAP it is the ground
-  meshed from density at the deepest quadtree level. One of the two needs
-  another word before either reaches the wire protocol.
+  meshed from density. The first survives DECISIONS 48 and the second does
+  not, so this may settle itself; if anything in the voxel POC still wants the
+  word, one of the two needs another before either reaches the wire protocol.
+- **How far orbit has to reach before a level may be hollow.** A far level
+  costs nothing to leave empty inside and a near one may not be. Where the
+  line falls is a number nobody has measured (DECISIONS 48).
+- **When shells arrive.** They keep a block's width roughly constant with
+  depth. Nothing needs them while digging stays in the build band, and the
+  term is reserved so nothing else takes it.
+- **Blocky or smooth first.** What a visitor sees on arrival, before touching
+  a setting. Both meshers read the same cells, so this is a default and not an
+  architecture, but it is the whole look of the thing.
 
 ## Later
 

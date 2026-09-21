@@ -119,6 +119,10 @@ Numbers marked (p) are proposed and not yet confirmed.
 
 ## Streaming and LOD
 
+- Proposed for replacement, whole: the ground becomes voxels at every level
+  and the heightfield goes (DECISIONS 48, docs/VOXEL_BRIEF.md). What follows
+  is what runs today, and the volume layer's boundary with the heightfield is
+  the fault that decision is about.
 - On arrival the client asks: which chunks near me are stored, at what version?
 - The server sends only those. Untouched terrain costs zero bandwidth.
 - Rings of interest around the player; ring depth follows the bandwidth budget.
