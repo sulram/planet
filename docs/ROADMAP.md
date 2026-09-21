@@ -84,9 +84,10 @@ Every milestone ends runnable end to end.
 - The planet, the moon and anything in orbit are voxels, drawn from a block
   under the feet to a whole body seen from outside. Proposed in DECISIONS 48;
   the brief carries the numbers and the order of work.
-- [ ] World size in the recipe: `SECTOR_BITS` per world, frozen like the generator version. Touches `topology::Address`, the generator, the client and the wire shape, and is what makes the design provable at 326 m before it is asked to hold 20.9 km
-- [ ] A crate of its own beside `client::terrain`, so the planet that works is never at risk while the POC is tried
-- [ ] Chunks around a body: generate, mesh, stream by distance, with the build band whole. A tunnel and a well then work by construction rather than by a window
+- [x] World size in the recipe: `sector_bits` per world, `4..=16`, frozen like the generator version. A size is the scale the shape is printed at, so a small world is the same world (49, 50). `--bits N` on the desktop shell
+- [x] A crate of its own, `crates/terrain`. It replaced `client::terrain` rather than sitting beside it: the heightfield was in the way of the size being a value at all
+- [x] Chunks around a body: generate, mesh, stream by distance, with the build band whole. A tunnel and a well work by construction rather than by a window. Frame in WASM: worst 3.75 ms of a 12 ms budget, median 1.89
+- [ ] What the ground lost with the heightfield and has to win back as voxels: the sea, the grass, and the moon as a body of its own
 - [ ] Reduced chunks and the level pyramid, to orbit. Eight or nine levels for today's planet; a far level may be hollow because nobody can be inside it, a near one may not
 - [ ] Shells, when depth distortion earns them: the blocks per layer quadruple at fixed steps so a block keeps its width going down (the reference, and the one part of its design the glossary names and nothing builds)
 - [ ] A body is a body: the moon stops being a second sampling path in the generator and becomes another recipe with another size

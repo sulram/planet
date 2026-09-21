@@ -1,8 +1,8 @@
 //! The desktop shell: the offline explorer in a window, or a headless shot.
 //!
 //! ```text
-//! planet [--seed HEX] [--avatar NAME] [--at U,V]
-//! planet shot --out FILE [--seed HEX] [--avatar NAME] [--size WxH] [--clock S]
+//! planet [--seed HEX] [--bits N] [--avatar NAME] [--at U,V]
+//! planet shot --out FILE [--seed HEX] [--bits N] [--avatar NAME] [--size WxH] [--clock S]
 //!             [--altitude M] [--pitch DEG] [--boom M] [--walk S] [--at U,V] [--moon M]
 //! ```
 

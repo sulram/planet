@@ -129,26 +129,28 @@ Numbers marked (p) are proposed and not yet confirmed.
 
 ## Streaming and LOD
 
-- Proposed for replacement, whole: the ground becomes voxels at every level
-  and the heightfield goes (DECISIONS 48, docs/VOXEL_BRIEF.md). What follows
-  is what runs today, and the volume layer's boundary with the heightfield is
-  the fault that decision is about.
+- The ground is voxels at every level and the heightfield is gone (DECISIONS
+  48, 51; docs/VOXEL_BRIEF.md). `crates/terrain` holds the read path, the
+  mesher and the streamer.
 - On arrival the client asks: which chunks near me are stored, at what version?
 - The server sends only those. Untouched terrain costs zero bandwidth.
-- Rings of interest around the player; ring depth follows the bandwidth budget.
-- Quadtree per sector for planetary LOD, ground to orbit. Today it is the whole
-  terrain: heightfield patches of 32x32 quads with skirts, down to one vertex
-  per block, a few built per frame, nearest and coarsest first. Surface nets
-  chunks will replace the deepest levels near the player.
-- The deepest quadtree level meshes its ground from the density by surface
-  nets instead of from the height, so a cave, an arch and an overhang exist
-  there. A patch of that level is exactly `2 x 2` chunks across and one block
-  a cell. The level above is still a heightfield with its skirt, and the two
-  agree on where the ground is, so the handover is the LOD boundary that was
-  already there: nothing new streams and nothing is suppressed.
-- A heightfield patch is `PATCH_VERTICES` in a grid every patch shares; a
-  volume patch brings its own indices. The streamer's budget counts work
-  rather than patches, because a volume patch costs about six of a height.
+- One read path: `chunk(addr)` is the stored chunk if there is one and the
+  generated chunk otherwise. Nothing is stored yet, so today every answer is
+  generated once and kept.
+- A chunk is wanted when its centre is within `REACH_M` of the eye and inside
+  the build band of the column it stands on. The wanted set is worked out only
+  when the eye leaves the chunk it was in.
+- The band is what may be edited, not what has to be drawn: where the
+  generator says nothing under a column is hollow, only the chunks the surface
+  runs through are built.
+- What is wanted and not built is a queue, nearest last. A frame drains it
+  until `BUDGET` chunks have been **generated**, not meshed: a chunk at the
+  frontier pulls in the 27 its mesh reads, and the budget has to be able to
+  stop in the middle of that (51).
+- No far field yet, so the reach is short and a body small enough fits in it
+  whole. Reduced chunks and the level pyramid are the next piece (ROADMAP).
+- One body: the moon is in the sky and pulls, but its ground was the
+  heightfield's and comes back as a body with a recipe of its own.
 - Client cache: SQLite on native, OPFS in the browser.
 
 ## Identity and permissions

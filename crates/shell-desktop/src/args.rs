@@ -77,6 +77,9 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         let mut value = || args.next().ok_or(format!("{flag} needs a value"));
         match flag.as_str() {
             "--seed" => recipe.seed = parse_seed(&value()?).map_err(|e| e.to_string())?,
+            // The body's size, `4..=16`. A small world fits whole inside the
+            // near field, which is the only place there is ground yet.
+            "--bits" => recipe.sector_bits = number(&value()?, "--bits")?,
             // The file names the ground, and the recipe follows it: a field
             // world is only ever the world that field was baked for.
             "--field" => {

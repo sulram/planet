@@ -14,7 +14,7 @@
 //! representation of its own.
 
 use glam::DVec3;
-use topology::{BLOCK_M, RADIUS_M};
+use topology::BLOCK_M;
 use worldgen::{Direction, Generator};
 
 /// A rise a walker takes in its stride. One block; two is a wall, to be
@@ -145,7 +145,7 @@ pub fn clear_run_m(generator: &Generator, from: DVec3, toward: DVec3, reach_m: f
     let mut at_m = PROBE_M;
     while at_m < reach_m {
         let at = from + toward * at_m;
-        let height_m = at.length() - RADIUS_M;
+        let height_m = at.length() - generator.sphere().radius_m();
         if generator.density_m(at.normalize_or(DVec3::Y).to_array(), height_m, 0.0) > 0.0 {
             return at_m - PROBE_M;
         }

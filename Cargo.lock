@@ -363,6 +363,7 @@ dependencies = [
  "scene",
  "serde",
  "serde_json",
+ "terrain",
  "topology",
  "voxel",
  "worldgen",

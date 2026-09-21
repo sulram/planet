@@ -8,7 +8,7 @@
 
 use glam::{DMat3, DQuat, DVec3};
 use scene::Camera;
-use topology::{RADIUS_M, SurfacePoint};
+use topology::{QuadSphere, SurfacePoint};
 use worldgen::Generator;
 
 use crate::collision::{self, BODY_M, Footing, STEP_M};
@@ -96,6 +96,8 @@ pub struct MoonBody {
 #[derive(Clone, Debug)]
 pub struct Controller {
     pub mode: Mode,
+    /// The body this controller walks: its size, and the metres that follow.
+    sphere: QuadSphere,
     point: SurfacePoint,
     /// Feet, metres above the datum sphere.
     height_m: f64,
@@ -134,12 +136,14 @@ pub struct Controller {
 impl Controller {
     /// Stands on the ground at `point`, looking along the sector's `u` axis.
     pub fn spawn(point: SurfacePoint, generator: &Generator) -> Controller {
-        let tangents = point.tangents();
+        let sphere = generator.sphere();
+        let tangents = sphere.blocks().tangents(point);
         let view = DVec3::from(tangents.du).normalize();
         Controller {
             mode: Mode::Walk,
+            sphere,
             point,
-            height_m: generator.sample(point.direction()).height_m,
+            height_m: generator.sample(sphere.blocks().direction(point)).height_m,
             vertical_mps: 0.0,
             grounded: true,
             facing: view,
@@ -158,6 +162,16 @@ impl Controller {
         }
     }
 
+    /// The body this controller is on.
+    pub fn sphere(&self) -> QuadSphere {
+        self.sphere
+    }
+
+    /// The unit direction from the body's centre through the avatar.
+    fn point_direction(&self) -> [f64; 3] {
+        self.sphere.blocks().direction(self.point)
+    }
+
     pub fn point(&self) -> SurfacePoint {
         self.point
     }
@@ -170,7 +184,7 @@ impl Controller {
     /// From the centre of the site's body through the avatar.
     pub fn radial(&self) -> DVec3 {
         match self.site {
-            Site::Planet => DVec3::from(self.point.direction()),
+            Site::Planet => DVec3::from(self.point_direction()),
             Site::Moon { direction } => direction,
         }
     }
@@ -214,14 +228,14 @@ impl Controller {
     fn body(&self) -> (DVec3, f64) {
         match (self.site, self.moon) {
             (Site::Moon { .. }, Some(moon)) => (moon.center, moon.radius_m),
-            _ => (DVec3::ZERO, RADIUS_M),
+            _ => (DVec3::ZERO, self.sphere.radius_m()),
         }
     }
 
     /// Ground height over the datum of the current body, metres.
     fn ground_m(&self, generator: &Generator) -> f64 {
         match self.site {
-            Site::Planet => generator.sample(self.point.direction()).height_m,
+            Site::Planet => generator.sample(self.point_direction()).height_m,
             Site::Moon { direction } => {
                 generator.moon_sample_at(direction.to_array(), 0.0).height_m
             }
@@ -234,7 +248,7 @@ impl Controller {
     /// under the feet is a volume and not a height.
     fn footing(&self, generator: &Generator) -> Footing {
         match self.site {
-            Site::Planet => collision::footing(generator, self.point.direction(), self.height_m),
+            Site::Planet => collision::footing(generator, self.point_direction(), self.height_m),
             // The moon is a height all the way down, and so is any world on a
             // generator version frozen before caves.
             Site::Moon { direction } => {
@@ -338,8 +352,8 @@ impl Controller {
             }
             Site::Moon { .. } if radii > MOON_SOI_EXIT => {
                 self.site = Site::Planet;
-                self.point = SurfacePoint::from_direction(position.to_array());
-                self.height_m = position.length() - RADIUS_M;
+                self.point = self.sphere.blocks().surface_point(position.to_array());
+                self.height_m = position.length() - self.sphere.radius_m();
             }
             _ => {}
         }
@@ -391,8 +405,8 @@ impl Controller {
     /// Flies to a place in world space.
     pub fn fly_to(&mut self, position: DVec3) {
         self.site = Site::Planet;
-        self.point = SurfacePoint::from_direction(position.to_array());
-        self.height_m = position.length() - RADIUS_M;
+        self.point = self.sphere.blocks().surface_point(position.to_array());
+        self.height_m = position.length() - self.sphere.radius_m();
         self.mode = Mode::Fly;
         self.grounded = false;
         self.resolve_site();
@@ -618,9 +632,9 @@ impl Controller {
     }
 
     fn step_on_planet(&mut self, delta: DVec3, generator: &Generator) {
-        let tangents = self.point.tangents();
+        let tangents = self.sphere.blocks().tangents(self.point);
         let up = DVec3::from(tangents.up);
-        let radius = RADIUS_M + self.height_m;
+        let radius = self.sphere.radius_m() + self.height_m;
         // Metres per block along each address axis, at this height.
         let (tu, tv) = (
             DVec3::from(tangents.du) * radius,
@@ -637,7 +651,7 @@ impl Controller {
         self.point = if self.stopped_by_rock(generator) {
             self.walk_to(du, dv, generator)
         } else {
-            SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv).wrapped()
+            self.sphere.blocks().wrapped(SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv))
         };
         self.height_m += up.dot(delta);
     }
@@ -663,9 +677,11 @@ impl Controller {
             if du == 0.0 && dv == 0.0 {
                 continue;
             }
-            let point = SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv)
-                .wrapped();
-            let there = collision::footing(generator, point.direction(), self.height_m);
+            let point = self
+                .sphere
+                .blocks()
+                .wrapped(SurfacePoint::new(self.point.sector, self.point.u + du, self.point.v + dv));
+            let there = collision::footing(generator, self.sphere.blocks().direction(point), self.height_m);
             if collision::admits(here, there, self.height_m) {
                 return point;
             }

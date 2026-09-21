@@ -20,13 +20,14 @@ pub fn run(shot: Shot, generator: &Generator) -> Result<(), String> {
     let [width, height] = shot.size;
     let span_m = shot.slice_m;
     let sector = Sector::new(0).expect("sector 0");
-    let side = f64::from(topology::SECTOR_SIDE);
+    let sphere = generator.sphere();
+    let side = f64::from(sphere.blocks().side());
     let [u, v] = shot.at.unwrap_or([0.5, 0.5]);
     let (middle_u, v) = (u * side, v * side);
 
     // The ground under the middle of the cut sets where the window sits, so
     // the picture is about the surface wherever on the planet it is taken.
-    let at = |u: f64| SurfacePoint::new(sector, u, v).direction();
+    let at = |u: f64| sphere.blocks().direction(SurfacePoint::new(sector, u, v));
     let centre_m = generator.sample(at(middle_u)).height_m;
     let (top_m, bottom_m) = (centre_m + SKY_M, centre_m - DEEP_M);
 

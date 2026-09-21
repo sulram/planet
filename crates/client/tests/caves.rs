@@ -5,7 +5,7 @@
 
 use client::collision::{self, BODY_M, STEP_M};
 use client::{Controller, Wish};
-use topology::{SECTOR_SIDE, Sector, SurfacePoint};
+use topology::{QuadSphere, Sector, SurfacePoint};
 use worldgen::{Column, Generator, Recipe};
 
 /// Cave country of seed and place (docs/ROADMAP.md): where the renders that
@@ -19,9 +19,19 @@ fn world() -> Generator {
     Generator::new(Recipe::new(CAVE_SEED)).expect("the current generator version")
 }
 
+/// The body these tests walk: today's planet.
+fn sphere() -> QuadSphere {
+    QuadSphere::new(topology::MAX_BITS).expect("a legal size")
+}
+
 fn at(u: f64, v: f64) -> SurfacePoint {
-    let side = f64::from(SECTOR_SIDE);
+    let side = f64::from(sphere().blocks().side());
     SurfacePoint::new(Sector::ALL[0], u * side, v * side)
+}
+
+/// The unit direction through a surface point.
+fn towards(point: SurfacePoint) -> [f64; 3] {
+    sphere().blocks().direction(point)
 }
 
 /// The first place of cave country whose column `wanted` accepts.
@@ -30,7 +40,7 @@ fn search(generator: &Generator, what: &str, wanted: impl Fn(&Column) -> bool) -
         for j in 0..STEPS {
             let step = SPAN / f64::from(STEPS);
             let point = at(FROM[0] + f64::from(i) * step, FROM[1] + f64::from(j) * step);
-            let column = generator.column(point.direction(), 0.0);
+            let column = generator.column(towards(point), 0.0);
             if !column.solid() && wanted(&column) {
                 return point;
             }
@@ -63,12 +73,12 @@ fn ground_without_a_cave_is_its_height() {
     for i in 0..60 {
         for j in 0..60 {
             let point = at(f64::from(i) / 60.0, f64::from(j) / 60.0);
-            let column = generator.column(point.direction(), 0.0);
+            let column = generator.column(towards(point), 0.0);
             if !column.solid() {
                 continue;
             }
             let ground_m = column.ground().height_m;
-            let footing = collision::footing(&generator, point.direction(), ground_m);
+            let footing = collision::footing(&generator, towards(point), ground_m);
             // The fast path: nothing hollow anywhere, so nothing to search.
             assert_eq!(footing.floor_m, Some(ground_m));
             assert_eq!(footing.ceiling_m, None);
@@ -85,7 +95,7 @@ fn a_cave_is_a_floor_under_a_roof() {
     let point = search(&generator, "chamber", |column| {
         hollow(column).is_some_and(|(roof_m, floor_m)| roof_m - floor_m > BODY_M + 1.0)
     });
-    let column = generator.column(point.direction(), 0.0);
+    let column = generator.column(towards(point), 0.0);
     let (roof_m, floor_m) = hollow(&column).expect("the chamber the search found");
     println!(
         "chamber {floor_m:.1} m to {roof_m:.1} m, ground {:.1} m",
@@ -93,7 +103,7 @@ fn a_cave_is_a_floor_under_a_roof() {
     );
 
     // Standing on the floor: that floor, and the roof if it is within reach.
-    let standing = collision::footing(&generator, point.direction(), floor_m + 0.5);
+    let standing = collision::footing(&generator, towards(point), floor_m + 0.5);
     let found_m = standing.floor_m.expect("a floor under the feet");
     assert!(
         (found_m - floor_m).abs() < 0.3,
@@ -111,7 +121,7 @@ fn a_cave_is_a_floor_under_a_roof() {
     // Standing with the head almost against the roof: the roof, and the
     // room between the two.
     let head_m = roof_m - BODY_M - 0.1;
-    let under = collision::footing(&generator, point.direction(), head_m);
+    let under = collision::footing(&generator, towards(point), head_m);
     let ceiling_m = under.ceiling_m.expect("a roof over the feet");
     assert!(
         (ceiling_m - roof_m).abs() < 0.3,
@@ -133,9 +143,9 @@ fn a_mouth_is_not_a_floor() {
         let ground_m = column.ground().height_m;
         ground_m > 5.0 && column.density_m(ground_m - 0.5) < 0.0
     });
-    let column = generator.column(point.direction(), 0.0);
+    let column = generator.column(towards(point), 0.0);
     let ground_m = column.ground().height_m;
-    let footing = collision::footing(&generator, point.direction(), ground_m);
+    let footing = collision::footing(&generator, towards(point), ground_m);
     match footing.floor_m {
         // Deeper than a footing looks: nothing to stand on, so a body falls.
         None => {}
@@ -152,8 +162,8 @@ fn walk(controller: &mut Controller, generator: &Generator, wish: Wish, seconds:
     let mut underground = 0;
     for frame in 0..(seconds * 60.0) as u32 {
         controller.update(1.0 / 60.0, wish, generator);
-        let column = generator.column(controller.point().direction(), 0.0);
-        let feet_m = controller.position().length() - topology::RADIUS_M;
+        let column = generator.column(towards(controller.point()), 0.0);
+        let feet_m = controller.position().length() - sphere().radius_m();
         assert!(
             column.density_m(feet_m + STEP_M) <= 0.0,
             "frame {frame}: knee deep in rock at {feet_m} m, ground {} m",
@@ -182,8 +192,8 @@ fn a_body_falls_into_a_cave_and_stands_on_its_floor() {
     );
     assert!(controller.grounded(), "still falling after three seconds");
 
-    let column = generator.column(controller.point().direction(), 0.0);
-    let feet_m = controller.position().length() - topology::RADIUS_M;
+    let column = generator.column(towards(controller.point()), 0.0);
+    let feet_m = controller.position().length() - sphere().radius_m();
     let altitude_m = controller.altitude_m(&generator);
     println!("landed {altitude_m:.1} m under the height, at {feet_m:.1} m");
     assert!(altitude_m < -1.0, "landed on the roof of the hole");

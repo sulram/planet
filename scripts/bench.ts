@@ -48,12 +48,25 @@ for (const [body, name] of runs) {
 
 	bench.descent_start(body);
 	let worst = 0;
+	let worstAt = -1;
+	const times: number[] = [];
 	for (let frame = 0; frame < 600; frame++) {
 		const before = performance.now();
 		bench.descent_frame();
-		worst = Math.max(worst, performance.now() - before);
+		const ms = performance.now() - before;
+		times.push(ms);
+		if (ms > worst) {
+			worst = ms;
+			worstAt = frame;
+		}
 	}
 	report(`${name}: worst frame of a 10 s descent`, worst, FRAME_BUDGET_MS);
+	const sorted = [...times].sort((a, b) => a - b);
+	const over = times.filter((t) => t > FRAME_BUDGET_MS).length;
+	console.log(
+		`     worst at frame ${worstAt}, median ${sorted[300].toFixed(2)} ms, ` +
+			`p99 ${sorted[594].toFixed(2)} ms, ${over} frames over budget`
+	);
 }
 
 // What one body's collision costs, apart from the frame it lands in: a

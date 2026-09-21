@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use client::collision;
 use client::{Client, Input, Key, Recipe};
-use topology::{SECTOR_SIDE, Sector, SurfacePoint};
+use topology::{Sector, SurfacePoint};
 use wasm_bindgen::prelude::wasm_bindgen;
 use worldgen::{Field, Generator, Source};
 
@@ -108,7 +108,8 @@ const CAVE_AT: [f64; 2] = [0.3105, 0.6585];
 #[wasm_bindgen]
 pub fn footings(count: i32) -> f64 {
     let generator = Generator::new(Recipe::new(CAVE_SEED)).expect("the current generator version");
-    let side = f64::from(SECTOR_SIDE);
+    let sphere = generator.sphere();
+    let side = f64::from(sphere.blocks().side());
     let mut sum = 0.0;
     for i in 0..count {
         let spread = f64::from(i) * 1e-5;
@@ -117,7 +118,7 @@ pub fn footings(count: i32) -> f64 {
             (CAVE_AT[0] + spread) * side,
             (CAVE_AT[1] + spread) * side,
         );
-        let direction = point.direction();
+        let direction = sphere.blocks().direction(point);
         let ground_m = generator.sample(direction).height_m;
         sum += collision::footing(&generator, direction, ground_m)
             .floor_m

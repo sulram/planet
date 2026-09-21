@@ -5,7 +5,7 @@
 //! not resolve.
 
 use proptest::prelude::*;
-use topology::{BLOCK_M, Column, Dir, Grid, MAX_BITS, MIN_BITS, QuadSphere, Sector, SurfacePoint, vec3};
+use topology::{Column, Dir, Grid, MAX_BITS, MIN_BITS, QuadSphere, Sector, SurfacePoint, vec3};
 
 /// Sizes the design is proved at, plus any other legal one.
 fn sphere() -> impl Strategy<Value = QuadSphere> {
