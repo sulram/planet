@@ -88,7 +88,8 @@ Every milestone ends runnable end to end.
 - [x] A crate of its own, `crates/terrain`. It replaced `client::terrain` rather than sitting beside it: the heightfield was in the way of the size being a value at all
 - [x] Chunks around a body: generate, mesh, stream by distance, with the build band whole. A tunnel and a well work by construction rather than by a window. Frame in WASM: worst 3.75 ms of a 12 ms budget, median 1.89
 - [ ] What the ground lost with the heightfield and has to win back as voxels: the sea, the grass, and the moon as a body of its own
-- [ ] Reduced chunks and the level pyramid, to orbit. Eight or nine levels for today's planet; a far level may be hollow because nobody can be inside it, a near one may not
+- [x] Reduced chunks and the level pyramid, to orbit. Thirteen levels at `2^16`, the coarsest six chunks for the whole body. Generated at their own footprint, not built from the level under them (52)
+- [ ] What the pyramid still owes: whether a level boundary cracks under a cliff, whether a hill pops when a level changes, and the memory a full pyramid holds (16,642 chunks at `2^16`)
 - [ ] Shells, when depth distortion earns them: the blocks per layer quadruple at fixed steps so a block keeps its width going down (the reference, and the one part of its design the glossary names and nothing builds)
 - [ ] A body is a body: the moon stops being a second sampling path in the generator and becomes another recipe with another size
 - [ ] What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), the frame on a Pi and in a tab, and the invariants (integer address, authoritative by address, one read path, copy on first write)

@@ -394,7 +394,7 @@ impl Client {
         self.stats(dt);
 
         let camera = self.controller.camera(&self.generator);
-        let patches = self.stream(&camera, false);
+        let patches = self.stream(false);
         self.frame(camera, patches)
     }
 
@@ -403,7 +403,7 @@ impl Client {
     /// renders, where there is no next frame to finish the job.
     pub fn settled_frame(&mut self) -> Frame {
         let camera = self.controller.camera(&self.generator);
-        let patches = self.stream(&camera, true);
+        let patches = self.stream(true);
         self.frame(camera, patches)
     }
 
@@ -422,12 +422,15 @@ impl Client {
     /// One body for now. The moon is still in the sky and still pulls, but its
     /// ground was the heightfield's; it comes back as a body of its own, with
     /// a recipe of its own (VOXEL_BRIEF, Bodies).
-    fn stream(&mut self, camera: &scene::Camera, settle: bool) -> Vec<scene::PatchDraw> {
+    fn stream(&mut self, settle: bool) -> Vec<scene::PatchDraw> {
+        // Around the body, never around the camera. The camera is a boom that
+        // swings metres away and is free to look from orbit; the ground under
+        // the avatar's feet is not allowed to depend on where it is pointed.
+        let eye = self.controller.position();
         let drawn = if settle {
-            self.terrain.settle(&self.generator, camera.position)
+            self.terrain.settle(&self.generator, eye)
         } else {
-            self.terrain
-                .update(&self.generator, camera.position, terrain::BUDGET)
+            self.terrain.update(&self.generator, eye, terrain::BUDGET)
         };
         drawn
             .into_iter()

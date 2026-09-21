@@ -2,11 +2,11 @@
 
 use glam::DVec3;
 use scene::{TerrainMesh, TerrainVertex};
-use topology::{BLOCK_M, QuadSphere, SurfacePoint, vec3};
+use topology::{QuadSphere, SurfacePoint, vec3};
 use voxel::CHUNK_SIDE;
 use worldgen::Material;
 
-use crate::address::ChunkAddr;
+use crate::address::{ChunkAddr, cell_grid};
 use crate::read::{Chunks, Lattice};
 
 /// Meshes one chunk, or `None` when no surface passes through it.
@@ -58,16 +58,24 @@ pub fn mesh(chunks: &Chunks, sphere: QuadSphere, addr: ChunkAddr) -> Option<Terr
     })
 }
 
-/// A point in the mesher's cell units, placed on the sphere.
+/// A point in the mesher's cell units, placed on the sphere. The cells are
+/// this chunk's own, so a coarse chunk lands in the same world as a fine one.
 fn place(sphere: QuadSphere, addr: ChunkAddr, local: [f64; 3]) -> [f64; 3] {
+    let cells = cell_grid(sphere, addr.level).expect("a level this body has");
+    let point = cells.wrapped(cell_point_at(addr, local));
+    let height_m = (f64::from(addr.low_h()) + local[2] + 0.5) * addr.cell_m();
+    let direction = cells.direction(point);
+    topology::vec3::scale(direction, sphere.radius_m() + height_m)
+}
+
+/// The surface point of a place inside a chunk, in its own cells.
+fn cell_point_at(addr: ChunkAddr, local: [f64; 3]) -> SurfacePoint {
     let low = addr.low_column();
-    let point = SurfacePoint::new(
+    SurfacePoint::new(
         low.sector,
         f64::from(low.u) + local[0] + 0.5,
         f64::from(low.v) + local[1] + 0.5,
-    );
-    let height_m = (f64::from(addr.low_h()) + local[2] + 0.5) * BLOCK_M;
-    sphere.position(sphere.blocks().wrapped(point), height_m)
+    )
 }
 
 /// The address space normal turned into a world space one, through the local
@@ -78,13 +86,9 @@ fn spherical_normal(
     local: [f64; 3],
     normal: [f32; 3],
 ) -> [f32; 3] {
-    let low = addr.low_column();
-    let point = sphere.blocks().wrapped(SurfacePoint::new(
-        low.sector,
-        f64::from(low.u) + local[0] + 0.5,
-        f64::from(low.v) + local[1] + 0.5,
-    ));
-    let frame = sphere.blocks().tangents(point);
+    let cells = cell_grid(sphere, addr.level).expect("a level this body has");
+    let point = cells.wrapped(cell_point_at(addr, local));
+    let frame = cells.tangents(point);
     let du = vec3::normalize(frame.du);
     let dv = vec3::normalize(frame.dv);
     let n = normal.map(f64::from);

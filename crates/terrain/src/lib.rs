@@ -14,8 +14,8 @@ mod mesh;
 mod read;
 mod stream;
 
-pub use address::{ChunkAddr, band_chunks, band_h, chunk_grid};
-pub use generate::{FOOTPRINT_M, generate};
+pub use address::{ChunkAddr, Level, band_chunks, cell_grid, chunk_grid, coarsest};
+pub use generate::generate;
 pub use mesh::mesh;
 pub use read::{Chunks, Lattice};
-pub use stream::{BUDGET, CHUNK_M, REACH_M, Terrain};
+pub use stream::{BUDGET, CHUNK_M, DETAIL, Terrain};

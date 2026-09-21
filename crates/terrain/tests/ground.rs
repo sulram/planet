@@ -1,6 +1,6 @@
 //! The ground is a volume, at any size, and it closes across a seam.
 
-use terrain::{ChunkAddr, Chunks, FOOTPRINT_M, band_chunks, band_h, chunk_grid, mesh};
+use terrain::{ChunkAddr, Chunks, band_chunks, chunk_grid, coarsest, mesh};
 use topology::{BLOCK_M, Column, Dir, MIN_BITS, QuadSphere, Sector};
 use voxel::{CHUNK_BITS, CHUNK_SIDE};
 use worldgen::{Generator, Recipe};
@@ -23,9 +23,10 @@ fn somewhere(sphere: QuadSphere) -> Column {
 /// The chunk the ground passes through under a column.
 fn ground_chunk(generator: &Generator, sphere: QuadSphere, column: Column) -> ChunkAddr {
     let direction = sphere.blocks().column_direction(column);
-    let height_m = generator.sample_at(direction, FOOTPRINT_M).height_m;
+    let height_m = generator.sample_at(direction, BLOCK_M).height_m;
     let h = (height_m / BLOCK_M) as i32;
     ChunkAddr::new(
+        0,
         Column::new(column.sector, column.u >> CHUNK_BITS, column.v >> CHUNK_BITS),
         h.div_euclid(CHUNK_SIDE as i32) as i16,
     )
@@ -91,7 +92,7 @@ fn the_lattice_reads_across_a_seam() {
 
     for bits in [MIN_BITS, 8, 16] {
         let (generator, sphere) = body(bits);
-        let chunks_grid = chunk_grid(sphere);
+        let chunks_grid = chunk_grid(sphere, 0).expect("level 0");
         let last = chunks_grid.max_coord();
         // The chunk column hard against the `u` edge of sector 0, away from
         // the corners.
@@ -99,7 +100,7 @@ fn the_lattice_reads_across_a_seam() {
         let over = chunks_grid.step(column, Dir::UPos);
         assert_ne!(over.column.sector, column.sector, "bits {bits}: not a seam");
 
-        let addr = ChunkAddr::new(column, 0);
+        let addr = ChunkAddr::new(0, column, 0);
         let mut chunks = Chunks::new();
         chunks.warm(&generator, sphere, addr, usize::MAX);
 
@@ -125,28 +126,34 @@ fn the_lattice_reads_across_a_seam() {
     }
 }
 
-/// The band is whole: chunks cover it, and they are centred on the ground
-/// rather than on the datum, so a mountain and a trench both get their band.
+/// The band is whole at every level: chunks cover it, coarse ones with fewer
+/// of them, and never fewer than one.
 #[test]
-fn the_band_is_a_whole_number_of_chunks_around_the_ground() {
+fn the_band_is_a_whole_number_of_chunks_at_every_level() {
     for bits in MIN_BITS..=topology::MAX_BITS {
         let sphere = QuadSphere::new(bits).unwrap();
-        let reach = band_chunks(sphere);
-        assert!(reach >= 1, "bits {bits}");
-        let covered = f64::from(reach) * f64::from(CHUNK_SIDE as u32);
-        assert!(covered >= f64::from(sphere.band_blocks()), "bits {bits}");
-
-        // Wherever the ground is, the band brackets it.
-        for ground_h in [-4000, -100, 0, 37, 4000] {
-            let range = band_h(sphere, ground_h);
-            let side = CHUNK_SIDE as i32;
-            let low = i32::from(*range.start()) * side;
-            let high = (i32::from(*range.end()) + 1) * side;
-            assert!(low <= ground_h && ground_h < high, "bits {bits} at {ground_h}");
+        for level in 0..=coarsest(sphere) {
+            let reach = band_chunks(sphere, level);
+            assert!(reach >= 1, "bits {bits} level {level}");
+            let covered = f64::from(reach) * f64::from(CHUNK_SIDE as u32) * f64::from(1u32 << level);
             assert!(
-                f64::from(ground_h - low) >= f64::from(sphere.band_blocks()),
-                "bits {bits} at {ground_h}: band floor not covered"
+                covered >= f64::from(sphere.band_blocks()),
+                "bits {bits} level {level}: {covered} blocks for a band of {}",
+                sphere.band_blocks()
             );
         }
+    }
+}
+
+/// The coarsest level of any body is six chunks, one a sector face: whatever
+/// the size, a whole world is drawable from a handful of them.
+#[test]
+fn the_coarsest_level_is_the_whole_body() {
+    for bits in MIN_BITS..=topology::MAX_BITS {
+        let sphere = QuadSphere::new(bits).unwrap();
+        let top = coarsest(sphere);
+        let grid = chunk_grid(sphere, top).expect("a coarsest level");
+        assert_eq!(grid.side(), 1, "bits {bits}");
+        assert!(chunk_grid(sphere, top + 1).is_none(), "bits {bits}: past the top");
     }
 }

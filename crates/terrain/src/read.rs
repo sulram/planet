@@ -11,7 +11,7 @@ use topology::{Column, QuadSphere};
 use voxel::{CHUNK_BITS, CHUNK_SIDE, Chunk, Material};
 use worldgen::Generator;
 
-use crate::address::ChunkAddr;
+use crate::address::{ChunkAddr, cell_grid};
 use crate::generate::{cell_point, generate};
 
 /// What one call to [`Chunks::warm`] did.
@@ -101,24 +101,25 @@ impl Chunks {
         self.centres.remove(addr);
     }
 
-    /// Drops every chunk further than `reach_m` from `eye`.
-    pub fn retain_near(&mut self, eye: DVec3, reach_m: f64) {
+    /// Drops every chunk further from `eye` than its own level allows.
+    pub fn retain_near(&mut self, eye: DVec3, reach_m: impl Fn(&ChunkAddr) -> f64) {
         let centres = &mut self.centres;
         self.held.retain(|addr, _| match centres.get(addr) {
-            Some(centre) => centre.distance(eye) <= reach_m,
+            Some(centre) => centre.distance(eye) <= reach_m(addr),
             None => false,
         });
         centres.retain(|addr, _| self.held.contains_key(addr));
     }
 
-    /// The chunk one step away, over a seam if that is where it is.
+    /// The chunk one step away, over a seam if that is where it is. Always of
+    /// the same level: a mesh reads its own grain and no other.
     fn neighbour(&self, sphere: QuadSphere, addr: ChunkAddr, offset: [i32; 3]) -> Option<ChunkAddr> {
         let (column, h) = locate(sphere, addr, [
             offset[0] * CHUNK_SIDE as i32,
             offset[1] * CHUNK_SIDE as i32,
             offset[2] * CHUNK_SIDE as i32,
         ])?;
-        Some(chunk_of(column, h))
+        Some(chunk_of(addr.level, column, h))
     }
 }
 
@@ -147,10 +148,10 @@ const NEIGHBOURHOOD: [[i32; 3]; 27] = {
 /// on, folded over a seam when it leaves the sector. `None` above or below
 /// what an `i16` height can name.
 pub fn locate(sphere: QuadSphere, addr: ChunkAddr, offset: [i32; 3]) -> Option<(Column, i32)> {
-    let blocks = sphere.blocks();
+    let cells = cell_grid(sphere, addr.level)?;
     let h = addr.low_h().checked_add(offset[2])?;
     let low = addr.low_column();
-    let side = blocks.side() as i32;
+    let side = cells.side() as i32;
     let (u, v) = (
         i32::from(low.u) + offset[0],
         i32::from(low.v) + offset[1],
@@ -160,13 +161,14 @@ pub fn locate(sphere: QuadSphere, addr: ChunkAddr, offset: [i32; 3]) -> Option<(
     if (0..side).contains(&u) && (0..side).contains(&v) {
         return Some((Column::new(low.sector, u as u16, v as u16), h));
     }
-    let point = blocks.wrapped(cell_point(addr, offset[0], offset[1]));
-    Some((blocks.column_of(point), h))
+    let point = cells.wrapped(cell_point(addr, offset[0], offset[1]));
+    Some((cells.column_of(point), h))
 }
 
-/// The chunk that holds a block, and where in it.
-pub fn chunk_of(column: Column, h: i32) -> ChunkAddr {
+/// The chunk of `level` that holds a cell, and where in it.
+pub fn chunk_of(level: crate::address::Level, column: Column, h: i32) -> ChunkAddr {
     ChunkAddr::new(
+        level,
         Column::new(
             column.sector,
             column.u >> CHUNK_BITS,
@@ -213,7 +215,7 @@ impl Lattice<'_> {
         let Some((column, h)) = locate(self.sphere, self.addr, at) else {
             return self.sky();
         };
-        match self.chunks.held.get(&chunk_of(column, h)) {
+        match self.chunks.held.get(&chunk_of(self.addr.level, column, h)) {
             Some(chunk) => chunk.cell(cell_of(column, h)),
             None => self.sky(),
         }

@@ -137,9 +137,24 @@ Numbers marked (p) are proposed and not yet confirmed.
 - One read path: `chunk(addr)` is the stored chunk if there is one and the
   generated chunk otherwise. Nothing is stored yet, so today every answer is
   generated once and kept.
-- A chunk is wanted when its centre is within `REACH_M` of the eye and inside
-  the build band of the column it stands on. The wanted set is worked out only
-  when the eye leaves the chunk it was in.
+- A pyramid of levels. A chunk of level `L` holds cells `2^L` blocks wide; its
+  cells live on the block grid coarsened by `L`, and the chunks on that grid
+  coarsened again by `CHUNK_BITS`. Level 0 is the ground you stand on; the
+  coarsest is one chunk per sector face, six for a whole world.
+- A coarse chunk is generated at the footprint of its own cells, not built from
+  the chunks under it: the generator fades out what the chunk cannot carry
+  (29, 43).
+- A level wants a shell: close enough to be worth drawing, far enough that the
+  level under it does not already cover the ground. The coarsest has no outer
+  edge, so a body is drawn whole from any distance and never disappears.
+- `DETAIL` is the only knob: how many of its own widths from the eye a level
+  survives. Every level is a square `2 * DETAIL + 1` chunks across, so the work
+  per level does not grow with the body.
+- The wanted set of a level is worked out only when the eye leaves the chunk it
+  was in **at that level**, so the coarse ones almost never move (52).
+- Streaming is around the body, never around the camera: the camera is a boom
+  that swings metres away and may look from orbit, and the ground under the
+  avatar may not depend on where it points.
 - The band is what may be edited, not what has to be drawn: where the
   generator says nothing under a column is hollow, only the chunks the surface
   runs through are built.
@@ -147,8 +162,6 @@ Numbers marked (p) are proposed and not yet confirmed.
   until `BUDGET` chunks have been **generated**, not meshed: a chunk at the
   frontier pulls in the 27 its mesh reads, and the budget has to be able to
   stop in the middle of that (51).
-- No far field yet, so the reach is short and a body small enough fits in it
-  whole. Reduced chunks and the level pyramid are the next piece (ROADMAP).
 - One body: the moon is in the sky and pulls, but its ground was the
   heightfield's and comes back as a body with a recipe of its own.
 - Client cache: SQLite on native, OPFS in the browser.

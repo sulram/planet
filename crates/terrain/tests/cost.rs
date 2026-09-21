@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use glam::DVec3;
-use terrain::{BUDGET, CHUNK_M, Terrain};
+use terrain::{BUDGET, CHUNK_M, Terrain, coarsest};
 use topology::{QuadSphere, SurfacePoint};
 use worldgen::{Generator, Recipe};
 
@@ -55,7 +55,8 @@ fn what_one_update_costs() {
         let queued = terrain.queued();
 
         println!(
-            "bits {bits:2}: {:4} drawn, {:5} held | cold {cold_ms:7.1} ms ({:.2} ms a chunk) | still {warm_ms:5.2} ms | scan {scan_ms:5.2} ms | a chunk over {step_ms:5.2} ms, {queued} queued",
+            "bits {bits:2}: {} levels, {:4} drawn, {:5} held | cold {cold_ms:7.1} ms ({:.2} ms a chunk) | still {warm_ms:5.2} ms | scan {scan_ms:5.2} ms | a chunk over {step_ms:5.2} ms, {queued} queued",
+            coarsest(sphere) + 1,
             drawn.len(),
             terrain.held_chunks(),
             cold_ms / built as f64,

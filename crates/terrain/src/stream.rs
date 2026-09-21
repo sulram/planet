@@ -1,46 +1,60 @@
 //! What a renderer should be holding, and the changes that get it there.
 //!
-//! One rule, not a window: a chunk is wanted when its centre is within reach
-//! of the eye and inside the build band of the column it stands on. Nothing
-//! here is capped against a frame budget, because a cap chosen that way is a
-//! constant tuned against a picture (DECISIONS 48).
+//! A pyramid of levels, the near one fine and the far ones coarse. A level's
+//! chunks are wanted in a shell: close enough that the level is worth drawing,
+//! far enough that the level under it does not already cover the ground. The
+//! coarsest level has no outer edge, so a body is drawn whole from any
+//! distance and never disappears.
 //!
-//! Reach is short while the far field is missing: at 8 m a chunk, seeing a
-//! kilometre is a pyramid of reduced levels and not more chunks. A body small
-//! enough to fit in the near field is therefore whole, which is what makes a
-//! small world worth proving on.
+//! Each level is a square of fixed width around the eye, so the work per level
+//! does not grow with the body, and a level is only reworked when the eye
+//! leaves the chunk it was in *at that level*: the coarse ones almost never
+//! move (DECISIONS 52).
 
 use std::collections::{HashMap, HashSet};
 
 use glam::DVec3;
 use scene::{PatchId, TerrainChange};
-use topology::{BLOCK_M, Column, QuadSphere, SurfacePoint};
-use voxel::CHUNK_SIDE;
+use topology::{Column, Grid, QuadSphere, SurfacePoint};
+use voxel::{CHUNK_BITS, CHUNK_SIDE};
 use worldgen::Generator;
 
-use crate::address::{ChunkAddr, band_chunks, chunk_grid};
-use crate::generate::FOOTPRINT_M;
+use crate::address::{ChunkAddr, Level, band_chunks, chunk_grid, coarsest};
 use crate::mesh::mesh;
 use crate::read::Chunks;
 
-/// Metres along one edge of a chunk.
-pub const CHUNK_M: f64 = CHUNK_SIDE as f64 * BLOCK_M;
+/// Metres along one edge of a level 0 chunk.
+pub const CHUNK_M: f64 = CHUNK_SIDE as f64 * topology::BLOCK_M;
+
+/// How many of its own widths from the eye a level stays worth drawing.
+///
+/// This is the only knob the pyramid has, and it sets both the detail and the
+/// cost: every level is a square `2 * DETAIL + 1` chunks across, so raising it
+/// raises the work at *every* level at once.
+pub const DETAIL: f64 = 7.0;
 
 /// Chunks a frame may generate.
 ///
 /// Measured by `bun run bench`, which is the referee, not this machine: in
-/// WASM a chunk costs several times what it costs in a native release build,
-/// so four of them is a frame of about 4 ms against a budget of 12, and the
-/// worst frame of a ten second descent is 3.75 ms with none over.
+/// WASM a chunk costs several times what it costs in a native release build.
 ///
 /// The number only means anything because the budget can stop in the middle of
 /// a neighbourhood. Before it could, one chunk at the frontier pulled in 27
-/// and cost 20 ms whatever this was set to.
+/// and cost 20 ms whatever this was set to (DECISIONS 51).
 pub const BUDGET: usize = 4;
 
-/// How far the near field reaches, in metres. Everything inside it is full
-/// resolution voxels; there is nothing outside it yet.
-pub const REACH_M: f64 = 56.0;
+/// How far a level reaches, metres.
+fn reach_m(level: Level) -> f64 {
+    DETAIL * CHUNK_M * f64::from(1u32 << level)
+}
+
+/// What one level of the pyramid is holding.
+#[derive(Default)]
+struct LevelState {
+    /// The chunk the eye was in when this level was last worked out.
+    standing_in: Option<ChunkAddr>,
+    wanted: HashSet<ChunkAddr>,
+}
 
 /// The ground around one body, streamed.
 pub struct Terrain {
@@ -54,26 +68,23 @@ pub struct Terrain {
     /// What is wanted and not built yet, nearest last: a frame pops from the
     /// end, so what appears first is what you are standing next to.
     queue: Vec<ChunkAddr>,
-    /// The chunk the eye was in when the queue was last worked out. The wanted
-    /// set only changes when the eye leaves it.
-    standing_in: Option<ChunkAddr>,
+    levels: Vec<LevelState>,
     changes: Vec<TerrainChange>,
     next_id: u64,
-    reach_m: f64,
 }
 
 impl Terrain {
     pub fn new(sphere: QuadSphere) -> Terrain {
+        let levels = (0..=coarsest(sphere)).map(|_| LevelState::default()).collect();
         Terrain {
             sphere,
             chunks: Chunks::new(),
             drawn: HashMap::new(),
             blank: HashSet::new(),
             queue: Vec::new(),
-            standing_in: None,
+            levels,
             changes: Vec::new(),
             next_id: 1,
-            reach_m: REACH_M,
         }
     }
 
@@ -81,10 +92,10 @@ impl Terrain {
         self.sphere
     }
 
-    /// How coarse the drawn ground is, metres between samples. The near field
-    /// is full resolution, so collision and what you see agree exactly.
+    /// How coarse the ground under the eye is drawn, metres between samples.
+    /// The near field is full resolution, so collision and what you see agree.
     pub fn drawn_footprint_m(&self) -> f64 {
-        FOOTPRINT_M
+        topology::BLOCK_M
     }
 
     /// Everything a renderer holds, in no particular order.
@@ -94,6 +105,11 @@ impl Terrain {
 
     pub fn held_chunks(&self) -> usize {
         self.chunks.len()
+    }
+
+    /// How much is still waiting to be built.
+    pub fn queued(&self) -> usize {
+        self.queue.len()
     }
 
     pub fn drain_changes(&mut self) -> Vec<TerrainChange> {
@@ -108,23 +124,18 @@ impl Terrain {
         self.drawn.clear();
         self.blank.clear();
         self.queue.clear();
-        self.standing_in = None;
+        for level in &mut self.levels {
+            *level = LevelState::default();
+        }
         self.chunks = Chunks::new();
     }
 
     /// Brings the held set in line with where the eye is, building at most
     /// `budget` chunks, and answers with what to draw. `eye` is metres from
     /// this body's centre.
-    ///
-    /// The wanted set is worked out only when the eye leaves the chunk it was
-    /// in, because walking within one chunk cannot change it. What is left is
-    /// a queue, drained a few chunks a frame: a chunk costs what it costs, and
-    /// a frame that builds every chunk it wants is a frame that stalls.
     pub fn update(&mut self, generator: &Generator, eye: DVec3, budget: usize) -> Vec<PatchId> {
-        let here = self.eye_chunk(eye);
-        if self.standing_in != Some(here) {
-            self.standing_in = Some(here);
-            self.resettle(generator, eye);
+        if self.resettle(generator, eye) {
+            self.requeue(eye);
         }
         self.build(generator, budget);
         self.drawn()
@@ -133,30 +144,59 @@ impl Terrain {
     /// The same, with every wanted chunk built before it answers. For headless
     /// renders, where there is no next frame to finish the job.
     pub fn settle(&mut self, generator: &Generator, eye: DVec3) -> Vec<PatchId> {
-        self.standing_in = Some(self.eye_chunk(eye));
+        for level in &mut self.levels {
+            level.standing_in = None;
+        }
         self.resettle(generator, eye);
+        self.requeue(eye);
         self.build(generator, usize::MAX);
         self.drawn()
     }
 
-    /// Which chunk the eye is standing in, whatever is under it.
-    fn eye_chunk(&self, eye: DVec3) -> ChunkAddr {
-        let grid = chunk_grid(self.sphere);
-        let point = grid.surface_point([eye.x, eye.y, eye.z]);
-        let above_m = eye.length() - self.sphere.radius_m();
-        let h = (above_m / CHUNK_M).floor().clamp(f64::from(i16::MIN), f64::from(i16::MAX));
-        ChunkAddr::new(grid.column_of(point), h as i16)
+    /// Reworks the levels the eye has moved out of. Answers whether anything
+    /// changed.
+    fn resettle(&mut self, generator: &Generator, eye: DVec3) -> bool {
+        let mut moved = false;
+        for level in 0..self.levels.len() as Level {
+            let Some(here) = self.eye_chunk(level, eye) else {
+                continue;
+            };
+            if self.levels[level as usize].standing_in == Some(here) {
+                continue;
+            }
+            self.levels[level as usize].standing_in = Some(here);
+            self.levels[level as usize].wanted = self.wanted(generator, eye, level);
+            moved = true;
+        }
+        moved
     }
 
-    /// Works out what is wanted, drops what is not, and queues the rest.
-    fn resettle(&mut self, generator: &Generator, eye: DVec3) {
-        let wanted = self.wanted(generator, eye);
+    /// Which chunk of `level` the eye is standing in.
+    fn eye_chunk(&self, level: Level, eye: DVec3) -> Option<ChunkAddr> {
+        let grid = chunk_grid(self.sphere, level)?;
+        let point = grid.surface_point([eye.x, eye.y, eye.z]);
+        let span = CHUNK_M * f64::from(1u32 << level);
+        let above_m = eye.length() - self.sphere.radius_m();
+        let h = (above_m / span)
+            .floor()
+            .clamp(f64::from(i16::MIN), f64::from(i16::MAX));
+        Some(ChunkAddr::new(level, grid.column_of(point), h as i16))
+    }
+
+    /// Everything the pyramid wants, dropping what it no longer does and
+    /// queueing what is missing.
+    fn requeue(&mut self, eye: DVec3) {
+        let union: HashSet<ChunkAddr> = self
+            .levels
+            .iter()
+            .flat_map(|level| level.wanted.iter().copied())
+            .collect();
 
         // Gone first, so a move never holds both sets at once.
         let stale: Vec<ChunkAddr> = self
             .drawn
             .keys()
-            .filter(|addr| !wanted.contains(*addr))
+            .filter(|addr| !union.contains(*addr))
             .copied()
             .collect();
         for addr in stale {
@@ -164,19 +204,18 @@ impl Terrain {
                 self.changes.push(TerrainChange::Remove(id));
             }
         }
-        self.blank.retain(|addr| wanted.contains(addr));
+        self.blank.retain(|addr| union.contains(addr));
 
-        // The cache holds the near field and the border a mesh reads, and
-        // nothing else: a chunk just outside the reach is about to be a
-        // neighbour again, so dropping it the moment it stops being drawn
-        // would generate it twice for one step.
-        self.chunks
-            .retain_near(eye, self.reach_m + CHUNK_M * 2.0);
+        // The cache holds each level's shell and the border a mesh reads. A
+        // chunk just outside is about to be a neighbour again, so dropping it
+        // the moment it stops being drawn would generate it twice for a step.
+        self.chunks.retain_near(eye, |addr| {
+            reach_m(addr.level) + 2.0 * addr.span_m()
+        });
 
-        // Distance once per chunk, not once per comparison: the key is worked
-        // out here and the sort only reads it.
+        // Distance once per chunk, not once per comparison.
         let sphere = self.sphere;
-        let mut by_distance: Vec<(f64, ChunkAddr)> = wanted
+        let mut by_distance: Vec<(f64, ChunkAddr)> = union
             .into_iter()
             .filter(|addr| !self.drawn.contains_key(addr) && !self.blank.contains(addr))
             .map(|addr| {
@@ -192,12 +231,77 @@ impl Terrain {
         self.queue = by_distance.into_iter().map(|(_, addr)| addr).collect();
     }
 
+    /// The chunks one level wants: its own shell around the eye.
+    fn wanted(&self, generator: &Generator, eye: DVec3, level: Level) -> HashSet<ChunkAddr> {
+        let sphere = self.sphere;
+        let mut wanted = HashSet::new();
+        let (Some(grid), Some(cells)) = (
+            chunk_grid(sphere, level),
+            crate::address::cell_grid(sphere, level),
+        ) else {
+            return wanted;
+        };
+
+        let outermost = level == coarsest(sphere);
+        let span_m = CHUNK_M * f64::from(1u32 << level);
+        let far = reach_m(level) + span_m * 0.87;
+        // The level under this one already covers everything inside its reach,
+        // so this one starts where that one stops. The finest level has
+        // nothing under it and starts at zero.
+        let near = if level == 0 { 0.0 } else { reach_m(level - 1) };
+
+        let here = grid.surface_point([eye.x, eye.y, eye.z]);
+        let square = DETAIL.ceil() as i32;
+        let whole = 2 * square + 1 >= grid.side() as i32;
+        let band = i32::from(band_chunks(sphere, level));
+        let radius_m = sphere.radius_m();
+        let cell_m = span_m / CHUNK_SIDE as f64;
+        let half = CHUNK_SIDE as f64 / 2.0;
+
+        for column in columns(grid, here, square, whole) {
+            // One direction per chunk column. Every chunk above it sits on
+            // this ray, so its position is arithmetic from here.
+            let low = Column::new(
+                column.sector,
+                column.u << CHUNK_BITS,
+                column.v << CHUNK_BITS,
+            );
+            let middle = SurfacePoint::new(
+                low.sector,
+                f64::from(low.u) + half,
+                f64::from(low.v) + half,
+            );
+            let ray = DVec3::from(cells.direction(cells.wrapped(middle)));
+
+            let under = generator.column(ray.to_array(), cell_m);
+            let ground_h = (under.ground().height_m / span_m).floor() as i32;
+
+            // The band is what may be edited, not what has to be drawn. Where
+            // the generator says nothing under this column is hollow, only the
+            // chunks the surface runs through can hold one.
+            let deep = if under.solid() { 1 } else { band };
+            for h in ground_h.saturating_sub(deep)..=ground_h.saturating_add(deep) {
+                let Ok(h) = i16::try_from(h) else { continue };
+                let centre_m = (f64::from(i32::from(h) * CHUNK_SIDE as i32) + half) * cell_m;
+                let distance = (ray * (radius_m + centre_m)).distance(eye);
+                if distance > far && !outermost {
+                    continue;
+                }
+                // Inside the finer level's reach, which already drew it.
+                if distance + span_m * 0.87 < near {
+                    continue;
+                }
+                wanted.insert(ChunkAddr::new(level, column, h));
+            }
+        }
+        wanted
+    }
+
     /// Works the queue until `budget` chunks have been generated.
     ///
     /// The budget counts chunks made, not meshes finished, because a mesh at
     /// the frontier pulls in up to 27 of them: it reads one cell past itself
-    /// on every side, and those cells belong to neighbours. Counting meshes
-    /// would let one frame do twenty times the work of another.
+    /// on every side, and those cells belong to neighbours (DECISIONS 51).
     fn build(&mut self, generator: &Generator, budget: usize) {
         let mut made = 0;
         while made < budget {
@@ -227,93 +331,11 @@ impl Terrain {
             self.changes.push(TerrainChange::Add(id, mesh));
         }
     }
-
-    /// How much is still waiting to be built.
-    pub fn queued(&self) -> usize {
-        self.queue.len()
-    }
-
-    /// Every chunk wanted at `eye`: inside the reach, inside the band.
-    fn wanted(&self, generator: &Generator, eye: DVec3) -> HashSet<ChunkAddr> {
-        let sphere = self.sphere;
-        let grid = chunk_grid(sphere);
-        let blocks = sphere.blocks();
-        let mut wanted = HashSet::new();
-
-        // Out of reach of the whole body: nothing is wanted, and nothing is
-        // worth asking the generator. Flying to another body must not cost a
-        // scan of this one every frame.
-        let above_m = eye.length() - sphere.radius_m();
-        let under_eye = blocks.surface_point([eye.x, eye.y, eye.z]);
-        let ground_under_m = generator
-            .sample_at(blocks.direction(under_eye), FOOTPRINT_M)
-            .height_m;
-        // Measured from the ground, because that is what the band hangs off.
-        if above_m - ground_under_m > self.reach_m + sphere.band_m() + CHUNK_M {
-            return wanted;
-        }
-
-        let here = grid.surface_point([eye.x, eye.y, eye.z]);
-        let span = (self.reach_m / CHUNK_M).ceil() as i32;
-        // A body smaller than the reach is wholly in the near field, and a
-        // square wider than the grid would ask to step several faces at once,
-        // which is not a step. Take every column instead.
-        let whole = 2 * span + 1 >= grid.side() as i32;
-        let band = i32::from(band_chunks(sphere));
-        let eye_h = (above_m / CHUNK_M).floor() as i32;
-
-        let radius_m = sphere.radius_m();
-        let slack = CHUNK_M * 0.87;
-        let reach = self.reach_m + slack;
-        for column in columns(grid, here, span, whole) {
-            // One direction per chunk column. Every chunk above it sits on
-            // this ray, so its position is arithmetic from here: working the
-            // sphere out per chunk instead meant thousands of tangents in the
-            // frame that first comes into range (measured: it was the spike).
-            let low = Column::new(
-                column.sector,
-                column.u << voxel::CHUNK_BITS,
-                column.v << voxel::CHUNK_BITS,
-            );
-            let half = CHUNK_SIDE as f64 / 2.0;
-            let middle = SurfacePoint::new(
-                low.sector,
-                f64::from(low.u) + half,
-                f64::from(low.v) + half,
-            );
-            let ray = DVec3::from(blocks.direction(blocks.wrapped(middle)));
-
-            let under = generator.column(ray.to_array(), FOOTPRINT_M);
-            let ground_h = (under.ground().height_m / CHUNK_M).floor() as i32;
-
-            // The band is what may be edited, not what has to be drawn. Where
-            // the generator says nothing under this column is hollow, only the
-            // chunks the surface itself runs through can hold one; where there
-            // are caves, the whole band can.
-            let deep = if under.solid() { 1 } else { band };
-            let low_h = ground_h.saturating_sub(deep).max(eye_h.saturating_sub(span));
-            let high_h = ground_h.saturating_add(deep).min(eye_h.saturating_add(span));
-            for h in low_h..=high_h {
-                let Ok(h) = i16::try_from(h) else { continue };
-                let centre_m = (f64::from(i32::from(h) * CHUNK_SIDE as i32) + half) * BLOCK_M;
-                if (ray * (radius_m + centre_m)).distance(eye) <= reach {
-                    wanted.insert(ChunkAddr::new(column, h));
-                }
-            }
-        }
-        wanted
-    }
-
 }
 
-/// The chunk columns to consider: every one of them on a body that fits in
-/// the near field, and the square around the eye otherwise.
-fn columns(
-    grid: topology::Grid,
-    here: SurfacePoint,
-    span: i32,
-    whole: bool,
-) -> Vec<Column> {
+/// The chunk columns to consider: every one of them on a grid that fits in the
+/// square, and the square around the eye otherwise.
+fn columns(grid: Grid, here: SurfacePoint, span: i32, whole: bool) -> Vec<Column> {
     if whole {
         let last = grid.max_coord();
         return topology::Sector::ALL
@@ -339,6 +361,7 @@ fn columns(
 
 /// Where a chunk's middle sits, metres from the body's centre.
 pub(crate) fn chunk_centre(sphere: QuadSphere, addr: ChunkAddr) -> DVec3 {
+    let cells = crate::address::cell_grid(sphere, addr.level).expect("a level this body has");
     let half = CHUNK_SIDE as f64 / 2.0;
     let low = addr.low_column();
     let point = SurfacePoint::new(
@@ -346,7 +369,7 @@ pub(crate) fn chunk_centre(sphere: QuadSphere, addr: ChunkAddr) -> DVec3 {
         f64::from(low.u) + half,
         f64::from(low.v) + half,
     );
-    let height_m = (f64::from(addr.low_h()) + half) * BLOCK_M;
-    let at = sphere.position(sphere.blocks().wrapped(point), height_m);
-    DVec3::new(at[0], at[1], at[2])
+    let height_m = (f64::from(addr.low_h()) + half) * addr.cell_m();
+    let at = cells.direction(cells.wrapped(point));
+    DVec3::new(at[0], at[1], at[2]) * (sphere.radius_m() + height_m)
 }
