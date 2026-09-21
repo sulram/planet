@@ -144,9 +144,16 @@ Numbers marked (p) are proposed and not yet confirmed.
 - A coarse chunk is generated at the footprint of its own cells, not built from
   the chunks under it: the generator fades out what the chunk cannot carry
   (29, 43).
-- A level wants a shell: close enough to be worth drawing, far enough that the
-  level under it does not already cover the ground. The coarsest has no outer
-  edge, so a body is drawn whole from any distance and never disappears.
+- A level wants a shell: close enough to be worth drawing, and not already
+  covered. Exactly one level draws any piece of ground: a chunk whose eight
+  children are all wanted one level finer is cut out rather than drawn under
+  them. The coarsest level has no outer edge, so a body is drawn whole from any
+  distance and never disappears.
+- Nothing comes down before its replacement is up. A chunk the pyramid stops
+  wanting keeps being drawn until the ground it covered is drawn at the level
+  that took over, or the queue runs dry (53).
+- Shadow casters are what the pyramid wants, never what is retiring: a chunk on
+  its way out would double the shadows through the handover.
 - `DETAIL` is the only knob: how many of its own widths from the eye a level
   survives. Every level is a square `2 * DETAIL + 1` chunks across, so the work
   per level does not grow with the body.

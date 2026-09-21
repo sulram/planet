@@ -113,6 +113,13 @@ impl Terrain {
             .collect()
     }
 
+    /// What casts a shadow: what the pyramid wants, and not what is on its way
+    /// out. A retiring chunk is up so the ground has no hole in it; letting it
+    /// cast as well would double every shadow through the handover.
+    pub fn casters(&self) -> Vec<PatchId> {
+        self.drawn.values().copied().collect()
+    }
+
     /// How many chunks are still up only because their replacement is not.
     pub fn retiring(&self) -> usize {
         self.retiring.len()
@@ -185,15 +192,23 @@ impl Terrain {
     /// changed.
     fn resettle(&mut self, generator: &Generator, eye: DVec3) -> bool {
         let mut moved = false;
+        // Finest first: a level's inner edge is cut out of the level under it,
+        // so when that one moves this one has to follow, however still the eye
+        // is at this grain.
+        let mut finer_moved = false;
         for level in 0..self.levels.len() as Level {
-            let Some(here) = self.eye_chunk(level, eye) else {
-                continue;
-            };
-            if self.levels[level as usize].standing_in == Some(here) {
+            let here = self.eye_chunk(level, eye);
+            let own = here.is_some() && self.levels[level as usize].standing_in != here;
+            if !own && !finer_moved {
+                finer_moved = false;
                 continue;
             }
-            self.levels[level as usize].standing_in = Some(here);
-            self.levels[level as usize].wanted = self.wanted(generator, eye, level);
+            if let Some(here) = here {
+                self.levels[level as usize].standing_in = Some(here);
+            }
+            let wanted = self.wanted(generator, eye, level);
+            self.levels[level as usize].wanted = wanted;
+            finer_moved = true;
             moved = true;
         }
         moved
@@ -288,10 +303,6 @@ impl Terrain {
         let outermost = level == coarsest(sphere);
         let span_m = CHUNK_M * f64::from(1u32 << level);
         let far = reach_m(level) + span_m * 0.87;
-        // The level under this one already covers everything inside its reach,
-        // so this one starts where that one stops. The finest level has
-        // nothing under it and starts at zero.
-        let near = if level == 0 { 0.0 } else { reach_m(level - 1) };
 
         let here = grid.surface_point([eye.x, eye.y, eye.z]);
         let square = DETAIL.ceil() as i32;
@@ -330,11 +341,16 @@ impl Terrain {
                 if distance > far && !outermost {
                     continue;
                 }
-                // Inside the finer level's reach, which already drew it.
-                if distance + span_m * 0.87 < near {
+                let addr = ChunkAddr::new(level, column, h);
+                // Exactly one level draws any piece of ground. A chunk whose
+                // eight children are all wanted one level finer is already
+                // covered, so it is cut out rather than drawn on top: two
+                // surfaces in one place fight for the depth buffer and cast
+                // two shadows (DECISIONS 54).
+                if self.covered_by_finer(addr) {
                     continue;
                 }
-                wanted.insert(ChunkAddr::new(level, column, h));
+                wanted.insert(addr);
             }
         }
         wanted
@@ -400,6 +416,19 @@ impl Terrain {
                 self.changes.push(TerrainChange::Remove(id));
             }
         }
+    }
+
+    /// Whether every piece of ground this chunk covers is wanted one level
+    /// finer, so drawing it too would double the surface.
+    fn covered_by_finer(&self, addr: ChunkAddr) -> bool {
+        let Some(finer) = addr.level.checked_sub(1) else {
+            return false;
+        };
+        let Some(children) = self.children(addr) else {
+            return false;
+        };
+        let below = &self.levels[finer as usize].wanted;
+        children.iter().all(|child| below.contains(child))
     }
 
     /// Whether the ground a chunk covers is drawn at another level now.

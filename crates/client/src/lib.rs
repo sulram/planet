@@ -458,7 +458,7 @@ impl Client {
             // no coarser level to pick a caster from yet.
             shadow_patches: self
                 .terrain
-                .drawn()
+                .casters()
                 .into_iter()
                 .map(|id| scene::PatchDraw {
                     id,
