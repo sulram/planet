@@ -29,12 +29,26 @@ const RELAX: u32 = 32;
 /// Share of plates that carry continental crust: the rest are ocean floor.
 const CONTINENTAL: f64 = 0.42;
 
-/// Angle, in radians, over which two plates blend into each other. Wider than
-/// a boundary feature: crust thins toward a margin before it ends.
-const MARGIN: f64 = 0.16;
 /// Angle a boundary feature reaches inland. A cordillera is narrow next to
 /// the plate that carries it.
 const REACH: f64 = 0.075;
+/// Angle over which a trench gives way to the arc behind it. The two belong
+/// to opposite sides of one boundary, and which side a sample is on flips at
+/// the bisector, so without a width to cross they meet as a vertical wall.
+const ARC: f64 = 0.035;
+/// Gap in site dot product over which a plate stops lending its crust to a
+/// sample. The crust is an average over every plate this close, never a blend
+/// of the nearest two: a blend of two names a second plate, and which plate
+/// that is changes from one sample to the next wherever three are equally
+/// close, taking the crust from continental to oceanic in one step.
+const CRUST: f64 = 0.13;
+/// Angle by which the second plate has to beat the third before the boundary
+/// between the first two counts as a margin of its own. Where three plates
+/// are equally close, which pair the boundary belongs to flips from sample to
+/// sample, and with it the direction the crust is moving: a trench on one
+/// side of that line and a ridge on the other. A junction is messy ground on
+/// a real planet too, so the features fade out there rather than fight.
+const TIE: f64 = 0.02;
 
 /// Where the land is and where it rises: what every source of shape gives the
 /// body of the generator.
@@ -107,6 +121,20 @@ fn on_sphere(a: f64, b: f64) -> [f64; 3] {
     [r * libm::cos(angle), r * libm::sin(angle), z]
 }
 
+/// What the plates do at one direction.
+struct Margin<'a> {
+    /// The nearest plate, and the next nearest: the pair whose boundary the
+    /// sample sits on, and whose motion decides what that boundary makes.
+    near: &'a Plate,
+    far: &'a Plate,
+    /// Angle from the bisector between the two.
+    edge: f64,
+    /// How clearly those two are a pair at all. See [`TIE`].
+    certain: f64,
+    /// Signed crust level, continental high and oceanic low. See [`CRUST`].
+    crust: f64,
+}
+
 impl Plates {
     pub fn new(recipe: &Recipe) -> Plates {
         let seed = recipe.seed ^ SITE;
@@ -150,26 +178,56 @@ impl Plates {
         }))
     }
 
-    /// The two nearest plates at a direction, nearest first, and the angle
-    /// from the boundary between them.
-    fn boundary(&self, d: Direction) -> (&Plate, &Plate, f64) {
+    /// What the plates do at a direction: the margin a sample sits in, and the
+    /// crust under it.
+    fn margin(&self, d: Direction) -> Margin<'_> {
+        let mut dots = [0.0f64; COUNT];
         let (mut best, mut next) = (0usize, 1usize);
         let (mut best_dot, mut next_dot) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+        let mut third_dot = f64::NEG_INFINITY;
         for (index, plate) in self.0.iter().enumerate() {
             let value = dot(d, plate.site);
+            dots[index] = value;
             if value > best_dot {
+                third_dot = next_dot;
                 (next, next_dot) = (best, best_dot);
                 (best, best_dot) = (index, value);
             } else if value > next_dot {
+                third_dot = next_dot;
                 (next, next_dot) = (index, value);
+            } else if value > third_dot {
+                third_dot = value;
             }
         }
-        let (a, b) = (&self.0[best], &self.0[next]);
+        let (near, far) = (&self.0[best], &self.0[next]);
         // The boundary is the plane that bisects the two sites. The angle to
         // it is the gap in the dot products over how far apart the sites are.
-        let split = [0, 1, 2].map(|axis| a.site[axis] - b.site[axis]);
-        let edge = (best_dot - next_dot) / libm::sqrt(dot(split, split)).max(1e-9);
-        (a, b, edge)
+        let split = [0, 1, 2].map(|axis| near.site[axis] - far.site[axis]);
+        let apart = libm::sqrt(dot(split, split)).max(1e-9);
+        let edge = (best_dot - next_dot) / apart;
+        // Read in the same units as `edge`: how far inside this pair's own
+        // margin the third plate is left behind. See `TIE`.
+        let certain = smoothstep(0.0, TIE, (next_dot - third_dot) / apart);
+        // Crust: continental floats, oceanic sits low. Averaged over every
+        // plate near enough to matter, so no single plate's identity can
+        // change under the sample. See `CRUST`.
+        let (mut sum, mut weights) = (0.0, 0.0);
+        for (index, plate) in self.0.iter().enumerate() {
+            let gap = best_dot - dots[index];
+            if gap >= CRUST {
+                continue;
+            }
+            let weight = 1.0 - smoothstep(0.0, CRUST, gap);
+            sum += weight * if plate.continental { 0.46 } else { -0.52 };
+            weights += weight;
+        }
+        Margin {
+            near,
+            far,
+            edge,
+            certain,
+            crust: sum / weights.max(1e-9),
+        }
     }
 
     /// The shape of the crust under a direction.
@@ -182,13 +240,15 @@ impl Plates {
         let warped =
             normalize([0, 1, 2].map(|axis| d[axis] + 0.055 * coarse[axis] + 0.018 * fine[axis]));
 
-        let (near, far, edge) = self.boundary(warped);
+        let Margin {
+            near,
+            far,
+            edge,
+            certain,
+            crust,
+        } = self.margin(warped);
 
-        // Crust: continental floats, oceanic sits low, and the two blend over
-        // the margin so a coast is a slope and not a wall.
-        let level = |plate: &Plate| if plate.continental { 0.46 } else { -0.52 };
-        let across = 0.5 + 0.5 * smoothstep(0.0, MARGIN, edge);
-        let mut land = level(far) + (level(near) - level(far)) * across;
+        let mut land = crust;
         let mut ranges = 0.0;
 
         // How the two plates move against each other, at this point, along the
@@ -200,7 +260,7 @@ impl Plates {
             dot([0, 1, 2].map(|axis| here[axis] - there[axis]), normal)
         };
         let strength = (libm::fabs(motion) * 1.5).min(1.0);
-        let close = 1.0 - smoothstep(0.0, REACH, edge);
+        let close = certain * (1.0 - smoothstep(0.0, REACH, edge));
 
         if motion > 0.0 {
             // Convergent. Two continents pile up into one belt; where ocean
@@ -212,18 +272,24 @@ impl Plates {
                     land += 0.30 * force;
                     ranges += force;
                 }
-                (true, false) => {
-                    land += 0.16 * force;
-                    ranges += 0.95 * force;
-                }
-                (false, true) => {
-                    land -= 0.85 * force;
-                    ranges += 0.25 * force;
-                }
                 (false, false) => {
                     // Ocean meets ocean: a trench and an island arc beside it.
                     land -= 0.55 * force;
                     ranges += 0.55 * force;
+                }
+                // Ocean meets land: the ocean dives, so the trench is on its
+                // side and the arc of volcanoes on the other. Which side a
+                // sample is on is which plate is nearer, and that swaps at the
+                // bisector, where `close` is 1 and the force is at its
+                // greatest. Branching on it puts a full arc against a full
+                // trench with nothing in between, which is a wall of a
+                // kilometre. Read off a signed distance instead, so the
+                // margin is the slope it is on a real coast.
+                _ => {
+                    let toward_land = if near.continental { edge } else { -edge };
+                    let arc = smoothstep(-ARC, ARC, toward_land);
+                    land += (0.16 * arc - 0.85 * (1.0 - arc)) * force;
+                    ranges += (0.95 * arc + 0.25 * (1.0 - arc)) * force;
                 }
             }
         } else {

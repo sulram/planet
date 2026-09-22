@@ -56,10 +56,10 @@ fn v3_is_frozen() {
 }
 
 const GOLDEN_V3: [u64; 4] = [
-    0xed12_aeda_06d7_8008,
-    0x0031_791e_1f9b_b2c9,
-    0xb8e2_df13_eede_7796,
-    0x644f_108f_3349_caf3,
+    0x56a3_9fdc_62d0_2583,
+    0x39f4_7080_d514_e605,
+    0x5c1a_f236_7298_a341,
+    0xc316_899c_45e2_e17b,
 ];
 
 #[test]

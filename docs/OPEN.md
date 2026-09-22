@@ -49,6 +49,12 @@ DECISIONS.md, update ARCHITECTURE.md, delete it here.
 - **Fields: where they are hosted.** 25 MB each, gitignored, baked by
   `bun run field`. Same question as the default asset set, and the same answer
   when it comes. Whether an instance should offer more than one is open too.
+- **The simplex kernel steps, and the warp rides on it** (63). `simplex_d`
+  uses `0.6 - r²` over four corners, so value and gradient both jump a little
+  at every simplex boundary, and `plates::shape` warps its domain by that
+  gradient. Worst seen: 21 m of seabed, 250 m under water. `0.5 - r²` is
+  continuous and costs amplitude; either way every world and every golden
+  changes, so it waits for a reason to spend that.
 - **License.** "Free software end to end" names no license yet.
 - Account deletion: superuser only today; `worlds.owner` has no cascade.
 - World ownership transfer: the update rule allows it with no consent step.
