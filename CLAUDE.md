@@ -158,10 +158,21 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 
 ## refs/
 
-- Read-only reference checkouts: Hyperfy, Cryptovoxels, Vircadia World, others.
-- **Read for architecture, never copy code.** Licenses differ: Cryptovoxels
-  `retro` is BSL 1.1 (not open source), Hyperfy is GPL-3.0 (to verify),
-  Vircadia World is Apache-2.0.
+- Read-only checkouts, gitignored, shallow. `its-plataforma` and `vybe` are
+  symlinks to sibling working copies.
+- **Read for architecture.** The licence decides what may be taken:
+  - **MIT or Apache-2.0, code may be copied** with its notice: `myth` (shadow
+    atlas, SSA render graph, DECISIONS 61), `bevy` (the largest live Rust wgpu
+    codebase), `cesium` (planet scale f64 as camera relative f32, quadtree LOD,
+    skirts against cracks), `playcanvas` (clustered lighting on WebGL2),
+    `threejs` (API ergonomics, GLTF), `godot` (M3 gizmos and editor UX),
+    `valence` (server authoritative voxel protocol), `three-vrm` and
+    `vrm-specification` (VRM for `avatar`), `fast-surface-nets-rs`,
+    `vircadia-world` (unmoved since January 2026).
+  - **Copyleft or source available, ideas only**: `retro` (Cryptovoxels,
+    BSL 1.1, not open source), `hyperfy` (GPL-3.0-only), `veloren`
+    (GPL-3.0-or-later), `luanti` (LGPL-2.1+, mapblock streaming, server
+    authority, per world privileges), `dust` (MPL-2.0, file level copyleft).
 - Anything learned from a ref that shapes a choice goes to DECISIONS.
 
 ## Tests
