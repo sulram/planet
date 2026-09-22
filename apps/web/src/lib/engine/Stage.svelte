@@ -43,8 +43,6 @@
 	// engine asks for it as soon as its first world is built; `null` on the
 	// server, where there is no address bar to read.
 	const arrivedAt = typeof location === 'undefined' ? null : location.hash.slice(1) || null;
-	/** Where a respawn puts you back: the address on arrival, then wherever you are. */
-	const stand = $derived(stats?.pose ?? arrivedAt);
 	/** The last place written, so standing still writes nothing. */
 	let written = '';
 
@@ -119,7 +117,7 @@
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {fieldPath} {mode} {avatar} {stand} effects={wanted} onevent={receive} />
+	<EngineView {recipe} {fieldPath} {mode} {avatar} stand={arrivedAt} effects={wanted} onevent={receive} />
 	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}

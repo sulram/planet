@@ -1,12 +1,14 @@
 //! Saying where you are: the code a person reads out, and the way they face.
 
-use client::{Client, Event, Input, Key, Recipe};
+use client::{Client, Command, Event, Input, Key, Recipe};
 
 /// Everything the HUD shows about a place, as the client last said it.
 struct Said {
     place: String,
     pose: String,
     bearing_deg: Option<f64>,
+    /// Metres above the ground, or above the sea. Negative is under water.
+    altitude_m: f64,
 }
 
 fn run(client: &mut Client, input: &mut Input, seconds: f64) -> Said {
@@ -18,6 +20,7 @@ fn run(client: &mut Client, input: &mut Input, seconds: f64) -> Said {
                 place,
                 pose,
                 bearing_deg,
+                altitude_m,
                 ..
             } = event
             {
@@ -25,6 +28,7 @@ fn run(client: &mut Client, input: &mut Input, seconds: f64) -> Said {
                     place,
                     pose,
                     bearing_deg,
+                    altitude_m,
                 });
             }
         }
@@ -191,4 +195,81 @@ fn a_link_arrives_looking_the_way_it_was_sent() {
         said.pose
     );
     assert_eq!(there.place, said.place, "the link moved the place too");
+}
+
+/// A place belongs to the ground its recipe puts under it, so carrying one
+/// into a new world is only safe while that world still has ground there.
+/// The page used to hand your old address straight back after every recipe,
+/// which on a field of the Earth is open sea most of the time.
+#[test]
+fn a_new_recipe_never_leaves_you_in_the_water() {
+    let mut client = Client::new(Recipe::new(1)).expect("a world");
+    let mut input = Input::default();
+    input.key(Key::Forward, true);
+    let walked = run(&mut client, &mut input, 6.0);
+    input.key(Key::Forward, false);
+
+    // Twelve different worlds under the same feet. Each is new ground, where
+    // the place held from the last one names somewhere else entirely.
+    for seed in 2..14 {
+        client.command(Command::SetRecipe {
+            recipe: Recipe::new(seed),
+        });
+        let said = run(&mut client, &mut input, 1.0);
+        assert!(
+            said.altitude_m >= 0.0,
+            "seed {seed} left the avatar {:.0} m under water at {}, walked from {}",
+            -said.altitude_m,
+            said.place,
+            walked.place
+        );
+    }
+}
+
+/// The other half of the same rule: while the ground holds, a knob leaves you
+/// standing exactly where you were, which is the whole point of turning one.
+#[test]
+fn turning_a_knob_leaves_you_where_you_stood() {
+    let mut client = Client::new(Recipe::new(1)).expect("a world");
+    let mut input = Input::default();
+    input.key(Key::Forward, true);
+    run(&mut client, &mut input, 6.0);
+    input.key(Key::Forward, false);
+    // Let the stride run out first: a place read mid step keeps moving after
+    // it, and this test is about what the recipe does, not about momentum.
+    let before = run(&mut client, &mut input, 1.5);
+
+    // Taller peaks over the same coastline: the ground under the avatar
+    // rises or falls, and is still ground.
+    let mut recipe = Recipe::new(1);
+    recipe.params.relief_m = 1800.0;
+    client.command(Command::SetRecipe { recipe });
+    let after = run(&mut client, &mut input, 1.0);
+
+    assert_eq!(
+        before.place, after.place,
+        "turning a knob moved the avatar off its place"
+    );
+    assert!(
+        after.altitude_m >= 0.0,
+        "a knob left the avatar under water at {}",
+        after.place
+    );
+}
+
+/// A face of a world can be all ocean, and the search used to give up after
+/// the first one and stand in the middle of it. Seed 10 is such a world: it
+/// used to open on 476 m of seabed.
+#[test]
+fn a_world_whose_first_face_is_ocean_still_opens_on_land() {
+    for seed in 1..24 {
+        let mut client = Client::new(Recipe::new(seed)).expect("a world");
+        let said = run(&mut client, &mut Input::default(), 1.0);
+        assert!(
+            said.altitude_m >= 0.0,
+            "seed {seed} opened {:.0} m under water at {}",
+            -said.altitude_m,
+            said.place
+        );
+    }
 }

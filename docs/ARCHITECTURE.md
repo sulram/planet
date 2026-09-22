@@ -81,6 +81,9 @@ Numbers marked (p) are proposed and not yet confirmed.
 
 - One command/event seam between core and any UI. Svelte panels send commands
   and render events. Tool logic stays in Rust so every client shares it.
+- Where you stand is the client's, never the page's (62). A new recipe keeps
+  your place while the new ground is dry under it and spawns you otherwise;
+  the address bar's place is honoured once, for the world its link was for.
 - Settings are `scene::Effects`: set with `set_effects`, clamped by the client,
   answered with `effects_changed`, carried in every `Frame`. The renderer holds
   no setting of its own. Both UIs put a button in the top right corner.

@@ -19,13 +19,12 @@
 		/** How the picture is made. Undefined leaves the engine as it is. */
 		effects?: Effects;
 		/**
-		 * Where to stand after any respawn: the place from the address bar on
-		 * arrival, and wherever the person is once they are in the world.
+		 * The place from the address bar, for the world that link was for.
 		 *
-		 * Setting a recipe regenerates and respawns, and the engine sets one of
-		 * its own before the page sets the real one, so this cannot be a single
-		 * shot after the first world: it is sent after every one. The gain is
-		 * that turning a knob keeps you where you were standing.
+		 * Sent once, on the first world the engine builds. Keeping your footing
+		 * across a later recipe is the engine's own job, because only it knows
+		 * what the new ground puts under an address: a place carried over by
+		 * the page lands you in the sea every time the coastline moves.
 		 */
 		stand?: string | null;
 		onevent?: (event: EngineEvent) => void;
@@ -47,13 +46,19 @@
 	let engineEffects = '';
 	/** The field already handed to the engine, by id. */
 	let engineField: string | undefined;
+	/** Whether the arrival place has been honoured. It is good for one world. */
+	let arrived = false;
 
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') {
 			engineRecipe = JSON.stringify(event.recipe);
-			// The world just respawned the avatar, so this is the moment
-			// standing somewhere else survives.
-			if (stand && engine) engine.command({ type: 'go_to', place: stand });
+			// The first world is the one the link was written for. Every world
+			// after it is new ground, where those characters name somewhere
+			// else, so the engine's own respawn is the one that knows better.
+			if (!arrived && stand && engine) {
+				arrived = true;
+				engine.command({ type: 'go_to', place: stand });
+			}
 		}
 		if (event.type === 'mode_changed') engineMode = event.mode;
 		if (event.type === 'avatar_changed') engineAvatar = event.path;

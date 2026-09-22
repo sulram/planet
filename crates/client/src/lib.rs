@@ -20,7 +20,7 @@ use glam::DVec3;
 use scene::{SkinnedChange, TerrainChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
-use worldgen::{GENERATOR_VERSION, Generator, Material};
+use worldgen::{GENERATOR_VERSION, Generator, Material, Sample};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
@@ -595,8 +595,24 @@ impl Client {
 
     fn regenerate(&mut self, generator: Generator) {
         let mode = self.controller.mode;
+        // Turning a knob should leave you where you stood. But the ground
+        // under a place belongs to the recipe, so the same address on new
+        // ground can be open sea, and over a field of the Earth it usually
+        // is: the planet is 71% water. Keep the place only while it is still
+        // a place to stand, and let the world choose otherwise.
+        let held = self.controller.point();
+        let keep = !self.controller.on_moon()
+            && self.controller.sphere() == generator.sphere()
+            && standable(&generator, held);
         self.generator = generator;
-        self.controller = Controller::spawn(spawn_point(&self.generator), &self.generator);
+        if keep {
+            // A flyer keeps its altitude, which `stand_at` lifts if the new
+            // ground rose through it; a walker lands on whatever is there now.
+            let height_m = (mode == Mode::Fly).then(|| self.controller.height_m());
+            self.controller.stand_at(height_m, &self.generator);
+        } else {
+            self.controller = Controller::spawn(spawn_point(&self.generator), &self.generator);
+        }
         self.controller.mode = mode;
         self.terrain.clear();
         self.moon_terrain.clear();
@@ -633,40 +649,69 @@ impl Client {
     }
 }
 
+/// Whether a body could stand at `point`: dry ground, clear of the waves.
+///
+/// This is what a place carried from one recipe to another has to answer. An
+/// address on its own says nothing about the ground, because the ground is
+/// the recipe's, so the same characters can name a hill under one and the
+/// middle of an ocean under the next.
+fn standable(generator: &Generator, point: SurfacePoint) -> bool {
+    let direction = generator.sphere().blocks().direction(point);
+    dry(generator.sample(direction), generator.scale())
+}
+
+/// Ground clear of the waves. Heights are in reference metres, so the margin
+/// scales with the body: a metre of clearance on the reference planet, less
+/// on a smaller one.
+fn dry(sample: Sample, scale: f64) -> bool {
+    sample.height_m > scale
+}
+
 /// A place to stand: the first gentle, dry ground along a fixed search path
-/// over sector 0. Deterministic per recipe, so a world always opens the same.
+/// over the whole body. Deterministic per recipe, so a world always opens the
+/// same.
+///
+/// The search is every sector, not just the first. A face of a world can be
+/// all ocean, and on a field of the Earth one of them is most of the Pacific,
+/// so a search that gave up after sector 0 spawned people hundreds of metres
+/// under water. Sector 0 is still walked first, so a world that had an answer
+/// there opens where it always did.
 fn spawn_point(generator: &Generator) -> SurfacePoint {
     let grid = generator.sphere().blocks();
     let side = f64::from(grid.side());
     // Heights are written in reference metres and printed at the body's own
     // size (50), so what counts as dry ground scales with the world.
     let scale = generator.scale();
-    let sector = Sector::ALL[0];
-    // A coarse lattice ordered from the sector centre outward.
+    // A coarse lattice ordered from a sector's centre outward.
     let mut cells: Vec<(i32, i32)> = (-12..=12)
         .flat_map(|i| (-12..=12).map(move |j| (i, j)))
         .collect();
     cells.sort_by_key(|(i, j)| i * i + j * j);
-    let candidates = cells.into_iter().map(|(i, j)| {
-        SurfacePoint::new(
-            sector,
-            side * (0.5 + f64::from(i) / 26.0),
-            side * (0.5 + f64::from(j) / 26.0),
-        )
-    });
-    let mut fallback = None;
-    for point in candidates {
-        let sample = generator.sample(grid.direction(point));
-        let dry = sample.height_m > scale && sample.material != Material::Snow;
-        if dry && sample.height_m < 300.0 * scale {
-            return point;
-        }
-        if sample.height_m > 0.0 {
-            fallback.get_or_insert(point);
+    // The highest ground seen anywhere, for a world with no gentle spot at
+    // all: the shallowest water is the likeliest place to find a shoal, and
+    // is a kinder answer than the middle of a sector.
+    let mut highest: Option<(f64, SurfacePoint)> = None;
+    for sector in Sector::ALL {
+        for &(i, j) in &cells {
+            let point = SurfacePoint::new(
+                sector,
+                side * (0.5 + f64::from(i) / 26.0),
+                side * (0.5 + f64::from(j) / 26.0),
+            );
+            let sample = generator.sample(grid.direction(point));
+            let gentle = dry(sample, scale) && sample.material != Material::Snow;
+            if gentle && sample.height_m < 300.0 * scale {
+                return point;
+            }
+            match highest {
+                Some((height_m, _)) if height_m >= sample.height_m => {}
+                _ => highest = Some((sample.height_m, point)),
+            }
         }
     }
-    // A water world, or one frozen solid: stand on whatever there is.
-    fallback.unwrap_or(SurfacePoint::new(sector, side / 2.0, side / 2.0))
+    // A water world, or one frozen solid: stand on the best there is.
+    let (_, point) = highest.expect("the lattice has at least one cell");
+    point
 }
 
 /// splitmix64 finalizer: spreads a counter into a seed.
