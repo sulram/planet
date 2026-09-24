@@ -1,0 +1,13 @@
+# What `bun run proto` generates, into the tree, committed. Paths are from the
+# repo root, where the script runs buf.
+version: v2
+clean: true
+plugins:
+  # Go: google.golang.org/protobuf, the version go.mod pins.
+  - local: protoc-gen-go
+    out: server/internal/protocol
+    opt:
+      - module=github.com/sulram/planet/server/internal/protocol
+  # Rust: prost, the version Cargo.lock pins.
+  - local: protoc-gen-prost
+    out: crates/protocol/src/gen

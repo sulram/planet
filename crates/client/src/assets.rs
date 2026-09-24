@@ -18,10 +18,11 @@ pub struct AssetRequest {
 }
 
 /// What a pending request is for.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Purpose {
     Manifest,
-    Avatar,
+    /// An avatar, by the reference it was asked for.
+    Avatar(String),
     Clip(crate::figure::Gait),
 }
 
@@ -47,10 +48,6 @@ pub(crate) struct Requests {
 
 impl Requests {
     pub fn ask(&mut self, path: String, purpose: Purpose) {
-        // A newer avatar request replaces an older one still in flight.
-        if purpose == Purpose::Avatar {
-            self.pending.retain(|(_, p)| *p != Purpose::Avatar);
-        }
         self.next_id += 1;
         self.pending.push((self.next_id, purpose));
         self.outbox.push(AssetRequest {

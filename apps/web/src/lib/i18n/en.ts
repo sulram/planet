@@ -119,6 +119,13 @@ export const en = {
 	'engine.settings.toneMap.reinhard': 'Reinhard',
 	'engine.settings.toneMap.linear': 'Linear',
 	'engine.settings.defaults': 'Defaults',
+	'engine.here': 'Here',
+	'engine.here.you': 'you',
+	'engine.here.visitor': 'Visitor {n}',
+	'engine.here.someone': 'Someone {n}',
+	'engine.session.offline': 'Offline',
+	'engine.session.connecting': 'Connecting',
+	'engine.session.online': 'Online',
 
 	'play.title': 'New planet',
 	'play.seed.hint': '16 hex digits. The same seed always gives the same planet. Share the address to share it.',

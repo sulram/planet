@@ -13,6 +13,9 @@ export interface Engine {
 	command(command: Command): void;
 	/** The ground a recipe names. Sent before the recipe that names it. */
 	set_field(bytes: Uint8Array): void;
+	/** Opens the link to a world server at a socket URL, ticket included. */
+	connect(url: string): void;
+	disconnect(): void;
 	free(): void;
 }
 
@@ -26,6 +29,8 @@ export interface EngineModule {
 interface RawEngine {
 	command(json: string): void;
 	set_field(bytes: Uint8Array): void;
+	connect(url: string): void;
+	disconnect(): void;
 	free(): void;
 }
 interface RawModule {
@@ -53,6 +58,8 @@ async function load(): Promise<EngineModule | null> {
 			return {
 				command: (command) => engine.command(JSON.stringify(command)),
 				set_field: (bytes) => engine.set_field(bytes),
+				connect: (url) => engine.connect(url),
+				disconnect: () => engine.disconnect(),
 				free: () => engine.free()
 			};
 		}

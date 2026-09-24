@@ -5,6 +5,8 @@
 //   bun run webshot        -> out/web.png, from /play
 //   bun run webshot --path /play --wait 20 --out out/web.png
 //   bun run webshot --eval "document.querySelector('.toggle button').click()"
+//   bun run webshot --port 9334   (a second Chrome beside the first: two people in one world)
+//   bun run webshot --eval "..." --after 6   (seconds between the script and the picture)
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -18,9 +20,10 @@ const option = (name: string, fallback: string) => {
 const url = `${option('origin', 'http://[::1]:5173')}${option('path', '/play')}`;
 const out = resolve(ROOT, option('out', 'out/web.png'));
 const waitMs = Number(option('wait', '15')) * 1000;
-// Run in the page once it has settled, a second before the picture: a click.
+// Run in the page once it has settled, before the picture: a click, a walk.
 const script = option('eval', '');
-const PORT = 9333;
+const afterMs = Number(option('after', '1')) * 1000;
+const PORT = Number(option('port', '9333'));
 
 const binary =
 	process.env.CHROME ??
@@ -83,7 +86,7 @@ await send('Page.navigate', { url });
 await Bun.sleep(waitMs);
 if (script) {
 	await send('Runtime.evaluate', { expression: script });
-	await Bun.sleep(1000);
+	await Bun.sleep(afterMs);
 }
 const shot = await send('Page.captureScreenshot', { format: 'png' });
 mkdirSync(dirname(out), { recursive: true });

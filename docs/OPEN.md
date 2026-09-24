@@ -34,7 +34,6 @@ The address is the save format: settled before the first volume is stored.
 | **Fields: where they are hosted.** 25 MB each, gitignored, baked by `bun run field`. Same question, same answer when it comes. Whether an instance offers more than one is open too | a second field (ROADMAP M2) | DECISIONS 44 |
 | **How much of a world a signed out desktop may reach.** Offline preview is permanent, so a picker of seeds and fields visited before could work with no account. Whether it should, and whether a world list is worth caching for a flight | the desktop screens (ROADMAP M2) | DECISIONS 46 |
 | ECS crate: `hecs` or `bevy_ecs` standalone | entities (ROADMAP M5) | DECISIONS 03 |
-| Protocol schema language: protobuf or flatbuffers | the wire protocol (ROADMAP M2) | ARCHITECTURE |
 | How much building is possible outside the browser (Pi, headset) | ROADMAP M6 | ARCHITECTURE |
 | Scripting model: server side; language and sandbox | scripts (ROADMAP wishes) | VISION |
 | Chain for assets and deeds (leaning Tezos); when to anchor snapshots in Bitcoin | wallet linking (ROADMAP wishes) | VISION |

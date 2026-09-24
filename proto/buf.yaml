@@ -1,0 +1,15 @@
+# The protocol module. `bun run proto` generates from it; `buf lint` keeps it
+# in the standard style.
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # A zero value here is a chosen default, not an unspecified one: an absent
+    # body is the planet and an absent gait is standing still.
+    - ENUM_ZERO_VALUE_SUFFIX
+breaking:
+  use:
+    - FILE

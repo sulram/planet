@@ -3,6 +3,7 @@ import { translate } from '$lib/i18n/config';
 import { visitorAvatar } from '$lib/server/avatar';
 import { pbStatus } from '$lib/server/pb';
 import { servedField } from '$lib/server/fields';
+import { worldLink } from '$lib/server/session';
 import { getWorld } from '$lib/server/worlds';
 import { fieldId } from '$lib/world';
 import type { PageServerLoad } from './$types';
@@ -16,7 +17,8 @@ export const load: PageServerLoad = async (event) => {
 			// A world shaped by ground this instance does not have cannot be
 			// entered: the engine says so rather than showing another planet.
 			fieldPath: await servedField(fieldId(world.recipe)),
-			avatar: await visitorAvatar(event)
+			avatar: await visitorAvatar(event),
+			link: worldLink(world.id, locals.user !== null)
 		};
 	} catch (err) {
 		if (pbStatus(err) === 404) error(404, translate(locals.locale, 'error.notFound.title'));

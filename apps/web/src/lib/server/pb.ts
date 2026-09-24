@@ -2,6 +2,8 @@ import PocketBase, { ClientResponseError, type ListResult, type RecordModel } fr
 import { env } from '$env/dynamic/private';
 
 export const PB_URL = env.PB_URL || 'http://127.0.0.1:8090';
+/** Where a browser reaches the same server: the world socket opens there. */
+export const PB_PUBLIC_URL = env.PB_PUBLIC_URL || PB_URL;
 
 /** Session data exposed to routes: a serializable subset of the `users` record. */
 export type SessionUser = {

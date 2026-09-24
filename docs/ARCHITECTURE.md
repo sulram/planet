@@ -11,6 +11,20 @@ Numbers marked (p) are proposed and not yet confirmed.
 | Hot | chunks, op log, presence, edits, streaming | our Go code, one `world.db` (SQLite, WAL) per world, binary WebSocket |
 
 - One Go executable: PocketBase with our routes and WebSocket registered inside.
+- The hot plane's doors, on PocketBase's router (`internal/cold/hot.go`):
+  `POST /api/planet/ticket` mints a ticket for the signed in caller;
+  `GET /api/planet/worlds/{id}/socket?ticket=` opens the world socket. No
+  ticket is a visitor. A ticket works once and for a minute.
+- Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
+  source (DECISIONS 66). `Hello` says the protocol version; any other is
+  refused. `Welcome` carries the recipe, so a client checks it stands in the
+  world the server holds.
+- Presence: the world actor keeps every session's last stance and relays what
+  changed at 15 Hz, in one frame encoded once, with a heartbeat every two
+  seconds so a silent link is a dead one on both sides. A client too slow to
+  take its frames is dropped; the actor never waits for a client.
+- The actor holds no state past its sessions yet: `world.db` arrives with
+  chunks (ROADMAP M3).
 - Bridge: volumes and roles cached in memory at start; PocketBase hooks
   invalidate the cache. A revoke in the panel applies on the next block.
 - No transaction spans both files. Permission decides, op log records.
@@ -95,8 +109,24 @@ Numbers marked (p) are proposed and not yet confirmed.
   the headless picture. It does not persist the choice yet.
   JSON tagged by `type`: `client::Command`, `client::Event`.
 - Crates: `topology` and `worldgen` (deterministic, `libm`), `scene` (plain
-  data a client hands a renderer), `avatar` (VRM + clips, no GPU), `client`, `render`, `shell-desktop`,
-  `shell-web`. `voxel` and `protocol` appear when a milestone pulls them.
+  data a client hands a renderer), `avatar` (VRM + clips, no GPU), `protocol`
+  (the wire, generated), `client`, `render`, `shell-desktop`, `shell-web`.
+  `voxel` appears when volumes are built.
+- The link is the shell's, the protocol the client's: `shell-web` opens the
+  socket (`Engine.connect(url)`), hands every frame to `Client::receive` and
+  sends what `drain_outbound` queues. The client says hello, keeps the peers,
+  sends its own stance when it changed and as a heartbeat, and reports
+  `session` and `peers` events over the seam. The desktop shell has no
+  socket yet (ROADMAP M2).
+- A peer is drawn a tick and a half behind its newest stance, between the
+  last two heard, in world space: a walk across a seam never interpolates
+  through the seam. Every body, the player's included, is one `Figure` over
+  one shared set of clips; avatars load once per asset reference and are
+  worn by any number of bodies (`client::wardrobe`).
+- Web: `/w/[id]` hands the engine the socket URL and, for a signed in person,
+  a path that mints a fresh ticket before every connection, so a reconnect is
+  never a visitor by accident. The page reconnects with a doubling wait from
+  one second to thirty. `PB_PUBLIC_URL` is where a browser reaches the server.
 - The controller keeps its state in address space; a wish direction in metres
   becomes an address delta through the local tangents. Tangent vectors are
   parallel transported, so seams and corners need no special case.

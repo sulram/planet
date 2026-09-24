@@ -119,6 +119,13 @@ export const pt: Messages = {
 	'engine.settings.toneMap.neutral': 'Neutro',
 	'engine.settings.toneMap.reinhard': 'Reinhard',
 	'engine.settings.toneMap.linear': 'Linear',
+	'engine.here': 'Aqui',
+	'engine.here.you': 'você',
+	'engine.here.visitor': 'Visitante {n}',
+	'engine.here.someone': 'Alguém {n}',
+	'engine.session.offline': 'Desconectado',
+	'engine.session.connecting': 'Conectando',
+	'engine.session.online': 'Conectado',
 	'engine.settings.defaults': 'Padrões',
 
 	'play.title': 'Planeta novo',

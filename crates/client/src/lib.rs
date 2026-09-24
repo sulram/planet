@@ -1,9 +1,10 @@
 //! The client core: controller, terrain streaming, and the command/event seam.
 //!
 //! No window, no DOM, no GPU. A platform shell feeds [`Input`] and a time
-//! step, forwards [`Command`]s from its UI, and hands the resulting
-//! [`scene::Frame`] and terrain changes to a renderer. An agent drives the
-//! same type and simply never renders.
+//! step, forwards [`Command`]s from its UI, hands over the frames of a link to
+//! a world server and sends back what is queued for it, and hands the
+//! resulting [`scene::Frame`] and terrain changes to a renderer. An agent
+//! drives the same type and simply never renders.
 
 mod assets;
 mod box_figure;
@@ -12,25 +13,32 @@ mod controller;
 mod figure;
 mod grass;
 mod input;
+mod peers;
 mod place;
 mod seam;
+mod session;
 mod terrain;
+mod wardrobe;
 
 use glam::DVec3;
 use scene::{SkinnedChange, TerrainChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
-use worldgen::{GENERATOR_VERSION, Generator, Material, Sample};
+use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use controller::{Controller, Wish};
-use figure::Figure;
+use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Input, Key};
+use peers::Peers;
 pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{Command, Event, Mode};
+pub use seam::{Command, Event, Mode, PeerInfo, SessionStatus};
+pub use session::Outbound;
+use session::Session;
 use terrain::{Body, Terrain};
+use wardrobe::Wardrobe;
 
 /// Seconds for the sun to go around once.
 const DAY_S: f64 = 1200.0;
@@ -48,7 +56,14 @@ pub struct Client {
     controller: Controller,
     terrain: Terrain,
     moon_terrain: Terrain,
+    /// The player's own body.
     figure: Figure,
+    /// The clips every figure shares.
+    clips: Clips,
+    /// Every avatar loaded, by asset reference, worn by any number of bodies.
+    wardrobe: Wardrobe,
+    session: Session,
+    peers: Peers,
     requests: Requests,
     manifest: Option<Manifest>,
     /// A random avatar was asked for before the manifest arrived.
@@ -92,6 +107,10 @@ impl Client {
             terrain: Terrain::new(Body::new(terrain::Kind::Planet, sphere)),
             moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
             figure: Figure::default(),
+            clips: Clips::new(),
+            wardrobe: Wardrobe::default(),
+            session: Session::default(),
+            peers: Peers::default(),
             requests: Requests::default(),
             manifest: None,
             wants_random_avatar: false,
@@ -116,6 +135,10 @@ impl Client {
         });
         client.events.push(Event::EffectsChanged {
             effects: client.effects,
+        });
+        client.events.push(Event::Session {
+            status: SessionStatus::Offline,
+            session: None,
         });
         Ok(client)
     }
@@ -339,53 +362,101 @@ impl Client {
         let Some(purpose) = self.requests.answer(id) else {
             return;
         };
-        let outcome = bytes.and_then(|bytes| match purpose {
+        let outcome = bytes.and_then(|bytes| match &purpose {
             Purpose::Manifest => serde_json::from_slice::<Manifest>(&bytes)
                 .map(|manifest| self.adopt(manifest))
                 .map_err(|e| e.to_string()),
-            Purpose::Avatar => avatar::Avatar::from_vrm(&bytes)
-                .map(|avatar| self.worn(avatar))
-                .map_err(|e| e.to_string()),
+            Purpose::Avatar(path) => {
+                let avatar = avatar::Avatar::from_vrm(&bytes).map_err(|e| e.to_string());
+                self.wardrobe.arrived(path, avatar).map(|_| ())
+            }
             Purpose::Clip(gait) => avatar::Clip::from_glb(&bytes)
-                .map(|clip| self.figure.add_clip(gait, clip))
+                .map(|clip| {
+                    self.clips.insert(*gait, clip);
+                })
                 .map_err(|e| e.to_string()),
         });
         if let Err(message) = outcome {
             self.events.push(Event::Rejected {
                 message: format!("{purpose:?}: {message}"),
             });
-            if purpose == Purpose::Avatar {
-                self.wear_default();
+            if let Purpose::Avatar(path) = &purpose {
+                self.fall_back_from(&path.clone());
             }
         }
+        self.dress_all();
     }
 
     /// Asks for the avatar at an asset reference. Every way of choosing an
     /// avatar ends here, whether the reference came from the manifest, a
     /// cookie or, later, a user's own uploads.
     fn wear(&mut self, path: String) {
-        self.requests.ask(path.clone(), Purpose::Avatar);
-        self.wanted_avatar = Some(path);
+        self.wanted_avatar = Some(path.clone());
+        self.session.wear(&path);
+        self.dress_all();
     }
 
-    fn worn(&mut self, avatar: avatar::Avatar) {
-        self.figure.wear(avatar);
-        if let Some(path) = self.wanted_avatar.clone() {
-            self.events.push(Event::AvatarChanged { path });
-        }
-    }
-
-    /// The wanted avatar could not be loaded: there is always a default.
-    fn wear_default(&mut self) {
-        let default = self
-            .manifest
+    /// The default avatar the manifest names, if it names one.
+    fn default_avatar(&self) -> Option<String> {
+        self.manifest
             .as_ref()
-            .and_then(|m| m.default_avatar.clone());
-        match default {
-            Some(path) if self.wanted_avatar.as_ref() != Some(&path) => self.wear(path),
-            // The default itself failed, or there is none: the box figure stays.
-            _ => self.wanted_avatar = None,
+            .and_then(|m| m.default_avatar.clone())
+    }
+
+    /// A file at `path` is not an avatar: every body that wanted it wears the
+    /// default instead. The default itself failing, or there being none,
+    /// leaves the box figure.
+    fn fall_back_from(&mut self, path: &str) {
+        let default = self.default_avatar().filter(|d| d != path);
+        if self.wanted_avatar.as_deref() == Some(path) {
+            match &default {
+                Some(default) => self.wear(default.clone()),
+                None => self.wanted_avatar = None,
+            }
         }
+        for peer in self.peers.iter_mut().filter(|p| p.avatar == path) {
+            peer.avatar = default.clone().unwrap_or_default();
+        }
+    }
+
+    /// Puts every body in what it wants, from what has landed, and asks for
+    /// what has not. A body whose file is still on its way stays as it is:
+    /// the box figure, or what it wore before.
+    fn dress_all(&mut self) {
+        let default = self.default_avatar();
+        let choose = |wanted: &str| -> Option<String> {
+            if wanted.is_empty() {
+                default.clone()
+            } else {
+                Some(wanted.to_owned())
+            }
+        };
+        if let Some(wanted) = self.wanted_avatar.clone().and_then(|w| choose(&w))
+            && dress(
+                &mut self.figure,
+                &wanted,
+                &mut self.wardrobe,
+                &mut self.requests,
+            )
+        {
+            self.events.push(Event::AvatarChanged { path: wanted });
+        }
+        for peer in self.peers.iter_mut() {
+            if let Some(wanted) = choose(&peer.avatar) {
+                dress(
+                    &mut peer.figure,
+                    &wanted,
+                    &mut self.wardrobe,
+                    &mut self.requests,
+                );
+            }
+        }
+        let worn = self
+            .figure
+            .mesh()
+            .into_iter()
+            .chain(self.peers.iter().filter_map(|p| p.figure.mesh()));
+        self.wardrobe.prune(worn);
     }
 
     /// The avatar on offer after the one worn, wrapping around.
@@ -430,7 +501,169 @@ impl Client {
     }
 
     pub fn drain_skinned_changes(&mut self) -> Vec<SkinnedChange> {
-        self.figure.drain_changes()
+        self.wardrobe.drain_changes()
+    }
+
+    /// The shell opened the link to the world server: the client says hello.
+    /// Which world is in the socket's address; who this is was settled by
+    /// the ticket that rode along with it.
+    pub fn link_opened(&mut self) {
+        self.session
+            .opened(self.wanted_avatar.as_deref().unwrap_or(""));
+        self.events.push(Event::Session {
+            status: SessionStatus::Connecting,
+            session: None,
+        });
+    }
+
+    /// The link is gone, from either side.
+    pub fn link_closed(&mut self) {
+        self.session.closed();
+        self.went_offline();
+    }
+
+    /// One frame from the server.
+    pub fn receive(&mut self, frame: &[u8]) {
+        use protocol::server_message::Message;
+        let message = match protocol::decode::<protocol::ServerMessage>(frame) {
+            Ok(message) => message,
+            Err(error) => {
+                self.events.push(Event::Rejected {
+                    message: format!("frame from the server: {error}"),
+                });
+                return;
+            }
+        };
+        self.session.heard();
+        match message.message {
+            Some(Message::Welcome(welcome)) => {
+                if !self.same_world(welcome.recipe.as_ref()) {
+                    self.events.push(Event::Rejected {
+                        message: "the server holds another recipe for this world".into(),
+                    });
+                    self.session.close();
+                    self.went_offline();
+                    return;
+                }
+                self.session.welcomed(welcome.session);
+                for peer in &welcome.peers {
+                    self.peers.add(peer, &self.generator);
+                }
+                self.events.push(Event::Session {
+                    status: SessionStatus::Online,
+                    session: Some(welcome.session),
+                });
+                self.peers_changed();
+            }
+            Some(Message::Joined(joined)) => {
+                if let Some(peer) = &joined.peer {
+                    self.peers.add(peer, &self.generator);
+                    self.peers_changed();
+                }
+            }
+            Some(Message::Left(left)) => {
+                self.peers.remove(left.session);
+                self.peers_changed();
+            }
+            Some(Message::Stances(stances)) => {
+                let own = match self.session.link() {
+                    session::Link::Online { session } => session,
+                    _ => 0,
+                };
+                for moved in &stances.moved {
+                    if let Some(stance) = &moved.stance
+                        && moved.session != own
+                    {
+                        self.peers.moved(moved.session, stance, &self.generator);
+                    }
+                }
+            }
+            Some(Message::Wearing(wearing)) => {
+                self.peers.wearing(wearing.session, &wearing.avatar);
+                self.dress_all();
+            }
+            Some(Message::Refused(refused)) => {
+                self.events.push(Event::Rejected {
+                    message: format!("refused by the server: {}", refused.reason),
+                });
+                self.session.closed();
+                self.went_offline();
+            }
+            None => {}
+        }
+    }
+
+    /// Whether the server's recipe is the one this client stands in. A page
+    /// sets the recipe from the same row the server reads, so a difference
+    /// is a stale page, and peers placed by another recipe would stand on
+    /// the wrong ground.
+    fn same_world(&self, recipe: Option<&protocol::Recipe>) -> bool {
+        let Some(recipe) = recipe else {
+            return false;
+        };
+        let own = self.recipe();
+        let params = if recipe.params_json.trim().is_empty() {
+            Ok(Params::default())
+        } else {
+            serde_json::from_str::<Params>(&recipe.params_json)
+        };
+        recipe.seed == worldgen::format_seed(own.seed)
+            && recipe.generator_version == own.generator_version
+            && params.is_ok_and(|params| params == own.params)
+    }
+
+    fn peers_changed(&mut self) {
+        self.dress_all();
+        self.events.push(Event::Peers {
+            peers: self.peers.infos(),
+        });
+    }
+
+    fn went_offline(&mut self) {
+        self.peers.clear();
+        self.dress_all();
+        self.events.push(Event::Session {
+            status: SessionStatus::Offline,
+            session: None,
+        });
+        self.events.push(Event::Peers { peers: Vec::new() });
+    }
+
+    /// What the shell sends on the link, in order. Empty while offline.
+    pub fn drain_outbound(&mut self) -> Vec<Outbound> {
+        self.session.drain_outbound()
+    }
+
+    /// Where this body is and how it moves, for the wire.
+    fn stance(&self) -> protocol::Stance {
+        let controller = &self.controller;
+        let grid = self.generator.sphere().blocks();
+        let point = if controller.on_moon() {
+            grid.surface_point(controller.radial().to_array())
+        } else {
+            controller.point()
+        };
+        let facing = controller.facing();
+        let gait = Gait::of(controller);
+        let body = if controller.on_moon() {
+            protocol::Body::Moon
+        } else {
+            protocol::Body::Planet
+        };
+        protocol::Stance {
+            body: body.into(),
+            sector: point.sector.index() as u32,
+            u: point.u as f32,
+            v: point.v as f32,
+            height_m: controller.height_m() as f32,
+            facing_x: facing.x as f32,
+            facing_y: facing.y as f32,
+            facing_z: facing.z as f32,
+            gait: gait.wire().into(),
+            speed_mps: figure::speed_for(gait, controller.ground_mps(), controller.speed_mps())
+                as f32,
+            sprint: controller.sprinting(),
+        }
     }
 
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
@@ -489,7 +722,17 @@ impl Client {
         let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
         self.controller.set_drawn_footprint(footprint_m);
         self.controller.update(dt, wish, &self.generator);
-        self.figure.update(dt, &self.controller);
+        let motion = Motion::of(&self.controller);
+        self.figure.update(dt, &motion, &self.clips);
+        self.peers.update(dt, moon, &self.clips);
+        let stance = self.stance();
+        if self.session.tick(dt, stance) {
+            self.events.push(Event::Rejected {
+                message: "the server went silent".into(),
+            });
+            self.session.close();
+            self.went_offline();
+        }
         self.stats(dt);
 
         let camera = self.controller.camera(&self.generator);
@@ -543,6 +786,19 @@ impl Client {
     fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchDraw>) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
+
+        // Every body, the player's first: an avatar when its file has
+        // landed, the box figure until then.
+        let mut boxes = Vec::new();
+        let mut skinned = Vec::new();
+        let bodies = core::iter::once((&self.figure, Motion::of(&self.controller)))
+            .chain(self.peers.bodies(self.moon_position()));
+        for (figure, motion) in bodies {
+            match figure.instance(&motion, &self.clips) {
+                Some(instance) => skinned.push(instance),
+                None => boxes.extend(box_figure::parts(&motion)),
+            }
+        }
         Frame {
             camera,
             sun_direction: sun.as_vec3(),
@@ -577,12 +833,8 @@ impl Client {
                 end: self.controller.position() + self.controller.up() * 1.5,
                 radius_m: 0.65,
             },
-            boxes: if self.figure.is_worn() {
-                Vec::new()
-            } else {
-                box_figure::parts(&self.controller)
-            },
-            skinned: self.figure.instance(&self.controller).into_iter().collect(),
+            boxes,
+            skinned,
         }
     }
 
@@ -594,6 +846,12 @@ impl Client {
     }
 
     fn regenerate(&mut self, generator: Generator) {
+        // Another recipe is another world, and the link was to this one. A
+        // front end that changes worlds opens a new link afterwards.
+        if self.session.link() != session::Link::Offline {
+            self.session.close();
+            self.went_offline();
+        }
         let mode = self.controller.mode;
         // Turning a knob should leave you where you stood. But the ground
         // under a place belongs to the recipe, so the same address on new
@@ -720,4 +978,25 @@ fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     x ^ (x >> 31)
+}
+
+/// Puts one body in the avatar it wants, when the file has landed, and asks
+/// for it otherwise. True when the body changed into it just now.
+fn dress(
+    figure: &mut Figure,
+    wanted: &str,
+    wardrobe: &mut Wardrobe,
+    requests: &mut Requests,
+) -> bool {
+    match wardrobe.get(wanted) {
+        Some(worn) if figure.mesh() != Some(worn.mesh) => {
+            figure.wear(worn);
+            true
+        }
+        Some(_) => false,
+        None => {
+            wardrobe.want(wanted, requests);
+            false
+        }
+    }
 }

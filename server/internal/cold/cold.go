@@ -6,6 +6,7 @@ package cold
 import (
 	"github.com/pocketbase/pocketbase/core"
 
+	"github.com/sulram/planet/server/internal/world"
 	// Registers the schema migrations; PocketBase applies them on serve.
 	_ "github.com/sulram/planet/server/migrations"
 )
@@ -15,13 +16,17 @@ const (
 	worldsCollection = "worlds"
 )
 
-// Register binds the cold plane to the app. Nothing touches the database
-// until the app serves, after the migrations have run.
+// Register binds the cold plane to the app, and the hot plane's doors with
+// it. Nothing touches the database until the app serves, after the
+// migrations have run.
 func Register(app core.App, cfg Config) {
+	hub := world.NewHub(catalog{app: app})
+	tickets := world.NewTickets()
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		if err := applySettings(e.App, cfg); err != nil {
 			return err
 		}
+		registerHot(e, hub, tickets)
 		if err := ensureOperator(e.App, cfg.OperatorEmail); err != nil {
 			return err
 		}

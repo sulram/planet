@@ -214,10 +214,7 @@ impl Controller {
 
     /// The avatar's frame, columns right, up, back.
     pub fn body_basis(&self) -> DMat3 {
-        let up = self.frame_up;
-        let flat = self.facing - up * self.facing.dot(up);
-        let back = -flat.normalize_or(up.any_orthonormal_vector());
-        DMat3::from_cols(up.cross(back), up, back)
+        crate::figure::basis(self.frame_up, self.facing)
     }
 
     pub fn on_moon(&self) -> bool {

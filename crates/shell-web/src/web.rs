@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use client::{Client, Input, Key};
+use client::{Client, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, KeyboardEvent, MouseEvent, WheelEvent};
+use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, MouseEvent, WheelEvent};
 
 #[wasm_bindgen(start)]
 fn start() {
@@ -32,6 +32,8 @@ struct State {
     input: Input,
     on_event: js_sys::Function,
     last_frame_ms: f64,
+    /// The socket to a world server, while the page wants one.
+    link: Option<Link>,
 }
 
 /// Where the web app serves the asset root.
@@ -68,6 +70,7 @@ impl Engine {
             input: Input::default(),
             on_event,
             last_frame_ms: now_ms(),
+            link: None,
         }));
         let alive = Rc::new(RefCell::new(true));
         let listeners = listen(&canvas, &state);
@@ -94,10 +97,107 @@ impl Engine {
             .set_field(bytes)
             .map_err(|e| JsError::new(&e.to_string()))
     }
+
+    /// Opens the link to a world server at a socket URL, the ticket already
+    /// in it. The client speaks the protocol; this only carries frames. The
+    /// page hears `session` events and decides when to connect again.
+    pub fn connect(&self, url: &str) -> Result<(), JsError> {
+        self.disconnect();
+        let link = Link::open(url, &self.state).map_err(|e| JsError::new(&e))?;
+        self.state.borrow_mut().link = Some(link);
+        Ok(())
+    }
+
+    /// Closes the link, if one is open.
+    pub fn disconnect(&self) {
+        let link = self.state.borrow_mut().link.take();
+        if let Some(link) = link {
+            link.close();
+            self.state.borrow_mut().client.link_closed();
+        }
+    }
+}
+
+/// One WebSocket, and its listeners, for as long as the page wants it.
+struct Link {
+    socket: web_sys::WebSocket,
+    listeners: Vec<Listener>,
+}
+
+impl Link {
+    fn open(url: &str, state: &Rc<RefCell<State>>) -> Result<Link, String> {
+        let socket = web_sys::WebSocket::new(url).map_err(|e| format!("{url}: {e:?}"))?;
+        socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
+        let target: &web_sys::EventTarget = socket.as_ref();
+
+        let opened = {
+            let state = state.clone();
+            move |_: web_sys::Event| state.borrow_mut().client.link_opened()
+        };
+        let message = {
+            let state = state.clone();
+            move |event: web_sys::Event| {
+                let event: MessageEvent = event.unchecked_into();
+                if let Ok(buffer) = event.data().dyn_into::<js_sys::ArrayBuffer>() {
+                    let frame = js_sys::Uint8Array::new(&buffer).to_vec();
+                    state.borrow_mut().client.receive(&frame);
+                }
+            }
+        };
+        // A close after an error, or an error after a close: the client
+        // hears one closing either way, and a second is harmless.
+        let closed = {
+            let state = state.clone();
+            move |_: web_sys::Event| {
+                let mut state = state.borrow_mut();
+                if state.link.is_some() {
+                    state.link = None;
+                    state.client.link_closed();
+                }
+            }
+        };
+        let listeners = vec![
+            Listener::add(target, "open", opened),
+            Listener::add(target, "message", message),
+            Listener::add(target, "close", closed.clone()),
+            Listener::add(target, "error", closed),
+        ];
+        Ok(Link { socket, listeners })
+    }
+
+    fn send(&self, outbound: Outbound) {
+        match outbound {
+            Outbound::Frame(frame) => {
+                if let Err(error) = self.socket.send_with_u8_array(&frame) {
+                    log::warn!("send: {error:?}");
+                }
+            }
+            Outbound::Close => self.socket.close().unwrap_or(()),
+        }
+    }
+
+    fn close(self) {
+        for listener in self.listeners {
+            listener.remove();
+        }
+        let _ = self.socket.close();
+    }
+}
+
+/// Sends what the client queued for the link.
+fn pump_link(state: &Rc<RefCell<State>>) {
+    let mut held = state.borrow_mut();
+    let outbound = held.client.drain_outbound();
+    if let Some(link) = &held.link {
+        for out in outbound {
+            link.send(out);
+        }
+    }
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
+        self.disconnect();
         *self.alive.borrow_mut() = false;
         for listener in self.listeners.drain(..) {
             listener.remove();
@@ -224,6 +324,7 @@ fn run(state: Rc<RefCell<State>>, alive: Rc<RefCell<bool>>) {
             return;
         }
         fetch_assets(&state);
+        pump_link(&state);
         let (events, on_event) = {
             let mut held = state.borrow_mut();
             let events = held.frame();

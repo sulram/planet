@@ -87,7 +87,8 @@ Every milestone ends runnable end to end.
 ## M2: create world, two people see each other
 
 - [x] `server/`: PocketBase embedded, `worlds` collection, "create world" writes the recipe
-- [ ] `world.db` per world, world actor per active world
+- [x] World actor per active world (DECISIONS 66)
+- [ ] `world.db` per world, opened by the actor
 - [x] Email login: magic link (web); anonymous visitor
 - [ ] One-time code login on native
 - [ ] The cold plane moves behind the command and event seam: `list_worlds`, `create_world`, `enter_world`, with the clamping `+page.server.ts` does today living in `client` where both front ends reach it (DECISIONS 46)
@@ -96,7 +97,9 @@ Every milestone ends runnable end to end.
 - [ ] Desktop screens over that seam: sign in, a list of worlds, enter one, preview a planet with its knobs and create from it. The backoffice stays on the web
 - [ ] Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - [x] Backoffice for operators: worlds and users
-- [ ] Binary WebSocket protocol; presence; avatars (default set)
+- [x] Binary WebSocket protocol; presence; avatars (default set) (DECISIONS 66)
+- [ ] Presence on the desktop: `bun run desktop <url>` opens the same socket, once the seam item above gives it the recipe
+- [ ] Names in the world: a nametag over each peer, and a name a person sets on their account
 - [ ] Generator as WASM inside Go (wazero)
 
 ### The world generator: what a person picks when a world is made

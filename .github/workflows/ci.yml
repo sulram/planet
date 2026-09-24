@@ -54,6 +54,24 @@ jobs:
       - run: go test ./...
       - run: go build ./...
 
+  # The generated wire types are committed; this proves they are the schema's.
+  proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: true
+      - run: bun install --frozen-lockfile
+      - run: bun run setup
+      - run: bun run proto
+      - run: git diff --exit-code -- crates/protocol/src/gen server/internal/protocol
+
   web:
     runs-on: ubuntu-latest
     steps:

@@ -3,6 +3,7 @@
 	import { Alert, Spinner } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import { fieldId, type Recipe } from '$lib/world';
+	import type { Link } from '$lib/server/session';
 	import { loadEngine, type Effects, type Engine, type EngineEvent, type Mode } from './index';
 
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
@@ -27,10 +28,16 @@
 		 * the page lands you in the sea every time the coastline moves.
 		 */
 		stand?: string | null;
+		/**
+		 * The world's socket, when this is a world and not a preview. The
+		 * engine connects once it stands in the recipe, and connects again
+		 * with a fresh ticket whenever the link drops.
+		 */
+		link?: Link;
 		onevent?: (event: EngineEvent) => void;
 	}
 
-	let { recipe, fieldPath, mode, avatar, effects, stand, onevent }: Props = $props();
+	let { recipe, fieldPath, mode, avatar, effects, stand, link, onevent }: Props = $props();
 
 	type Status = 'loading' | 'shaping' | 'running' | 'missing' | 'unsupported' | 'failed';
 
@@ -49,6 +56,29 @@
 	/** Whether the arrival place has been honoured. It is good for one world. */
 	let arrived = false;
 
+	// The link: opened once the engine stands in the world the page wants,
+	// opened again after a drop, each time with a fresh ticket. The wait
+	// doubles from a second to half a minute, and a welcome resets it.
+	let linked = false;
+	let retryMs = 1000;
+	let retry: ReturnType<typeof setTimeout> | undefined;
+
+	async function connect() {
+		retry = undefined;
+		const here = engine;
+		if (!here || !link || !linked) return;
+		let url = link.url;
+		if (link.ticketPath) {
+			const ticket = await fetch(link.ticketPath, { method: 'POST' })
+				.then((response) => (response.ok ? response.json() : null))
+				.then((body: { ticket?: string } | null) => body?.ticket)
+				.catch(() => undefined);
+			if (here !== engine || !linked) return;
+			if (ticket) url += `?ticket=${encodeURIComponent(ticket)}`;
+		}
+		here.connect(url);
+	}
+
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') {
 			engineRecipe = JSON.stringify(event.recipe);
@@ -58,6 +88,23 @@
 			if (!arrived && stand && engine) {
 				arrived = true;
 				engine.command({ type: 'go_to', place: stand });
+			}
+			// The engine now stands in the world the page wanted: time to join
+			// it. The engine says the recipe in full and the page in what was
+			// chosen, so the seed and the version are what the two agree on;
+			// the engine checks the whole recipe against the server's on arrival.
+			const wanted =
+				recipe && event.recipe.seed === recipe.seed && event.recipe.generator_version === recipe.generator_version;
+			if (link && wanted && !linked) {
+				linked = true;
+				connect();
+			}
+		}
+		if (event.type === 'session') {
+			if (event.status === 'online') retryMs = 1000;
+			if (event.status === 'offline' && linked && !retry) {
+				retry = setTimeout(connect, retryMs);
+				retryMs = Math.min(retryMs * 2, 30_000);
 			}
 		}
 		if (event.type === 'mode_changed') engineMode = event.mode;
@@ -93,6 +140,8 @@
 
 		return () => {
 			destroyed = true;
+			linked = false;
+			clearTimeout(retry);
 			engine = undefined;
 			created?.free();
 		};

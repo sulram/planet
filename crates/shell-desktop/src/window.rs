@@ -151,10 +151,14 @@ impl Stage {
                     ));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
+                // The desktop has no socket yet (ROADMAP M2): the link stays
+                // offline and nobody else is ever here.
                 Event::RecipeChanged { .. }
                 | Event::Ready { .. }
                 | Event::ModeChanged { .. }
-                | Event::EffectsChanged { .. } => {}
+                | Event::EffectsChanged { .. }
+                | Event::Session { .. }
+                | Event::Peers { .. } => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
         }

@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Panel, Segmented, Stat } from '$lib/ds';
+	import { Badge, Panel, Segmented, Stat } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
+	import type { Link } from '$lib/server/session';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import EngineView from './EngineView.svelte';
 	import Settings from './Settings.svelte';
-	import { modes, type Effects, type EngineEvent, type Mode } from './index';
+	import { modes, type Effects, type EngineEvent, type Mode, type PeerInfo, type SessionStatus } from './index';
 
 	// The full viewport engine with its floating panel: what `/play` and
 	// `/w/[id]` share. The page supplies the top of the panel; mode, key hints
@@ -29,15 +30,26 @@
 		fieldPath?: string;
 		/** Asset path of the visitor's avatar, from the page load. */
 		avatar: string | null;
+		/** The world's socket, when this is a world other people can be in. */
+		link?: Link;
 		/** Called once the engine reports which generator version it runs. */
 		onready?: (generatorVersion: number) => void;
 		children: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, onready, children }: Props = $props();
+	let { title, recipe, fieldPath, avatar, link, onready, children }: Props = $props();
 
 	let mode = $state<Mode>('walk');
 	let stats = $state<Extract<EngineEvent, { type: 'stats' }>>();
+	let session = $state<SessionStatus>('offline');
+	let peers = $state<PeerInfo[]>([]);
+
+	// A peer is shown by name; someone without one is told apart by their
+	// session number, which the world gave them on arrival.
+	function who(peer: PeerInfo): string {
+		if (peer.name) return peer.name;
+		return t(peer.visitor ? 'engine.here.visitor' : 'engine.here.someone', { n: peer.session });
+	}
 
 	// The address bar is where you are. Read once, synchronously, because the
 	// engine asks for it as soon as its first world is built; `null` on the
@@ -98,6 +110,8 @@
 		if (event.type === 'ready') onready?.(event.generator_version);
 		else if (event.type === 'mode_changed') mode = event.mode;
 		else if (event.type === 'stats') stats = event;
+		else if (event.type === 'session') session = event.status;
+		else if (event.type === 'peers') peers = event.peers;
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
 			effects = event.effects;
@@ -117,13 +131,29 @@
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {fieldPath} {mode} {avatar} stand={arrivedAt} effects={wanted} onevent={receive} />
+	<EngineView {recipe} {fieldPath} {mode} {avatar} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
 	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}
 			<a class="home" href="/">{t('common.appName')}</a>
 		{/snippet}
 		{@render children()}
+		{#if link}
+			<section class="here">
+				<header>
+					<h3>{t('engine.here')}</h3>
+					<Badge variant={session === 'online' ? 'solid' : 'outline'}>{t(`engine.session.${session}`)}</Badge>
+				</header>
+				<ul>
+					{#if session === 'online'}
+						<li class="you">{t('engine.here.you')}</li>
+					{/if}
+					{#each peers as peer (peer.session)}
+						<li>{who(peer)}</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 		<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={(value) => (mode = value)} />
 		<ul class="hints">
 			{#each hints as hint (hint.keys)}
@@ -156,6 +186,29 @@
 	}
 	.home:hover {
 		color: var(--text);
+	}
+	.here {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-2);
+	}
+	.here header {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--sp-3);
+	}
+	.here h3 {
+		letter-spacing: var(--ls-caps);
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.here ul {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+	}
+	.you {
+		color: var(--text-muted);
 	}
 	.hints {
 		display: flex;

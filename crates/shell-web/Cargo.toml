@@ -34,6 +34,10 @@ web-sys = { version = "0.3", features = [
     "Performance",
     "Response",
     "AddEventListenerOptions",
+    "WebSocket",
+    "BinaryType",
+    "MessageEvent",
+    "CloseEvent",
 ] }
 
 [lints]

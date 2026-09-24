@@ -94,10 +94,39 @@ pub enum Event {
         /// whoever holds the locale.
         bearing_deg: Option<f64>,
     },
+    /// The link to the world server, whenever it changes. Sent once at the
+    /// start too, offline.
+    Session {
+        status: SessionStatus,
+        /// This client's session in the world, while online.
+        session: Option<u32>,
+    },
+    /// Who else is here, whenever that changes. Empty when offline.
+    Peers {
+        peers: Vec<PeerInfo>,
+    },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {
         message: String,
     },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionStatus {
+    Offline,
+    /// The socket is open and Welcome is awaited.
+    Connecting,
+    Online,
+}
+
+/// Someone else in the world, as a front end lists them. The name is the
+/// person's own or empty; a visitor is signed out.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct PeerInfo {
+    pub session: u32,
+    pub name: String,
+    pub visitor: bool,
 }
 
 impl Command {

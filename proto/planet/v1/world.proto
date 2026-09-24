@@ -1,0 +1,149 @@
+// The wire between a client and a world server. One message per WebSocket
+// binary frame: a ClientMessage one way, a ServerMessage the other.
+//
+// The schema is the single source for Rust (crates/protocol) and Go
+// (server/internal/protocol); `bun run proto` regenerates both. A change here
+// that an older client cannot read bumps PROTOCOL in both, and Hello says
+// which one a client speaks.
+syntax = "proto3";
+
+package planet.v1;
+
+option go_package = "github.com/sulram/planet/server/internal/protocol;protocol";
+
+// The body a stance is measured from. Every body is parametrised on the
+// planet's sector grid: on the moon the column is the one its radial passes
+// through, as the place code does it.
+enum Body {
+  BODY_PLANET = 0;
+  BODY_MOON = 1;
+}
+
+// How a body moves right now. One clip each, on every client.
+enum Gait {
+  GAIT_IDLE = 0;
+  GAIT_WALK = 1;
+  GAIT_RUN = 2;
+  GAIT_JUMP = 3;
+  GAIT_FALL = 4;
+  GAIT_FLY = 5;
+  GAIT_SWIM = 6;
+}
+
+// Where a body is and how it moves: what presence carries, many times a
+// second. A pose is what a link carries; a stance is what a peer sends.
+// The place is an address with fractional blocks, never a float position.
+message Stance {
+  Body body = 1;
+  // 0 to 5.
+  uint32 sector = 2;
+  // Blocks along the sector's axes. A float holds a sector side of 2^16 to
+  // 1/256 of a block, which is 2 mm.
+  float u = 3;
+  float v = 4;
+  // Feet over the datum sphere of the body.
+  float height_m = 5;
+  // Unit vector in world space, the way the body faces.
+  float facing_x = 6;
+  float facing_y = 7;
+  float facing_z = 8;
+  Gait gait = 9;
+  // What the clip is played at: along the ground on foot, through the water
+  // when swimming.
+  float speed_mps = 10;
+  // Running on foot, flying flat out.
+  bool sprint = 11;
+}
+
+// What a client says first. Who it is was settled before: a ticket from the
+// cold plane rides the socket URL and is redeemed on the way in.
+message Hello {
+  // The protocol this client speaks. Refused when it is not the server's.
+  uint32 protocol = 1;
+  // The avatar worn, as an asset reference: a path under the asset root, or
+  // a URL. A person's own avatar loads through the same reference.
+  string avatar = 2;
+}
+
+// The avatar changed.
+message Wear {
+  string avatar = 1;
+}
+
+message ClientMessage {
+  oneof message {
+    Hello hello = 1;
+    Stance stance = 2;
+    Wear wear = 3;
+  }
+}
+
+// Seed + params + generator version, as the worlds collection holds it. The
+// params are the JSON the generator version owns.
+message Recipe {
+  // A u64 as 16 lowercase hex digits.
+  string seed = 1;
+  uint32 generator_version = 2;
+  string params_json = 3;
+}
+
+// Someone in the world.
+message Peer {
+  // Given by the world actor, unique while the world is active.
+  uint32 session = 1;
+  // As the person set it. Empty when they set none.
+  string name = 2;
+  // Signed out. Looks, never builds.
+  bool visitor = 3;
+  string avatar = 4;
+  // Absent until the peer has said where it is.
+  Stance stance = 5;
+}
+
+// The answer to Hello: who you are here, what world this is, who is here.
+message Welcome {
+  uint32 session = 1;
+  Recipe recipe = 2;
+  repeated Peer peers = 3;
+}
+
+message Joined {
+  Peer peer = 1;
+}
+
+message Left {
+  uint32 session = 1;
+}
+
+message Wearing {
+  uint32 session = 1;
+  string avatar = 2;
+}
+
+message Moved {
+  uint32 session = 1;
+  Stance stance = 2;
+}
+
+// Every stance that changed since the last tick, yours included: ignore your
+// own session. Sent on every tick that has something to say, and every few
+// seconds regardless, so a silent link is a dead one.
+message Stances {
+  repeated Moved moved = 1;
+}
+
+// Sent instead of Welcome, then the socket closes.
+message Refused {
+  string reason = 1;
+}
+
+message ServerMessage {
+  oneof message {
+    Welcome welcome = 1;
+    Joined joined = 2;
+    Left left = 3;
+    Stances stances = 4;
+    Wearing wearing = 5;
+    Refused refused = 6;
+  }
+}

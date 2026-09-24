@@ -43,8 +43,21 @@ export type Command =
 	 */
 	| { type: 'go_to'; place: string };
 
+export type SessionStatus = 'offline' | 'connecting' | 'online';
+
+/** Someone else in the world. The name is their own, or empty. */
+export interface PeerInfo {
+	session: number;
+	name: string;
+	visitor: boolean;
+}
+
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }
+	/** The link to the world server, whenever it changes. */
+	| { type: 'session'; status: SessionStatus; session: number | null }
+	/** Who else is here, whenever that changes. Empty when offline. */
+	| { type: 'peers'; peers: PeerInfo[] }
 	| { type: 'recipe_changed'; recipe: Recipe }
 	| { type: 'mode_changed'; mode: Mode }
 	| { type: 'avatar_changed'; path: string }
@@ -72,7 +85,9 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'mode_changed',
 	'avatar_changed',
 	'effects_changed',
-	'stats'
+	'stats',
+	'session',
+	'peers'
 ]);
 
 /** Parses one event. Unknown types and malformed payloads yield null. */

@@ -21,6 +21,11 @@ describe('parseEvent', () => {
 			tone_map: 'aces'
 		};
 		expect(parseEvent(JSON.stringify({ type: 'effects_changed', effects }))).toEqual({ type: 'effects_changed', effects });
+		expect(parseEvent('{"type":"session","status":"online","session":3}')).toEqual({ type: 'session', status: 'online', session: 3 });
+		expect(parseEvent('{"type":"peers","peers":[{"session":2,"name":"Ada","visitor":false}]}')).toEqual({
+			type: 'peers',
+			peers: [{ session: 2, name: 'Ada', visitor: false }]
+		});
 	});
 
 	test('ignores unknown types and malformed payloads', () => {

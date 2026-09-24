@@ -42,7 +42,13 @@ this file in the same change.
 | Op log | Append-only record of ops: who, when, address, before, after. |
 | Hot plane | Chunks, ops, presence, streaming. Our code, `world.db`, WebSocket. |
 | Cold plane | Accounts, worlds, volumes, roles, records. PocketBase. |
-| World actor | The single goroutine that owns one active world's state and writes. |
+| World actor | The single goroutine that owns one active world's state and writes. Started by the hub on the first session, gone after the last. |
+| Hub | The registry of active worlds: one actor each. The socket route hands every connection to it. |
+| Session | One connection inside a world: a person or agent, from Hello to Left. Numbered by the actor. |
+| Peer | Another session in the same world, as a client sees it: a name, an avatar reference and a stance. |
+| Stance | Where a body is and how it moves, as presence carries it fifteen times a second: an address with fractional blocks, a height, a facing, a gait and a speed. A pose is what a link carries; a stance is what a peer sends. |
+| Ticket | A one-use, one-minute token the cold plane mints for a signed in person and the socket redeems. How an identity crosses to the hot plane without the session cookie. |
+| Link (code) | The socket between a client and a world server, as the platform shell holds it. The client owns the protocol, the shell owns the socket. |
 | Volume | An integer address box inside one sector where building is granted. Nests. The only place voxels exist. |
 | Stamp | A volume's flatten and blend footprint, applied when the ground is sampled. How anything that is not terrain seats into terrain, at every level, without being an edit. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
