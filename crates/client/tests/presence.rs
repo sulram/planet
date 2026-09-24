@@ -343,3 +343,36 @@ fn heads_are_anchored_on_the_screen_while_online() {
         "the last anchors are taken down: {events:?}"
     );
 }
+
+#[test]
+fn a_name_rides_in_hello_and_a_peer_renamed_is_listed_anew() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command(Command::SetName { name: "Zed".into() });
+    client.link_opened();
+    let hello = sent(&mut client);
+    assert!(
+        matches!(&hello[..], [client_message::Message::Hello(h)] if h.name == "Zed"),
+        "{hello:?}"
+    );
+    client.receive(&welcome(&client, 1, vec![peer(2, "Ada")]));
+    sent(&mut client);
+
+    client.command(Command::SetName { name: "Zoe".into() });
+    let out = sent(&mut client);
+    assert!(
+        matches!(&out[..], [client_message::Message::Rename(r)] if r.name == "Zoe"),
+        "{out:?}"
+    );
+
+    client.drain_events();
+    client.receive(&server(server_message::Message::Renamed(
+        protocol::Renamed {
+            session: 2,
+            name: "Grace".into(),
+        },
+    )));
+    assert!(matches!(
+        client.drain_events().last(),
+        Some(Event::Peers { peers }) if peers.len() == 1 && peers[0].name == "Grace"
+    ));
+}

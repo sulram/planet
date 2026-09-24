@@ -63,11 +63,19 @@ message Hello {
   // The avatar worn, as an asset reference: a path under the asset root, or
   // a URL. A person's own avatar loads through the same reference.
   string avatar = 2;
+  // What to be called, at most `NameChars`. A signed in person's account
+  // name wins over it; a visitor is called this or nothing.
+  string name = 3;
 }
 
 // The avatar changed.
 message Wear {
   string avatar = 1;
+}
+
+// The name changed. Empty is a name too: back to nobody in particular.
+message Rename {
+  string name = 1;
 }
 
 // Who hears a line.
@@ -96,6 +104,7 @@ message ClientMessage {
     Stance stance = 2;
     Wear wear = 3;
     Say say = 4;
+    Rename rename = 5;
   }
 }
 
@@ -141,6 +150,11 @@ message Wearing {
   string avatar = 2;
 }
 
+message Renamed {
+  uint32 session = 1;
+  string name = 2;
+}
+
 message Moved {
   uint32 session = 1;
   Stance stance = 2;
@@ -176,5 +190,6 @@ message ServerMessage {
     Wearing wearing = 5;
     Refused refused = 6;
     Said said = 7;
+    Renamed renamed = 8;
   }
 }

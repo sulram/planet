@@ -238,6 +238,7 @@
 				<Icon name="globe" label="World" />
 				<Icon name="send" label="Send" />
 				<Icon name="map-pin" label="Place" />
+				<Icon name="pencil" label="Edit" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
 			</div>
 		</section>

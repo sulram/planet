@@ -122,6 +122,8 @@ export const en = {
 	'engine.settings.defaults': 'Defaults',
 	'engine.here': 'Here',
 	'engine.here.you': 'you',
+	'engine.here.name': 'Your name',
+	'engine.here.rename': 'Edit name',
 	'engine.here.visitor': 'Visitor {n}',
 	'engine.here.someone': 'Someone {n}',
 	'engine.session.offline': 'Offline',

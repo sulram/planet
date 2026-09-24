@@ -122,6 +122,8 @@ export const pt: Messages = {
 	'engine.settings.toneMap.linear': 'Linear',
 	'engine.here': 'Aqui',
 	'engine.here.you': 'você',
+	'engine.here.name': 'Seu nome',
+	'engine.here.rename': 'Editar nome',
 	'engine.here.visitor': 'Visitante {n}',
 	'engine.here.someone': 'Alguém {n}',
 	'engine.session.offline': 'Desconectado',

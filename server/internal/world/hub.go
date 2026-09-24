@@ -17,7 +17,7 @@ import (
 
 // Protocol is the wire version this server speaks. Hello says the client's;
 // any other number is refused. Kept equal to `protocol::PROTOCOL` in Rust.
-const Protocol = 2
+const Protocol = 3
 
 // A client says Hello within this long of connecting, and then something at
 // least every few seconds; a silent link is a dead one.
@@ -69,7 +69,7 @@ func (h *Hub) Join(ctx context.Context, worldID string, identity Identity, conn 
 	if err != nil {
 		return refuse(ctx, conn, err.Error())
 	}
-	s := newSession(identity, hello.Avatar, conn)
+	s := newSession(identity, hello.Avatar, cleanName(hello.Name), conn)
 	a.inbox <- inbound{kind: joinKind, session: s}
 	return s.run(ctx, a)
 }

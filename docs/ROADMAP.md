@@ -99,7 +99,7 @@ Every milestone ends runnable end to end.
 - [x] Backoffice for operators: worlds and users
 - [x] Binary WebSocket protocol; presence; avatars (default set) (DECISIONS 66)
 - [ ] Presence on the desktop: `bun run desktop <url>` opens the same socket, once the seam item above gives it the recipe
-- [ ] Names in the world: a nametag over each peer (the web hangs one on `anchors`; the desktop waits for its socket), and a name a person sets on their account
+- [x] Names in the world: a nametag over each peer (the web hangs one on `anchors`; the desktop waits for its socket), and a name a person sets where it is shown: on the account when signed in, in a cookie for a visitor, and live in the world through `Rename`
 - [x] Chat: `Say` and `Said` on the socket, scopes `near` and `world`, `@here` shares a place to teleport to; limits in the actor (DECISIONS 69)
 - [ ] Generator as WASM inside Go (wazero)
 

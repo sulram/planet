@@ -270,6 +270,36 @@ func TestWhatIsRefused(t *testing.T) {
 	}
 }
 
+func TestANameIsGivenAndChanged(t *testing.T) {
+	hub := NewHub(fixedCatalog{"w1": recipe(t)})
+	a := connect(t, hub, "w1", &pb.Hello{Protocol: Protocol, Name: "  Zed   the  " + strings.Repeat("z", NameChars)})
+	a.hear()
+	b := connect(t, hub, "w1", hello())
+	peer := b.hear().GetWelcome().Peers[0]
+	if peer.Name != "Zed the "+strings.Repeat("z", NameChars-8) || !peer.Visitor {
+		t.Fatalf("a visitor is called what it said, on one line and cut at NameChars: %q", peer.Name)
+	}
+
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Rename{Rename: &pb.Rename{Name: "Ada"}}})
+	renamed := b.hearUntil(func(m *pb.ServerMessage) bool { return m.GetRenamed() != nil }).GetRenamed()
+	if renamed.Session != peer.Session || renamed.Name != "Ada" {
+		t.Fatalf("a new name is relayed: %v", renamed)
+	}
+
+	// An account's name is the account's: the hello cannot override it.
+	tickets := NewTickets()
+	who, _ := tickets.Redeem(tickets.Mint(Identity{UserID: "u1", Name: "Grace"}))
+	c := connectAs(t, hub, "w1", who, &pb.Hello{Protocol: Protocol, Name: "Impostor"})
+	c.hear()
+	joined := b.hearUntil(func(m *pb.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
+	if joined.Peer.Name != "Grace" {
+		t.Fatalf("the ticket names the person: %v", joined.Peer)
+	}
+	a.leave()
+	b.leave()
+	c.leave()
+}
+
 func TestALineReachesItsScope(t *testing.T) {
 	hub := NewHub(fixedCatalog{"w1": recipe(t)})
 	a := connect(t, hub, "w1", hello())

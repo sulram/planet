@@ -45,6 +45,10 @@ Numbers marked (p) are proposed and not yet confirmed.
   and headset (PocketBase OTP). Wallets are optional links, later.
 - Visitor: anonymous, enters any world, walks and looks, never builds.
   `worlds` is publicly readable; `/play` and `/w/[id]` need no login.
+- A name is set where it is shown, in the world panel: `users.name` for a
+  signed in person, a cookie for a visitor, and `Rename` on the socket at
+  once. The ticket's name wins over what Hello says, so an account cannot be
+  impersonated by a client. At most `NameChars`.
 - Sign up and sign in are one flow: the first code request creates the
   account (server hook), the first valid code verifies it. No passwords.
 - The email carries a link `{APP_URL}/login/verify?otpId=&code=` and the code.

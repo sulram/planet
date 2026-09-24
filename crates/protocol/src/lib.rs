@@ -8,7 +8,7 @@ pub use prost::Message;
 
 /// The protocol a client speaks, said in `Hello`. Bumped with any change an
 /// older client cannot read; the server refuses every other number.
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 pub mod v1 {
     #![allow(clippy::all, clippy::pedantic)]

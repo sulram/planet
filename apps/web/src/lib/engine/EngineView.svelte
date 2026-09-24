@@ -17,6 +17,8 @@
 		mode: Mode;
 		/** Asset path of the avatar to wear. Null wears any the manifest offers. */
 		avatar: string | null;
+		/** What to be called. Sent before the link opens, and again whenever it changes. */
+		name?: string;
 		/** How the picture is made. Undefined leaves the engine as it is. */
 		effects?: Effects;
 		/**
@@ -37,7 +39,7 @@
 		onevent?: (event: EngineEvent) => void;
 	}
 
-	let { recipe, fieldPath, mode, avatar, effects, stand, link, onevent }: Props = $props();
+	let { recipe, fieldPath, mode, avatar, name = '', effects, stand, link, onevent }: Props = $props();
 
 	/**
 	 * A command with no prop of its own: a line said, a place gone to. Dropped
@@ -69,6 +71,7 @@
 	let engineRecipe = '';
 	let engineMode: Mode | undefined;
 	let engineAvatar: string | undefined;
+	let engineName: string | undefined;
 	let engineEffects = '';
 	/** The field already handed to the engine, by id. */
 	let engineField: string | undefined;
@@ -206,6 +209,12 @@
 		if (!engine || (avatar && avatar === engineAvatar)) return;
 		if (avatar) engineAvatar = avatar;
 		engine.command(avatar ? { type: 'set_avatar', path: avatar } : { type: 'random_avatar' });
+	});
+
+	$effect(() => {
+		if (!engine || name === engineName) return;
+		engineName = name;
+		engine.command({ type: 'set_name', name });
 	});
 
 	$effect(() => {

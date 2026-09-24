@@ -2,7 +2,7 @@
 	// One icon, drawn as a stroke in the current colour at the text size.
 	// The paths are Lucide's (ISC): adding one is copying its path data here,
 	// so the set stays the handful the product uses and no library rides along.
-	export type IconName = 'globe' | 'users' | 'send' | 'map-pin';
+	export type IconName = 'globe' | 'users' | 'send' | 'map-pin' | 'pencil';
 
 	interface Props {
 		name: IconName;
@@ -16,7 +16,9 @@
 		globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 0a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20ZM2 12h20',
 		users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm13 18v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
 		send: 'm22 2-7 20-4-9-9-4ZM22 2 11 13',
-		'map-pin': 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0ZM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z'
+		'map-pin': 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0ZM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+		pencil:
+			'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zm-6.174-1.812 4 4'
 	};
 </script>
 

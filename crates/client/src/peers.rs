@@ -204,6 +204,12 @@ impl Peers {
         }
     }
 
+    pub fn renamed(&mut self, session: u32, name: &str) {
+        if let Some(peer) = self.by_session.get_mut(&session) {
+            peer.info.name = name.to_owned();
+        }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Peer> {
         self.by_session.values()
     }

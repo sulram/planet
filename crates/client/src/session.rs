@@ -66,7 +66,7 @@ impl Session {
     }
 
     /// The link is open: say hello.
-    pub fn opened(&mut self, avatar: &str) {
+    pub fn opened(&mut self, avatar: &str, name: &str) {
         self.link = Link::Connecting;
         self.since_sent_s = 0.0;
         self.since_heard_s = 0.0;
@@ -74,7 +74,16 @@ impl Session {
         self.say(client_message::Message::Hello(protocol::Hello {
             protocol: protocol::PROTOCOL,
             avatar: avatar.to_owned(),
+            name: name.to_owned(),
         }));
+    }
+
+    pub fn rename(&mut self, name: &str) {
+        if self.online() {
+            self.say(client_message::Message::Rename(protocol::Rename {
+                name: name.to_owned(),
+            }));
+        }
     }
 
     pub fn welcomed(&mut self, session: u32) {

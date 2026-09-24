@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { translate } from '$lib/i18n/config';
 import { visitorAvatar } from '$lib/server/avatar';
+import { visitorName } from '$lib/server/name';
 import { pbStatus } from '$lib/server/pb';
 import { servedField } from '$lib/server/fields';
 import { worldLink } from '$lib/server/session';
@@ -18,6 +19,7 @@ export const load: PageServerLoad = async (event) => {
 			// entered: the engine says so rather than showing another planet.
 			fieldPath: await servedField(fieldId(world.recipe)),
 			avatar: await visitorAvatar(event),
+			name: visitorName(event),
 			link: worldLink(world.id, locals.user !== null)
 		};
 	} catch (err) {

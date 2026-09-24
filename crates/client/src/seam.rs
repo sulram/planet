@@ -76,6 +76,12 @@ pub enum Command {
     GoTo {
         place: String,
     },
+    /// What to be called: said in Hello and, while online, changed at once.
+    /// A signed in person's account name wins on the server; a front end
+    /// keeps the account in step itself. Empty is a name too.
+    SetName {
+        name: String,
+    },
     /// Say a line to whoever is in scope. With `here`, where you stand rides
     /// along, filled in by the server from the stance it holds, and comes
     /// back in [`Event::Said`] as a place. Nothing goes out while offline.

@@ -10,4 +10,4 @@
 	<title>{data.world.name} · {t('common.appName')}</title>
 </svelte:head>
 
-<Stage title={data.world.name} recipe={data.world.recipe} fieldPath={data.fieldPath ?? undefined} avatar={data.avatar} link={data.link} />
+<Stage title={data.world.name} recipe={data.world.recipe} fieldPath={data.fieldPath ?? undefined} avatar={data.avatar} name={data.name} link={data.link} />

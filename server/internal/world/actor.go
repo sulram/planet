@@ -29,6 +29,22 @@ const (
 	lineWindow = 5 * time.Second
 )
 
+// NameChars is the most a name carries. A UI holds the same limit.
+const NameChars = 24
+
+// cleanName is a name as the world keeps it: one line, trimmed, cut at
+// NameChars. Empty is nobody in particular, which is allowed.
+func cleanName(name string) string {
+	if !utf8.ValidString(name) {
+		return ""
+	}
+	name = strings.Join(strings.Fields(name), " ")
+	if runes := []rune(name); len(runes) > NameChars {
+		name = string(runes[:NameChars])
+	}
+	return strings.TrimSpace(name)
+}
+
 type inboundKind uint8
 
 const (
@@ -139,6 +155,12 @@ func (a *actor) handle(s *session, message *pb.ClientMessage) {
 		}}}, s)
 	case *pb.ClientMessage_Say:
 		a.say(s, m.Say, time.Now())
+	case *pb.ClientMessage_Rename:
+		s.name = cleanName(m.Rename.Name)
+		a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Renamed{Renamed: &pb.Renamed{
+			Session: s.id,
+			Name:    s.name,
+		}}}, s)
 	}
 }
 

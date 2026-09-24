@@ -47,12 +47,22 @@ pub struct Hello {
     /// a URL. A person's own avatar loads through the same reference.
     #[prost(string, tag="2")]
     pub avatar: ::prost::alloc::string::String,
+    /// What to be called, at most `NameChars`. A signed in person's account
+    /// name wins over it; a visitor is called this or nothing.
+    #[prost(string, tag="3")]
+    pub name: ::prost::alloc::string::String,
 }
 /// The avatar changed.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Wear {
     #[prost(string, tag="1")]
     pub avatar: ::prost::alloc::string::String,
+}
+/// The name changed. Empty is a name too: back to nobody in particular.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Rename {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
 }
 /// A line of chat. Relayed to everyone in scope, the speaker included, and
 /// never stored. Dropped, and nobody told, past the actor's length and rate
@@ -71,7 +81,7 @@ pub struct Say {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientMessage {
-    #[prost(oneof="client_message::Message", tags="1, 2, 3, 4")]
+    #[prost(oneof="client_message::Message", tags="1, 2, 3, 4, 5")]
     pub message: ::core::option::Option<client_message::Message>,
 }
 /// Nested message and enum types in `ClientMessage`.
@@ -86,6 +96,8 @@ pub mod client_message {
         Wear(super::Wear),
         #[prost(message, tag="4")]
         Say(super::Say),
+        #[prost(message, tag="5")]
+        Rename(super::Rename),
     }
 }
 /// Seed + params + generator version, as the worlds collection holds it. The
@@ -145,6 +157,13 @@ pub struct Wearing {
     #[prost(string, tag="2")]
     pub avatar: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Renamed {
+    #[prost(uint32, tag="1")]
+    pub session: u32,
+    #[prost(string, tag="2")]
+    pub name: ::prost::alloc::string::String,
+}
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct Moved {
     #[prost(uint32, tag="1")]
@@ -181,7 +200,7 @@ pub struct Refused {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerMessage {
-    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 7")]
+    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 7, 8")]
     pub message: ::core::option::Option<server_message::Message>,
 }
 /// Nested message and enum types in `ServerMessage`.
@@ -202,6 +221,8 @@ pub mod server_message {
         Refused(super::Refused),
         #[prost(message, tag="7")]
         Said(super::Said),
+        #[prost(message, tag="8")]
+        Renamed(super::Renamed),
     }
 }
 /// The body a stance is measured from. Every body is parametrised on the

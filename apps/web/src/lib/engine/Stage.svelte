@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Badge, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
 	import type { Link } from '$lib/server/session';
@@ -11,7 +11,7 @@
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
 	import Settings from './Settings.svelte';
-	import { modes, type Anchor, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
+	import { modes, NAME_CHARS, type Anchor, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
 	import { who } from './who';
 
 	// The full viewport engine with its floating panel: what `/play` and
@@ -35,6 +35,8 @@
 		fieldPath?: string;
 		/** Asset path of the visitor's avatar, from the page load. */
 		avatar: string | null;
+		/** What this person is called, from the page load. Empty when nobody said. */
+		name?: string;
 		/** The world's socket, when this is a world other people can be in. */
 		link?: Link;
 		/** Called once the engine reports which generator version it runs. */
@@ -43,7 +45,46 @@
 		children?: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, link, onready, children }: Props = $props();
+	let { title, recipe, fieldPath, avatar, name = '', link, onready, children }: Props = $props();
+
+	// The name, edited where it is shown. The engine hears it at once, so the
+	// world does too, and the page keeps it for the next visit: on the account
+	// when signed in, in a cookie for a visitor. Best effort, like the avatar.
+	// The page's name is the starting point only: from here on it is edited.
+	// svelte-ignore state_referenced_locally
+	let myName = $state(name);
+	let editing = $state(false);
+	let draft = $state('');
+	let nameInput: HTMLInputElement | undefined = $state();
+
+	function editName() {
+		draft = myName;
+		editing = true;
+		requestAnimationFrame(() => nameInput?.select());
+	}
+
+	function keepName() {
+		if (!editing) return;
+		editing = false;
+		const next = [...draft.split(/\s+/).filter(Boolean).join(' ')].slice(0, NAME_CHARS).join('').trim();
+		if (next === myName) return;
+		myName = next;
+		fetch('/name', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ name: next })
+		}).catch(() => {});
+	}
+
+	function onNameKey(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			keepName();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			editing = false;
+		}
+	}
 
 	let view = $state<ReturnType<typeof EngineView>>();
 	let mode = $state<Mode>('walk');
@@ -157,7 +198,7 @@
 </script>
 
 <div class="stage">
-	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
+	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} name={myName} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
 	{#if link}
 		<Balloons {anchors} {peers} {me} {lines} />
 		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />
@@ -180,7 +221,27 @@
 				</header>
 				<ul>
 					{#if session === 'online'}
-						<li class="you">{t('engine.here.you')}</li>
+						<li class="you">
+							{#if editing}
+								<Input
+									bind:element={nameInput}
+									bind:value={draft}
+									maxlength={NAME_CHARS * 2}
+									placeholder={t('engine.here.name')}
+									aria-label={t('engine.here.name')}
+									autocomplete="off"
+									spellcheck="false"
+									onkeydown={onNameKey}
+									onblur={keepName}
+								/>
+							{:else}
+								<span>{myName || t('engine.here.you')}</span>
+								{#if myName}<span class="muted">{t('engine.here.you')}</span>{/if}
+								<button type="button" class="edit" title={t('engine.here.rename')} onclick={editName}>
+									<Icon name="pencil" label={t('engine.here.rename')} />
+								</button>
+							{/if}
+						</li>
 					{/if}
 					{#each peers as peer (peer.session)}
 						<li>{who(peer)}</li>
@@ -242,6 +303,25 @@
 		gap: var(--sp-1);
 	}
 	.you {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+		min-height: var(--control-h);
+	}
+	.muted {
 		color: var(--text-muted);
+	}
+	.edit {
+		display: inline-grid;
+		place-items: center;
+		width: var(--control-h);
+		height: var(--control-h);
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.edit:hover {
+		color: var(--text);
 	}
 </style>

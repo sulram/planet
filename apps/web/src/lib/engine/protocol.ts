@@ -12,6 +12,8 @@ export type Scope = 'near' | 'world';
 export const scopes = ['near', 'world'] as const satisfies readonly Scope[];
 /** The most a line carries, in characters (code points). The server drops longer ones unheard. */
 export const LINE_CHARS = 500;
+/** The most a name carries. The server cuts longer ones. */
+export const NAME_CHARS = 24;
 
 export type ToneMap = 'aces' | 'agx' | 'neutral' | 'reinhard' | 'linear';
 export const toneMaps = ['aces', 'agx', 'neutral', 'reinhard', 'linear'] as const satisfies readonly ToneMap[];
@@ -49,7 +51,9 @@ export type Command =
 	 */
 	| { type: 'go_to'; place: string }
 	/** Say a line. With `here`, where you stand rides along and comes back as a place. */
-	| { type: 'say'; scope: Scope; text: string; here?: boolean };
+	| { type: 'say'; scope: Scope; text: string; here?: boolean }
+	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
+	| { type: 'set_name'; name: string };
 
 export type SessionStatus = 'offline' | 'connecting' | 'online';
 

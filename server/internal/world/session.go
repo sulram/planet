@@ -20,8 +20,11 @@ type session struct {
 	id       uint32
 	identity Identity
 	avatar   string
-	stance   *pb.Stance
-	conn     Conn
+	// What the person is called here: the account's name, or the one a
+	// visitor gave. Changed by Rename.
+	name   string
+	stance *pb.Stance
+	conn   Conn
 	// When the last lineBurst lines were said, oldest first, for the rate
 	// limit. Touched by the actor only.
 	said [lineBurst]time.Time
@@ -32,10 +35,14 @@ type session struct {
 	once  sync.Once
 }
 
-func newSession(identity Identity, avatar string, conn Conn) *session {
+func newSession(identity Identity, avatar, name string, conn Conn) *session {
+	if identity.Name != "" {
+		name = identity.Name
+	}
 	return &session{
 		identity: identity,
 		avatar:   avatar,
+		name:     name,
 		conn:     conn,
 		out:      make(chan []byte, outboxDepth),
 		ended:    make(chan struct{}),
@@ -45,7 +52,7 @@ func newSession(identity Identity, avatar string, conn Conn) *session {
 func (s *session) peer() *pb.Peer {
 	return &pb.Peer{
 		Session: s.id,
-		Name:    s.identity.Name,
+		Name:    s.name,
 		Visitor: s.identity.Visitor(),
 		Avatar:  s.avatar,
 		Stance:  s.stance,

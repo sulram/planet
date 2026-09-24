@@ -70,6 +70,8 @@ pub struct Client {
     wants_random_avatar: bool,
     /// The asset reference of the avatar asked for last.
     wanted_avatar: Option<String>,
+    /// What to be called, as the front end set it. Rides in Hello.
+    wanted_name: String,
     events: Vec<Event>,
     effects: Effects,
     /// Width over height of the view, for culling.
@@ -118,6 +120,7 @@ impl Client {
             manifest: None,
             wants_random_avatar: false,
             wanted_avatar: None,
+            wanted_name: String::new(),
             events: vec![Event::Ready {
                 generator_version: GENERATOR_VERSION,
             }],
@@ -344,6 +347,10 @@ impl Client {
                 }
             }
             Command::Say { scope, text, here } => self.session.say_line(scope.wire(), text, here),
+            Command::SetName { name } => {
+                self.session.rename(&name);
+                self.wanted_name = name;
+            }
         }
     }
 
@@ -521,8 +528,10 @@ impl Client {
     /// Which world is in the socket's address; who this is was settled by
     /// the ticket that rode along with it.
     pub fn link_opened(&mut self) {
-        self.session
-            .opened(self.wanted_avatar.as_deref().unwrap_or(""));
+        self.session.opened(
+            self.wanted_avatar.as_deref().unwrap_or(""),
+            &self.wanted_name,
+        );
         self.events.push(Event::Session {
             status: SessionStatus::Connecting,
             session: None,
@@ -594,6 +603,10 @@ impl Client {
             Some(Message::Wearing(wearing)) => {
                 self.peers.wearing(wearing.session, &wearing.avatar);
                 self.dress_all();
+            }
+            Some(Message::Renamed(renamed)) => {
+                self.peers.renamed(renamed.session, &renamed.name);
+                self.peers_changed();
             }
             Some(Message::Said(said)) => {
                 let grid = self.generator.sphere().blocks();
