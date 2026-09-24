@@ -17,6 +17,7 @@
 		"shot": "bun scripts/shot.ts",
 		"webshot": "bun scripts/webshot.ts",
 		"bench": "bun scripts/bench.ts",
+		"docs": "bun scripts/docs.ts",
 		"check": "bun scripts/check.ts",
 		"build": "bun run wasm && bun run --cwd apps/web build"
 	},

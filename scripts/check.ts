@@ -11,4 +11,5 @@ await $`go vet ./...`.cwd(`${ROOT}/server`);
 await $`go test ./...`.cwd(`${ROOT}/server`);
 await $`bun run --cwd apps/web check`;
 await $`bun test ./apps/web/src`;
+await $`bun scripts/docs.ts`;
 console.log('all checks pass');

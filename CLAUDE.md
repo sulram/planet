@@ -6,7 +6,11 @@ Operating rules for anyone writing code in this repo, human or AI (Claude,
 Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 
 - The *why*: [VISION.md](docs/VISION.md)
-- The current shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- The current shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md); per theme,
+  [WORLD.md](docs/WORLD.md) (what a world is made of) and
+  [RENDER.md](docs/RENDER.md) (how the picture is made)
+- The one current campaign: [BRIEF.md](docs/BRIEF.md). One at a time; it
+  dissolves into the docs above when it ships
 - Settled choices, with rejected alternatives: [DECISIONS.md](docs/DECISIONS.md)
 - What we build next: [ROADMAP.md](docs/ROADMAP.md)
 - What is still unsettled, and only there: [OPEN.md](docs/OPEN.md)
@@ -18,14 +22,53 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - This file and every operational doc: **titles + bullets, no prose
   paragraphs**. They enter LLM context every session. Economy is a feature.
 - VISION and DECISIONS keep prose: they carry the *why*. Read on demand.
-- **One fact, one place.** Current state lives in ARCHITECTURE; the why and the
-  rejected alternatives in DECISIONS; open questions **only** in OPEN.
-- A change to behaviour, rule or architecture updates its doc **in the same
-  commit**. A decision is logged in DECISIONS in the commit that applies it.
+- **One fact, one place.** Each kind of information has a home; anywhere else
+  it is a pointer:
+
+| Information | Home |
+|---|---|
+| Current state, how it is | the theme doc: ARCHITECTURE, WORLD, RENDER |
+| Why, and what was rejected | DECISIONS |
+| What comes next, in what order | ROADMAP |
+| A question with no answer, a problem with no chosen fix | OPEN |
+| What changed, line by line | git |
+
+- A change touches **at most three** of them: the theme doc, DECISIONS and,
+  when work or a question is left, ROADMAP **or** OPEN. Each says only its own
+  fact and points to the others. All in the commit that makes the change.
+- A DECISIONS entry is numbered and appended; its title states the decision.
+  The body ends with **Rejected** and **Lives in** (the doc section or the
+  code). A retired entry keeps its number: the title is struck through, with
+  the number of the entry that replaced it.
+- OPEN is tables: a question, what it **unblocks**, where the context is. A
+  question nothing waits on is a wish, and wishes live in ROADMAP.
 - **Keep GLOSSARY alive**: a new, renamed or shifted term updates the glossary
   in the same change. Naming is design.
-- A doc over ~200 lines splits by theme (DECISIONS is append-only, exempt).
+- A doc over 200 lines splits by theme (DECISIONS is append-only, exempt).
 - **No em dashes** anywhere: docs, comments, UI strings, commits.
+- `bun run docs` checks what a script can: every `DECISIONS N` names an
+  entry, crate bullets below match `crates/`, `bun run` names match
+  `package.json`, no em dash, no operational doc past 200 lines. Part of
+  `bun run check` and of CI.
+
+## Writing: the present, in the affirmative
+
+- Applies to docs **and** code comments.
+- **Say what is and what to do.** An affirmative sentence teaches; a bare
+  prohibition leaves the reader guessing. A prohibition is for a hard rule and
+  comes with the alternative ("X never; use Y").
+- **Only the present.** Code and docs describe the system as it is. No "used
+  to be", "removed", "no longer", "superseded by": right on the day, wrong at
+  the next change. The past lives in git (what) and in DECISIONS (why). A
+  struck ROADMAP item carries a DECISIONS number, never the story.
+- **Changed or removed code: rewrite or delete, in the same commit, every
+  comment and doc that speaks of it.** A comment about what does not exist is
+  permanent litter, and an AI reads it as truth.
+- A comment explains the **why** of the current code; the what, the code says.
+- **Attentive eye.** Working on a piece, look around it. Something stale,
+  duplicated, inconsistent or more complex than it needs: small and on the
+  same subject, fix it in the same commit and say so; bigger, point it out and
+  propose, or record it in OPEN. Continuous cleanup, no waiting for a sweep.
 
 ## Language: English only
 
@@ -66,8 +109,6 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `crates/`: Rust workspace, cut **by dependency, not by platform**.
   - `topology`: address, neighbours, sector seams, address <-> position.
     Pure integer logic where possible. No GPU, no IO.
-  - `voxel`: chunk formats and codecs for the build layer. Deleted with
-    DECISIONS 58; written again from scratch when volumes are built.
   - `worldgen`: the generator. Deterministic. Also built to WASM for the server.
     A world's shape is a source: plates over the seed, or a baked `field`.
   - `protocol`: wire messages, generated from `proto/`. Not yet.
@@ -88,7 +129,7 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   `manifest.json`, the config that names them. `assets/fields/` holds baked
   fields, made by `bun run field` and gitignored.
 - `scripts/`: every repeated command is a script here. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | check`.
+  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | docs | check | build`.
 - `docs/`: see top of this file.
 - `refs/`: gitignored. Reference projects for reading (see below).
 
@@ -154,7 +195,8 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   prints the page's console and saves a PNG. WebGPU rejects what Metal lets by.
 - Each crate stays **LLM-sized**. Too big for one context: split by dependency.
 - ROADMAP is intent, not contract: add wishes freely, reorder, check a box when
-  it ships, strike what we drop and log the why in DECISIONS.
+  it ships, strike what we drop and log the why in DECISIONS. A struck or
+  checked item points at where it lives now; the story stays in DECISIONS.
 
 ## refs/
 
@@ -181,7 +223,6 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
 - `topology`: property tests are mandatory (neighbour of neighbour in the
   opposite direction is self, for every address, across seams).
 - `worldgen`: golden hashes per generator version, identical on native and WASM.
-- `voxel`: codec round trips, when it comes back.
 - A test you add runs and passes in the same commit.
 
 ## Commits
