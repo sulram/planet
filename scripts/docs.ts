@@ -26,6 +26,30 @@ for (const file of files) {
 		});
 }
 
+/* ------------------------------------ dependency direction is law (CLAUDE.md) */
+
+// What each core crate may import of ours. Shells and bench are leaves and
+// may import anything. A new arrow is a decision: log it, then add it here.
+const ALLOWED: Record<string, string[]> = {
+	topology: [],
+	scene: [],
+	protocol: [],
+	worldgen: ['topology'],
+	avatar: ['scene'],
+	render: ['scene'],
+	client: ['topology', 'worldgen', 'scene', 'avatar', 'protocol'],
+	'ui-native': ['client', 'scene'],
+};
+const ours = readdirSync(`${ROOT}/crates`).filter((d) => existsSync(`${ROOT}/crates/${d}/Cargo.toml`));
+for (const [crate, allowed] of Object.entries(ALLOWED)) {
+	if (!ours.includes(crate)) continue;
+	const toml = read(`crates/${crate}/Cargo.toml`);
+	const deps = toml.slice(toml.indexOf('[dependencies]'), toml.indexOf('[dev-dependencies]') === -1 ? undefined : toml.indexOf('[dev-dependencies]'));
+	for (const m of deps.matchAll(/^([a-z-]+)(?:\.workspace| *=)/gm)) {
+		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`crates/${crate}: imports \`${m[1]}\`, which CLAUDE.md § How the engine stays reusable forbids`);
+	}
+}
+
 /* ------------------------------------------- crate bullets match crates/ */
 
 const layout = claude.slice(claude.indexOf('## Layout'), claude.indexOf('## Invariants'));

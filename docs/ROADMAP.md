@@ -82,6 +82,7 @@ Every milestone ends runnable end to end.
 - [ ] LOD by projected error with hysteresis; geomorph between levels. Nothing comes down before its replacement is up (53)
 - [ ] The volume: draw one, stamp the ground under it, greedy mesh it, bake its light, stream it by proximity, put one under the sea
 - [ ] What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), and the frame on a Pi and in a tab
+- [ ] The sphere leaves the seam: `scene::Frame` names the planet four times (radius, moon, sun, sea) and the own-indices mesh is the exception in `render`. One `Sky` struct and the volume mesh as the primary shape, so a renderer with no sphere ignores one field (65)
 
 ## M2: create world, two people see each other
 

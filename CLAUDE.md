@@ -198,6 +198,38 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   it ships, strike what we drop and log the why in DECISIONS. A struck or
   checked item points at where it lives now; the story stays in DECISIONS.
 
+## How the engine stays reusable
+
+- **Reusability is a byproduct, never a goal.** A seam earns its existence
+  with two implementations, one of them real: two shells, two bodies, two
+  sources, two front ends. A seam with one implementation is a guess, and a
+  guess in a public type is paid on every change. Wait for the consumer.
+- **Dependency direction is law**, held by `bun run docs`: `topology`,
+  `scene` and `protocol` import no crate of ours; `worldgen` imports only
+  `topology`; `avatar` and `render` import only `scene`. A new arrow is a
+  decision, logged before the edge exists.
+- **A crate speaks only its own nouns.** `scene` may say mesh, camera and
+  light; it may not say planet. `render` knows a mesh, never a heightfield or a
+  sphere. When a public type names a neighbour's noun, the seam is in the
+  wrong place, and the fix is one struct at the boundary, not a flag inside.
+- **The world half and the engine half of `client` stay apart.** The seam,
+  input, assets and the figure know no body; the controller, collision and
+  streaming know one `Body`. What a second body kind needs is a trait over
+  `Body`, which arrives with the second body and not before.
+- **A volume knows no sphere.** Cells in an integer box, in the box's own
+  frame; the mesher, the codec and cube collision import no `topology`.
+  Seating a box on a body is the client's job. That is how a flat world falls
+  out of the volume work rather than being built.
+- **Nouns that belong to the planet stay the planet's**: the generator, the
+  sky, the sea, the moon. They are not made general; they are kept out of the
+  seams the rest passes through.
+- **Each milestone ends with a reading pass, not a refactor**: every crate's
+  public surface read once, and each type naming a neighbour's noun goes to
+  OPEN. Rewriting waits for the consumer that pays for it.
+- **Small and tested at the seam is the whole strategy.** Re-cutting a 2,000
+  line crate with property tests at its boundary is an afternoon. That is why
+  the LLM-sized rule exists.
+
 ## refs/
 
 - Read-only checkouts, gitignored, shallow. `its-plataforma` and `vybe` are
