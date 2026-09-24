@@ -76,8 +76,9 @@
 		flex-direction: column;
 		align-items: center;
 		gap: var(--sp-1);
-		/* Sits on the anchor and shrinks with distance, never below half. */
-		transform: translate(-50%, -100%) scale(clamp(0.5, var(--near), 1));
+		/* Floats a little over the anchor, so it never touches the head, and
+		   shrinks with distance, never below half. */
+		transform: translate(-50%, calc(-100% - var(--sp-8))) scale(clamp(0.5, var(--near), 1));
 		transform-origin: bottom center;
 	}
 	.name {
