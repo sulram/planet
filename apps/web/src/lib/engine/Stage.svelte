@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Badge, Panel, Segmented, Stat } from '$lib/ds';
+	import { Badge, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
 	import type { Link } from '$lib/server/session';
@@ -9,13 +9,15 @@
 	import Balloons from './Balloons.svelte';
 	import Chat, { type Line } from './Chat.svelte';
 	import EngineView from './EngineView.svelte';
+	import Help from './Help.svelte';
 	import Settings from './Settings.svelte';
 	import { modes, type Anchor, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
 	import { who } from './who';
 
 	// The full viewport engine with its floating panel: what `/play` and
-	// `/w/[id]` share. The page supplies the top of the panel; mode, key hints
-	// and the stats line are the same everywhere.
+	// `/w/[id]` share. The page may supply the top of the panel; who is here,
+	// the mode and the stats line are the same everywhere. The keys live
+	// behind the help button and the picture behind settings.
 	// The compass point a bearing lands on, and the angle beside it. A rose has
 	// sixteen points, so each is 22.5 degrees wide. `null` is a pole, where a
 	// bearing is not a thing that exists.
@@ -37,7 +39,8 @@
 		link?: Link;
 		/** Called once the engine reports which generator version it runs. */
 		onready?: (generatorVersion: number) => void;
-		children: Snippet;
+		/** The page's own top of the panel, when it has one. */
+		children?: Snippet;
 	}
 
 	let { title, recipe, fieldPath, avatar, link, onready, children }: Props = $props();
@@ -124,18 +127,6 @@
 	}
 
 	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`engine.mode.${value}`) })));
-	const hints = $derived([
-		{ keys: t('engine.hint.look.keys'), does: t('engine.hint.look') },
-		{ keys: 'W A S D', does: t('engine.hint.move') },
-		{ keys: t('engine.hint.up.keys'), does: t('engine.hint.up') },
-		{ keys: 'C', does: t('engine.hint.down') },
-		{ keys: 'Shift', does: t('engine.hint.sprint') },
-		{ keys: 'F', does: t('engine.hint.mode') },
-		{ keys: 'V', does: t('engine.hint.avatar') },
-		{ keys: 'Enter', does: t('engine.hint.chat') },
-		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },
-		{ keys: 'Esc', does: t('engine.hint.release') }
-	]);
 
 	function receive(event: EngineEvent) {
 		if (event.type === 'ready') onready?.(event.generator_version);
@@ -172,11 +163,15 @@
 		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />
 	{/if}
 	<Settings {effects} {defaults} onchange={choose} />
+	<Help />
 	<Panel {title}>
 		{#snippet aside()}
-			<a class="home" href="/">{t('common.appName')}</a>
+			<span class="corner">
+				<a class="home" href="/">{t('common.appName')}</a>
+				<ThemeToggle />
+			</span>
 		{/snippet}
-		{@render children()}
+		{@render children?.()}
 		{#if link}
 			<section class="here">
 				<header>
@@ -194,11 +189,6 @@
 			</section>
 		{/if}
 		<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={(value) => (mode = value)} />
-		<ul class="hints">
-			{#each hints as hint (hint.keys)}
-				<li><kbd>{hint.keys}</kbd> {hint.does}</li>
-			{/each}
-		</ul>
 		{#if stats}
 			<dl>
 				<Stat label={t('engine.stats.place')} value={stats.place} />
@@ -216,6 +206,11 @@
 		position: fixed;
 		inset: 0;
 		overflow: hidden;
+	}
+	.corner {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-3);
 	}
 	.home {
 		color: var(--text-muted);
@@ -248,14 +243,5 @@
 	}
 	.you {
 		color: var(--text-muted);
-	}
-	.hints {
-		display: flex;
-		flex-direction: column;
-		gap: var(--sp-1);
-		color: var(--text-muted);
-	}
-	kbd {
-		color: var(--text);
 	}
 </style>

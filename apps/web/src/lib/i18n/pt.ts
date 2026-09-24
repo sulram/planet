@@ -101,6 +101,7 @@ export const pt: Messages = {
 	'engine.compass.rose': 'N,NNE,NE,ENE,L,ESE,SE,SSE,S,SSO,SO,OSO,O,ONO,NO,NNO',
 	'engine.stats.atThePole': 'no polo',
 	'engine.settings': 'Ajustes',
+	'engine.help': 'Ajuda',
 	'engine.settings.shadows': 'Sombras',
 	'engine.settings.grass': 'Grama',
 	'engine.settings.clouds': 'Nuvens',

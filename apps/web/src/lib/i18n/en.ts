@@ -100,6 +100,7 @@ export const en = {
 	'engine.compass.rose': 'N,NNE,NE,ENE,E,ESE,SE,SSE,S,SSW,SW,WSW,W,WNW,NW,NNW',
 	'engine.stats.atThePole': 'at the pole',
 	'engine.settings': 'Settings',
+	'engine.help': 'Help',
 	'engine.settings.shadows': 'Shadows',
 	'engine.settings.grass': 'Grass',
 	'engine.settings.clouds': 'Clouds',
