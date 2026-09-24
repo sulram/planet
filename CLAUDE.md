@@ -86,6 +86,23 @@ Codex, Kimi). `AGENTS.md` is a symlink to this file: edit only `CLAUDE.md`.
   Never silently downgrade.
 - "Start rough" means small scope, never low quality.
 
+## Working beside other agents
+
+- Several sessions often work in this same checkout at once. Mind your own
+  business: your task, your files, and nothing else.
+- Before the first write: `git status`, and `ListAgents` where the harness
+  has it. Tell the other sessions in one message what you are doing and which
+  paths are yours; keep to them.
+- A file another session is shaping is theirs: wait for them to finish and
+  build on what they leave. Read a shared file (this one, the DECISIONS
+  index, `scripts/`) right before editing it, and re-read it after.
+- Two sessions given the same task: say so to the user and stop until one is
+  named. The tree does not merge two designs.
+- Stage and commit only your own paths. A stranger's change in your commit is
+  a bug, however small.
+- A number is taken by the file that exists, never by the tail of a list you
+  read a while ago: a new decision is the next file in `docs/decisions/`.
+
 ## What this is (one breath)
 
 - A finite, spherical voxel world that people and AI agents walk, fly, drive
