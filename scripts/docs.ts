@@ -2,7 +2,7 @@
 // the repo disagree (runs in `bun run check` and in CI); `bun run docs gen`
 // rewrites what is generated (the DECISIONS index). The rules it holds are in
 // CLAUDE.md § Docs style and § How the engine stays reusable.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
 import { ROOT } from './lib';
 
 const mode = process.argv[2] === 'gen' ? 'gen' : 'check';
@@ -76,6 +76,22 @@ for (const file of files) {
 				if (!entries.has(Number(m[1]))) problems.push(`${file}:${i + 1}: DECISIONS ${m[1]} does not exist`);
 			}
 		});
+}
+
+/* ---------------------------- every CLAUDE.md has an AGENTS.md symlink beside it */
+
+for (const guide of new Bun.Glob('**/CLAUDE.md').scanSync({ cwd: ROOT, dot: false })) {
+	if (guide.includes('node_modules') || guide.startsWith('refs/') || guide.includes('/target/')) continue;
+	const dir = guide.slice(0, -'CLAUDE.md'.length);
+	const agents = `${ROOT}/${dir}AGENTS.md`;
+	let target: string | null = null;
+	try {
+		target = readlinkSync(agents);
+	} catch {
+		problems.push(`${dir}AGENTS.md: missing; it is a symlink to CLAUDE.md (ln -s CLAUDE.md ${dir}AGENTS.md)`);
+		continue;
+	}
+	if (target !== 'CLAUDE.md') problems.push(`${dir}AGENTS.md: points at ${target}; it is a symlink to CLAUDE.md`);
 }
 
 /* ------------------------------------ dependency direction is law (CLAUDE.md) */

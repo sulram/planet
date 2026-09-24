@@ -1,8 +1,8 @@
 # CLAUDE.md: working guide for `planet`
 
-Rules for anyone writing code here, human or AI. `AGENTS.md` is a symlink to
-this file: edit only `CLAUDE.md`. Folder rules: `apps/web/CLAUDE.md`,
-`server/CLAUDE.md`. `planet` is a codename; the name is pending (docs/OPEN.md).
+Rules for anyone writing code here, human or AI. Every `CLAUDE.md`, here and
+in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
+`CLAUDE.md`. `planet` is a codename; the name is pending (docs/OPEN.md).
 
 - Why: [VISION.md](docs/VISION.md)
 - Shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md); per theme,
