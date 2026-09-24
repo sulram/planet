@@ -22,7 +22,7 @@
 		/**
 		 * The place from the address bar, for the world that link was for.
 		 *
-		 * Sent once, on the first world the engine builds. Keeping your footing
+		 * Sent once, on the world the page asked for. Keeping your footing
 		 * across a later recipe is the engine's own job, because only it knows
 		 * what the new ground puts under an address: a place carried over by
 		 * the page lands you in the sea every time the coastline moves.
@@ -82,20 +82,24 @@
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') {
 			engineRecipe = JSON.stringify(event.recipe);
-			// The first world is the one the link was written for. Every world
-			// after it is new ground, where those characters name somewhere
-			// else, so the engine's own respawn is the one that knows better.
-			if (!arrived && stand && engine) {
+			// Whether the engine now stands in the world the page wanted. It
+			// builds a world of its own before the page's arrives, and the
+			// page's waits on a fetch when a field shapes it, so the first
+			// world reported is not the one asked for. The engine says the
+			// recipe in full and the page in what was chosen, so the seed and
+			// the version are what the two agree on; the engine checks the
+			// whole recipe against the server's on arrival.
+			const wanted =
+				recipe && event.recipe.seed === recipe.seed && event.recipe.generator_version === recipe.generator_version;
+			// The address bar's place is honoured once, for the world its link
+			// was written for. Every world after it is new ground, where those
+			// characters name somewhere else, so the engine's own respawn is
+			// the one that knows better.
+			if (wanted && !arrived && stand && engine) {
 				arrived = true;
 				engine.command({ type: 'go_to', place: stand });
 			}
-			// The engine now stands in the world the page wanted: time to join
-			// it. The engine says the recipe in full and the page in what was
-			// chosen, so the seed and the version are what the two agree on;
-			// the engine checks the whole recipe against the server's on arrival.
-			const wanted =
-				recipe && event.recipe.seed === recipe.seed && event.recipe.generator_version === recipe.generator_version;
-			if (link && wanted && !linked) {
+			if (wanted && link && !linked) {
 				linked = true;
 				connect();
 			}
