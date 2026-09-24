@@ -78,7 +78,7 @@
 		gap: var(--sp-1);
 		/* Floats a little over the anchor, so it never touches the head, and
 		   shrinks with distance, never below half. */
-		transform: translate(-50%, calc(-100% - var(--sp-8))) scale(clamp(0.5, var(--near), 1));
+		transform: translate(-50%, calc(-100% - var(--sp-6))) scale(clamp(0.5, var(--near), 1));
 		transform-origin: bottom center;
 	}
 	.name {
