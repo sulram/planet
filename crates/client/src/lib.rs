@@ -271,6 +271,7 @@ impl Client {
         // The point first, because it is what the body stands on and what the
         // moon's radial is read from; then the body, then the height, then the
         // way of looking. Each step reads the one before it.
+        let mode = self.controller.mode;
         self.teleport(point);
         if pose.on_moon {
             let moon = self.moon_position();
@@ -290,6 +291,13 @@ impl Client {
         }
         if let Some(pitch) = pose.pitch_deg {
             self.controller.set_pitch(pitch.to_radians());
+        }
+        // A height off the ground is a flight, and a front end that showed a
+        // walker has to hear it: the panel says what the body does.
+        if self.controller.mode != mode {
+            self.events.push(Event::ModeChanged {
+                mode: self.controller.mode,
+            });
         }
         Ok(())
     }

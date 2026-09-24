@@ -1,6 +1,6 @@
 //! Saying where you are: the code a person reads out, and the way they face.
 
-use client::{Client, Command, Event, Input, Key, Recipe};
+use client::{Client, Command, Event, Input, Key, Mode, Recipe};
 
 /// Everything the HUD shows about a place, as the client last said it.
 struct Said {
@@ -272,4 +272,29 @@ fn a_world_whose_first_face_is_ocean_still_opens_on_land() {
             said.place
         );
     }
+}
+
+/// A height in a link is a flight, and the arriving front end showed a
+/// walker: it hears the switch, or its panel says walk while the body flies.
+#[test]
+fn a_link_from_the_air_arrives_flying_and_says_so() {
+    let mut client = Client::new(Recipe::new(1)).expect("a world");
+    let mut input = Input::default();
+    client.command(Command::SetMode { mode: Mode::Fly });
+    input.key(Key::Up, true);
+    run(&mut client, &mut input, 3.0);
+    input.key(Key::Up, false);
+    let said = run(&mut client, &mut input, 1.5);
+    assert!(said.pose.contains('@'), "not in the air: {}", said.pose);
+
+    let mut fresh = Client::new(Recipe::new(1)).expect("a world");
+    fresh.drain_events();
+    fresh.go_to(&said.pose).expect("the link opens");
+    let events = fresh.drain_events();
+    assert!(
+        events.contains(&Event::ModeChanged { mode: Mode::Fly }),
+        "the front end was not told about the flight: {events:?}"
+    );
+    let there = run(&mut fresh, &mut input, 1.5);
+    assert!(there.altitude_m > 1.0, "landed instead: {} m", there.altitude_m);
 }
