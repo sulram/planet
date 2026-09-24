@@ -66,7 +66,7 @@ const index = ['| # | Logged | Decision | Status |', '|---|---|---|---|', ...ent
 
 /* ------------------------------------------------- DECISIONS N names an entry */
 
-const sources = new Bun.Glob('{docs/**/*.md,CLAUDE.md,README.md,crates/**/*.{rs,wgsl},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}');
+const sources = new Bun.Glob('{docs/**/*.md,CLAUDE.md,apps/web/CLAUDE.md,server/CLAUDE.md,README.md,crates/**/*.{rs,wgsl},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}');
 const files = [...sources.scanSync(ROOT)].filter((f) => !f.includes('node_modules') && !f.includes('/target/'));
 for (const file of files) {
 	read(file)
@@ -117,7 +117,7 @@ const scripts = Object.keys(JSON.parse(read('package.json')).scripts as Record<s
 const listed = [...layout.matchAll(/`bun run ([^`]+)`/g)].map((m) => m[1]).find((l) => l.includes('|'))?.split('|').map((s) => s.trim()) ?? [];
 for (const s of scripts) if (!listed.includes(s)) problems.push(`CLAUDE.md § Layout: script \`${s}\` is not in the bun run list`);
 for (const s of listed) if (!scripts.includes(s)) problems.push(`CLAUDE.md § Layout: \`bun run ${s}\` is not a script`);
-for (const file of [...docs, 'CLAUDE.md', 'README.md']) {
+for (const file of [...docs, 'CLAUDE.md', 'apps/web/CLAUDE.md', 'server/CLAUDE.md', 'README.md']) {
 	for (const m of read(file).matchAll(/bun run ([a-z]+)/g)) {
 		if (!scripts.includes(m[1])) problems.push(`${file}: \`bun run ${m[1]}\` is not a script`);
 	}
@@ -135,7 +135,7 @@ for (const file of files) {
 
 /* ------------------------------------------- an operational doc splits at 200 */
 
-for (const file of docs) {
+for (const file of [...docs, 'CLAUDE.md']) {
 	if (file.endsWith('DECISIONS.md') || file.endsWith('VISION.md')) continue;
 	const lines = read(file).trimEnd().split('\n').length;
 	if (lines > 200) problems.push(`${file}: ${lines} lines; over 200 it splits by theme`);
