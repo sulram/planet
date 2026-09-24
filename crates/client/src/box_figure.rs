@@ -26,6 +26,9 @@ struct Part {
     swing: f64,
 }
 
+/// The top of the head box: pivot, offset and half its height.
+pub const TOP_M: f64 = 1.42 + 0.16 + 0.14;
+
 const PARTS: [Part; 6] = [
     Part {
         pivot: DVec3::new(0.0, 1.10, 0.0),

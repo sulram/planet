@@ -779,7 +779,10 @@ impl Client {
         let moon = self.moon_position();
         let own_head = own.map(|session| {
             let up = self.controller.body_basis().y_axis;
-            (session, self.controller.position() + up * figure::HEAD_M)
+            (
+                session,
+                self.controller.position() + up * self.figure.label_m(),
+            )
         });
         let inverse = camera.rotation.inverse();
         let focal = 1.0 / (f64::from(camera.fov_y) / 2.0).tan();

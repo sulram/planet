@@ -241,7 +241,7 @@ impl Peers {
             let motion = peer.motion_at(self.now_s, moon)?;
             Some((
                 *session,
-                motion.position + motion.basis.y_axis * figure::HEAD_M,
+                motion.position + motion.basis.y_axis * peer.figure.label_m(),
             ))
         })
     }

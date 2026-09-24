@@ -31,6 +31,10 @@ fn every_avatar_loads_and_poses() {
         );
         let joints = avatar.joint_matrices(&idle.sample(0.3));
         assert!(joints.iter().all(|m| m.is_finite()), "{path:?}");
+        // Tall or short, a body stands somewhere between a bee and a giant.
+        let height = avatar.height_m();
+        assert!((0.3..4.0).contains(&height), "{path:?} stands {height} m");
+        println!("{} stands {height:.2} m", path.display());
     }
 }
 

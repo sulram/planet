@@ -94,8 +94,8 @@ impl Gait {
     }
 }
 
-/// Where a label hangs over a body: just above the head, from the feet.
-pub const HEAD_M: f64 = 1.8;
+/// Clearance between the top of a body and the label hung over it.
+const LABEL_M: f64 = 0.1;
 
 /// What a figure needs to stand and move: where the body is, which way it
 /// faces and stands, what it is doing and how fast.
@@ -186,6 +186,15 @@ impl Figure {
     /// The mesh worn, if any.
     pub fn mesh(&self) -> Option<SkinnedMeshId> {
         self.worn.as_ref().map(|worn| worn.mesh)
+    }
+
+    /// Where a label hangs, metres above the feet: over the top of the
+    /// avatar worn, whatever its height, or of the box figure before one lands.
+    pub fn label_m(&self) -> f64 {
+        let top = self.worn.as_ref().map_or(crate::box_figure::TOP_M, |worn| {
+            f64::from(worn.avatar.height_m())
+        });
+        top + LABEL_M
     }
 
     pub fn update(&mut self, dt: f64, motion: &Motion, clips: &Clips) {

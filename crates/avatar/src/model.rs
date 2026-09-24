@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use scene::{Image, MAX_JOINTS, SkinnedMesh, SkinnedPrimitive, SkinnedVertex};
 
 use crate::Error;
@@ -22,6 +22,9 @@ pub struct Avatar {
     /// Height of the hips above the feet at rest, metres: the scale of the
     /// hips motion in clips.
     hips_height_m: f32,
+    /// The top of the mesh at rest, metres above the feet: how tall the
+    /// avatar stands, whatever its shape.
+    height_m: f32,
 }
 
 impl Avatar {
@@ -52,14 +55,46 @@ impl Avatar {
         let hips_height_m = hierarchy.world(&hierarchy.rest)[hips].w_axis.y;
 
         let mesh = Arc::new(mesh(&glb, skin.index())?);
-        Ok(Avatar {
+        let mut avatar = Avatar {
             mesh,
             hierarchy,
             joints,
             inverse_bind,
             humanoid,
             hips_height_m,
-        })
+            height_m: 0.0,
+        };
+        avatar.height_m = avatar.top_at_rest();
+        Ok(avatar)
+    }
+
+    /// The highest point of the mesh posed at rest. Skinned, not read off
+    /// the vertices, because a file may keep its vertices at another scale
+    /// and put the metres in its joints.
+    fn top_at_rest(&self) -> f32 {
+        let joints = self.joint_matrices(&Pose::rest());
+        self.mesh
+            .vertices
+            .iter()
+            .map(|vertex| {
+                let position = Vec3::from(vertex.position);
+                vertex
+                    .joints
+                    .iter()
+                    .zip(vertex.weights)
+                    .filter(|(_, weight)| *weight > 0.0)
+                    .map(|(&joint, weight)| {
+                        joints[usize::from(joint)].transform_point3(position).y * weight
+                    })
+                    .sum::<f32>()
+            })
+            .fold(0.0, f32::max)
+    }
+
+    /// How tall the avatar stands at rest, metres from the feet to the top
+    /// of whatever it wears on its head.
+    pub fn height_m(&self) -> f32 {
+        self.height_m
     }
 
     /// Joint matrices (mesh space from rest space) for a pose.
