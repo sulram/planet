@@ -12,6 +12,8 @@ export { default as Button } from './Button.svelte';
 export { default as Checkbox } from './Checkbox.svelte';
 export { default as Dialog } from './Dialog.svelte';
 export { default as Field } from './Field.svelte';
+export { default as Icon } from './Icon.svelte';
+export type { IconName } from './Icon.svelte';
 export { default as Input } from './Input.svelte';
 export { default as LangSwitch } from './LangSwitch.svelte';
 export { default as Page } from './Page.svelte';

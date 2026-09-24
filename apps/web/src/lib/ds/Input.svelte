@@ -5,12 +5,14 @@
 		value?: string;
 		/** Marks the control as failing validation; pair with `Field error`. */
 		invalid?: boolean;
+		/** The element itself, for a caller that moves focus. */
+		element?: HTMLInputElement;
 	}
 
-	let { value = $bindable(''), invalid = false, ...rest }: Props = $props();
+	let { value = $bindable(''), invalid = false, element = $bindable(), ...rest }: Props = $props();
 </script>
 
-<input class="input" bind:value aria-invalid={invalid || undefined} {...rest} />
+<input class="input" bind:this={element} bind:value aria-invalid={invalid || undefined} {...rest} />
 
 <style>
 	.input {

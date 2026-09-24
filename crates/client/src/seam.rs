@@ -140,6 +140,12 @@ pub enum Event {
     Peers {
         peers: Vec<PeerInfo>,
     },
+    /// Where every head in view is on the screen, this client's own
+    /// included: sent every frame while there is one, and once empty after
+    /// the last. A front end hangs a nametag or a balloon there.
+    Anchors {
+        anchors: Vec<Anchor>,
+    },
     /// A line someone said, this client's own included: what the world
     /// heard is what a UI shows. `place` is where the speaker stood when they
     /// shared it, as `GoTo` takes it; `None` when they did not.
@@ -171,6 +177,16 @@ pub struct PeerInfo {
     pub session: u32,
     pub name: String,
     pub visitor: bool,
+}
+
+/// A head on the screen: fractions of the viewport from the top left, so
+/// no front end needs to know the canvas size, and how far the head is.
+#[derive(Clone, Copy, PartialEq, Debug, Serialize)]
+pub struct Anchor {
+    pub session: u32,
+    pub x: f32,
+    pub y: f32,
+    pub distance_m: f32,
 }
 
 impl Command {

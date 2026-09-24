@@ -6,10 +6,12 @@
 	import type { Link } from '$lib/server/session';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
+	import Balloons from './Balloons.svelte';
 	import Chat, { type Line } from './Chat.svelte';
 	import EngineView from './EngineView.svelte';
 	import Settings from './Settings.svelte';
-	import { modes, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
+	import { modes, type Anchor, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
+	import { who } from './who';
 
 	// The full viewport engine with its floating panel: what `/play` and
 	// `/w/[id]` share. The page supplies the top of the panel; mode, key hints
@@ -47,13 +49,7 @@
 	/** This client's own session in the world, while online. */
 	let me = $state<number | null>(null);
 	let peers = $state<PeerInfo[]>([]);
-
-	// A peer is shown by name; someone without one is told apart by their
-	// session number, which the world gave them on arrival.
-	function who(peer: PeerInfo): string {
-		if (peer.name) return peer.name;
-		return t(peer.visitor ? 'engine.here.visitor' : 'engine.here.someone', { n: peer.session });
-	}
+	let anchors = $state.raw<Anchor[]>([]);
 
 	// Lines are what was heard while here, never stored: the panel keeps the
 	// last hundred and a line keeps the name its speaker had when it was said.
@@ -66,11 +62,13 @@
 		const peer = peers.find((p) => p.session === event.session);
 		const line: Line = {
 			id: ++lineCount,
+			session: event.session,
 			who: own ? t('engine.here.you') : who(peer ?? { session: event.session, name: '', visitor: false }),
 			own,
 			scope: event.scope,
 			text: event.text,
-			place: event.place
+			place: event.place,
+			at: Date.now()
 		};
 		lines = [...lines.slice(1 - LINES_KEPT), line];
 	}
@@ -134,6 +132,7 @@
 		{ keys: 'Shift', does: t('engine.hint.sprint') },
 		{ keys: 'F', does: t('engine.hint.mode') },
 		{ keys: 'V', does: t('engine.hint.avatar') },
+		{ keys: 'Enter', does: t('engine.hint.chat') },
 		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },
 		{ keys: 'Esc', does: t('engine.hint.release') }
 	]);
@@ -147,6 +146,7 @@
 			me = event.session;
 		} else if (event.type === 'peers') peers = event.peers;
 		else if (event.type === 'said') heard(event);
+		else if (event.type === 'anchors') anchors = event.anchors;
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
 			effects = event.effects;
@@ -167,6 +167,10 @@
 
 <div class="stage">
 	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
+	{#if link}
+		<Balloons {anchors} {peers} {me} {lines} />
+		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />
+	{/if}
 	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}
@@ -188,7 +192,6 @@
 					{/each}
 				</ul>
 			</section>
-			<Chat {lines} online={session === 'online'} onsay={say} ongo={go} />
 		{/if}
 		<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={(value) => (mode = value)} />
 		<ul class="hints">

@@ -94,6 +94,9 @@ impl Gait {
     }
 }
 
+/// Where a label hangs over a body: just above the head, from the feet.
+pub const HEAD_M: f64 = 1.8;
+
 /// What a figure needs to stand and move: where the body is, which way it
 /// faces and stands, what it is doing and how fast.
 #[derive(Clone, Copy, Debug)]

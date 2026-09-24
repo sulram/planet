@@ -34,7 +34,7 @@ pub use input::{Input, Key};
 use peers::Peers;
 pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{Command, Event, Mode, PeerInfo, Scope, SessionStatus};
+pub use seam::{Anchor, Command, Event, Mode, PeerInfo, Scope, SessionStatus};
 pub use session::Outbound;
 use session::Session;
 use terrain::{Body, Terrain};
@@ -79,6 +79,9 @@ pub struct Client {
     noon_offset: f64,
     stats_timer_s: f64,
     frames_since_stats: u32,
+    /// Whether the last frame hung anchors, so the first empty frame after
+    /// them still says so.
+    had_anchors: bool,
     entropy: u64,
 }
 
@@ -124,6 +127,7 @@ impl Client {
             noon_offset: 0.0,
             stats_timer_s: 0.0,
             frames_since_stats: 0,
+            had_anchors: false,
             entropy: 0,
         };
         client
@@ -759,8 +763,61 @@ impl Client {
         self.stats(dt);
 
         let camera = self.controller.camera(&self.generator);
+        self.anchors(&camera);
         let patches = self.stream(&camera, Terrain::update);
         self.frame(camera, patches)
+    }
+
+    /// Where every head in view lands on the screen, own body first, with
+    /// the renderer's own projection: reversed infinite depth has no far
+    /// plane, so only what is behind the camera or off the sides is left out.
+    fn anchors(&mut self, camera: &scene::Camera) {
+        let own = match self.session.link() {
+            session::Link::Online { session } => Some(session),
+            _ => None,
+        };
+        let moon = self.moon_position();
+        let own_head = own.map(|session| {
+            let up = self.controller.body_basis().y_axis;
+            (session, self.controller.position() + up * figure::HEAD_M)
+        });
+        let inverse = camera.rotation.inverse();
+        let focal = 1.0 / (f64::from(camera.fov_y) / 2.0).tan();
+        let aspect = f64::from(self.aspect);
+        let near = f64::from(camera.near);
+        let anchors: Vec<Anchor> = own_head
+            .into_iter()
+            .chain(
+                own.is_some()
+                    .then(|| self.peers.heads(moon))
+                    .into_iter()
+                    .flatten(),
+            )
+            .filter_map(|(session, head)| {
+                let local = inverse * (head - camera.position);
+                if local.z >= -near {
+                    return None;
+                }
+                let x = focal / aspect * local.x / -local.z;
+                let y = focal * local.y / -local.z;
+                // A little past the edge, so a label slides off instead of
+                // popping.
+                if x.abs() > 1.2 || y.abs() > 1.2 {
+                    return None;
+                }
+                Some(Anchor {
+                    session,
+                    x: ((x + 1.0) / 2.0) as f32,
+                    y: ((1.0 - y) / 2.0) as f32,
+                    distance_m: local.length() as f32,
+                })
+            })
+            .collect();
+        if anchors.is_empty() && !self.had_anchors {
+            return;
+        }
+        self.had_anchors = !anchors.is_empty();
+        self.events.push(Event::Anchors { anchors });
     }
 
     /// The frame as it would look once streaming caught up. Blocks until every

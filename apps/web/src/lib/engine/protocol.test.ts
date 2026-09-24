@@ -33,6 +33,10 @@ describe('parseEvent', () => {
 			text: 'hi',
 			place: '4-K7M42Q'
 		});
+		expect(parseEvent('{"type":"anchors","anchors":[{"session":2,"x":0.5,"y":0.4,"distance_m":3}]}')).toEqual({
+			type: 'anchors',
+			anchors: [{ session: 2, x: 0.5, y: 0.4, distance_m: 3 }]
+		});
 	});
 
 	test('ignores unknown types and malformed payloads', () => {

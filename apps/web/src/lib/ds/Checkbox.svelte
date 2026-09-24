@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	// A yes or no with its label. The mark is a filled square: the design
-	// system has one shape and no icons.
+	// A yes or no with its label. The mark is a filled square, the design
+	// system's one shape; an icon marks an action, never a state.
 	interface Props {
 		checked: boolean;
 		disabled?: boolean;

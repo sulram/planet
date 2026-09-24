@@ -304,3 +304,42 @@ fn a_line_goes_out_online_and_comes_back_with_a_place() {
         "a shared place is a place to go"
     );
 }
+
+#[test]
+fn heads_are_anchored_on_the_screen_while_online() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    let events = run(&mut client, 0.2);
+    assert!(
+        !events.iter().any(|e| matches!(e, Event::Anchors { .. })),
+        "nobody is anchored offline"
+    );
+
+    client.link_opened();
+    client.receive(&welcome(&client, 1, vec![peer(2, "Ada")]));
+    let events = run(&mut client, 0.2);
+    let Some(Event::Anchors { anchors }) = events
+        .iter()
+        .rev()
+        .find(|e| matches!(e, Event::Anchors { .. }))
+    else {
+        panic!("the own head is anchored every frame: {events:?}");
+    };
+    let own = anchors
+        .iter()
+        .find(|a| a.session == 1)
+        .expect("the own head, in view of the own camera");
+    // The camera looks at the eyes and the head sits just above: near the
+    // middle of the screen, a few metres off.
+    assert!(
+        (0.3..0.7).contains(&own.x) && (0.2..0.7).contains(&own.y),
+        "{own:?}"
+    );
+    assert!(own.distance_m > 0.5 && own.distance_m < 20.0, "{own:?}");
+
+    client.link_closed();
+    let events = run(&mut client, 0.1);
+    assert!(
+        events.contains(&Event::Anchors { anchors: vec![] }),
+        "the last anchors are taken down: {events:?}"
+    );
+}

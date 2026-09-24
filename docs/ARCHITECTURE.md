@@ -122,8 +122,10 @@ Numbers marked (p) are proposed and not yet confirmed.
   socket (`Engine.connect(url)`), hands every frame to `Client::receive` and
   sends what `drain_outbound` queues. The client says hello, keeps the peers,
   sends its own stance when it changed and as a heartbeat, and reports
-  `session`, `peers` and `said` events over the seam; `say` and `go_to` are
-  the chat panel's commands. The desktop shell has no
+  `session`, `peers`, `said` and `anchors` events over the seam; `say` and
+  `go_to` are the chat bar's commands. `anchors` is where every head in view
+  is on the screen, each frame, so nametags and balloons are a front end's
+  DOM and never a render feature. The desktop shell has no
   socket yet (ROADMAP M2).
 - A peer is drawn a tick and a half behind its newest stance, between the
   last two heard, in world space: a walk across a seam never interpolates

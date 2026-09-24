@@ -133,6 +133,8 @@ export const en = {
 	'engine.chat.placeholder': 'Say something. {here} shares where you stand.',
 	'engine.chat.offline': 'Chat opens when you are online.',
 	'engine.chat.send': 'Send',
+	'engine.chat.closed': 'Enter to chat',
+	'engine.hint.chat': 'chat',
 	'engine.chat.here': '@here',
 	'engine.chat.goto': 'Go to {place}',
 	'engine.chat.lines': 'Lines said',

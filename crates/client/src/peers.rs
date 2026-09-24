@@ -234,6 +234,18 @@ impl Peers {
     }
 
     /// Every peer that has said where it is, and where to draw it now.
+    /// Where each peer's head is now, world space, by session: what a label
+    /// is hung over.
+    pub fn heads(&self, moon: DVec3) -> impl Iterator<Item = (u32, DVec3)> {
+        self.by_session.iter().filter_map(move |(session, peer)| {
+            let motion = peer.motion_at(self.now_s, moon)?;
+            Some((
+                *session,
+                motion.position + motion.basis.y_axis * figure::HEAD_M,
+            ))
+        })
+    }
+
     pub fn bodies(&self, moon: DVec3) -> impl Iterator<Item = (&Figure, Motion)> {
         self.by_session
             .values()

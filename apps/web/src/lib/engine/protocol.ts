@@ -60,6 +60,14 @@ export interface PeerInfo {
 	visitor: boolean;
 }
 
+/** A head on the screen: fractions of the viewport from the top left, and how far. */
+export interface Anchor {
+	session: number;
+	x: number;
+	y: number;
+	distance_m: number;
+}
+
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }
 	/** The link to the world server, whenever it changes. */
@@ -72,6 +80,8 @@ export type EngineEvent =
 	 * `go_to`, or null.
 	 */
 	| { type: 'said'; session: number; scope: Scope; text: string; place: string | null }
+	/** Every head in view, yours included, every frame while there is one and once empty after. */
+	| { type: 'anchors'; anchors: Anchor[] }
 	| { type: 'recipe_changed'; recipe: Recipe }
 	| { type: 'mode_changed'; mode: Mode }
 	| { type: 'avatar_changed'; path: string }
@@ -102,7 +112,8 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'stats',
 	'session',
 	'peers',
-	'said'
+	'said',
+	'anchors'
 ]);
 
 /** Parses one event. Unknown types and malformed payloads yield null. */

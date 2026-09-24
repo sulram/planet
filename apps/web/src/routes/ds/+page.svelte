@@ -6,6 +6,7 @@
 		Checkbox,
 		Dialog,
 		Field,
+		Icon,
 		Input,
 		LangSwitch,
 		Page,
@@ -227,6 +228,18 @@
 				<Slider label="Disabled" value={0.3} min={0} max={1} disabled />
 				<Select label="Tone map" options={curves} value={curve} onselect={(value) => (curve = value)} />
 			</Stack>
+		</section>
+
+		<section>
+			<h2>Icon</h2>
+			<p class="muted">A stroke in the current colour at the text size. Lucide's paths, copied one at a time: the set is what the product uses.</p>
+			<div class="row">
+				<Icon name="users" label="Near" />
+				<Icon name="globe" label="World" />
+				<Icon name="send" label="Send" />
+				<Icon name="map-pin" label="Place" />
+				<Button variant="ghost"><Icon name="send" /> With a label</Button>
+			</div>
 		</section>
 
 		<section>

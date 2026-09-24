@@ -47,6 +47,17 @@
 		engine?.command(command);
 	}
 
+	/** Hands the world back: the canvas takes focus and the pointer. */
+	export function take() {
+		canvas?.focus();
+		canvas?.requestPointerLock();
+	}
+
+	/** Lets the world go, so a form can have the keys and the pointer. */
+	export function release() {
+		if (document.pointerLockElement === canvas) document.exitPointerLock();
+	}
+
 	type Status = 'loading' | 'shaping' | 'running' | 'missing' | 'unsupported' | 'failed';
 
 	let canvas: HTMLCanvasElement | undefined = $state();
