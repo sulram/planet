@@ -19,7 +19,7 @@
 <script lang="ts">
 	import { Icon, Input } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { LINE_BYTES } from './index';
+	import { LINE_CHARS } from './index';
 
 	// A bar at the foot of the world. Closed, it shows what was just said and
 	// fades it; Enter opens it, takes the pointer out of the world and puts
@@ -51,8 +51,12 @@
 	let now = $state(Date.now());
 
 	const here = $derived(t('engine.chat.here'));
-	// The server's limit, held here so nobody meets it there.
-	const tooLong = $derived(new TextEncoder().encode(draft).length > LINE_BYTES);
+	// The server's limit, held here so nobody meets it there. Counted as the
+	// server counts, in code points, so an accent is one.
+	const length = $derived([...draft].length);
+	const tooLong = $derived(length > LINE_CHARS);
+	/** The count shows once a line is long enough to wonder. */
+	const counting = $derived(length >= LINE_CHARS * 0.8);
 	const shown = $derived(open ? lines : lines.filter((line) => now - line.at < RECENT_MS));
 
 	// A closed bar forgets: the clock ticks while there is something to forget.
@@ -158,6 +162,9 @@
 			onfocus={show}
 			onkeydown={onkeyInput}
 		/>
+		{#if counting}
+			<span class="count" class:over={tooLong} aria-live="polite">{t('engine.chat.count', { n: length, max: LINE_CHARS })}</span>
+		{/if}
 		<button type="button" class="toggle" disabled={!online || tooLong} title={t('engine.chat.send')} onclick={() => { send(); input?.focus(); }}>
 			<Icon name="send" label={t('engine.chat.send')} />
 		</button>
@@ -241,6 +248,15 @@
 	}
 	.scopes {
 		display: flex;
+	}
+	.count {
+		flex: none;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.count.over {
+		color: var(--danger);
+		font-weight: var(--fw-bold);
 	}
 	.toggle {
 		display: inline-flex;

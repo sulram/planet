@@ -28,7 +28,7 @@ Numbers marked (p) are proposed and not yet confirmed.
   `NearBlocks` on the same body, measured by the actor with the client's own
   projection mirrored in `near.go`; `world` reaches every body. A line said
   with `here` comes back with the speaker's stance as the actor holds it.
-  Limits live in the actor: `LineBytes`, five lines in five seconds.
+  Limits live in the actor: `LineChars`, five lines in five seconds.
 - The actor holds no state past its sessions yet: `world.db` arrives with
   chunks (ROADMAP M3).
 - Bridge: volumes and roles cached in memory at start; PocketBase hooks

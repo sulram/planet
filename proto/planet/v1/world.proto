@@ -83,7 +83,7 @@ enum Scope {
 // limits: a UI holds the same limits so a person never meets them.
 message Say {
   Scope scope = 1;
-  // At most 500 bytes of UTF-8. May be empty when `here` is set.
+  // At most 500 characters. May be empty when `here` is set.
   string text = 2;
   // Share where you stand: the server fills Said.stance from the stance it
   // holds, so a client cannot claim to stand where it does not.

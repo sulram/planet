@@ -10,8 +10,8 @@ export const modes = ['walk', 'fly'] as const satisfies readonly Mode[];
 /** Who hears a line: within reach on the same body, or the whole world. Never another world. */
 export type Scope = 'near' | 'world';
 export const scopes = ['near', 'world'] as const satisfies readonly Scope[];
-/** The most a line carries, in bytes of UTF-8. The server drops longer ones unheard. */
-export const LINE_BYTES = 500;
+/** The most a line carries, in characters (code points). The server drops longer ones unheard. */
+export const LINE_CHARS = 500;
 
 export type ToneMap = 'aces' | 'agx' | 'neutral' | 'reinhard' | 'linear';
 export const toneMaps = ['aces', 'agx', 'neutral', 'reinhard', 'linear'] as const satisfies readonly ToneMap[];

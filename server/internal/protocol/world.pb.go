@@ -432,7 +432,7 @@ func (x *Wear) GetAvatar() string {
 type Say struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Scope Scope                  `protobuf:"varint,1,opt,name=scope,proto3,enum=planet.v1.Scope" json:"scope,omitempty"`
-	// At most 500 bytes of UTF-8. May be empty when `here` is set.
+	// At most 500 characters. May be empty when `here` is set.
 	Text string `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	// Share where you stand: the server fills Said.stance from the stance it
 	// holds, so a client cannot claim to stand where it does not.

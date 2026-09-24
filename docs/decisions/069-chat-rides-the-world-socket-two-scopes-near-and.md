@@ -49,9 +49,10 @@ last lines, if a UI ever wants one, lives in the actor's memory and dies with
 the actor.
 
 **Limits live in the actor from the first day**, because spam is the first
-thing to arrive: a line is at most 500 bytes of UTF-8, and a session says at
-most five lines in five seconds; past either the actor drops the line. The UI
-holds the same limits so a person never meets them. A line carries the
+thing to arrive: a line is at most 500 characters, counted as a person
+counts them and never as bytes, and a session says at most five lines in five
+seconds; past either the actor drops the line. The UI holds the same limits,
+with a count that appears as a line grows long, so a person never meets them. A line carries the
 session, and the client knows the name from its peers; a visitor speaks as a
 nametag will show it. Chat lands after nametags (ROADMAP M2), because a line
 from nobody is noise. A mute is a role, and roles are per world (M4): until

@@ -162,6 +162,9 @@ func TestTwoPeopleSeeEachOther(t *testing.T) {
 		t.Fatalf("the welcome carries the recipe: %v", welcome.Recipe)
 	}
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(10)}})
+	// The stance lands in the actor by its own road, so it is heard back
+	// before the second person arrives to be told it.
+	a.hearUntil(func(m *pb.ServerMessage) bool { return len(m.GetStances().GetMoved()) > 0 })
 
 	b := connect(t, hub, "w1", hello())
 	welcomeB := b.hear().GetWelcome()
@@ -278,14 +281,14 @@ func TestALineReachesItsScope(t *testing.T) {
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(100)}})
 	b.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(110)}})
 	far.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(1100)}})
-	// The stances have to land before a line is measured against them.
+	// The stances have to land before a line is measured against them: the
+	// neighbour waits to hear both its own and the speaker's.
+	landed := map[uint32]bool{}
 	b.hearUntil(func(m *pb.ServerMessage) bool {
 		for _, moved := range m.GetStances().GetMoved() {
-			if moved.Session == me {
-				return true
-			}
+			landed[moved.Session] = true
 		}
-		return false
+		return len(landed) >= 2
 	})
 
 	said := func(c *client) *pb.Said {
@@ -306,9 +309,12 @@ func TestALineReachesItsScope(t *testing.T) {
 		t.Fatalf("the far one hears only the world line, and no place unasked: %v", line)
 	}
 
-	long := strings.Repeat("x", LineBytes+1)
+	long := strings.Repeat("x", LineChars+1)
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: long}}})
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD}}})
+	// Characters, not bytes: a full line of accents is still a line.
+	accented := strings.Repeat("ç", LineChars)
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: accented}}})
 	for i := range lineBurst + 2 {
 		a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: strconv.Itoa(i)}}})
 	}
@@ -321,7 +327,7 @@ func TestALineReachesItsScope(t *testing.T) {
 		return m.GetWearing() != nil
 	})
 	// Two lines were already said in this window: three more fit.
-	if want := []string{"0", "1", "2"}; !slices.Equal(heard, want) {
+	if want := []string{accented, "0", "1"}; !slices.Equal(heard, want) {
 		t.Fatalf("too long, empty and past the rate are dropped: %v", heard)
 	}
 

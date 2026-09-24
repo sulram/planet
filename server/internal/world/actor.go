@@ -18,12 +18,13 @@ const TickRate = 15
 // often, so a client can tell a quiet room from a dead link.
 const heartbeat = 2 * time.Second
 
-// A line is at most this long, in bytes of UTF-8, and a session says at most
-// lineBurst lines in lineWindow. Past either the line is dropped and nobody
-// is told: a UI holds the same limits, so a person never meets them, and
-// only a client that ignores them does.
+// A line is at most this many characters, counted as a person counts them
+// (code points, never bytes), and a session says at most lineBurst lines in
+// lineWindow. Past either the line is dropped and nobody is told: a UI holds
+// the same limits, so a person never meets them, and only a client that
+// ignores them does. The wire's worst case is four bytes a character.
 const (
-	LineBytes  = 500
+	LineChars  = 500
 	lineBurst  = 5
 	lineWindow = 5 * time.Second
 )
@@ -147,7 +148,7 @@ func (a *actor) handle(s *session, message *pb.ClientMessage) {
 // client's word. A line is never stored (DECISIONS 69).
 func (a *actor) say(s *session, say *pb.Say, now time.Time) {
 	text := strings.TrimSpace(say.Text)
-	if len(text) > LineBytes || !utf8.ValidString(text) || (text == "" && !say.Here) {
+	if !utf8.ValidString(text) || utf8.RuneCountInString(text) > LineChars || (text == "" && !say.Here) {
 		return
 	}
 	if !s.mayspeak(now) {

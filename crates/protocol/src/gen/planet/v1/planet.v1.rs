@@ -61,7 +61,7 @@ pub struct Wear {
 pub struct Say {
     #[prost(enumeration="Scope", tag="1")]
     pub scope: i32,
-    /// At most 500 bytes of UTF-8. May be empty when `here` is set.
+    /// At most 500 characters. May be empty when `here` is set.
     #[prost(string, tag="2")]
     pub text: ::prost::alloc::string::String,
     /// Share where you stand: the server fills Said.stance from the stance it
