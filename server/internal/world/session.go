@@ -3,6 +3,7 @@ package world
 import (
 	"context"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -21,6 +22,9 @@ type session struct {
 	avatar   string
 	stance   *pb.Stance
 	conn     Conn
+	// When the last lineBurst lines were said, oldest first, for the rate
+	// limit. Touched by the actor only.
+	said [lineBurst]time.Time
 	// Frames for the writer. Closed by the actor when the session ends.
 	out chan []byte
 	// Closed once, when the actor lets the session go.
@@ -46,6 +50,17 @@ func (s *session) peer() *pb.Peer {
 		Avatar:  s.avatar,
 		Stance:  s.stance,
 	}
+}
+
+// mayspeak is the rate limit: true, and the line counted, unless lineBurst
+// lines were already said within lineWindow.
+func (s *session) mayspeak(now time.Time) bool {
+	if now.Sub(s.said[0]) < lineWindow {
+		return false
+	}
+	copy(s.said[:], s.said[1:])
+	s.said[lineBurst-1] = now
+	return true
 }
 
 // send queues a message for the writer, dropping the session if it is behind.

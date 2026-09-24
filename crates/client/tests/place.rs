@@ -296,5 +296,9 @@ fn a_link_from_the_air_arrives_flying_and_says_so() {
         "the front end was not told about the flight: {events:?}"
     );
     let there = run(&mut fresh, &mut input, 1.5);
-    assert!(there.altitude_m > 1.0, "landed instead: {} m", there.altitude_m);
+    assert!(
+        there.altitude_m > 1.0,
+        "landed instead: {} m",
+        there.altitude_m
+    );
 }

@@ -6,9 +6,10 @@
 	import type { Link } from '$lib/server/session';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
+	import Chat, { type Line } from './Chat.svelte';
 	import EngineView from './EngineView.svelte';
 	import Settings from './Settings.svelte';
-	import { modes, type Effects, type EngineEvent, type Mode, type PeerInfo, type SessionStatus } from './index';
+	import { modes, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
 
 	// The full viewport engine with its floating panel: what `/play` and
 	// `/w/[id]` share. The page supplies the top of the panel; mode, key hints
@@ -39,9 +40,12 @@
 
 	let { title, recipe, fieldPath, avatar, link, onready, children }: Props = $props();
 
+	let view = $state<ReturnType<typeof EngineView>>();
 	let mode = $state<Mode>('walk');
 	let stats = $state<Extract<EngineEvent, { type: 'stats' }>>();
 	let session = $state<SessionStatus>('offline');
+	/** This client's own session in the world, while online. */
+	let me = $state<number | null>(null);
 	let peers = $state<PeerInfo[]>([]);
 
 	// A peer is shown by name; someone without one is told apart by their
@@ -49,6 +53,34 @@
 	function who(peer: PeerInfo): string {
 		if (peer.name) return peer.name;
 		return t(peer.visitor ? 'engine.here.visitor' : 'engine.here.someone', { n: peer.session });
+	}
+
+	// Lines are what was heard while here, never stored: the panel keeps the
+	// last hundred and a line keeps the name its speaker had when it was said.
+	const LINES_KEPT = 100;
+	let lines = $state<Line[]>([]);
+	let lineCount = 0;
+
+	function heard(event: Extract<EngineEvent, { type: 'said' }>) {
+		const own = event.session === me;
+		const peer = peers.find((p) => p.session === event.session);
+		const line: Line = {
+			id: ++lineCount,
+			who: own ? t('engine.here.you') : who(peer ?? { session: event.session, name: '', visitor: false }),
+			own,
+			scope: event.scope,
+			text: event.text,
+			place: event.place
+		};
+		lines = [...lines.slice(1 - LINES_KEPT), line];
+	}
+
+	function say(scope: Scope, text: string, here: boolean) {
+		view?.command({ type: 'say', scope, text, here });
+	}
+
+	function go(place: string) {
+		view?.command({ type: 'go_to', place });
 	}
 
 	// The address bar is where you are. Read once, synchronously, because the
@@ -110,8 +142,11 @@
 		if (event.type === 'ready') onready?.(event.generator_version);
 		else if (event.type === 'mode_changed') mode = event.mode;
 		else if (event.type === 'stats') stats = event;
-		else if (event.type === 'session') session = event.status;
-		else if (event.type === 'peers') peers = event.peers;
+		else if (event.type === 'session') {
+			session = event.status;
+			me = event.session;
+		} else if (event.type === 'peers') peers = event.peers;
+		else if (event.type === 'said') heard(event);
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
 			effects = event.effects;
@@ -131,7 +166,7 @@
 </script>
 
 <div class="stage">
-	<EngineView {recipe} {fieldPath} {mode} {avatar} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
+	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
 	<Settings {effects} {defaults} onchange={choose} />
 	<Panel {title}>
 		{#snippet aside()}
@@ -153,6 +188,7 @@
 					{/each}
 				</ul>
 			</section>
+			<Chat {lines} online={session === 'online'} onsay={say} ongo={go} />
 		{/if}
 		<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={(value) => (mode = value)} />
 		<ul class="hints">

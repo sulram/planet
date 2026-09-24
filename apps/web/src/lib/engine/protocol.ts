@@ -7,6 +7,12 @@ import type { Recipe } from '$lib/world';
 export type Mode = 'walk' | 'fly';
 export const modes = ['walk', 'fly'] as const satisfies readonly Mode[];
 
+/** Who hears a line: within reach on the same body, or the whole world. Never another world. */
+export type Scope = 'near' | 'world';
+export const scopes = ['near', 'world'] as const satisfies readonly Scope[];
+/** The most a line carries, in bytes of UTF-8. The server drops longer ones unheard. */
+export const LINE_BYTES = 500;
+
 export type ToneMap = 'aces' | 'agx' | 'neutral' | 'reinhard' | 'linear';
 export const toneMaps = ['aces', 'agx', 'neutral', 'reinhard', 'linear'] as const satisfies readonly ToneMap[];
 
@@ -37,11 +43,13 @@ export type Command =
 	/** Fields left out take the engine's default. */
 	| { type: 'set_effects'; effects: Partial<Effects> }
 	/**
-	 * Stand at a place code, `4-K7M42Q`. Arrival, not travel: it is how a
-	 * shared address opens where it says. A short code names a box and you
-	 * land in the middle of it.
+	 * Stand at a place code, `4-K7M42Q`: how a shared address opens where it
+	 * says, and how a place shared in chat is reached. A short code names a
+	 * box and you land in the middle of it.
 	 */
-	| { type: 'go_to'; place: string };
+	| { type: 'go_to'; place: string }
+	/** Say a line. With `here`, where you stand rides along and comes back as a place. */
+	| { type: 'say'; scope: Scope; text: string; here?: boolean };
 
 export type SessionStatus = 'offline' | 'connecting' | 'online';
 
@@ -58,6 +66,12 @@ export type EngineEvent =
 	| { type: 'session'; status: SessionStatus; session: number | null }
 	/** Who else is here, whenever that changes. Empty when offline. */
 	| { type: 'peers'; peers: PeerInfo[] }
+	/**
+	 * A line someone said, your own included: what the world heard is what is
+	 * shown. `place` is where the speaker stood when they shared it, ready for
+	 * `go_to`, or null.
+	 */
+	| { type: 'said'; session: number; scope: Scope; text: string; place: string | null }
 	| { type: 'recipe_changed'; recipe: Recipe }
 	| { type: 'mode_changed'; mode: Mode }
 	| { type: 'avatar_changed'; path: string }
@@ -87,7 +101,8 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'effects_changed',
 	'stats',
 	'session',
-	'peers'
+	'peers',
+	'said'
 ]);
 
 /** Parses one event. Unknown types and malformed payloads yield null. */

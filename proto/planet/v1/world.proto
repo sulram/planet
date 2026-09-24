@@ -70,11 +70,32 @@ message Wear {
   string avatar = 1;
 }
 
+// Who hears a line.
+enum Scope {
+  // Everyone within `NearBlocks` of the speaker, on the same body.
+  SCOPE_NEAR = 0;
+  // Everyone in the world, on every body.
+  SCOPE_WORLD = 1;
+}
+
+// A line of chat. Relayed to everyone in scope, the speaker included, and
+// never stored. Dropped, and nobody told, past the actor's length and rate
+// limits: a UI holds the same limits so a person never meets them.
+message Say {
+  Scope scope = 1;
+  // At most 500 bytes of UTF-8. May be empty when `here` is set.
+  string text = 2;
+  // Share where you stand: the server fills Said.stance from the stance it
+  // holds, so a client cannot claim to stand where it does not.
+  bool here = 3;
+}
+
 message ClientMessage {
   oneof message {
     Hello hello = 1;
     Stance stance = 2;
     Wear wear = 3;
+    Say say = 4;
   }
 }
 
@@ -132,6 +153,15 @@ message Stances {
   repeated Moved moved = 1;
 }
 
+// A line someone said, the receiver's own included.
+message Said {
+  uint32 session = 1;
+  Scope scope = 2;
+  string text = 3;
+  // Where the speaker stood, when they shared it. Absent otherwise.
+  Stance stance = 4;
+}
+
 // Sent instead of Welcome, then the socket closes.
 message Refused {
   string reason = 1;
@@ -145,5 +175,6 @@ message ServerMessage {
     Stances stances = 4;
     Wearing wearing = 5;
     Refused refused = 6;
+    Said said = 7;
   }
 }

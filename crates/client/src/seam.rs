@@ -16,6 +16,31 @@ pub enum Mode {
     Fly,
 }
 
+/// Who hears a line: everyone within `NearBlocks` of the speaker on the same
+/// body, or everyone in the world, on every body. Never another world.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scope {
+    Near,
+    World,
+}
+
+impl Scope {
+    pub(crate) fn wire(self) -> protocol::Scope {
+        match self {
+            Scope::Near => protocol::Scope::Near,
+            Scope::World => protocol::Scope::World,
+        }
+    }
+
+    pub(crate) fn from_wire(scope: protocol::Scope) -> Scope {
+        match scope {
+            protocol::Scope::Near => Scope::Near,
+            protocol::Scope::World => Scope::World,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
@@ -44,11 +69,21 @@ pub enum Command {
     /// facing south and looking a little down. A code shorter than full
     /// precision names a box, and the middle of it is where you land.
     ///
-    /// This is arrival, not travel: it is how a shared address opens where it
-    /// says, and how `--at` aims a headless render. Moving about a world is
-    /// walking, flying and, later, portals.
+    /// Arrival and travel both: how a shared address opens where it says,
+    /// how `--at` aims a headless render, and how a place someone shared in
+    /// chat is reached at a click. Walking, flying and, later, portals are
+    /// the other ways about a world.
     GoTo {
         place: String,
+    },
+    /// Say a line to whoever is in scope. With `here`, where you stand rides
+    /// along, filled in by the server from the stance it holds, and comes
+    /// back in [`Event::Said`] as a place. Nothing goes out while offline.
+    Say {
+        scope: Scope,
+        text: String,
+        #[serde(default)]
+        here: bool,
     },
 }
 
@@ -104,6 +139,15 @@ pub enum Event {
     /// Who else is here, whenever that changes. Empty when offline.
     Peers {
         peers: Vec<PeerInfo>,
+    },
+    /// A line someone said, this client's own included: what the world
+    /// heard is what a UI shows. `place` is where the speaker stood when they
+    /// shared it, as `GoTo` takes it; `None` when they did not.
+    Said {
+        session: u32,
+        scope: Scope,
+        text: String,
+        place: Option<String>,
     },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {
@@ -180,6 +224,28 @@ mod tests {
         assert_eq!(
             Event::ModeChanged { mode: Mode::Walk }.to_json(),
             r#"{"type":"mode_changed","mode":"walk"}"#
+        );
+        assert_eq!(
+            Event::Said {
+                session: 3,
+                scope: Scope::Near,
+                text: "hi".into(),
+                place: None
+            }
+            .to_json(),
+            r#"{"type":"said","session":3,"scope":"near","text":"hi","place":null}"#
+        );
+    }
+
+    #[test]
+    fn a_line_needs_no_here() {
+        assert_eq!(
+            Command::from_json(r#"{"type":"say","scope":"world","text":"hi"}"#).unwrap(),
+            Command::Say {
+                scope: Scope::World,
+                text: "hi".into(),
+                here: false
+            }
         );
     }
 }

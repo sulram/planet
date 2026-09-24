@@ -1,7 +1,9 @@
 package world
 
 import (
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
 
@@ -15,6 +17,16 @@ const TickRate = 15
 // heartbeat bounds the silence: an empty Stances goes out at least this
 // often, so a client can tell a quiet room from a dead link.
 const heartbeat = 2 * time.Second
+
+// A line is at most this long, in bytes of UTF-8, and a session says at most
+// lineBurst lines in lineWindow. Past either the line is dropped and nobody
+// is told: a UI holds the same limits, so a person never meets them, and
+// only a client that ignores them does.
+const (
+	LineBytes  = 500
+	lineBurst  = 5
+	lineWindow = 5 * time.Second
+)
 
 type inboundKind uint8
 
@@ -124,7 +136,35 @@ func (a *actor) handle(s *session, message *pb.ClientMessage) {
 			Session: s.id,
 			Avatar:  s.avatar,
 		}}}, s)
+	case *pb.ClientMessage_Say:
+		a.say(s, m.Say, time.Now())
 	}
+}
+
+// say relays a line to everyone in its scope, the speaker included, so what
+// a client shows is what the world heard. The speaker's place rides along
+// when asked for, from the stance the actor holds and never from the
+// client's word. A line is never stored (DECISIONS 69).
+func (a *actor) say(s *session, say *pb.Say, now time.Time) {
+	text := strings.TrimSpace(say.Text)
+	if len(text) > LineBytes || !utf8.ValidString(text) || (text == "" && !say.Here) {
+		return
+	}
+	if !s.mayspeak(now) {
+		return
+	}
+	said := &pb.Said{Session: s.id, Scope: say.Scope, Text: text}
+	if say.Here {
+		said.Stance = s.stance
+	}
+	message := &pb.ServerMessage{Message: &pb.ServerMessage_Said{Said: said}}
+	if say.Scope == pb.Scope_SCOPE_WORLD {
+		a.broadcast(message, nil)
+		return
+	}
+	a.relay(message, func(other *session) bool {
+		return other == s || near(s.stance, other.stance)
+	})
 }
 
 // flush relays what moved since the last tick to everyone, in one frame
@@ -142,16 +182,21 @@ func (a *actor) flush(now time.Time) {
 	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Stances{Stances: &pb.Stances{Moved: moved}}}, nil)
 }
 
-// broadcast sends one message to every session but `except`. A session too
-// slow to take it is dropped: the actor never waits for a client.
+// broadcast sends one message to every session but `except`.
 func (a *actor) broadcast(message *pb.ServerMessage, except *session) {
+	a.relay(message, func(s *session) bool { return s != except })
+}
+
+// relay sends one message, encoded once, to every session `to` admits. A
+// session too slow to take it is dropped: the actor never waits for a client.
+func (a *actor) relay(message *pb.ServerMessage, to func(*session) bool) {
 	frame, err := proto.Marshal(message)
 	if err != nil {
 		return
 	}
 	var slow []*session
 	for _, s := range a.sessions {
-		if s == except {
+		if !to(s) {
 			continue
 		}
 		if !s.offer(frame) {

@@ -17,7 +17,7 @@ import (
 
 // Protocol is the wire version this server speaks. Hello says the client's;
 // any other number is refused. Kept equal to `protocol::PROTOCOL` in Rust.
-const Protocol = 1
+const Protocol = 2
 
 // A client says Hello within this long of connecting, and then something at
 // least every few seconds; a silent link is a dead one.

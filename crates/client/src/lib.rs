@@ -34,7 +34,7 @@ pub use input::{Input, Key};
 use peers::Peers;
 pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{Command, Event, Mode, PeerInfo, SessionStatus};
+pub use seam::{Command, Event, Mode, PeerInfo, Scope, SessionStatus};
 pub use session::Outbound;
 use session::Session;
 use terrain::{Body, Terrain};
@@ -339,6 +339,7 @@ impl Client {
                     self.events.push(Event::Rejected { message });
                 }
             }
+            Command::Say { scope, text, here } => self.session.say_line(scope.wire(), text, here),
         }
     }
 
@@ -589,6 +590,20 @@ impl Client {
             Some(Message::Wearing(wearing)) => {
                 self.peers.wearing(wearing.session, &wearing.avatar);
                 self.dress_all();
+            }
+            Some(Message::Said(said)) => {
+                let grid = self.generator.sphere().blocks();
+                let place = said
+                    .stance
+                    .as_ref()
+                    .and_then(|stance| place::Pose::of_stance(grid, stance))
+                    .map(|pose| pose.place(grid));
+                self.events.push(Event::Said {
+                    session: said.session,
+                    scope: Scope::from_wire(said.scope()),
+                    text: said.text,
+                    place,
+                });
             }
             Some(Message::Refused(refused)) => {
                 self.events.push(Event::Rejected {

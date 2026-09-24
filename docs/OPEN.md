@@ -42,6 +42,7 @@ The address is the save format: settled before the first volume is stored.
 | Meta store policy on crypto features; only matters if wallets ship on Quest | ROADMAP M6 | |
 | Hyperfy license: confirm GPL-3.0 | the license row above | CLAUDE.md § refs |
 | Terms of use for uploaded content | uploads (ROADMAP M5) | |
+| **Muting in chat.** A mute is a role and roles are per world (M4); until then an operator's only tool is the backoffice | chat moderation | DECISIONS 69 · ROADMAP M4 |
 
 ## Problems with no chosen fix
 

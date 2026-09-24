@@ -140,6 +140,55 @@ func (Gait) EnumDescriptor() ([]byte, []int) {
 	return file_planet_v1_world_proto_rawDescGZIP(), []int{1}
 }
 
+// Who hears a line.
+type Scope int32
+
+const (
+	// Everyone within `NearBlocks` of the speaker, on the same body.
+	Scope_SCOPE_NEAR Scope = 0
+	// Everyone in the world, on every body.
+	Scope_SCOPE_WORLD Scope = 1
+)
+
+// Enum value maps for Scope.
+var (
+	Scope_name = map[int32]string{
+		0: "SCOPE_NEAR",
+		1: "SCOPE_WORLD",
+	}
+	Scope_value = map[string]int32{
+		"SCOPE_NEAR":  0,
+		"SCOPE_WORLD": 1,
+	}
+)
+
+func (x Scope) Enum() *Scope {
+	p := new(Scope)
+	*p = x
+	return p
+}
+
+func (x Scope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Scope) Descriptor() protoreflect.EnumDescriptor {
+	return file_planet_v1_world_proto_enumTypes[2].Descriptor()
+}
+
+func (Scope) Type() protoreflect.EnumType {
+	return &file_planet_v1_world_proto_enumTypes[2]
+}
+
+func (x Scope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Scope.Descriptor instead.
+func (Scope) EnumDescriptor() ([]byte, []int) {
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{2}
+}
+
 // Where a body is and how it moves: what presence carries, many times a
 // second. A pose is what a link carries; a stance is what a peer sends.
 // The place is an address with fractional blocks, never a float position.
@@ -377,6 +426,72 @@ func (x *Wear) GetAvatar() string {
 	return ""
 }
 
+// A line of chat. Relayed to everyone in scope, the speaker included, and
+// never stored. Dropped, and nobody told, past the actor's length and rate
+// limits: a UI holds the same limits so a person never meets them.
+type Say struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Scope Scope                  `protobuf:"varint,1,opt,name=scope,proto3,enum=planet.v1.Scope" json:"scope,omitempty"`
+	// At most 500 bytes of UTF-8. May be empty when `here` is set.
+	Text string `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	// Share where you stand: the server fills Said.stance from the stance it
+	// holds, so a client cannot claim to stand where it does not.
+	Here          bool `protobuf:"varint,3,opt,name=here,proto3" json:"here,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Say) Reset() {
+	*x = Say{}
+	mi := &file_planet_v1_world_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Say) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Say) ProtoMessage() {}
+
+func (x *Say) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_v1_world_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Say.ProtoReflect.Descriptor instead.
+func (*Say) Descriptor() ([]byte, []int) {
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Say) GetScope() Scope {
+	if x != nil {
+		return x.Scope
+	}
+	return Scope_SCOPE_NEAR
+}
+
+func (x *Say) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *Say) GetHere() bool {
+	if x != nil {
+		return x.Here
+	}
+	return false
+}
+
 type ClientMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Message:
@@ -384,6 +499,7 @@ type ClientMessage struct {
 	//	*ClientMessage_Hello
 	//	*ClientMessage_Stance
 	//	*ClientMessage_Wear
+	//	*ClientMessage_Say
 	Message       isClientMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -391,7 +507,7 @@ type ClientMessage struct {
 
 func (x *ClientMessage) Reset() {
 	*x = ClientMessage{}
-	mi := &file_planet_v1_world_proto_msgTypes[3]
+	mi := &file_planet_v1_world_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +519,7 @@ func (x *ClientMessage) String() string {
 func (*ClientMessage) ProtoMessage() {}
 
 func (x *ClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[3]
+	mi := &file_planet_v1_world_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +532,7 @@ func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
 func (*ClientMessage) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{3}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ClientMessage) GetMessage() isClientMessage_Message {
@@ -453,6 +569,15 @@ func (x *ClientMessage) GetWear() *Wear {
 	return nil
 }
 
+func (x *ClientMessage) GetSay() *Say {
+	if x != nil {
+		if x, ok := x.Message.(*ClientMessage_Say); ok {
+			return x.Say
+		}
+	}
+	return nil
+}
+
 type isClientMessage_Message interface {
 	isClientMessage_Message()
 }
@@ -469,11 +594,17 @@ type ClientMessage_Wear struct {
 	Wear *Wear `protobuf:"bytes,3,opt,name=wear,proto3,oneof"`
 }
 
+type ClientMessage_Say struct {
+	Say *Say `protobuf:"bytes,4,opt,name=say,proto3,oneof"`
+}
+
 func (*ClientMessage_Hello) isClientMessage_Message() {}
 
 func (*ClientMessage_Stance) isClientMessage_Message() {}
 
 func (*ClientMessage_Wear) isClientMessage_Message() {}
+
+func (*ClientMessage_Say) isClientMessage_Message() {}
 
 // Seed + params + generator version, as the worlds collection holds it. The
 // params are the JSON the generator version owns.
@@ -489,7 +620,7 @@ type Recipe struct {
 
 func (x *Recipe) Reset() {
 	*x = Recipe{}
-	mi := &file_planet_v1_world_proto_msgTypes[4]
+	mi := &file_planet_v1_world_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +632,7 @@ func (x *Recipe) String() string {
 func (*Recipe) ProtoMessage() {}
 
 func (x *Recipe) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[4]
+	mi := &file_planet_v1_world_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +645,7 @@ func (x *Recipe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Recipe.ProtoReflect.Descriptor instead.
 func (*Recipe) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{4}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Recipe) GetSeed() string {
@@ -556,7 +687,7 @@ type Peer struct {
 
 func (x *Peer) Reset() {
 	*x = Peer{}
-	mi := &file_planet_v1_world_proto_msgTypes[5]
+	mi := &file_planet_v1_world_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -568,7 +699,7 @@ func (x *Peer) String() string {
 func (*Peer) ProtoMessage() {}
 
 func (x *Peer) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[5]
+	mi := &file_planet_v1_world_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -581,7 +712,7 @@ func (x *Peer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Peer.ProtoReflect.Descriptor instead.
 func (*Peer) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{5}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Peer) GetSession() uint32 {
@@ -631,7 +762,7 @@ type Welcome struct {
 
 func (x *Welcome) Reset() {
 	*x = Welcome{}
-	mi := &file_planet_v1_world_proto_msgTypes[6]
+	mi := &file_planet_v1_world_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -643,7 +774,7 @@ func (x *Welcome) String() string {
 func (*Welcome) ProtoMessage() {}
 
 func (x *Welcome) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[6]
+	mi := &file_planet_v1_world_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -656,7 +787,7 @@ func (x *Welcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Welcome.ProtoReflect.Descriptor instead.
 func (*Welcome) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{6}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Welcome) GetSession() uint32 {
@@ -689,7 +820,7 @@ type Joined struct {
 
 func (x *Joined) Reset() {
 	*x = Joined{}
-	mi := &file_planet_v1_world_proto_msgTypes[7]
+	mi := &file_planet_v1_world_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -701,7 +832,7 @@ func (x *Joined) String() string {
 func (*Joined) ProtoMessage() {}
 
 func (x *Joined) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[7]
+	mi := &file_planet_v1_world_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -714,7 +845,7 @@ func (x *Joined) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Joined.ProtoReflect.Descriptor instead.
 func (*Joined) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{7}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Joined) GetPeer() *Peer {
@@ -733,7 +864,7 @@ type Left struct {
 
 func (x *Left) Reset() {
 	*x = Left{}
-	mi := &file_planet_v1_world_proto_msgTypes[8]
+	mi := &file_planet_v1_world_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -745,7 +876,7 @@ func (x *Left) String() string {
 func (*Left) ProtoMessage() {}
 
 func (x *Left) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[8]
+	mi := &file_planet_v1_world_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -758,7 +889,7 @@ func (x *Left) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Left.ProtoReflect.Descriptor instead.
 func (*Left) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{8}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Left) GetSession() uint32 {
@@ -778,7 +909,7 @@ type Wearing struct {
 
 func (x *Wearing) Reset() {
 	*x = Wearing{}
-	mi := &file_planet_v1_world_proto_msgTypes[9]
+	mi := &file_planet_v1_world_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +921,7 @@ func (x *Wearing) String() string {
 func (*Wearing) ProtoMessage() {}
 
 func (x *Wearing) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[9]
+	mi := &file_planet_v1_world_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +934,7 @@ func (x *Wearing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Wearing.ProtoReflect.Descriptor instead.
 func (*Wearing) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{9}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Wearing) GetSession() uint32 {
@@ -830,7 +961,7 @@ type Moved struct {
 
 func (x *Moved) Reset() {
 	*x = Moved{}
-	mi := &file_planet_v1_world_proto_msgTypes[10]
+	mi := &file_planet_v1_world_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -842,7 +973,7 @@ func (x *Moved) String() string {
 func (*Moved) ProtoMessage() {}
 
 func (x *Moved) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[10]
+	mi := &file_planet_v1_world_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +986,7 @@ func (x *Moved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Moved.ProtoReflect.Descriptor instead.
 func (*Moved) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{10}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Moved) GetSession() uint32 {
@@ -884,7 +1015,7 @@ type Stances struct {
 
 func (x *Stances) Reset() {
 	*x = Stances{}
-	mi := &file_planet_v1_world_proto_msgTypes[11]
+	mi := &file_planet_v1_world_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -896,7 +1027,7 @@ func (x *Stances) String() string {
 func (*Stances) ProtoMessage() {}
 
 func (x *Stances) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[11]
+	mi := &file_planet_v1_world_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -909,12 +1040,82 @@ func (x *Stances) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Stances.ProtoReflect.Descriptor instead.
 func (*Stances) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{11}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Stances) GetMoved() []*Moved {
 	if x != nil {
 		return x.Moved
+	}
+	return nil
+}
+
+// A line someone said, the receiver's own included.
+type Said struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session uint32                 `protobuf:"varint,1,opt,name=session,proto3" json:"session,omitempty"`
+	Scope   Scope                  `protobuf:"varint,2,opt,name=scope,proto3,enum=planet.v1.Scope" json:"scope,omitempty"`
+	Text    string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	// Where the speaker stood, when they shared it. Absent otherwise.
+	Stance        *Stance `protobuf:"bytes,4,opt,name=stance,proto3" json:"stance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Said) Reset() {
+	*x = Said{}
+	mi := &file_planet_v1_world_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Said) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Said) ProtoMessage() {}
+
+func (x *Said) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_v1_world_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Said.ProtoReflect.Descriptor instead.
+func (*Said) Descriptor() ([]byte, []int) {
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *Said) GetSession() uint32 {
+	if x != nil {
+		return x.Session
+	}
+	return 0
+}
+
+func (x *Said) GetScope() Scope {
+	if x != nil {
+		return x.Scope
+	}
+	return Scope_SCOPE_NEAR
+}
+
+func (x *Said) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *Said) GetStance() *Stance {
+	if x != nil {
+		return x.Stance
 	}
 	return nil
 }
@@ -929,7 +1130,7 @@ type Refused struct {
 
 func (x *Refused) Reset() {
 	*x = Refused{}
-	mi := &file_planet_v1_world_proto_msgTypes[12]
+	mi := &file_planet_v1_world_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -941,7 +1142,7 @@ func (x *Refused) String() string {
 func (*Refused) ProtoMessage() {}
 
 func (x *Refused) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[12]
+	mi := &file_planet_v1_world_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -954,7 +1155,7 @@ func (x *Refused) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Refused.ProtoReflect.Descriptor instead.
 func (*Refused) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{12}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Refused) GetReason() string {
@@ -974,6 +1175,7 @@ type ServerMessage struct {
 	//	*ServerMessage_Stances
 	//	*ServerMessage_Wearing
 	//	*ServerMessage_Refused
+	//	*ServerMessage_Said
 	Message       isServerMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -981,7 +1183,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_planet_v1_world_proto_msgTypes[13]
+	mi := &file_planet_v1_world_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -993,7 +1195,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_v1_world_proto_msgTypes[13]
+	mi := &file_planet_v1_world_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1006,7 +1208,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_planet_v1_world_proto_rawDescGZIP(), []int{13}
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ServerMessage) GetMessage() isServerMessage_Message {
@@ -1070,6 +1272,15 @@ func (x *ServerMessage) GetRefused() *Refused {
 	return nil
 }
 
+func (x *ServerMessage) GetSaid() *Said {
+	if x != nil {
+		if x, ok := x.Message.(*ServerMessage_Said); ok {
+			return x.Said
+		}
+	}
+	return nil
+}
+
 type isServerMessage_Message interface {
 	isServerMessage_Message()
 }
@@ -1098,6 +1309,10 @@ type ServerMessage_Refused struct {
 	Refused *Refused `protobuf:"bytes,6,opt,name=refused,proto3,oneof"`
 }
 
+type ServerMessage_Said struct {
+	Said *Said `protobuf:"bytes,7,opt,name=said,proto3,oneof"`
+}
+
 func (*ServerMessage_Welcome) isServerMessage_Message() {}
 
 func (*ServerMessage_Joined) isServerMessage_Message() {}
@@ -1109,6 +1324,8 @@ func (*ServerMessage_Stances) isServerMessage_Message() {}
 func (*ServerMessage_Wearing) isServerMessage_Message() {}
 
 func (*ServerMessage_Refused) isServerMessage_Message() {}
+
+func (*ServerMessage_Said) isServerMessage_Message() {}
 
 var File_planet_v1_world_proto protoreflect.FileDescriptor
 
@@ -1132,11 +1349,16 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\bprotocol\x18\x01 \x01(\rR\bprotocol\x12\x16\n" +
 	"\x06avatar\x18\x02 \x01(\tR\x06avatar\"\x1e\n" +
 	"\x04Wear\x12\x16\n" +
-	"\x06avatar\x18\x01 \x01(\tR\x06avatar\"\x98\x01\n" +
+	"\x06avatar\x18\x01 \x01(\tR\x06avatar\"U\n" +
+	"\x03Say\x12&\n" +
+	"\x05scope\x18\x01 \x01(\x0e2\x10.planet.v1.ScopeR\x05scope\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x12\n" +
+	"\x04here\x18\x03 \x01(\bR\x04here\"\xbc\x01\n" +
 	"\rClientMessage\x12(\n" +
 	"\x05hello\x18\x01 \x01(\v2\x10.planet.v1.HelloH\x00R\x05hello\x12+\n" +
 	"\x06stance\x18\x02 \x01(\v2\x11.planet.v1.StanceH\x00R\x06stance\x12%\n" +
-	"\x04wear\x18\x03 \x01(\v2\x0f.planet.v1.WearH\x00R\x04wearB\t\n" +
+	"\x04wear\x18\x03 \x01(\v2\x0f.planet.v1.WearH\x00R\x04wear\x12\"\n" +
+	"\x03say\x18\x04 \x01(\v2\x0e.planet.v1.SayH\x00R\x03sayB\t\n" +
 	"\amessage\"j\n" +
 	"\x06Recipe\x12\x12\n" +
 	"\x04seed\x18\x01 \x01(\tR\x04seed\x12+\n" +
@@ -1164,16 +1386,22 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\asession\x18\x01 \x01(\rR\asession\x12)\n" +
 	"\x06stance\x18\x02 \x01(\v2\x11.planet.v1.StanceR\x06stance\"1\n" +
 	"\aStances\x12&\n" +
-	"\x05moved\x18\x01 \x03(\v2\x10.planet.v1.MovedR\x05moved\"!\n" +
+	"\x05moved\x18\x01 \x03(\v2\x10.planet.v1.MovedR\x05moved\"\x87\x01\n" +
+	"\x04Said\x12\x18\n" +
+	"\asession\x18\x01 \x01(\rR\asession\x12&\n" +
+	"\x05scope\x18\x02 \x01(\x0e2\x10.planet.v1.ScopeR\x05scope\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\x12)\n" +
+	"\x06stance\x18\x04 \x01(\v2\x11.planet.v1.StanceR\x06stance\"!\n" +
 	"\aRefused\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xae\x02\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xd5\x02\n" +
 	"\rServerMessage\x12.\n" +
 	"\awelcome\x18\x01 \x01(\v2\x12.planet.v1.WelcomeH\x00R\awelcome\x12+\n" +
 	"\x06joined\x18\x02 \x01(\v2\x11.planet.v1.JoinedH\x00R\x06joined\x12%\n" +
 	"\x04left\x18\x03 \x01(\v2\x0f.planet.v1.LeftH\x00R\x04left\x12.\n" +
 	"\astances\x18\x04 \x01(\v2\x12.planet.v1.StancesH\x00R\astances\x12.\n" +
 	"\awearing\x18\x05 \x01(\v2\x12.planet.v1.WearingH\x00R\awearing\x12.\n" +
-	"\arefused\x18\x06 \x01(\v2\x12.planet.v1.RefusedH\x00R\arefusedB\t\n" +
+	"\arefused\x18\x06 \x01(\v2\x12.planet.v1.RefusedH\x00R\arefused\x12%\n" +
+	"\x04said\x18\a \x01(\v2\x0f.planet.v1.SaidH\x00R\x04saidB\t\n" +
 	"\amessage*&\n" +
 	"\x04Body\x12\x0f\n" +
 	"\vBODY_PLANET\x10\x00\x12\r\n" +
@@ -1185,7 +1413,11 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\tGAIT_JUMP\x10\x03\x12\r\n" +
 	"\tGAIT_FALL\x10\x04\x12\f\n" +
 	"\bGAIT_FLY\x10\x05\x12\r\n" +
-	"\tGAIT_SWIM\x10\x06B<Z:github.com/sulram/planet/server/internal/protocol;protocolb\x06proto3"
+	"\tGAIT_SWIM\x10\x06*(\n" +
+	"\x05Scope\x12\x0e\n" +
+	"\n" +
+	"SCOPE_NEAR\x10\x00\x12\x0f\n" +
+	"\vSCOPE_WORLD\x10\x01B<Z:github.com/sulram/planet/server/internal/protocol;protocolb\x06proto3"
 
 var (
 	file_planet_v1_world_proto_rawDescOnce sync.Once
@@ -1199,49 +1431,57 @@ func file_planet_v1_world_proto_rawDescGZIP() []byte {
 	return file_planet_v1_world_proto_rawDescData
 }
 
-var file_planet_v1_world_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_planet_v1_world_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_planet_v1_world_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_planet_v1_world_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_planet_v1_world_proto_goTypes = []any{
 	(Body)(0),             // 0: planet.v1.Body
 	(Gait)(0),             // 1: planet.v1.Gait
-	(*Stance)(nil),        // 2: planet.v1.Stance
-	(*Hello)(nil),         // 3: planet.v1.Hello
-	(*Wear)(nil),          // 4: planet.v1.Wear
-	(*ClientMessage)(nil), // 5: planet.v1.ClientMessage
-	(*Recipe)(nil),        // 6: planet.v1.Recipe
-	(*Peer)(nil),          // 7: planet.v1.Peer
-	(*Welcome)(nil),       // 8: planet.v1.Welcome
-	(*Joined)(nil),        // 9: planet.v1.Joined
-	(*Left)(nil),          // 10: planet.v1.Left
-	(*Wearing)(nil),       // 11: planet.v1.Wearing
-	(*Moved)(nil),         // 12: planet.v1.Moved
-	(*Stances)(nil),       // 13: planet.v1.Stances
-	(*Refused)(nil),       // 14: planet.v1.Refused
-	(*ServerMessage)(nil), // 15: planet.v1.ServerMessage
+	(Scope)(0),            // 2: planet.v1.Scope
+	(*Stance)(nil),        // 3: planet.v1.Stance
+	(*Hello)(nil),         // 4: planet.v1.Hello
+	(*Wear)(nil),          // 5: planet.v1.Wear
+	(*Say)(nil),           // 6: planet.v1.Say
+	(*ClientMessage)(nil), // 7: planet.v1.ClientMessage
+	(*Recipe)(nil),        // 8: planet.v1.Recipe
+	(*Peer)(nil),          // 9: planet.v1.Peer
+	(*Welcome)(nil),       // 10: planet.v1.Welcome
+	(*Joined)(nil),        // 11: planet.v1.Joined
+	(*Left)(nil),          // 12: planet.v1.Left
+	(*Wearing)(nil),       // 13: planet.v1.Wearing
+	(*Moved)(nil),         // 14: planet.v1.Moved
+	(*Stances)(nil),       // 15: planet.v1.Stances
+	(*Said)(nil),          // 16: planet.v1.Said
+	(*Refused)(nil),       // 17: planet.v1.Refused
+	(*ServerMessage)(nil), // 18: planet.v1.ServerMessage
 }
 var file_planet_v1_world_proto_depIdxs = []int32{
 	0,  // 0: planet.v1.Stance.body:type_name -> planet.v1.Body
 	1,  // 1: planet.v1.Stance.gait:type_name -> planet.v1.Gait
-	3,  // 2: planet.v1.ClientMessage.hello:type_name -> planet.v1.Hello
-	2,  // 3: planet.v1.ClientMessage.stance:type_name -> planet.v1.Stance
-	4,  // 4: planet.v1.ClientMessage.wear:type_name -> planet.v1.Wear
-	2,  // 5: planet.v1.Peer.stance:type_name -> planet.v1.Stance
-	6,  // 6: planet.v1.Welcome.recipe:type_name -> planet.v1.Recipe
-	7,  // 7: planet.v1.Welcome.peers:type_name -> planet.v1.Peer
-	7,  // 8: planet.v1.Joined.peer:type_name -> planet.v1.Peer
-	2,  // 9: planet.v1.Moved.stance:type_name -> planet.v1.Stance
-	12, // 10: planet.v1.Stances.moved:type_name -> planet.v1.Moved
-	8,  // 11: planet.v1.ServerMessage.welcome:type_name -> planet.v1.Welcome
-	9,  // 12: planet.v1.ServerMessage.joined:type_name -> planet.v1.Joined
-	10, // 13: planet.v1.ServerMessage.left:type_name -> planet.v1.Left
-	13, // 14: planet.v1.ServerMessage.stances:type_name -> planet.v1.Stances
-	11, // 15: planet.v1.ServerMessage.wearing:type_name -> planet.v1.Wearing
-	14, // 16: planet.v1.ServerMessage.refused:type_name -> planet.v1.Refused
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	2,  // 2: planet.v1.Say.scope:type_name -> planet.v1.Scope
+	4,  // 3: planet.v1.ClientMessage.hello:type_name -> planet.v1.Hello
+	3,  // 4: planet.v1.ClientMessage.stance:type_name -> planet.v1.Stance
+	5,  // 5: planet.v1.ClientMessage.wear:type_name -> planet.v1.Wear
+	6,  // 6: planet.v1.ClientMessage.say:type_name -> planet.v1.Say
+	3,  // 7: planet.v1.Peer.stance:type_name -> planet.v1.Stance
+	8,  // 8: planet.v1.Welcome.recipe:type_name -> planet.v1.Recipe
+	9,  // 9: planet.v1.Welcome.peers:type_name -> planet.v1.Peer
+	9,  // 10: planet.v1.Joined.peer:type_name -> planet.v1.Peer
+	3,  // 11: planet.v1.Moved.stance:type_name -> planet.v1.Stance
+	14, // 12: planet.v1.Stances.moved:type_name -> planet.v1.Moved
+	2,  // 13: planet.v1.Said.scope:type_name -> planet.v1.Scope
+	3,  // 14: planet.v1.Said.stance:type_name -> planet.v1.Stance
+	10, // 15: planet.v1.ServerMessage.welcome:type_name -> planet.v1.Welcome
+	11, // 16: planet.v1.ServerMessage.joined:type_name -> planet.v1.Joined
+	12, // 17: planet.v1.ServerMessage.left:type_name -> planet.v1.Left
+	15, // 18: planet.v1.ServerMessage.stances:type_name -> planet.v1.Stances
+	13, // 19: planet.v1.ServerMessage.wearing:type_name -> planet.v1.Wearing
+	17, // 20: planet.v1.ServerMessage.refused:type_name -> planet.v1.Refused
+	16, // 21: planet.v1.ServerMessage.said:type_name -> planet.v1.Said
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_planet_v1_world_proto_init() }
@@ -1249,26 +1489,28 @@ func file_planet_v1_world_proto_init() {
 	if File_planet_v1_world_proto != nil {
 		return
 	}
-	file_planet_v1_world_proto_msgTypes[3].OneofWrappers = []any{
+	file_planet_v1_world_proto_msgTypes[4].OneofWrappers = []any{
 		(*ClientMessage_Hello)(nil),
 		(*ClientMessage_Stance)(nil),
 		(*ClientMessage_Wear)(nil),
+		(*ClientMessage_Say)(nil),
 	}
-	file_planet_v1_world_proto_msgTypes[13].OneofWrappers = []any{
+	file_planet_v1_world_proto_msgTypes[15].OneofWrappers = []any{
 		(*ServerMessage_Welcome)(nil),
 		(*ServerMessage_Joined)(nil),
 		(*ServerMessage_Left)(nil),
 		(*ServerMessage_Stances)(nil),
 		(*ServerMessage_Wearing)(nil),
 		(*ServerMessage_Refused)(nil),
+		(*ServerMessage_Said)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_planet_v1_world_proto_rawDesc), len(file_planet_v1_world_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   14,
+			NumEnums:      3,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

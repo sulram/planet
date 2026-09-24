@@ -3,6 +3,9 @@ package world
 import (
 	"context"
 	"errors"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,4 +265,67 @@ func TestWhatIsRefused(t *testing.T) {
 	if hub.Active() != 0 {
 		t.Fatal("nothing refused leaves an actor behind")
 	}
+}
+
+func TestALineReachesItsScope(t *testing.T) {
+	hub := NewHub(fixedCatalog{"w1": recipe(t)})
+	a := connect(t, hub, "w1", hello())
+	me := a.hear().GetWelcome().Session
+	b := connect(t, hub, "w1", hello())
+	b.hear()
+	far := connect(t, hub, "w1", hello())
+	far.hear()
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(100)}})
+	b.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(110)}})
+	far.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(1100)}})
+	// The stances have to land before a line is measured against them.
+	b.hearUntil(func(m *pb.ServerMessage) bool {
+		for _, moved := range m.GetStances().GetMoved() {
+			if moved.Session == me {
+				return true
+			}
+		}
+		return false
+	})
+
+	said := func(c *client) *pb.Said {
+		return c.hearUntil(func(m *pb.ServerMessage) bool { return m.GetSaid() != nil }).GetSaid()
+	}
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_NEAR, Text: "  hi  ", Here: true}}})
+	for _, c := range []*client{a, b} {
+		line := said(c)
+		if line.Session != me || line.Text != "hi" || line.Scope != pb.Scope_SCOPE_NEAR {
+			t.Fatalf("a near line reaches the speaker and a neighbour, trimmed: %v", line)
+		}
+		if line.Stance == nil || line.Stance.U != 100 {
+			t.Fatalf("with the speaker's place, as the actor saw it: %v", line)
+		}
+	}
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: "all"}}})
+	if line := said(far); line.Text != "all" || line.Stance != nil {
+		t.Fatalf("the far one hears only the world line, and no place unasked: %v", line)
+	}
+
+	long := strings.Repeat("x", LineBytes+1)
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: long}}})
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD}}})
+	for i := range lineBurst + 2 {
+		a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: strconv.Itoa(i)}}})
+	}
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Wear{Wear: &pb.Wear{Avatar: "avatars/Ada.vrm"}}})
+	var heard []string
+	far.hearUntil(func(m *pb.ServerMessage) bool {
+		if line := m.GetSaid(); line != nil {
+			heard = append(heard, line.Text)
+		}
+		return m.GetWearing() != nil
+	})
+	// Two lines were already said in this window: three more fit.
+	if want := []string{"0", "1", "2"}; !slices.Equal(heard, want) {
+		t.Fatalf("too long, empty and past the rate are dropped: %v", heard)
+	}
+
+	a.leave()
+	b.leave()
+	far.leave()
 }

@@ -128,6 +128,18 @@ impl Session {
         }
     }
 
+    /// A line for whoever is in scope. Nothing while offline: a line said to
+    /// nobody is not queued for later.
+    pub fn say_line(&mut self, scope: protocol::Scope, text: String, here: bool) {
+        if self.online() {
+            self.say(client_message::Message::Say(protocol::Say {
+                scope: scope.into(),
+                text,
+                here,
+            }));
+        }
+    }
+
     fn say(&mut self, message: client_message::Message) {
         let frame = protocol::encode(&ClientMessage {
             message: Some(message),

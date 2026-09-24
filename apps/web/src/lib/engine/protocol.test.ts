@@ -26,6 +26,13 @@ describe('parseEvent', () => {
 			type: 'peers',
 			peers: [{ session: 2, name: 'Ada', visitor: false }]
 		});
+		expect(parseEvent('{"type":"said","session":2,"scope":"near","text":"hi","place":"4-K7M42Q"}')).toEqual({
+			type: 'said',
+			session: 2,
+			scope: 'near',
+			text: 'hi',
+			place: '4-K7M42Q'
+		});
 	});
 
 	test('ignores unknown types and malformed payloads', () => {

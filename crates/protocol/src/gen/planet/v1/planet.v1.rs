@@ -54,9 +54,24 @@ pub struct Wear {
     #[prost(string, tag="1")]
     pub avatar: ::prost::alloc::string::String,
 }
+/// A line of chat. Relayed to everyone in scope, the speaker included, and
+/// never stored. Dropped, and nobody told, past the actor's length and rate
+/// limits: a UI holds the same limits so a person never meets them.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Say {
+    #[prost(enumeration="Scope", tag="1")]
+    pub scope: i32,
+    /// At most 500 bytes of UTF-8. May be empty when `here` is set.
+    #[prost(string, tag="2")]
+    pub text: ::prost::alloc::string::String,
+    /// Share where you stand: the server fills Said.stance from the stance it
+    /// holds, so a client cannot claim to stand where it does not.
+    #[prost(bool, tag="3")]
+    pub here: bool,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientMessage {
-    #[prost(oneof="client_message::Message", tags="1, 2, 3")]
+    #[prost(oneof="client_message::Message", tags="1, 2, 3, 4")]
     pub message: ::core::option::Option<client_message::Message>,
 }
 /// Nested message and enum types in `ClientMessage`.
@@ -69,6 +84,8 @@ pub mod client_message {
         Stance(super::Stance),
         #[prost(message, tag="3")]
         Wear(super::Wear),
+        #[prost(message, tag="4")]
+        Say(super::Say),
     }
 }
 /// Seed + params + generator version, as the worlds collection holds it. The
@@ -143,6 +160,19 @@ pub struct Stances {
     #[prost(message, repeated, tag="1")]
     pub moved: ::prost::alloc::vec::Vec<Moved>,
 }
+/// A line someone said, the receiver's own included.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Said {
+    #[prost(uint32, tag="1")]
+    pub session: u32,
+    #[prost(enumeration="Scope", tag="2")]
+    pub scope: i32,
+    #[prost(string, tag="3")]
+    pub text: ::prost::alloc::string::String,
+    /// Where the speaker stood, when they shared it. Absent otherwise.
+    #[prost(message, optional, tag="4")]
+    pub stance: ::core::option::Option<Stance>,
+}
 /// Sent instead of Welcome, then the socket closes.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Refused {
@@ -151,7 +181,7 @@ pub struct Refused {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerMessage {
-    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6")]
+    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 7")]
     pub message: ::core::option::Option<server_message::Message>,
 }
 /// Nested message and enum types in `ServerMessage`.
@@ -170,6 +200,8 @@ pub mod server_message {
         Wearing(super::Wearing),
         #[prost(message, tag="6")]
         Refused(super::Refused),
+        #[prost(message, tag="7")]
+        Said(super::Said),
     }
 }
 /// The body a stance is measured from. Every body is parametrised on the
@@ -239,6 +271,35 @@ impl Gait {
             "GAIT_FALL" => Some(Self::Fall),
             "GAIT_FLY" => Some(Self::Fly),
             "GAIT_SWIM" => Some(Self::Swim),
+            _ => None,
+        }
+    }
+}
+/// Who hears a line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum Scope {
+    /// Everyone within `NearBlocks` of the speaker, on the same body.
+    Near = 0,
+    /// Everyone in the world, on every body.
+    World = 1,
+}
+impl Scope {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Near => "SCOPE_NEAR",
+            Self::World => "SCOPE_WORLD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SCOPE_NEAR" => Some(Self::Near),
+            "SCOPE_WORLD" => Some(Self::World),
             _ => None,
         }
     }

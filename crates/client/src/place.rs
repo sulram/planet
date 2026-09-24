@@ -9,7 +9,7 @@
 //! the native panel from each writing their own version of this, and it is why
 //! `Stats` carries a place *and* a pose rather than the parts.
 
-use topology::{Column, Grid};
+use topology::{Column, Grid, Sector, SurfacePoint};
 
 /// Marks the moon. Not in the code alphabet, so it can never be read as one.
 const MOON_MARK: char = 'm';
@@ -31,6 +31,28 @@ pub struct Pose {
 }
 
 impl Pose {
+    /// Where a stance stands, as a place with no way of looking: what a line
+    /// said with `@here` carries. On the ground the height is left out, as
+    /// [`Client::here`](crate::Client::here) leaves it out; in the air it is
+    /// kept, so arriving there arrives flying. `None` for a sector that does
+    /// not exist.
+    pub fn of_stance(grid: Grid, stance: &protocol::Stance) -> Option<Pose> {
+        let sector = Sector::new(u8::try_from(stance.sector).ok()?)?;
+        let point = SurfacePoint::new(sector, f64::from(stance.u), f64::from(stance.v));
+        let airborne = matches!(
+            stance.gait(),
+            protocol::Gait::Fly | protocol::Gait::Jump | protocol::Gait::Fall
+        );
+        Some(Pose {
+            on_moon: stance.body() == protocol::Body::Moon,
+            column: grid.column_of(point),
+            h: airborne.then(|| (f64::from(stance.height_m) / topology::BLOCK_M) as i16),
+            bearing_deg: None,
+            pitch_deg: None,
+            chars: topology::CODE_MAX,
+        })
+    }
+
     /// The place alone: body and code, no way of looking. What a HUD shows and
     /// what a person reads out.
     pub fn place(&self, grid: Grid) -> String {

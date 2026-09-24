@@ -23,6 +23,12 @@ Numbers marked (p) are proposed and not yet confirmed.
   changed at 15 Hz, in one frame encoded once, with a heartbeat every two
   seconds so a silent link is a dead one on both sides. A client too slow to
   take its frames is dropped; the actor never waits for a client.
+- Chat: `Say` up, `Said` down, relayed by the actor to everyone in scope,
+  the speaker included, and never stored (DECISIONS 69). `near` reaches
+  `NearBlocks` on the same body, measured by the actor with the client's own
+  projection mirrored in `near.go`; `world` reaches every body. A line said
+  with `here` comes back with the speaker's stance as the actor holds it.
+  Limits live in the actor: `LineBytes`, five lines in five seconds.
 - The actor holds no state past its sessions yet: `world.db` arrives with
   chunks (ROADMAP M3).
 - Bridge: volumes and roles cached in memory at start; PocketBase hooks
@@ -116,7 +122,8 @@ Numbers marked (p) are proposed and not yet confirmed.
   socket (`Engine.connect(url)`), hands every frame to `Client::receive` and
   sends what `drain_outbound` queues. The client says hello, keeps the peers,
   sends its own stance when it changed and as a heartbeat, and reports
-  `session` and `peers` events over the seam. The desktop shell has no
+  `session`, `peers` and `said` events over the seam; `say` and `go_to` are
+  the chat panel's commands. The desktop shell has no
   socket yet (ROADMAP M2).
 - A peer is drawn a tick and a half behind its newest stance, between the
   last two heard, in world space: a walk across a seam never interpolates

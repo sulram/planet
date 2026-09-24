@@ -47,6 +47,8 @@ this file in the same change.
 | Session | One connection inside a world: a person or agent, from Hello to Left. Numbered by the actor. |
 | Peer | Another session in the same world, as a client sees it: a name, an avatar reference and a stance. |
 | Stance | Where a body is and how it moves, as presence carries it fifteen times a second: an address with fractional blocks, a height, a facing, a gait and a speed. A pose is what a link carries; a stance is what a peer sends. |
+| Line | One chat message: a scope, a text, the speaker's session and, when they said `@here`, the speaker's place as the actor saw it. Relayed, never stored. |
+| Scope | Who hears a line: `near`, within a radius on the same body, or `world`, every session in the world. Never another world. |
 | Ticket | A one-use, one-minute token the cold plane mints for a signed in person and the socket redeems. How an identity crosses to the hot plane without the session cookie. |
 | Link (code) | The socket between a client and a world server, as the platform shell holds it. The client owns the protocol, the shell owns the socket. |
 | Volume | An integer address box inside one sector where building is granted. Nests. The only place voxels exist. |
