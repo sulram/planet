@@ -10,14 +10,14 @@ import { fieldId } from '$lib/world';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-	const { params, locals } = event;
+	const { params, locals, fetch } = event;
 	try {
 		const world = await getWorld(locals.pb, params.id);
 		return {
 			world,
 			// A world shaped by ground this instance does not have cannot be
 			// entered: the engine says so rather than showing another planet.
-			fieldPath: await servedField(fieldId(world.recipe)),
+			fieldPath: await servedField(fetch, fieldId(world.recipe)),
 			avatar: await visitorAvatar(event),
 			name: visitorName(event),
 			link: worldLink(world.id, locals.user !== null)

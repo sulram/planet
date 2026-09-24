@@ -22,14 +22,14 @@ import type { Actions, PageServerLoad } from './$types';
 // The offline preview. The seed and the shape live in the URL so a planet can
 // be shared; arriving without a valid seed lands on a fresh random planet.
 export const load: PageServerLoad = async (event) => {
-	const { url } = event;
+	const { url, fetch } = event;
 	const seed = normalizeSeed(url.searchParams.get('seed'));
 	if (!seed || seed !== url.searchParams.get('seed')) redirect(303, `/play?seed=${seed ?? randomSeed()}`);
 	const asked = url.searchParams.get('shape');
 	const shape: Shape = isShape(asked) ? asked : 'generated';
 	// The sidecar names the ground without anyone downloading it: the page can
 	// build the whole recipe before the engine fetches a single texel.
-	const field = shape === 'generated' ? null : await readFieldSidecar(shape);
+	const field = shape === 'generated' ? null : await readFieldSidecar(fetch, shape);
 	const settled: Shape = field ? shape : 'generated';
 	return {
 		seed,
@@ -53,7 +53,7 @@ function readKnobs(shape: Shape, get: (key: string) => string | null): Knobs {
 export const actions: Actions = {
 	// "Create world" writes one row: the previewed recipe, a name and the owner.
 	// It runs with the person's own token; PocketBase rules do the rest.
-	create: async ({ request, locals }) => {
+	create: async ({ request, locals, fetch }) => {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
 		const seed = normalizeSeed(String(form.get('seed') ?? ''));
@@ -64,7 +64,7 @@ export const actions: Actions = {
 		const shape: Shape = isShape(asked) ? asked : 'generated';
 		// The id is read here, from the file this instance serves, and never
 		// taken from the form: a recipe may only ever name ground we have.
-		const field = shape === 'generated' ? null : await readFieldSidecar(shape);
+		const field = shape === 'generated' ? null : await readFieldSidecar(fetch, shape);
 		// Clamped here too: the form is a suggestion, the range is the rule.
 		const knobs = readKnobs(shape, (key) => form.get(key) as string | null);
 
