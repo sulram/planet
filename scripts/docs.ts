@@ -1,9 +1,11 @@
 // What a script can check about the docs. `bun run docs` fails when a doc and
-// the repo disagree (runs in `bun run check` and in CI). The rules it holds
-// are in CLAUDE.md § Docs style.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+// the repo disagree (runs in `bun run check` and in CI); `bun run docs gen`
+// rewrites what is generated (the DECISIONS index). The rules it holds are in
+// CLAUDE.md § Docs style and § How the engine stays reusable.
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { ROOT } from './lib';
 
+const mode = process.argv[2] === 'gen' ? 'gen' : 'check';
 const problems: string[] = [];
 const read = (p: string) => readFileSync(`${ROOT}/${p}`, 'utf8');
 const docs = readdirSync(`${ROOT}/docs`)
@@ -11,10 +13,60 @@ const docs = readdirSync(`${ROOT}/docs`)
 	.map((f) => `docs/${f}`);
 const claude = read('CLAUDE.md');
 
+/* --------------------------------- the decisions log: files, and their index */
+
+type Entry = { n: number; file: string; title: string; status: string; date: string; retires: number[] };
+const entriesByFile: Entry[] = [];
+for (const f of readdirSync(`${ROOT}/docs/decisions`).filter((f) => f.endsWith('.md')).sort()) {
+	const text = read(`docs/decisions/${f}`);
+	const head = text.match(/^# (~~)?(\d+)\. (.*?)(~~)? \((.*?)\)\s*$/m);
+	if (!head) {
+		problems.push(`docs/decisions/${f}: the first line is not "# NN. Title (status)"`);
+		continue;
+	}
+	const struck = Boolean(head[1]);
+	const retires = [...text.matchAll(/\bretires (\d+)\b/g)].map((m) => Number(m[1]));
+	entriesByFile.push({
+		n: Number(head[2]),
+		file: f,
+		title: head[3],
+		status: struck ? `retired, ${head[5]}` : head[5],
+		date: text.match(/^Logged (\d{4}-\d{2}-\d{2})\./m)?.[1] ?? '',
+		retires,
+	});
+	if (!f.startsWith(head[2].padStart(3, '0') + '-')) problems.push(`docs/decisions/${f}: the file name does not start with ${head[2].padStart(3, '0')}-`);
+	if (!/^# .*\n\nLogged \d{4}-\d{2}-\d{2}\./.test(text)) problems.push(`docs/decisions/${f}: the second paragraph is not "Logged YYYY-MM-DD."`);
+}
+const entries = new Set(entriesByFile.map((e) => e.n));
+entriesByFile.sort((a, b) => a.n - b.n);
+for (const [i, e] of entriesByFile.entries()) {
+	const dup = entriesByFile.filter((x) => x.n === e.n);
+	if (dup.length > 1 && dup[0] === e) problems.push(`docs/decisions: number ${e.n} is claimed by ${dup.map((x) => x.file).join(' and ')}`);
+	if (i > 0 && e.n > entriesByFile[i - 1].n + 1) problems.push(`docs/decisions: number ${entriesByFile[i - 1].n + 1} is skipped before ${e.file}`);
+	for (const r of e.retires) {
+		const old = entriesByFile.find((x) => x.n === r);
+		if (old && !old.status.startsWith('retired')) problems.push(`docs/decisions/${old.file}: retired by ${e.n}, and its title is not struck`);
+	}
+}
+
+const index = ['| # | Logged | Decision | Status |', '|---|---|---|---|', ...entriesByFile.map((e) => `| ${String(e.n).padStart(2, '0')} | ${e.date} | [${e.title}](decisions/${e.file}) | ${e.status} |`)].join('\n');
+{
+	const file = 'docs/DECISIONS.md';
+	const text = read(file);
+	const re = /(<!-- generated:index -->)[\s\S]*?(<!-- \/generated:index -->)/;
+	if (!re.test(text)) problems.push(`${file}: the <!-- generated:index --> markers are missing`);
+	else {
+		const next = text.replace(re, (_, open, close) => `${open}\n${index}\n${close}`);
+		if (next !== text) {
+			if (mode === 'gen') writeFileSync(`${ROOT}/${file}`, next);
+			else problems.push(`${file}: the index is stale (run bun run docs gen)`);
+		}
+	}
+}
+
 /* ------------------------------------------------- DECISIONS N names an entry */
 
-const entries = new Set([...read('docs/DECISIONS.md').matchAll(/^## ~*(\d+)\./gm)].map((m) => Number(m[1])));
-const sources = new Bun.Glob('{docs/*.md,CLAUDE.md,README.md,crates/**/*.{rs,wgsl},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}');
+const sources = new Bun.Glob('{docs/**/*.md,CLAUDE.md,README.md,crates/**/*.{rs,wgsl},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}');
 const files = [...sources.scanSync(ROOT)].filter((f) => !f.includes('node_modules') && !f.includes('/target/'));
 for (const file of files) {
 	read(file)
@@ -94,4 +146,4 @@ if (problems.length) {
 	console.error(`\n${problems.length} problem(s) in the docs`);
 	process.exit(1);
 }
-console.log('docs agree with the repo');
+console.log(mode === 'gen' ? 'docs generated and checked' : 'docs agree with the repo');
