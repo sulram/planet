@@ -134,7 +134,7 @@ export const pt: Messages = {
 	'engine.chat.offline': 'A conversa abre quando você está conectado.',
 	'engine.chat.send': 'Enviar',
 	'engine.chat.closed': 'Enter para conversar',
-	'engine.chat.count': '{n}/{max}',
+	'engine.chat.left': '{n} caracteres restantes',
 	'engine.hint.chat': 'conversar',
 	'engine.chat.here': '@aqui',
 	'engine.chat.goto': 'Ir para {place}',

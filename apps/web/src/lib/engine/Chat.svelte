@@ -52,11 +52,15 @@
 
 	const here = $derived(t('engine.chat.here'));
 	// The server's limit, held here so nobody meets it there. Counted as the
-	// server counts, in code points, so an accent is one.
-	const length = $derived([...draft].length);
-	const tooLong = $derived(length > LINE_CHARS);
-	/** The count shows once a line is long enough to wonder. */
-	const counting = $derived(length >= LINE_CHARS * 0.8);
+	// server counts, in code points, so an accent is one. A draft is cut at
+	// the limit as it is typed or pasted, so the line is never too long;
+	// what is left is shown while the bar is open and stands out near zero.
+	const left = $derived(LINE_CHARS - [...draft].length);
+	const scarce = $derived(left <= LINE_CHARS / 10);
+	$effect(() => {
+		const chars = [...draft];
+		if (chars.length > LINE_CHARS) draft = chars.slice(0, LINE_CHARS).join('');
+	});
 	const shown = $derived(open ? lines : lines.filter((line) => now - line.at < RECENT_MS));
 
 	// A closed bar forgets: the clock ticks while there is something to forget.
@@ -82,7 +86,7 @@
 		const words = draft.split(/\s+/).filter(Boolean);
 		const said = words.some(shares);
 		const text = words.filter((word) => !shares(word)).join(' ');
-		if ((!text && !said) || tooLong) return;
+		if (!text && !said) return;
 		onsay(scope, text, said);
 		draft = '';
 	}
@@ -155,17 +159,16 @@
 			bind:value={draft}
 			placeholder={!online ? t('engine.chat.offline') : open ? t('engine.chat.placeholder', { here }) : t('engine.chat.closed')}
 			disabled={!online}
-			invalid={tooLong}
 			enterkeyhint="send"
 			autocomplete="off"
 			aria-label={t('engine.chat')}
 			onfocus={show}
 			onkeydown={onkeyInput}
 		/>
-		{#if counting}
-			<span class="count" class:over={tooLong} aria-live="polite">{t('engine.chat.count', { n: length, max: LINE_CHARS })}</span>
+		{#if open}
+			<span class="count" class:scarce title={t('engine.chat.left', { n: left })}>{left}</span>
 		{/if}
-		<button type="button" class="toggle" disabled={!online || tooLong} title={t('engine.chat.send')} onclick={() => { send(); input?.focus(); }}>
+		<button type="button" class="toggle" disabled={!online} title={t('engine.chat.send')} onclick={() => { send(); input?.focus(); }}>
 			<Icon name="send" label={t('engine.chat.send')} />
 		</button>
 	</div>
@@ -254,8 +257,8 @@
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
-	.count.over {
-		color: var(--danger);
+	.count.scarce {
+		color: var(--text);
 		font-weight: var(--fw-bold);
 	}
 	.toggle {

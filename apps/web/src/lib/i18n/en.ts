@@ -134,7 +134,7 @@ export const en = {
 	'engine.chat.offline': 'Chat opens when you are online.',
 	'engine.chat.send': 'Send',
 	'engine.chat.closed': 'Enter to chat',
-	'engine.chat.count': '{n}/{max}',
+	'engine.chat.left': '{n} characters left',
 	'engine.hint.chat': 'chat',
 	'engine.chat.here': '@here',
 	'engine.chat.goto': 'Go to {place}',
