@@ -75,16 +75,18 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--sp-1);
+		gap: var(--sp-3);
 		/* Floats a little over the anchor, so it never touches the head, and
 		   shrinks with distance, never below half. */
 		transform: translate(-50%, calc(-100% - var(--sp-6))) scale(clamp(0.5, var(--near), 1));
 		transform-origin: bottom center;
 	}
 	.name {
-		padding: 0 var(--sp-2);
-		background: var(--bg-overlay);
-		color: var(--text);
+		color: var(--on-world);
+		font-weight: var(--fw-medium);
+		text-shadow:
+			0 0 var(--sp-2) var(--on-world-shadow),
+			0 var(--sp-1) var(--sp-3) var(--on-world-shadow);
 		white-space: nowrap;
 	}
 	.balloon {
