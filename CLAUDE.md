@@ -6,7 +6,8 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 
 - Why: [VISION.md](docs/VISION.md)
 - Shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md); per theme,
-  [WORLD.md](docs/WORLD.md) and [RENDER.md](docs/RENDER.md)
+  [WORLD.md](docs/WORLD.md), [RENDER.md](docs/RENDER.md) and
+  [DEPLOY.md](docs/DEPLOY.md) (how an instance is hosted)
 - The one current campaign: [BRIEF.md](docs/BRIEF.md); it dissolves when it ships
 - Decisions and what was rejected: [DECISIONS.md](docs/DECISIONS.md), the index of `docs/decisions/`
 - Next: [ROADMAP.md](docs/ROADMAP.md). Unsettled, only there: [OPEN.md](docs/OPEN.md)
@@ -17,7 +18,7 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 
 | Information | Home |
 |---|---|
-| Current state | the theme doc: ARCHITECTURE, WORLD, RENDER |
+| Current state | the theme doc: ARCHITECTURE, WORLD, RENDER, DEPLOY |
 | Why, and what was rejected | DECISIONS |
 | What comes next, in what order | ROADMAP |
 | A question with no answer, a problem with no chosen fix | OPEN |
