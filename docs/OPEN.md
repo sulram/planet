@@ -10,6 +10,7 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 |---|---|---|
 | **The name.** `planet` is a codename | crate, repo and domain names | README |
 | **Confirm the proposed entries** 03 (raw wgpu), 05 (numbers), 06, 09, 19, 20, 25 (tangent warp), 46 (the desktop is a whole player) | code that depends on them; 25 is the address, and the address is the save format | DECISIONS |
+| **Which of entries 51 to 55 survive 58.** They came out of the voxel pyramid 58 retired: the frame budget counting chunks (51), the far field as the same grid coarsened (52), nothing coming down before its replacement is up (53), one level per piece of ground (54), coarse ground not casting (55). Some are still cited by ROADMAP; the rest get their titles struck | the reading pass at the end of M1.75 | DECISIONS 58 |
 | **License.** "Free software end to end" names none yet | the default asset set: the locomotion clips come from Hyperfy (GPL-3.0-only, Mixamo rig) and are replaced, by Mixamo or our own, before a licence GPL does not fit | DECISIONS 01 · `assets/` |
 
 ## Blocks volumes (M1.75)
