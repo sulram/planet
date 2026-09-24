@@ -83,10 +83,11 @@
 	}
 	.name {
 		color: var(--on-world);
-		font-weight: var(--fw-medium);
+		font-weight: var(--fw-bold);
 		text-shadow:
-			0 0 var(--sp-2) var(--on-world-shadow),
-			0 var(--sp-1) var(--sp-3) var(--on-world-shadow);
+			0 0 var(--sp-1) var(--on-world-shadow),
+			0 0 var(--sp-1) var(--on-world-shadow),
+			0 var(--bw) var(--sp-1) var(--on-world-shadow);
 		white-space: nowrap;
 	}
 	.balloon {

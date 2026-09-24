@@ -40,9 +40,9 @@
 	--danger: light-dark(var(--red-600), var(--red-400));
 	--danger-text: var(--bg);
 	/* Text laid straight over the world, in either theme: white, with a
-	   shadow that keeps it readable on sky and grass alike. */
+	   tight dark shadow, nearly an outline, so it reads on sky and grass. */
 	--on-world: var(--white);
-	--on-world-shadow: color-mix(in srgb, var(--black) 70%, transparent);
+	--on-world-shadow: color-mix(in srgb, var(--black) 90%, transparent);
 
 	/* ---- Type: one size. Hierarchy is weight, case, spacing and borders. ---- */
 	--font: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
