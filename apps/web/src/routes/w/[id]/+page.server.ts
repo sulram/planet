@@ -1,29 +1,5 @@
-import { error } from '@sveltejs/kit';
-import { translate } from '$lib/i18n/config';
-import { visitorAvatar } from '$lib/server/avatar';
-import { visitorName } from '$lib/server/name';
-import { pbStatus } from '$lib/server/pb';
-import { servedField } from '$lib/server/fields';
-import { worldLink } from '$lib/server/session';
-import { getWorld } from '$lib/server/worlds';
-import { fieldId } from '$lib/world';
+import { enterWorld } from '$lib/server/enter';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async (event) => {
-	const { params, locals, fetch } = event;
-	try {
-		const world = await getWorld(locals.pb, params.id);
-		return {
-			world,
-			// A world shaped by ground this instance does not have cannot be
-			// entered: the engine says so rather than showing another planet.
-			fieldPath: await servedField(fetch, fieldId(world.recipe)),
-			avatar: await visitorAvatar(event),
-			name: visitorName(event),
-			link: worldLink(world.id, locals.user !== null)
-		};
-	} catch (err) {
-		if (pbStatus(err) === 404) error(404, translate(locals.locale, 'error.notFound.title'));
-		error(503, translate(locals.locale, 'error.unreachable'));
-	}
-};
+// Any world, by link. Unlisted, never locked (DECISIONS 70).
+export const load: PageServerLoad = (event) => enterWorld(event, event.params.id);

@@ -93,7 +93,7 @@ Every milestone ends runnable end to end.
 - [ ] One-time code login on native
 - [ ] The cold plane moves behind the command and event seam: `list_worlds`, `create_world`, `enter_world`, with the clamping `+page.server.ts` does today living in `client` where both front ends reach it (DECISIONS 46)
 - [ ] `bun run desktop <url>` and `bun run shot --world <url>`: a world opened by the same address the browser shows, a bare id meaning the configured instance. Needs the seam, an HTTP client and a local cache of recipes
-- [ ] An instance's main world, in the cold plane beside `worlds`, so the web and the desktop open the same front door
+- [x] An instance's main world, in the cold plane beside `worlds`, so the web and the desktop open the same front door (DECISIONS 70)
 - [ ] Desktop screens over that seam: sign in, a list of worlds, enter one, preview a planet with its knobs and create from it. The backoffice stays on the web
 - [ ] Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - [x] Backoffice for operators: worlds and users

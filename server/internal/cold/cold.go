@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	usersCollection  = "users"
-	worldsCollection = "worlds"
+	usersCollection    = "users"
+	worldsCollection   = "worlds"
+	instanceCollection = "instance"
 )
 
 // Register binds the cold plane to the app, and the hot plane's doors with
@@ -30,11 +31,15 @@ func Register(app core.App, cfg Config) {
 		if err := ensureOperator(e.App, cfg.OperatorEmail); err != nil {
 			return err
 		}
+		if err := ensureInstance(e.App); err != nil {
+			return err
+		}
 		return e.Next()
 	})
 
 	app.OnRecordRequestOTPRequest(usersCollection).BindFunc(createAccountOnFirstLogin)
 	app.OnRecordValidate(worldsCollection).BindFunc(validateWorld)
+	app.OnRecordCreate(instanceCollection).BindFunc(keepOneInstance)
 	app.OnMailerRecordOTPSend(usersCollection).BindFunc(logMagicLink)
 	app.OnMailerSend().BindFunc(skipDeliveryWithoutSMTP)
 }

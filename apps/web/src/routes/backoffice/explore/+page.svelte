@@ -51,8 +51,6 @@
 			: t('play.shape.earth.hint', { n: String(Math.round(data.field?.texel_m ?? 0)) })
 	);
 
-	const playHref = $derived(`/play?seed=${data.seed}&shape=${data.shape}`);
-
 	$effect(() => {
 		draft = data.seed;
 	});
@@ -68,7 +66,7 @@
 				if (value !== knob.fallback) query.set(knob.key, value.toFixed(knob.places));
 			}
 		}
-		return `/play?${query}`;
+		return `/backoffice/explore?${query}`;
 	}
 
 	async function show(seed: string, shape: Shape = data.shape) {
@@ -100,7 +98,7 @@
 </svelte:head>
 
 <Stage title={t('play.title')} {recipe} {fieldPath} avatar={data.avatar} onready={(version) => (generatorVersion = version)}>
-	<form method="GET" action="/play" onsubmit={regenerate}>
+	<form method="GET" action="/backoffice/explore" onsubmit={regenerate}>
 		<Stack>
 			<Field label={t('play.shape')} hint={shapeHint}>
 				<Segmented
@@ -141,46 +139,34 @@
 		</Stack>
 	</form>
 
-	{#if data.user}
-		<form
-			method="POST"
-			action="?/create&seed={data.seed}&shape={data.shape}"
-			id="create"
-			use:enhance={() => {
-				creating = true;
-				return async ({ update }) => {
-					await update({ reset: false });
-					creating = false;
-				};
-			}}
-		>
-			<input type="hidden" name="seed" value={data.seed} />
-			<input type="hidden" name="shape" value={data.shape} />
-			<input type="hidden" name="generator_version" value={generatorVersion ?? ''} />
-			<Stack>
-				<Field label={t('world.name')} for="name" hint={t('play.create.hint')} error={form?.error}>
-					<Input
-						id="name"
-						name="name"
-						value={form?.name ?? ''}
-						maxlength={WORLD_NAME_MAX}
-						autocomplete="off"
-						invalid={!!form?.error}
-						required
-					/>
-				</Field>
-				<Button type="submit" loading={creating} disabled={!recipe}>{t('play.create')}</Button>
-			</Stack>
-		</form>
-	{:else}
-		<p class="signin">
-			<a href="/login?redirect={encodeURIComponent(playHref)}">{t('play.signin')}</a>
-		</p>
-	{/if}
+	<form
+		method="POST"
+		action="?/create&seed={data.seed}&shape={data.shape}"
+		id="create"
+		use:enhance={() => {
+			creating = true;
+			return async ({ update }) => {
+				await update({ reset: false });
+				creating = false;
+			};
+		}}
+	>
+		<input type="hidden" name="seed" value={data.seed} />
+		<input type="hidden" name="shape" value={data.shape} />
+		<input type="hidden" name="generator_version" value={generatorVersion ?? ''} />
+		<Stack>
+			<Field label={t('world.name')} for="name" hint={t('play.create.hint')} error={form?.error}>
+				<Input
+					id="name"
+					name="name"
+					value={form?.name ?? ''}
+					maxlength={WORLD_NAME_MAX}
+					autocomplete="off"
+					invalid={!!form?.error}
+					required
+				/>
+			</Field>
+			<Button type="submit" loading={creating} disabled={!recipe}>{t('play.create')}</Button>
+		</Stack>
+	</form>
 </Stage>
-
-<style>
-	.signin {
-		color: var(--text-muted);
-	}
-</style>

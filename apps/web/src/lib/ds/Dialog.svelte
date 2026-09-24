@@ -1,13 +1,16 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { enhance } from '$app/forms';
+	import type { ActionResult } from '@sveltejs/kit';
 	import Button from './Button.svelte';
 	import { t } from '$lib/i18n';
 
 	// Modal over the native <dialog>: focus trapped, Esc closes, page dims.
 	// Project rule: EVERY destructive action passes through a confirming Dialog.
 	// The box is a form. With `action` it posts to a SvelteKit form action
-	// (children carry the fields); without, it calls `onconfirm`.
+	// (children carry the fields); without, it calls `onconfirm`. A dialog
+	// that walks a person through steps (sign in: the email, then the code)
+	// reads each action's result with `onresult` and says whether it is done.
 	interface Props {
 		open?: boolean;
 		title: string;
@@ -16,11 +19,17 @@
 		danger?: boolean;
 		/** Form action to post to, for example `?/delete`. */
 		action?: string;
+		/**
+		 * With `action`: reads the result instead of applying it to the page,
+		 * and returns whether the dialog closes. Absent, the page updates and
+		 * the dialog closes.
+		 */
+		onresult?: (result: ActionResult) => boolean | Promise<boolean>;
 		onconfirm?: () => void | Promise<void>;
 		children: Snippet;
 	}
 
-	let { open = $bindable(false), title, confirmLabel, danger = false, action, onconfirm, children }: Props = $props();
+	let { open = $bindable(false), title, confirmLabel, danger = false, action, onresult, onconfirm, children }: Props = $props();
 
 	let el: HTMLDialogElement | undefined = $state();
 	let busy = $state(false);
@@ -66,7 +75,13 @@
 			{action}
 			use:enhance={() => {
 				busy = true;
-				return async ({ update }) => {
+				return async ({ result, update }) => {
+					if (onresult) {
+						const done = await onresult(result);
+						busy = false;
+						if (done) open = false;
+						return;
+					}
 					await update();
 					busy = false;
 					open = false;

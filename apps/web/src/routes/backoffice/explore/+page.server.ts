@@ -1,6 +1,5 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { translate } from '$lib/i18n/config';
-import { loginPath } from '$lib/server/auth';
 import { visitorAvatar } from '$lib/server/avatar';
 import { pbStatus } from '$lib/server/pb';
 import { createWorld } from '$lib/server/worlds';
@@ -19,12 +18,13 @@ import {
 import { readFieldSidecar } from '$lib/server/fields';
 import type { Actions, PageServerLoad } from './$types';
 
-// The offline preview. The seed and the shape live in the URL so a planet can
-// be shared; arriving without a valid seed lands on a fresh random planet.
+// The operators' explorer: a planet previewed offline and, when it reads
+// right, saved as a world. The seed and the shape live in the URL so a
+// planet can be shared; arriving without a valid seed lands on a fresh one.
 export const load: PageServerLoad = async (event) => {
 	const { url, fetch } = event;
 	const seed = normalizeSeed(url.searchParams.get('seed'));
-	if (!seed || seed !== url.searchParams.get('seed')) redirect(303, `/play?seed=${seed ?? randomSeed()}`);
+	if (!seed || seed !== url.searchParams.get('seed')) redirect(303, `/backoffice/explore?seed=${seed ?? randomSeed()}`);
 	const asked = url.searchParams.get('shape');
 	const shape: Shape = isShape(asked) ? asked : 'generated';
 	// The sidecar names the ground without anyone downloading it: the page can
@@ -57,7 +57,8 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const name = String(form.get('name') ?? '').trim();
 		const seed = normalizeSeed(String(form.get('seed') ?? ''));
-		if (!locals.user) redirect(303, loginPath(seed ? `/play?seed=${seed}` : '/play'));
+		// The backoffice barrier admitted an operator; the rule on `worlds` checks again.
+		if (!locals.user) error(403);
 
 		const generatorVersion = Number(form.get('generator_version'));
 		const asked = String(form.get('shape') ?? 'generated');

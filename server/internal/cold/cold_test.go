@@ -279,7 +279,7 @@ func TestWorldsCreate(t *testing.T) {
 	// body builds the request once the owner id is known.
 	asAna := func(body func(anaID, bobID string) string) func(testing.TB, *tests.TestApp, *tests.ApiScenario) {
 		return func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
-			ana := createUser(t, app, "ana@example.com", false)
+			ana := createUser(t, app, "ana@example.com", true)
 			bob := createUser(t, app, "bob@example.com", false)
 			s.Headers = authHeader(t, ana)
 			s.Body = strings.NewReader(body(ana.Id, bob.Id))
@@ -297,12 +297,20 @@ func TestWorldsCreate(t *testing.T) {
 
 	scenarios := []scenario{
 		{
-			ApiScenario: create("a user creates its own world", http.StatusOK, []string{`"seed":"0123456789abcdef"`, `"generator_version":1`}),
+			ApiScenario: create("an operator creates its own world", http.StatusOK, []string{`"seed":"0123456789abcdef"`, `"generator_version":1`}),
 			setup:       asAna(func(ana, _ string) string { return `{` + validWorld + `,"owner":"` + ana + `"}` }),
 		},
 		{
 			ApiScenario: create("not for somebody else", http.StatusBadRequest, []string{`"data":{}`}),
 			setup:       asAna(func(_, bob string) string { return `{` + validWorld + `,"owner":"` + bob + `"}` }),
+		},
+		{
+			ApiScenario: create("a signed in person who is not an operator cannot create", http.StatusBadRequest, []string{`"data":{}`}),
+			setup: func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
+				bob := createUser(t, app, "bob@example.com", false)
+				s.Headers = authHeader(t, bob)
+				s.Body = strings.NewReader(`{` + validWorld + `,"owner":"` + bob.Id + `"}`)
+			},
 		},
 		{
 			ApiScenario: create("a visitor cannot create", http.StatusBadRequest, []string{`"data":{}`}),
@@ -493,5 +501,124 @@ func TestMailIsNotDeliveredWithoutSMTP(t *testing.T) {
 	app.Settings().SMTP.Enabled = false
 	if delivered() {
 		t.Error("mail reached the transport with SMTP off")
+	}
+}
+
+func TestInstanceIsSeededOnce(t *testing.T) {
+	app := newApp(t)
+	// Twice, the way two starts would.
+	for range 2 {
+		if err := ensureInstance(app); err != nil {
+			t.Fatal(err)
+		}
+	}
+	records, err := app.FindRecordsByFilter(instanceCollection, "", "", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("want one instance record, got %d", len(records))
+	}
+
+	collection, err := app.FindCollectionByNameOrId(instanceCollection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Save(core.NewRecord(collection)); err == nil {
+		t.Fatal("a second instance record was saved")
+	}
+}
+
+func TestInstanceMainWorld(t *testing.T) {
+	withInstance := func(operator bool, body func(world string) string) func(testing.TB, *tests.TestApp, *tests.ApiScenario) {
+		return func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
+			if err := ensureInstance(app); err != nil {
+				t.Fatal(err)
+			}
+			who := createUser(t, app, "ana@example.com", operator)
+			world := createWorld(t, app, who)
+			instance, err := findInstance(app)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.URL = "/api/collections/instance/records/" + instance.Id
+			s.Headers = authHeader(t, who)
+			if body != nil {
+				s.Body = strings.NewReader(body(world.Id))
+			}
+		}
+	}
+	scenarios := []scenario{
+		{
+			ApiScenario: tests.ApiScenario{
+				Name:            "everyone reads the front door",
+				Method:          http.MethodGet,
+				URL:             "/api/collections/instance/records",
+				ExpectedStatus:  http.StatusOK,
+				ExpectedContent: []string{`"totalItems":1`, `"main_world":""`},
+			},
+			setup: func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
+				if err := ensureInstance(app); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			ApiScenario: tests.ApiScenario{
+				Name:            "an operator chooses the main world",
+				Method:          http.MethodPatch,
+				ExpectedStatus:  http.StatusOK,
+				ExpectedContent: []string{`"main_world":"`},
+			},
+			setup: withInstance(true, func(world string) string { return `{"main_world":"` + world + `"}` }),
+		},
+		{
+			ApiScenario: tests.ApiScenario{
+				Name:            "a person who is not an operator cannot",
+				Method:          http.MethodPatch,
+				ExpectedStatus:  http.StatusNotFound,
+				ExpectedContent: []string{`"data":{}`},
+			},
+			setup: withInstance(false, func(world string) string { return `{"main_world":"` + world + `"}` }),
+		},
+		{
+			ApiScenario: tests.ApiScenario{
+				Name:            "nobody deletes the instance",
+				Method:          http.MethodDelete,
+				ExpectedStatus:  http.StatusForbidden,
+				ExpectedContent: []string{`"data":{}`},
+			},
+			setup: withInstance(true, nil),
+		},
+	}
+	for _, s := range scenarios {
+		s.run(t)
+	}
+}
+
+func TestDeletingTheMainWorldClearsTheFrontDoor(t *testing.T) {
+	app := newApp(t)
+	if err := ensureInstance(app); err != nil {
+		t.Fatal(err)
+	}
+	ana := createUser(t, app, "ana@example.com", true)
+	world := createWorld(t, app, ana)
+	instance, err := findInstance(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance.Set("main_world", world.Id)
+	if err := app.Save(instance); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Delete(world); err != nil {
+		t.Fatal(err)
+	}
+	instance, err = findInstance(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := instance.GetString("main_world"); got != "" {
+		t.Fatalf("the front door still points at a deleted world: %q", got)
 	}
 }

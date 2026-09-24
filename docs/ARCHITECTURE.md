@@ -44,7 +44,15 @@ Numbers marked (p) are proposed and not yet confirmed.
 - Account by email: magic link in the browser, one-time code typed on native
   and headset (PocketBase OTP). Wallets are optional links, later.
 - Visitor: anonymous, enters any world, walks and looks, never builds.
-  `worlds` is publicly readable; `/play` and `/w/[id]` need no login.
+  `worlds` and `instance` are publicly readable; `/` and `/w/[id]` need no login.
+- The instance opens on its main world: `/` is that world (DECISIONS 70),
+  `/w/[id]` is any world by link, unlisted. The `instance` collection holds
+  one record, seeded on start, a second refused by a hook; `main_world` is
+  chosen on `/backoffice/worlds` and cleared by PocketBase if that world is
+  deleted, so `/` then says the instance is not open yet.
+- Signing in happens in the world: a dialog in the panel posts to the
+  `/login` and `/login/code` actions and never leaves the page; the link in
+  the email lands on `/login/verify` and returns to `/`.
 - A name is set where it is shown, in the world panel: `users.name` for a
   signed in person, a cookie for a visitor, and `Rename` on the socket at
   once. The ticket's name wins over what Hello says, so an account cannot be
@@ -54,7 +62,7 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The email carries a link `{APP_URL}/login/verify?otpId=&code=` and the code.
 - Operator: global flag `users.operator`. Gates `/backoffice`. Only an
   operator changes it. `PLANET_OPERATOR_EMAIL` seeds the first one.
-- Any signed in user creates worlds and owns them. Per world roles arrive in M4.
+- Operators create worlds, on `/backoffice/explore`, and own them. Per world roles arrive in M4.
 - Agent: API token issued by a responsible user.
 - Users are global. Roles are per world.
 

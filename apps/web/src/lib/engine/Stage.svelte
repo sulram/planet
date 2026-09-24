@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Badge, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { page } from '$app/state';
+	import { Badge, Button, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
 	import type { Link } from '$lib/server/session';
@@ -11,6 +12,7 @@
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
 	import Settings from './Settings.svelte';
+	import SignIn from './SignIn.svelte';
 	import { modes, NAME_CHARS, type Anchor, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
 	import { who } from './who';
 
@@ -85,6 +87,16 @@
 			editing = false;
 		}
 	}
+
+	// Signing in happens here, over the world (DECISIONS 70). Once the
+	// session is set the page reloads: the socket then opens with a ticket
+	// and the name is the account's, and the address bar keeps the place.
+	let signingIn = $state(false);
+	const user = $derived(page.data.user);
+	$effect(() => {
+		if (signingIn) view?.release();
+		else view?.take();
+	});
 
 	let view = $state<ReturnType<typeof EngineView>>();
 	let mode = $state<Mode>('walk');
@@ -205,10 +217,18 @@
 	{/if}
 	<Settings {effects} {defaults} onchange={choose} />
 	<Help />
+	<SignIn bind:open={signingIn} ondone={() => location.reload()} />
 	<Panel {title}>
 		{#snippet aside()}
 			<span class="corner">
-				<a class="home" href="/">{t('common.appName')}</a>
+				{#if user}
+					<form method="POST" action="/logout">
+						<Button type="submit" variant="ghost">{t('auth.logout')}</Button>
+					</form>
+				{:else}
+					<Button variant="ghost" onclick={() => (signingIn = true)}>{t('auth.login.title')}</Button>
+				{/if}
+				{#if user?.operator}<a class="home" href="/backoffice">{t('nav.backoffice')}</a>{/if}
 				<ThemeToggle />
 			</span>
 		{/snippet}

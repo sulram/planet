@@ -6,7 +6,9 @@
 	import { t } from '$lib/i18n';
 
 	// Two areas, one component: the site (default) and the backoffice, each
-	// with its own navigation. Operators switch through the last nav link.
+	// with its own navigation. The site is the world itself (DECISIONS 70), so
+	// its bar appears only off the planet: sign in pages, errors, a closed
+	// door. Operators switch through the last nav link.
 	interface Props {
 		area?: 'site' | 'backoffice';
 	}
@@ -19,14 +21,13 @@
 		area === 'backoffice'
 			? [
 					{ href: '/backoffice/worlds', label: t('nav.worlds') },
+					{ href: '/backoffice/explore', label: t('nav.explore') },
 					{ href: '/backoffice/users', label: t('nav.users') },
 					{ href: '/', label: t('nav.site') }
 				]
-			: [
-					{ href: '/', label: t('nav.worlds') },
-					{ href: '/play', label: t('nav.explore') },
-					...(user?.operator ? [{ href: '/backoffice', label: t('nav.backoffice') }] : [])
-				]
+			: user?.operator
+				? [{ href: '/backoffice', label: t('nav.backoffice') }]
+				: []
 	);
 	const loginHref = $derived(`/login?redirect=${encodeURIComponent(path + page.url.search)}`);
 </script>

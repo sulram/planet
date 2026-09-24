@@ -5,6 +5,8 @@ this file in the same change.
 
 | Term | Meaning |
 |---|---|
+| Instance | One server, its worlds and its people. One record in the `instance` collection says what is the instance's and not a world's, starting with its main world. A tenant, in the SaaS. |
+| Main world | The world an instance opens on: `/` on the web, the default on the desktop. Chosen by an operator. |
 | World | One recipe + one `world.db` + its records in PocketBase. An instance holds many. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |
 | Generator | The deterministic function from recipe + address to terrain. Versioned, frozen per world. |
