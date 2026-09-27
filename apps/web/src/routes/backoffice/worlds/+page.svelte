@@ -39,7 +39,11 @@
 		title={t('bo.worlds.title')}
 		lede={t('bo.worlds.lede')}
 		trail={[{ label: t('nav.backoffice'), href: '/backoffice' }]}
-	/>
+	>
+		{#snippet actions()}
+			<Button href="/backoffice/explore">{t('bo.worlds.create')}</Button>
+		{/snippet}
+	</PageHeader>
 
 	<Stack>
 		{#if form && 'error' in form}<Alert variant="danger">{form.error}</Alert>{/if}

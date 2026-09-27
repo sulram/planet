@@ -21,10 +21,8 @@ export const pt: Messages = {
 
 	'nav.main': 'Principal',
 	'nav.worlds': 'Mundos',
-	'nav.explore': 'Explorar',
 	'nav.users': 'Usuários',
 	'nav.backoffice': 'Backoffice',
-	'nav.site': 'Voltar ao site',
 
 	'auth.email': 'E-mail',
 	'auth.logout': 'Sair',
@@ -183,6 +181,7 @@ export const pt: Messages = {
 	'bo.worlds.title': 'Mundos',
 	'bo.worlds.lede': 'Todos os mundos. A receita nunca muda; só o nome.',
 	'bo.worlds.empty': 'Ainda não há mundos.',
+	'bo.worlds.create': 'Criar novo',
 	'bo.worlds.rename': 'Renomear',
 	'bo.worlds.rename.title': 'Renomear mundo',
 	'bo.worlds.rename.hint': 'Até {max} caracteres.',

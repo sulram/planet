@@ -20,10 +20,8 @@ export const en = {
 
 	'nav.main': 'Main',
 	'nav.worlds': 'Worlds',
-	'nav.explore': 'Explore',
 	'nav.users': 'Users',
 	'nav.backoffice': 'Backoffice',
-	'nav.site': 'Back to the site',
 
 	'auth.email': 'Email',
 	'auth.logout': 'Sign out',
@@ -182,6 +180,7 @@ export const en = {
 	'bo.worlds.title': 'Worlds',
 	'bo.worlds.lede': 'Every world. The recipe never changes; only the name does.',
 	'bo.worlds.empty': 'No worlds yet.',
+	'bo.worlds.create': 'Create new',
 	'bo.worlds.rename': 'Rename',
 	'bo.worlds.rename.title': 'Rename world',
 	'bo.worlds.rename.hint': 'Up to {max} characters.',

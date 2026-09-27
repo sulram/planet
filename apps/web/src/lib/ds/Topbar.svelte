@@ -8,7 +8,9 @@
 	// Two areas, one component: the site (default) and the backoffice, each
 	// with its own navigation. The site is the world itself (DECISIONS 70), so
 	// its bar appears only off the planet: sign in pages, errors, a closed
-	// door. Operators switch through the last nav link.
+	// door. The wordmark leads back to it from the backoffice, so the bar
+	// carries no link of its own for that. An operator on the site reaches
+	// the backoffice through its one nav link.
 	interface Props {
 		area?: 'site' | 'backoffice';
 	}
@@ -21,9 +23,7 @@
 		area === 'backoffice'
 			? [
 					{ href: '/backoffice/worlds', label: t('nav.worlds') },
-					{ href: '/backoffice/explore', label: t('nav.explore') },
-					{ href: '/backoffice/users', label: t('nav.users') },
-					{ href: '/', label: t('nav.site') }
+					{ href: '/backoffice/users', label: t('nav.users') }
 				]
 			: user?.operator
 				? [{ href: '/backoffice', label: t('nav.backoffice') }]

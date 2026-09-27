@@ -68,7 +68,7 @@ Numbers marked (p) are proposed and not yet confirmed.
   operator changes it. `PLANET_OPERATOR_EMAIL` seeds the first one. An
   operator reads every account's email; anyone else reads their own alone,
   which is PocketBase's default with `emailVisibility` off.
-- Operators create worlds, on `/backoffice/explore`, and own them. Per world roles arrive in M4.
+- Operators create worlds, on `/backoffice/explore` (the Worlds page's create button), and own them. Per world roles arrive in M4.
 - Agent: API token issued by a responsible user.
 - Users are global. Roles are per world.
 
