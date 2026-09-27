@@ -112,3 +112,41 @@ fn the_poles_are_where_the_poles_are() {
     assert!(generator.sample(at(-89.5, 0.0)).height_m > 0.0);
     assert!(generator.sample(at(89.5, 0.0)).height_m < 0.0);
 }
+
+#[test]
+fn the_reported_south_america_seam_has_one_ground_height() {
+    let Ok(bytes) = std::fs::read(FIELD) else {
+        return;
+    };
+    let field = Field::parse(bytes).unwrap();
+    let mut recipe = Recipe::new(0x0ba8_f494_f9bf_c4c4);
+    recipe.params.source = Source::Field(field.id());
+    let generator = Generator::with_field(recipe, field.clone()).unwrap();
+    let grid = generator.sphere().blocks();
+    let place = topology::place(grid, "4-NZZTM3R@207").unwrap();
+    let edge = f64::from(grid.side());
+    let direction = |offset| {
+        grid.direction(topology::SurfacePoint::new(
+            place.column.sector,
+            edge + offset,
+            f64::from(place.column.v) + 0.5,
+        ))
+    };
+    for footprint in [0.0, 0.5, 1.0, 2.0, 8.0, 32.0, 250.0, 1000.0, 2048.0] {
+        let a = field.sample(generator.sphere(), direction(-1e-4), footprint);
+        let b = field.sample(generator.sphere(), direction(1e-4), footprint);
+        assert!(
+            (a.elevation_m - b.elevation_m).abs() < 0.001
+                && (a.ruggedness_m - b.ruggedness_m).abs() < 0.001,
+            "Earth field at footprint {footprint}: {a:?} -> {b:?}"
+        );
+        let left = generator.sample_at(direction(-1e-4), footprint).height_m;
+        let right = generator.sample_at(direction(1e-4), footprint).height_m;
+        // The frozen simplex kernel has a centimetre-scale step at x = z
+        // here (OPEN, simplex kernel). The field itself must agree above.
+        assert!(
+            (left - right).abs() < 0.05,
+            "South America at footprint {footprint}: {left} -> {right}"
+        );
+    }
+}

@@ -148,6 +148,9 @@ m4-K7M42Q@40,180,-5
   and a one texel gutter across each seam. Two channels: elevation (`i16`,
   metres on the source body) and ruggedness (a byte of 16 m steps, the spread
   inside a finest texel). Levels blend by footprint, as `band` fades an octave.
+- The gutter is a slot: the bake leaves it empty and `Field::parse` fills it
+  from the neighbouring face, folded across the seam in address space, with
+  the mean of three faces at a cube corner (71). Sampling then knows no seam.
 - A field gives shape, never height: at 1/305 of Earth, honest elevations are
   a billiard ball and honest exaggeration is a wall. Zero maps to zero, so the
   coastline is exact; the relief is the generator's, sized by `relief_m`.
@@ -186,10 +189,6 @@ m4-K7M42Q@40,180,-5
   chunks near it are stored, at what version, and the server sends only those.
   Untouched nature costs zero bandwidth.
 - Client cache: SQLite on native, OPFS in the browser.
-- Owed back, and named here so it is not forgotten (57, docs/BRIEF.md): the far
-  field as baked field textures instead of a generator call per patch, a
-  horizon map for terrain self shadowing at range, and per pixel voxelization
-  so far ground reads as the same world as near cubes.
 
 ## Gravity
 

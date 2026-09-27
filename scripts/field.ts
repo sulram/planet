@@ -60,19 +60,8 @@ const FRAMES: number[][][] = [
 
 const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-/** Block coordinate `0..=SECTOR_SIDE` to cube face coordinate, warped. */
-const warp = (blocks: number) => Math.tan(((blocks - HALF) / HALF) * QUARTER_PI);
+/** Cube face coordinate to block coordinate `0..=SECTOR_SIDE`, unwarped. */
 const unwarp = (face: number) => (Math.atan(face) / QUARTER_PI) * HALF + HALF;
-
-/** The unit vector through a surface point. Legal outside the face: that is
- *  exactly what fills a gutter with the ground that continues past the edge. */
-function direction(sector: number, u: number, v: number): number[] {
-	const [n, ua, va] = FRAMES[sector];
-	const [x, y] = [warp(u), warp(v)];
-	const q = [0, 1, 2].map((a) => n[a] + ua[a] * x + va[a] * y);
-	const len = Math.hypot(q[0], q[1], q[2]);
-	return [q[0] / len, q[1] / len, q[2] / len];
-}
 
 /** The sector and surface coordinates a direction passes through. */
 function fromDirection(d: number[]): [number, number, number] {
@@ -200,46 +189,22 @@ function halve(face: Face, side: number): Face {
 	return out;
 }
 
-/** Writes one level: six faces, each with a one texel gutter carrying the
- *  ground from across its seam, so nothing at runtime knows what a seam is. */
+/** Writes one level: six faces, each with a one texel gutter left empty.
+ *  `Field::parse` fills it from the neighbouring face in address space, so
+ *  the seam fold is written once, in `topology` (DECISIONS 71). */
 function writeLevel(into: Uint8Array, offset: number, faces: Face[], side: number): number {
 	const stride = side + 2;
 	const plane = stride * stride;
-	// Bilinear read of a face at surface coordinates, for the gutter.
-	const read = (face: Face, u: number, v: number, channel: 'elevation' | 'rugged') => {
-		const x = Math.min(side - 0.5001, Math.max(0.5, (u / SECTOR_SIDE) * side)) - 0.5;
-		const y = Math.min(side - 0.5001, Math.max(0.5, (v / SECTOR_SIDE) * side)) - 0.5;
-		const [x0, y0] = [Math.floor(x), Math.floor(y)];
-		const [fx, fy] = [x - x0, y - y0];
-		const at = (ox: number, oy: number) => face[channel][(y0 + oy) * side + x0 + ox];
-		const top = at(0, 0) + (at(1, 0) - at(0, 0)) * fx;
-		const bottom = at(0, 1) + (at(1, 1) - at(0, 1)) * fx;
-		return top + (bottom - top) * fy;
-	};
-
 	for (let sector = 0; sector < 6; sector++) {
 		const face = faces[sector];
 		const elevation = new Int16Array(plane);
 		const rugged = new Uint8Array(plane);
-		for (let b = 0; b < stride; b++) {
-			for (let a = 0; a < stride; a++) {
-				let e: number;
-				let r: number;
-				if (a > 0 && b > 0 && a <= side && b <= side) {
-					const at = (b - 1) * side + (a - 1);
-					e = face.elevation[at];
-					r = face.rugged[at];
-				} else {
-					// Outside the face: the direction still resolves, onto
-					// whichever sector actually holds that ground.
-					const u = ((a - 0.5) / side) * SECTOR_SIDE;
-					const v = ((b - 0.5) / side) * SECTOR_SIDE;
-					const [other, ou, ov] = fromDirection(direction(sector, u, v));
-					e = read(faces[other], ou, ov, 'elevation');
-					r = read(faces[other], ou, ov, 'rugged');
-				}
-				elevation[b * stride + a] = Math.max(-32768, Math.min(32767, Math.round(e)));
-				rugged[b * stride + a] = Math.max(0, Math.min(255, Math.round(r / RUGGED_STEP)));
+		for (let b = 0; b < side; b++) {
+			for (let a = 0; a < side; a++) {
+				const from = b * side + a;
+				const at = (b + 1) * stride + a + 1;
+				elevation[at] = Math.max(-32768, Math.min(32767, Math.round(face.elevation[from])));
+				rugged[at] = Math.max(0, Math.min(255, Math.round(face.rugged[from] / RUGGED_STEP)));
 			}
 		}
 		into.set(new Uint8Array(elevation.buffer), offset);
