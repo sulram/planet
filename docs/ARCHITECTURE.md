@@ -61,7 +61,9 @@ Numbers marked (p) are proposed and not yet confirmed.
   account (server hook), the first valid code verifies it. No passwords.
 - The email carries a link `{APP_URL}/login/verify?otpId=&code=` and the code.
 - Operator: global flag `users.operator`. Gates `/backoffice`. Only an
-  operator changes it. `PLANET_OPERATOR_EMAIL` seeds the first one.
+  operator changes it. `PLANET_OPERATOR_EMAIL` seeds the first one. An
+  operator reads every account's email; anyone else reads their own alone,
+  which is PocketBase's default with `emailVisibility` off.
 - Operators create worlds, on `/backoffice/explore`, and own them. Per world roles arrive in M4.
 - Agent: API token issued by a responsible user.
 - Users are global. Roles are per world.

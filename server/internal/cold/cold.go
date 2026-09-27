@@ -38,6 +38,7 @@ func Register(app core.App, cfg Config) {
 	})
 
 	app.OnRecordRequestOTPRequest(usersCollection).BindFunc(createAccountOnFirstLogin)
+	app.OnRecordEnrich(usersCollection).BindFunc(showEmailsToOperators)
 	app.OnRecordValidate(worldsCollection).BindFunc(validateWorld)
 	app.OnRecordCreate(instanceCollection).BindFunc(keepOneInstance)
 	app.OnMailerRecordOTPSend(usersCollection).BindFunc(logMagicLink)

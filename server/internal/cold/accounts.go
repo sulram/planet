@@ -33,6 +33,18 @@ func createAccountOnFirstLogin(e *core.RecordCreateOTPRequestEvent) error {
 	return e.Next()
 }
 
+// showEmailsToOperators lets an operator read every account's email.
+// PocketBase shows an auth record's email to the record itself alone unless
+// the record opted in with emailVisibility, which nobody here does, and the
+// backoffice lists accounts by email with the operator's own token. Anyone
+// else keeps the default: their own address, nobody else's.
+func showEmailsToOperators(e *core.RecordEnrichEvent) error {
+	if e.RequestInfo != nil && e.RequestInfo.Auth != nil && e.RequestInfo.Auth.GetBool("operator") {
+		e.Record.IgnoreEmailVisibility(true)
+	}
+	return e.Next()
+}
+
 // ensureOperator makes sure the named account exists and is an operator. The
 // operator signs in by magic link like everyone else.
 func ensureOperator(app core.App, email string) error {

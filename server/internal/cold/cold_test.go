@@ -251,21 +251,22 @@ func TestUsersList(t *testing.T) {
 	scenarios := []scenario{
 		{
 			ApiScenario: tests.ApiScenario{
-				Name:            "a user sees only itself",
-				Method:          http.MethodGet,
-				URL:             "/api/collections/users/records",
-				ExpectedStatus:  http.StatusOK,
-				ExpectedContent: []string{`"totalItems":1`},
+				Name:               "a user sees only itself, with its own email",
+				Method:             http.MethodGet,
+				URL:                "/api/collections/users/records",
+				ExpectedStatus:     http.StatusOK,
+				ExpectedContent:    []string{`"totalItems":1`, `"email":"caller@example.com"`},
+				NotExpectedContent: []string{`ana@example.com`},
 			},
 			setup: listAs(false),
 		},
 		{
 			ApiScenario: tests.ApiScenario{
-				Name:            "an operator sees everyone",
+				Name:            "an operator sees everyone, emails included",
 				Method:          http.MethodGet,
 				URL:             "/api/collections/users/records",
 				ExpectedStatus:  http.StatusOK,
-				ExpectedContent: []string{`"totalItems":2`},
+				ExpectedContent: []string{`"totalItems":2`, `"email":"ana@example.com"`, `"email":"caller@example.com"`},
 			},
 			setup: listAs(true),
 		},
