@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Alert, Spinner } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import { fieldId, type Recipe } from '$lib/world';
@@ -8,7 +8,8 @@
 
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
 	// runs its own frame loop, input listeners and resize tracking; this
-	// component only keeps `recipe` and `mode` in sync through commands.
+	// component keeps `recipe` and `mode` in sync through commands, and keeps
+	// a veil over the picture until it is the world the page asked for.
 	interface Props {
 		/** Null until the caller knows the whole recipe; nothing is sent meanwhile. */
 		recipe: Recipe | null;
@@ -22,14 +23,16 @@
 		/** How the picture is made. Undefined leaves the engine as it is. */
 		effects?: Effects;
 		/**
-		 * The place from the address bar, for the world that link was for.
-		 *
-		 * Sent once, on the world the page asked for. Keeping your footing
-		 * across a later recipe is the engine's own job, because only it knows
-		 * what the new ground puts under an address: a place carried over by
-		 * the page lands you in the sea every time the coastline moves.
+		 * The address bar's place, each time a hand other than the page's puts
+		 * one there: the link that brought you here, a place pasted over it, a
+		 * world entered from another. A new object each time, since the same
+		 * place asked for twice is two walks. Honoured once the engine stands
+		 * in the world the page asked for, so a place meant for a world you
+		 * are not yet in waits for it. Where you stand after that is the
+		 * engine's: a place carried over a recipe change by the page lands you
+		 * in the sea every time the coastline moves (DECISIONS 62, 73).
 		 */
-		stand?: string | null;
+		stand?: { place: string } | null;
 		/**
 		 * The world's socket, when this is a world and not a preview. The
 		 * engine connects once it stands in the recipe, and connects again
@@ -60,11 +63,44 @@
 		if (document.pointerLockElement === canvas) document.exitPointerLock();
 	}
 
-	type Status = 'loading' | 'shaping' | 'running' | 'missing' | 'unsupported' | 'failed';
+	/** The engine's own life, before any world is asked of it. */
+	type Phase = 'loading' | 'ready' | 'missing' | 'unsupported' | 'failed';
+	/** What the veil says while it is down, and `running` once it lifts. */
+	type Status = Exclude<Phase, 'ready'> | 'shaping' | 'entering' | 'unshaped' | 'refused' | 'running';
 
 	let canvas: HTMLCanvasElement | undefined = $state();
 	let engine = $state.raw<Engine>();
-	let status = $state<Status>('loading');
+	let phase = $state<Phase>('loading');
+	/** The field is on its way. */
+	let fetching = $state(false);
+	/**
+	 * The engine stands in the world the page asked for. False from the moment
+	 * a recipe is sent until the engine says it stands in it.
+	 */
+	let standing = $state(false);
+	/** That world is drawn whole where you stand: the streamer has nothing left to build. */
+	let settled = $state(false);
+	/** The recipe names ground this instance does not serve. */
+	let unshaped = $state(false);
+	/** The engine refused the recipe the page asked for. */
+	let refused = $state(false);
+	// The veil stays down until the picture is the world the page asked for,
+	// drawn: the engine builds a world of its own before the page's arrives,
+	// the page's waits on a fetch when a field shapes it, and its ground takes
+	// a moment to stream in where you land.
+	const status = $derived<Status>(
+		phase !== 'ready'
+			? phase
+			: unshaped
+				? 'unshaped'
+				: refused
+					? 'refused'
+					: fetching
+						? 'shaping'
+						: recipe && !(standing && settled)
+							? 'entering'
+							: 'running'
+	);
 
 	// What the engine last reported or was last told: commands go out only on
 	// a real difference, so an event echoed back by the parent sends nothing.
@@ -75,8 +111,14 @@
 	let engineEffects = '';
 	/** The field already handed to the engine, by id. */
 	let engineField: string | undefined;
-	/** Whether the arrival place has been honoured. It is good for one world. */
-	let arrived = false;
+	/** A place from the address bar, waiting for the world it was written for. */
+	let pending: string | null = null;
+
+	function arrive() {
+		if (!engine || !standing || !pending) return;
+		engine.command({ type: 'go_to', place: pending });
+		pending = null;
+	}
 
 	// The link: opened once the engine stands in the world the page wants,
 	// opened again after a drop, each time with a fresh ticket. The wait
@@ -104,28 +146,30 @@
 	function receive(event: EngineEvent) {
 		if (event.type === 'recipe_changed') {
 			engineRecipe = JSON.stringify(event.recipe);
-			// Whether the engine now stands in the world the page wanted. It
-			// builds a world of its own before the page's arrives, and the
-			// page's waits on a fetch when a field shapes it, so the first
-			// world reported is not the one asked for. The engine says the
-			// recipe in full and the page in what was chosen, so the seed and
-			// the version are what the two agree on; the engine checks the
-			// whole recipe against the server's on arrival.
+			// Whether the engine now stands in the world the page wanted. The
+			// engine says the recipe in full and the page in what was chosen,
+			// so the seed and the version are what the two agree on; the
+			// engine checks the whole recipe against the server's on arrival.
+			// A world the engine changed on its own, a new seed at the keys,
+			// is not one the page awaits: it lifts no veil and drops none.
 			const wanted =
 				recipe && event.recipe.seed === recipe.seed && event.recipe.generator_version === recipe.generator_version;
-			// The address bar's place is honoured once, for the world its link
-			// was written for. Every world after it is new ground, where those
-			// characters name somewhere else, so the engine's own respawn is
-			// the one that knows better.
-			if (wanted && !arrived && stand && engine) {
-				arrived = true;
-				engine.command({ type: 'go_to', place: stand });
-			}
-			if (wanted && link && !linked) {
-				linked = true;
-				connect();
+			if (wanted) {
+				standing = true;
+				settled = false;
+				arrive();
+				if (link && !linked) {
+					linked = true;
+					connect();
+				}
 			}
 		}
+		// The ground is drawn where you stand. Heard for the engine's own world
+		// too, which is not the one awaited.
+		if (event.type === 'settled' && standing) settled = true;
+		// While a world is awaited, its recipe is the only command in flight
+		// that can be refused.
+		if (event.type === 'rejected' && recipe && !standing && !fetching) refused = true;
 		if (event.type === 'session') {
 			if (event.status === 'online') retryMs = 1000;
 			if (event.status === 'offline' && linked && !retry) {
@@ -147,13 +191,13 @@
 			const module = await loadEngine();
 			if (destroyed) return;
 			if (!module || !canvas) {
-				status = 'missing';
+				phase = 'missing';
 				return;
 			}
 			try {
 				created = await module.create(canvas, receive);
 			} catch {
-				status = 'gpu' in navigator ? 'failed' : 'unsupported';
+				phase = 'gpu' in navigator ? 'failed' : 'unsupported';
 				return;
 			}
 			if (destroyed) {
@@ -161,7 +205,7 @@
 				return;
 			}
 			engine = created;
-			status = 'running';
+			phase = 'ready';
 		})();
 
 		return () => {
@@ -182,27 +226,45 @@
 		if (next === engineRecipe) return;
 		const wanted = fieldId(recipe);
 		const here = engine;
+		unshaped = false;
+		refused = false;
 		if (!wanted || wanted === engineField) {
 			engineRecipe = next;
+			standing = false;
 			here.command({ type: 'set_recipe', recipe });
 			return;
 		}
-		if (!fieldPath) return;
+		if (!fieldPath) {
+			// Ground this instance does not serve: said, not another planet shown.
+			unshaped = true;
+			return;
+		}
 		engineRecipe = next;
-		status = 'shaping';
+		standing = false;
+		fetching = true;
 		fetch(fieldPath)
 			.then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(response.status)))
 			.then((bytes) => {
 				if (here !== engine) return;
 				here.set_field(new Uint8Array(bytes));
 				engineField = wanted;
-				status = 'running';
+				fetching = false;
 				here.command({ type: 'set_recipe', recipe });
 			})
 			.catch(() => {
 				engineRecipe = '';
-				status = 'failed';
+				fetching = false;
+				phase = 'failed';
 			});
+	});
+
+	// Each place the address bar is given is one request; `arrive` is read
+	// outside the effect's tracking so a later world does not replay it.
+	$effect(() => {
+		const place = stand?.place;
+		if (!place) return;
+		pending = place;
+		untrack(arrive);
 	});
 
 	$effect(() => {
@@ -232,23 +294,34 @@
 	});
 </script>
 
+{#snippet wait(word: string)}
+	<div class="wait">
+		<Spinner label={word} />
+		<span aria-hidden="true">{word}</span>
+	</div>
+{/snippet}
+
 <div class="view">
 	<canvas bind:this={canvas} tabindex="0" aria-label={t('engine.canvas')} onclick={() => canvas?.focus()}></canvas>
-	{#if status !== 'running'}
-		<div class="notice">
-			{#if status === 'loading'}
-				<Spinner label={t('engine.loading')} />
-			{:else if status === 'shaping'}
-				<Spinner label={t('engine.shaping')} />
-			{:else if status === 'missing'}
-				<Alert title={t('engine.missing.title')}>{t('engine.missing.body')} <code>bun run wasm</code></Alert>
-			{:else if status === 'unsupported'}
-				<Alert variant="danger" title={t('engine.unsupported.title')}>{t('engine.unsupported.body')}</Alert>
-			{:else}
-				<Alert variant="danger" title={t('engine.failed.title')}>{t('engine.failed.body')}</Alert>
-			{/if}
-		</div>
-	{/if}
+	<div class="veil" class:lifted={status === 'running'}>
+		{#if status === 'loading'}
+			{@render wait(t('engine.loading'))}
+		{:else if status === 'shaping'}
+			{@render wait(t('engine.shaping'))}
+		{:else if status === 'entering'}
+			{@render wait(t('engine.entering'))}
+		{:else if status === 'unshaped'}
+			<Alert variant="danger" title={t('engine.unshaped.title')}>{t('engine.unshaped.body')}</Alert>
+		{:else if status === 'refused'}
+			<Alert variant="danger" title={t('engine.refused.title')}>{t('engine.refused.body')}</Alert>
+		{:else if status === 'missing'}
+			<Alert title={t('engine.missing.title')}>{t('engine.missing.body')} <code>bun run wasm</code></Alert>
+		{:else if status === 'unsupported'}
+			<Alert variant="danger" title={t('engine.unsupported.title')}>{t('engine.unsupported.body')}</Alert>
+		{:else if status === 'failed'}
+			<Alert variant="danger" title={t('engine.failed.title')}>{t('engine.failed.body')}</Alert>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -263,12 +336,34 @@
 		height: 100%;
 		outline: none;
 	}
-	.notice {
+	/* Over the picture until it is the world asked for: softened, not hidden,
+	   so the wait reads as a world coming and not as a blank. */
+	.veil {
 		position: absolute;
 		inset: 0;
 		display: grid;
 		place-items: center;
 		padding: var(--sp-5);
 		pointer-events: none;
+		background: color-mix(in srgb, var(--bg) 45%, transparent);
+		backdrop-filter: blur(18px);
+		-webkit-backdrop-filter: blur(18px);
+		transition: opacity 300ms ease;
+	}
+	.veil.lifted {
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			opacity 300ms ease,
+			visibility 0s linear 300ms;
+	}
+	.wait {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--sp-3);
+		color: var(--text-muted);
+		letter-spacing: var(--ls-caps);
+		text-transform: uppercase;
 	}
 </style>

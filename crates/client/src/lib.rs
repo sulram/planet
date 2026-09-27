@@ -84,6 +84,8 @@ pub struct Client {
     /// Whether the last frame hung anchors, so the first empty frame after
     /// them still says so.
     had_anchors: bool,
+    /// Whether the last frame's streaming found nothing to build.
+    settled: bool,
     entropy: u64,
 }
 
@@ -131,6 +133,7 @@ impl Client {
             stats_timer_s: 0.0,
             frames_since_stats: 0,
             had_anchors: false,
+            settled: false,
             entropy: 0,
         };
         client
@@ -778,6 +781,13 @@ impl Client {
         let camera = self.controller.camera(&self.generator);
         self.anchors(&camera);
         let patches = self.stream(&camera, Terrain::update);
+        // Said on the way in, never while it holds: a front end lifts its
+        // veil on it, and hears it again after a leap or a new recipe.
+        let settled = self.terrain.settled() && self.moon_terrain.settled();
+        if settled && !self.settled {
+            self.events.push(Event::Settled);
+        }
+        self.settled = settled;
         self.frame(camera, patches)
     }
 

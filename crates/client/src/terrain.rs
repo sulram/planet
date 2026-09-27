@@ -180,6 +180,8 @@ pub struct Terrain {
     changes: Vec<TerrainChange>,
     frame: u64,
     casters: Vec<PatchId>,
+    /// Whether the last update found nothing to build.
+    settled: bool,
 }
 
 impl Terrain {
@@ -190,6 +192,7 @@ impl Terrain {
             changes: Vec::new(),
             frame: 0,
             casters: Vec::new(),
+            settled: false,
         }
     }
 
@@ -222,12 +225,18 @@ impl Terrain {
     /// headless renders, where the first frame is the only frame.
     pub fn settle(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
         loop {
-            let before = self.built.len();
             let patches = self.select(generator, camera, aspect, usize::MAX);
-            if self.built.len() == before {
+            if self.settled {
                 return patches;
             }
         }
+    }
+
+    /// Whether the last update found nothing to build: what is drawn is the
+    /// view at the detail it is meant to have. A step, a leap or a new recipe
+    /// unsettle it until the streamer catches up.
+    pub fn settled(&self) -> bool {
+        self.settled
     }
 
     fn select(
@@ -286,6 +295,7 @@ impl Terrain {
             }
         }
 
+        self.settled = missing.is_empty();
         // Coarse before fine, near before far: the picture sharpens evenly.
         missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
         for (_, node) in missing.into_iter().take(budget) {

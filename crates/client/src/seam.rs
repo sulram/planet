@@ -161,6 +161,10 @@ pub enum Event {
         text: String,
         place: Option<String>,
     },
+    /// The streamer has nothing left to build for this view: what is on
+    /// screen is the world at the detail it is meant to have. Sent each time
+    /// that becomes true again, after a new recipe, a leap or a walk.
+    Settled,
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {
         message: String,

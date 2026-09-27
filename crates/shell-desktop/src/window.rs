@@ -160,7 +160,8 @@ impl Stage {
                 | Event::Session { .. }
                 | Event::Peers { .. }
                 | Event::Said { .. }
-                | Event::Anchors { .. } => {}
+                | Event::Anchors { .. }
+                | Event::Settled => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
         }

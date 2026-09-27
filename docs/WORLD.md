@@ -68,7 +68,8 @@ m4-K7M42Q@40,180,-5
   the ground is a function of the recipe.
 - **Two renderings, not two facts.** A HUD shows the place, which is what a
   person reads out; the address bar carries the pose. `--at` takes the pose, so
-  what is in the address bar pastes straight into a headless render.
+  what is in the address bar pastes straight into a headless render, and a
+  pose pasted over the address bar is walked to (73).
 - North is the `+Y` pole. Not a choice: the sun turns about `+Y`, so it is the
   axis that gives a world its time zones, and a compass has to agree with the
   sky. At a pole there is no bearing, and that is said rather than guessed.

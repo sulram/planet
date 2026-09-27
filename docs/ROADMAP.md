@@ -167,6 +167,8 @@ Every milestone ends runnable end to end.
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
 - [ ] Portals between places, scales and worlds; magic as a capability
 - [ ] Gravity fields as placeable entities
+- [ ] The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
+- [ ] A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
 - [ ] Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
 - [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong. What the climate choice in M2 stands on
 - [ ] Scripts, server side

@@ -87,6 +87,10 @@ export type EngineEvent =
 	/** Every head in view, yours included, every frame while there is one and once empty after. */
 	| { type: 'anchors'; anchors: Anchor[] }
 	| { type: 'recipe_changed'; recipe: Recipe }
+	/** A command was refused. The message is for logs, not for people. */
+	| { type: 'rejected'; message: string }
+	/** Nothing is left to build for this view: the world is drawn whole. Again after a leap or a new recipe. */
+	| { type: 'settled' }
 	| { type: 'mode_changed'; mode: Mode }
 	| { type: 'avatar_changed'; path: string }
 	| { type: 'effects_changed'; effects: Effects }
@@ -110,6 +114,8 @@ export type EngineEvent =
 const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'ready',
 	'recipe_changed',
+	'rejected',
+	'settled',
 	'mode_changed',
 	'avatar_changed',
 	'effects_changed',

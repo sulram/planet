@@ -137,18 +137,26 @@
 		view?.command({ type: 'go_to', place });
 	}
 
-	// The address bar is where you are. Read once, synchronously, because the
-	// engine asks for it as soon as its first world is built; `null` on the
-	// server, where there is no address bar to read.
-	const arrivedAt = typeof location === 'undefined' ? null : location.hash.slice(1) || null;
-	/** The last place written, so standing still writes nothing. */
-	let written = '';
+	// The address bar is where you are. What this page writes there as you
+	// move is where you already stand; what a hand puts there is somewhere to
+	// go: the link that brought you here, a place pasted over it, a world
+	// entered from another. `page.url` moves on those alone, since the page's
+	// own `replaceState` leaves it be, and a new object each time makes the
+	// same place pasted twice two requests. The engine view walks there once
+	// it stands in the world this page asked for (DECISIONS 73). Empty on the
+	// server, where no address bar has a hash.
+	/** The last pose this page wrote, so standing still writes nothing. */
+	const own = { pose: '' };
+	const arrival = $derived.by(() => {
+		const place = page.url.hash.slice(1);
+		return place && place !== own.pose ? { place } : null;
+	});
 
 	// Replaced and never pushed: the back button is the way out of the world,
 	// not a trail of every step taken in it.
 	$effect(() => {
-		if (!stats || stats.pose === written) return;
-		written = stats.pose;
+		if (!stats || stats.pose === own.pose) return;
+		own.pose = stats.pose;
 		replaceState(`#${stats.pose}`, {});
 	});
 
@@ -210,7 +218,7 @@
 </script>
 
 <div class="stage">
-	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} name={myName} {link} stand={arrivedAt} effects={wanted} onevent={receive} />
+	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} name={myName} {link} stand={arrival} effects={wanted} onevent={receive} />
 	{#if link}
 		<Balloons {anchors} {peers} {me} {lines} />
 		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />

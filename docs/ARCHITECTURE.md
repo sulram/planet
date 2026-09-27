@@ -114,8 +114,11 @@ Numbers marked (p) are proposed and not yet confirmed.
 - One command/event seam between core and any UI. Svelte panels send commands
   and render events. Tool logic stays in Rust so every client shares it.
 - Where you stand is the client's, never the page's (62). A new recipe keeps
-  your place while the new ground is dry under it and spawns you otherwise;
-  the address bar's place is honoured once, for the world its link was for.
+  your place while the new ground is dry under it and spawns you otherwise.
+  The address bar's place is honoured each time a hand puts one there, once
+  the engine stands in the world the page asked for; what the page writes
+  there as you move never comes back. Until that world stands and is drawn
+  where you land (`settled`), a veil covers the picture (73).
 - Settings are `scene::Effects`: set with `set_effects`, clamped by the client,
   answered with `effects_changed`, carried in every `Frame`. The renderer holds
   no setting of its own. Both UIs put a button in the top right corner.
@@ -134,7 +137,8 @@ Numbers marked (p) are proposed and not yet confirmed.
   socket (`Engine.connect(url)`), hands every frame to `Client::receive` and
   sends what `drain_outbound` queues. The client says hello, keeps the peers,
   sends its own stance when it changed and as a heartbeat, and reports
-  `session`, `peers`, `said` and `anchors` events over the seam; `say` and
+  `session`, `peers`, `said` and `anchors` events over the seam, and
+  `settled` when the streamer has nothing left to build for the view; `say` and
   `go_to` are the chat bar's commands. `anchors` is where every head in view
   is on the screen, each frame, so nametags and balloons are a front end's
   DOM and never a render feature. The desktop shell has no
