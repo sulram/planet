@@ -166,9 +166,10 @@ Numbers marked (p) are proposed and not yet confirmed.
   `hooks.server.ts`. It holds no superuser credentials.
 - The WASM client lands in `apps/web/src/lib/engine/pkg` (`bun run wasm`),
   loaded by glob so the app builds without it.
-- Design system: `apps/web/src/lib/ds`, catalogue at `/ds`. JetBrains Mono,
-  one 10px size, black and white plus one red, radius 0, light and dark.
-  Components reference semantic tokens only.
+- Design system: `apps/web/src/lib/ds`, planet's own, grown for the
+  metaverse (DECISIONS 74); catalogue at `/ds`. JetBrains Mono, one 10px
+  size, black and white plus one red, radius 0, light and dark. Components
+  reference semantic tokens only.
 - i18n: flat dotted keys, `en.ts` is the source, `pt.ts` must match it.
 - The renderer accepts N views from day one (1 desktop, 2 XR).
 - The renderer writes depth (reversed, infinite) today; the motion vector
