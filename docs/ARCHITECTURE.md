@@ -59,7 +59,11 @@ Numbers marked (p) are proposed and not yet confirmed.
   impersonated by a client. At most `NameChars`.
 - Sign up and sign in are one flow: the first code request creates the
   account (server hook), the first valid code verifies it. No passwords.
-- The email carries a link `{APP_URL}/login/verify?otpId=&code=` and the code.
+- The email is the server's, rendered in the reader's language: the link
+  `{APP_URL}/login/verify?otpId=&code=` as a button and the code in large
+  digits. The web app sends the locale with the code request and the account
+  remembers it (`users.locale`, hidden); an account that never said one
+  reads English.
 - Operator: global flag `users.operator`. Gates `/backoffice`. Only an
   operator changes it. `PLANET_OPERATOR_EMAIL` seeds the first one. An
   operator reads every account's email; anyone else reads their own alone,

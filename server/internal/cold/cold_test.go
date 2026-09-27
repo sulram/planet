@@ -3,6 +3,8 @@ package cold
 import (
 	"html"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -122,17 +124,84 @@ func TestOTPRequestCreatesTheAccount(t *testing.T) {
 			if app.TestMailer.TotalSend() != 1 {
 				t.Fatalf("emails sent = %d, want 1", app.TestMailer.TotalSend())
 			}
-			// The email must carry the same link the log prints, plus a bare code.
+			// The email must carry the same link the log prints, plus the code
+			// in two halves, large enough to read from another screen.
 			body := html.UnescapeString(app.TestMailer.LastMessage().HTML)
 			link := magicLink(testConfig.AppURL, otps[0].Id, "")
 			if !strings.Contains(body, link) {
 				t.Errorf("email body lacks the magic link %q:\n%s", link, body)
 			}
-			if !strings.Contains(body, "<strong>") || strings.Contains(body, "{OTP") {
-				t.Errorf("email body lacks the plain code or kept a placeholder:\n%s", body)
+			half := user.Collection().OTP.Length / 2
+			code := regexp.MustCompile(`font-size:36px[^>]*>\d{` + strconv.Itoa(half) + `} \d{` + strconv.Itoa(half) + `}<`)
+			if !code.MatchString(body) || strings.Contains(body, "{OTP") {
+				t.Errorf("email body lacks the spaced code or kept a placeholder:\n%s", body)
 			}
 		},
 	}}.run(t)
+}
+
+func TestSignInMailSpeaksTheReadersLanguage(t *testing.T) {
+	request := func(email, locale string) tests.ApiScenario {
+		return tests.ApiScenario{
+			Method:          http.MethodPost,
+			URL:             "/api/collections/users/request-otp",
+			Body:            strings.NewReader(`{"email":"` + email + `","locale":"` + locale + `"}`),
+			Delay:           200 * time.Millisecond,
+			ExpectedStatus:  http.StatusOK,
+			ExpectedContent: []string{`"otpId":"`},
+		}
+	}
+	mailed := func(t testing.TB, app *tests.TestApp, email, subject, greeting, locale string) {
+		t.Helper()
+		message := app.TestMailer.LastMessage()
+		if message.Subject != subject || !strings.Contains(message.HTML, greeting) {
+			t.Errorf("subject = %q, greeting %q wanted in:\n%s", message.Subject, greeting, message.HTML)
+		}
+		user, err := app.FindAuthRecordByEmail(usersCollection, email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if user.GetString("locale") != locale {
+			t.Errorf("locale = %q, want %q", user.GetString("locale"), locale)
+		}
+	}
+	scenarios := []scenario{
+		{
+			ApiScenario: request("nova@example.com", "pt"),
+			setup: func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
+				s.Name = "a new account reads the language it asked in"
+				s.AfterTestFunc = func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+					mailed(t, app, "nova@example.com", "Entrar no planet", "Olá,", "pt")
+				}
+			},
+		},
+		{
+			ApiScenario: request("someone@example.com", "xx"),
+			setup: func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
+				s.Name = "an unknown language reads English"
+				s.AfterTestFunc = func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+					mailed(t, app, "someone@example.com", "Sign in to planet", "Hi,", "")
+				}
+			},
+		},
+		{
+			ApiScenario: request("ana@example.com", "en"),
+			setup: func(t testing.TB, app *tests.TestApp, s *tests.ApiScenario) {
+				s.Name = "an account follows the language of its latest request"
+				ana := createUser(t, app, "ana@example.com", false)
+				ana.Set("locale", "pt")
+				if err := app.Save(ana); err != nil {
+					t.Fatal(err)
+				}
+				s.AfterTestFunc = func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+					mailed(t, app, "ana@example.com", "Sign in to planet", "Hi,", "en")
+				}
+			},
+		},
+	}
+	for _, s := range scenarios {
+		s.run(t)
+	}
 }
 
 func TestOTPRequestReusesTheAccountWhateverTheCase(t *testing.T) {

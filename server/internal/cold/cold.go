@@ -38,9 +38,11 @@ func Register(app core.App, cfg Config) {
 	})
 
 	app.OnRecordRequestOTPRequest(usersCollection).BindFunc(createAccountOnFirstLogin)
+	app.OnRecordRequestOTPRequest(usersCollection).BindFunc(rememberLocale)
 	app.OnRecordEnrich(usersCollection).BindFunc(showEmailsToOperators)
 	app.OnRecordValidate(worldsCollection).BindFunc(validateWorld)
 	app.OnRecordCreate(instanceCollection).BindFunc(keepOneInstance)
+	app.OnMailerRecordOTPSend(usersCollection).BindFunc(writeMagicLinkMail)
 	app.OnMailerRecordOTPSend(usersCollection).BindFunc(logMagicLink)
 	app.OnMailerSend().BindFunc(skipDeliveryWithoutSMTP)
 }

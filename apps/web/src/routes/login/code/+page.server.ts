@@ -37,7 +37,9 @@ export const actions: Actions = {
 		if (!otp) redirect(303, '/login');
 
 		try {
-			const { otpId } = await locals.pb.collection('users').requestOTP(otp.email);
+			const { otpId } = await locals.pb
+				.collection('users')
+				.requestOTP(otp.email, { body: { email: otp.email, locale: locals.locale } });
 			writeOtp(cookies, { ...otp, otpId });
 		} catch (err) {
 			return fail(502, { error: translate(locals.locale, otpRequestError(pbStatus(err))) });

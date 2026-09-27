@@ -25,12 +25,43 @@ func createAccountOnFirstLogin(e *core.RecordCreateOTPRequestEvent) error {
 	email, _ := info.Body["email"].(string)
 
 	record := newUser(e.Collection, email)
+	record.Set("locale", localeAsked(info))
 	if err := e.App.Save(record); err != nil {
 		return fmt.Errorf("create account on first login: %w", err)
 	}
 	e.Record = record
 
 	return e.Next()
+}
+
+// rememberLocale keeps the reader's language on the account when the code
+// request says one, so the email speaks it: the web app knows the language
+// from the screen the request came from, and the mail hook knows only the
+// account. Best effort and quiet: a request without one changes nothing.
+func rememberLocale(e *core.RecordCreateOTPRequestEvent) error {
+	if e.Record == nil {
+		return e.Next()
+	}
+	info, err := e.RequestInfo()
+	if err != nil {
+		return err
+	}
+	if locale := localeAsked(info); locale != "" && locale != e.Record.GetString("locale") {
+		e.Record.Set("locale", locale)
+		if err := e.App.Save(e.Record); err != nil {
+			return fmt.Errorf("remember locale: %w", err)
+		}
+	}
+	return e.Next()
+}
+
+// localeAsked is the language a code request names, when the email exists in it.
+func localeAsked(info *core.RequestInfo) string {
+	locale, _ := info.Body["locale"].(string)
+	if knownLocale(locale) {
+		return locale
+	}
+	return ""
 }
 
 // showEmailsToOperators lets an operator read every account's email.
