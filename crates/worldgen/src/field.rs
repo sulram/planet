@@ -166,7 +166,8 @@ impl Field {
     /// Where three faces meet there is no fourth texel: the corner takes the
     /// mean of the three, the same number from whichever face reads it.
     fn fold_seams(&mut self) {
-        for level in self.levels.clone() {
+        for index in 0..self.levels.len() {
+            let level = self.levels[index];
             let grid = Grid::new(level.side.trailing_zeros()).expect("a face side is a grid");
             let side = f64::from(level.side);
             let stride = level.stride();
