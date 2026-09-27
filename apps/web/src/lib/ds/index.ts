@@ -14,6 +14,7 @@ export { default as CodeInput } from './CodeInput.svelte';
 export { default as Dialog } from './Dialog.svelte';
 export { default as Field } from './Field.svelte';
 export { default as Icon } from './Icon.svelte';
+export { default as IconButton } from './IconButton.svelte';
 export type { IconName } from './Icon.svelte';
 export { default as Input } from './Input.svelte';
 export { default as LangSwitch } from './LangSwitch.svelte';

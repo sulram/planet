@@ -2,7 +2,7 @@
 	// One icon, drawn as a stroke in the current colour at the text size.
 	// The paths are Lucide's (ISC): adding one is copying its path data here,
 	// so the set stays the handful the product uses and no library rides along.
-	export type IconName = 'globe' | 'users' | 'send' | 'map-pin' | 'pencil';
+	export type IconName = 'globe' | 'users' | 'send' | 'map-pin' | 'pencil' | 'log-out' | 'layout-dashboard';
 
 	interface Props {
 		name: IconName;
@@ -18,7 +18,11 @@
 		send: 'm22 2-7 20-4-9-9-4ZM22 2 11 13',
 		'map-pin': 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0ZM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
 		pencil:
-			'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zm-6.174-1.812 4 4'
+			'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zm-6.174-1.812 4 4',
+		'log-out': 'm16 17 5-5-5-5M21 12H9M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4',
+		// Lucide draws these four as rects with a radius of 1; spelled as paths here.
+		'layout-dashboard':
+			'M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1ZM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z'
 	};
 </script>
 

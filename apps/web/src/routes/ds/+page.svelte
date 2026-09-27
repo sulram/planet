@@ -8,6 +8,7 @@
 		Dialog,
 		Field,
 		Icon,
+		IconButton,
 		Input,
 		LangSwitch,
 		Page,
@@ -247,7 +248,15 @@
 				<Icon name="send" label="Send" />
 				<Icon name="map-pin" label="Place" />
 				<Icon name="pencil" label="Edit" />
+				<Icon name="log-out" label="Sign out" />
+				<Icon name="layout-dashboard" label="Backoffice" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
+			</div>
+			<p class="muted">IconButton: an action said by its icon alone, square, for a corner where words do not fit. The label is required; it is the accessible name and the tooltip.</p>
+			<div class="row">
+				<IconButton icon="log-out" label="Sign out" />
+				<IconButton href="/ds" icon="layout-dashboard" label="Backoffice" />
+				<IconButton icon="pencil" label="Edit" disabled />
 			</div>
 		</section>
 

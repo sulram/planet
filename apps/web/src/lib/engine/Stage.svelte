@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Badge, Button, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Button, Icon, IconButton, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Recipe } from '$lib/world';
 	import type { Link } from '$lib/server/session';
@@ -229,14 +229,14 @@
 	<Panel {title}>
 		{#snippet aside()}
 			<span class="corner">
+				{#if user?.operator}<IconButton href="/backoffice" icon="layout-dashboard" label={t('nav.backoffice')} />{/if}
 				{#if user}
 					<form method="POST" action="/logout">
-						<Button type="submit" variant="ghost">{t('auth.logout')}</Button>
+						<IconButton type="submit" icon="log-out" label={t('auth.logout')} />
 					</form>
 				{:else}
 					<Button variant="ghost" onclick={() => (signingIn = true)}>{t('auth.login.title')}</Button>
 				{/if}
-				{#if user?.operator}<a class="home" href="/backoffice">{t('nav.backoffice')}</a>{/if}
 				<ThemeToggle />
 			</span>
 		{/snippet}
@@ -299,16 +299,11 @@
 	.corner {
 		display: flex;
 		align-items: center;
-		gap: var(--sp-3);
+		gap: var(--sp-2);
 	}
-	.home {
-		color: var(--text-muted);
-		text-decoration: none;
-		letter-spacing: var(--ls-caps);
-		text-transform: uppercase;
-	}
-	.home:hover {
-		color: var(--text);
+	/* the form around sign out would otherwise sit on the text baseline */
+	.corner form {
+		display: flex;
 	}
 	.here {
 		display: flex;
