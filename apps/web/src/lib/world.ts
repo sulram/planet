@@ -26,10 +26,21 @@ export interface Field {
 	source: string;
 }
 
+/** A shape that is a baked field, not the seed's own. */
+export type Baked = Exclude<Shape, 'generated'>;
+
 /** Where a shape's field and its sidecar are served from. */
-export const FIELD_PATH: Record<Exclude<Shape, 'generated'>, string> = {
+export const FIELD_PATH: Record<Baked, string> = {
 	earth: '/assets/fields/earth.field'
 };
+
+/**
+ * Where a field's bytes are fetched from. The URL carries the content id, so
+ * a browser keeps the bytes for good and a rebake is a new URL (DECISIONS 72).
+ */
+export function fieldUrl(shape: Baked, id: string): string {
+	return `${FIELD_PATH[shape]}?${id}`;
+}
 
 /** The id a recipe names, or null when the seed alone shapes the world. */
 export function fieldId(recipe: Recipe): string | null {

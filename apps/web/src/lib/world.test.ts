@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isGeneratorVersion, isSeed, normalizeSeed, randomSeed } from './world';
+import { fieldUrl, isGeneratorVersion, isSeed, normalizeSeed, randomSeed } from './world';
 
 describe('isSeed', () => {
 	test('accepts 16 lowercase hex digits', () => {
@@ -67,5 +67,11 @@ describe('isGeneratorVersion', () => {
 		expect(isGeneratorVersion(-1)).toBe(false);
 		expect(isGeneratorVersion(1.5)).toBe(false);
 		expect(isGeneratorVersion(Number.NaN)).toBe(false);
+	});
+});
+
+describe('fieldUrl', () => {
+	test('carries the content id, so a rebake is a new URL', () => {
+		expect(fieldUrl('earth', 'abc123')).toBe('/assets/fields/earth.field?abc123');
 	});
 });

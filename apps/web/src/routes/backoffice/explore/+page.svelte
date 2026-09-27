@@ -6,7 +6,7 @@
 	import { t } from '$lib/i18n';
 	import {
 		buildParams,
-		FIELD_PATH,
+		fieldUrl,
 		knobsFor,
 		normalizeSeed,
 		randomSeed,
@@ -42,7 +42,7 @@
 	const recipe = $derived<Recipe | null>(
 		generatorVersion ? { seed: data.seed, generator_version: generatorVersion, params } : null
 	);
-	const fieldPath = $derived(data.shape === 'generated' ? undefined : FIELD_PATH[data.shape]);
+	const fieldPath = $derived(data.shape === 'generated' || !data.field ? undefined : fieldUrl(data.shape, data.field.id));
 
 	const shapeOptions = $derived(SHAPES.map((value) => ({ value, label: t(`play.shape.${value}`) })));
 	const shapeHint = $derived(

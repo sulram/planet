@@ -8,6 +8,8 @@
 // every release at /opt/planet/assets and linked into each, so a deploy
 // uploads only what changed of it. The box is set up by `bun run provision`.
 import { $ } from 'bun';
+import { readdir, stat } from 'node:fs/promises';
+import { brotliCompressSync, constants } from 'node:zlib';
 import { ROOT } from './lib';
 import { envArg, target } from './deploy.config';
 import { buildWasm } from './wasm';
@@ -41,6 +43,29 @@ const capture = (remote: string): string =>
 const push = (src: string, dest: string, ...flags: string[]) =>
 	run(['rsync', '-azL', ...flags, src, `${t.host}:${dest}`]);
 
+// A field goes out precompressed: adapter-node's static server sends
+// `name.field.br` to a browser that accepts brotli, so 25 MB travel as 16
+// (DECISIONS 72). Made here, once per bake: a sibling older than its field
+// is remade, a newer one is kept.
+async function compressFields(): Promise<void> {
+	const dir = `${ROOT}/assets/fields`;
+	for (const name of await readdir(dir).catch(() => [] as string[])) {
+		if (!name.endsWith('.field')) continue;
+		const field = `${dir}/${name}`;
+		const sibling = `${field}.br`;
+		const [baked, kept] = await Promise.all([stat(field), stat(sibling).catch(() => null)]);
+		if (kept && kept.mtimeMs >= baked.mtimeMs) continue;
+		console.log(`$ brotli ${name} (a minute, once per bake)`);
+		const bytes = await Bun.file(field).bytes();
+		const params = {
+			[constants.BROTLI_PARAM_QUALITY]: 11,
+			[constants.BROTLI_PARAM_LGWIN]: 24,
+			[constants.BROTLI_PARAM_SIZE_HINT]: bytes.length
+		};
+		await Bun.write(sibling, brotliCompressSync(bytes, { params }));
+	}
+}
+
 const sha = (await $`git rev-parse --short HEAD`.text()).trim();
 const dirty = (await $`git status --porcelain`.text()).trim() !== '';
 console.log(`deploy ${t.env}: ${sha}${dirty ? ' (dirty tree)' : ''} -> ${t.host} as ${release}${dry ? ' (dry run)' : ''}`);
@@ -53,6 +78,7 @@ if (!dry) {
 	await $`env GOOS=linux GOARCH=${t.arch} CGO_ENABLED=0 go build -trimpath -ldflags=-s\ -w -o ${stage}/release/planet ./cmd/planet`.cwd(`${ROOT}/server`);
 	await buildWasm();
 	await $`bun run --cwd apps/web build`;
+	await compressFields();
 	// The build without the asset set: that is shared on the box.
 	await $`rsync -a --exclude client/assets apps/web/build/ ${stage}/release/web/`;
 	// What the server side of the build imports at run time: the app's

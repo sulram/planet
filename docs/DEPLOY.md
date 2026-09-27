@@ -11,8 +11,9 @@ ARCHITECTURE.md; the open rows this waits on are in OPEN.md.
 - PocketBase is SQLite in one process; the world actor relays small protobuf
   frames. Twenty people in one world is 20 x 19 x 15 frames a second, under
   1 MB/s.
-- The heavy bytes are static and cached forever: the WASM engine (a few MB),
-  each avatar VRM, and a field (25 MB) on a first visit.
+- The heavy bytes are static. The WASM engine (a few MB) and a field (25 MB,
+  16 over the wire as brotli) are kept by the browser for good, since their
+  URLs carry a content hash (72); an avatar VRM is revalidated by ETag.
 
 ## The box
 
@@ -56,6 +57,7 @@ ARCHITECTURE.md; the open rows this waits on are in OPEN.md.
 
 ```text
 planet.example.org {
+    header /assets/fields/*.field Cache-Control "public, max-age=31536000, immutable"
     handle /api/* {
         reverse_proxy 127.0.0.1:8090
     }
@@ -92,7 +94,8 @@ planet.example.org {
   and `PORT=3000` for adapter-node. Both units read it. A change there is
   `systemctl restart planet-server planet-web`.
 - `bun run deploy <env>`, every release: builds here (the Go binary for the
-  box's arch with no CGO, the WASM engine, the web app), never on the box;
+  box's arch with no CGO, the WASM engine, the web app, a brotli sibling
+  beside each field, once per bake), never on the box;
   uploads a release to `/opt/planet/releases/<stamp>` and the asset set to
   `/opt/planet/assets`, shared by every release and linked into each, so a
   deploy moves only what changed of it; swaps `/opt/planet/current`, restarts

@@ -18,7 +18,9 @@ const t = target(envArg(args, 'usage: bun run provision <production | staging> [
 const caddyfile = `# planet, written by scripts/provision.ts. Edit the script, not this file.
 ${t.httpsPort === 443 ? '' : `{\n\thttps_port ${t.httpsPort}\n}\n\n`}${t.domain}${t.httpsPort === 443 ? '' : `:${t.httpsPort}`} {
 	encode zstd gzip
-${t.httpsPort === 443 ? '' : '\t# Another service holds 443, so the certificate comes by the HTTP challenge on 80.\n\ttls {\n\t\tissuer acme {\n\t\t\tdisable_tlsalpn_challenge\n\t\t}\n\t}\n'}	# The REST, the ticket and the world socket; then the PocketBase panel.
+${t.httpsPort === 443 ? '' : '\t# Another service holds 443, so the certificate comes by the HTTP challenge on 80.\n\ttls {\n\t\tissuer acme {\n\t\t\tdisable_tlsalpn_challenge\n\t\t}\n\t}\n'}	# A field's URL carries its content id (DECISIONS 72), so its bytes never change under it.
+	header /assets/fields/*.field Cache-Control "public, max-age=31536000, immutable"
+	# The REST, the ticket and the world socket; then the PocketBase panel.
 	handle /api/* {
 		reverse_proxy 127.0.0.1:8090
 	}
