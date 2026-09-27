@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ActionResult } from '@sveltejs/kit';
-	import { Alert, Dialog, Field, Input, Stack } from '$lib/ds';
+	import { Alert, CodeInput, Dialog, Field, Input, Stack } from '$lib/ds';
 	import { t } from '$lib/i18n';
 
 	// Signing in without leaving the world: the same two actions the login
@@ -89,7 +89,7 @@
 			<p>{t('auth.code.lede', { email })}</p>
 			{#if resent}<Alert>{t('auth.code.resent')}</Alert>{/if}
 			<Field label={t('auth.code.label')} for="signin-code" hint={t('auth.code.hint')} {error}>
-				<Input id="signin-code" name="code" bind:value={code} inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" invalid={!!error} required />
+				<CodeInput id="signin-code" name="code" bind:value={code} invalid={!!error} required />
 			</Field>
 			<p class="links">
 				<button type="button" class="link" onclick={resend}>{t('auth.code.resend')}</button>

@@ -4,6 +4,7 @@
 		Badge,
 		Button,
 		Checkbox,
+		CodeInput,
 		Dialog,
 		Field,
 		Icon,
@@ -60,6 +61,7 @@
 
 	let speed = $state<(typeof speeds)[number]['value']>('walk');
 	let email = $state('');
+	let code = $state('3635');
 	let loading = $state(false);
 	let confirming = $state(false);
 	let deleting = $state(false);
@@ -186,6 +188,12 @@
 							value="a"
 							label="Shape"
 						/>
+					</Field>
+					<Field label="Code" for="ds-code" hint="One cell per digit, in two halves, as the email spells it. Paste it with the space.">
+						<CodeInput id="ds-code" bind:value={code} />
+					</Field>
+					<Field label="Refused code" for="ds-code-refused" error="This code is wrong or expired.">
+						<CodeInput id="ds-code-refused" value="12345678" invalid />
 					</Field>
 					<Field label="Seed" for="ds-seed" error="An error replaces the hint and is shown whole.">
 						<Input id="ds-seed" value="not a seed" invalid />

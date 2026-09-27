@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Alert, Button, Field, Input, Page, PageHeader, Stack, Topbar } from '$lib/ds';
+	import { Alert, Button, CodeInput, Field, Page, PageHeader, Stack, Topbar } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { PageProps } from './$types';
 
@@ -34,17 +34,7 @@
 			<Stack>
 				<Field label={t('auth.code.label')} for="code" hint={t('auth.code.hint')} {error}>
 					<!-- svelte-ignore a11y_autofocus -->
-					<Input
-						id="code"
-						name="code"
-						inputmode="numeric"
-						autocomplete="one-time-code"
-						autocapitalize="off"
-						spellcheck="false"
-						invalid={!!error}
-						required
-						autofocus
-					/>
+					<CodeInput id="code" name="code" invalid={!!error} required autofocus />
 				</Field>
 				<Button type="submit" loading={busy === 'verify'}>{t('auth.code.submit')}</Button>
 			</Stack>
