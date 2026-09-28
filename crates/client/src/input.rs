@@ -45,6 +45,8 @@ pub struct Input {
     held: [bool; 9],
     /// One shot keys pressed since the last update.
     pressed: Vec<Key>,
+    /// Whether the shell let everything go since the last update.
+    interrupted: bool,
     /// Pointer motion in pixels, x right, y down.
     pub look: [f32; 2],
     /// Wheel motion in lines, positive zooms in.
@@ -74,17 +76,43 @@ impl Input {
         [axis(Key::Right, Key::Left), axis(Key::Forward, Key::Back)]
     }
 
-    /// Releases everything, for when the window loses focus.
+    /// Releases everything, for when the window loses focus. What a held key
+    /// was in the middle of is dropped, never landed: a stroke half drawn
+    /// when the window blurs goes the way of Escape, not of a click let go.
     pub fn release_all(&mut self) {
         self.held = Default::default();
+        self.interrupted = true;
     }
 
     /// Takes the one shot input, leaving held keys in place.
-    pub(crate) fn take_frame(&mut self) -> (Vec<Key>, [f32; 2], f32) {
-        let out = (core::mem::take(&mut self.pressed), self.look, self.zoom);
+    pub(crate) fn take_frame(&mut self) -> (Vec<Key>, [f32; 2], f32, bool) {
+        let out = (
+            core::mem::take(&mut self.pressed),
+            self.look,
+            self.zoom,
+            self.interrupted,
+        );
         self.look = [0.0; 2];
         self.zoom = 0.0;
+        self.interrupted = false;
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn losing_focus_lets_go_and_interrupts_once() {
+        let mut input = Input::default();
+        input.key(Key::Use, true);
+        input.release_all();
+        assert!(!input.held(Key::Use));
+        let (_, _, _, interrupted) = input.take_frame();
+        assert!(interrupted);
+        let (_, _, _, interrupted) = input.take_frame();
+        assert!(!interrupted);
     }
 }
 

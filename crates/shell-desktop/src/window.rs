@@ -246,6 +246,8 @@ impl ApplicationHandler for App {
         // the panel still hears buttons let go: the click that captured it was
         // pressed in the panel's sight, and a press it never sees released
         // reads as a drag from outside, which makes it refuse every click.
+        // A release reaches the world too, wherever it lands: a stroke
+        // dragged onto the panel ends when the button does.
         let released = matches!(
             event,
             WindowEvent::MouseInput {
@@ -253,11 +255,14 @@ impl ApplicationHandler for App {
                 ..
             }
         );
-        if (!stage.looking || released)
-            && stage.panel.window_event(&stage.window, &event)
+        if !released
             && !stage.looking
+            && stage.panel.window_event(&stage.window, &event)
         {
             return;
+        }
+        if released {
+            stage.panel.window_event(&stage.window, &event);
         }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),

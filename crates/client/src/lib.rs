@@ -808,7 +808,10 @@ impl Client {
 
     /// Advances the simulation by `dt` seconds and returns the frame to draw.
     pub fn update(&mut self, dt: f64, input: &mut Input) -> Frame {
-        let (pressed, look, zoom) = input.take_frame();
+        let (pressed, look, zoom, interrupted) = input.take_frame();
+        if interrupted {
+            self.build.cancel();
+        }
         self.entropy = self.entropy.wrapping_add(dt.to_bits()).rotate_left(7);
         for key in pressed {
             match key {
