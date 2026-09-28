@@ -8,12 +8,25 @@
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import Balloons from './Balloons.svelte';
+	import Build from './Build.svelte';
 	import Chat, { type Line } from './Chat.svelte';
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
 	import Settings from './Settings.svelte';
 	import SignIn from './SignIn.svelte';
-	import { modes, NAME_CHARS, type Anchor, type Effects, type EngineEvent, type Mode, type PeerInfo, type Scope, type SessionStatus } from './index';
+	import {
+		modes,
+		NAME_CHARS,
+		type Anchor,
+		type BuildRefusal,
+		type Effects,
+		type EngineEvent,
+		type Mode,
+		type PeerInfo,
+		type Scope,
+		type SessionStatus,
+		type Tool
+	} from './index';
 	import { who } from './who';
 
 	// The full viewport engine with its floating panel: what `/play` and
@@ -107,6 +120,18 @@
 	let peers = $state<PeerInfo[]>([]);
 	let anchors = $state.raw<Anchor[]>([]);
 
+	// Building: what the engine says is in hand, and why it last found no room.
+	let tool = $state<Tool | null>(null);
+	let paint = $state(0);
+	let palette = $state.raw<string[]>([]);
+	let refused = $state<BuildRefusal | null>(null);
+	let history = $state({ undo: false, redo: false });
+
+	function build(next: Tool | null) {
+		refused = null;
+		view?.command({ type: 'set_tool', tool: next });
+	}
+
 	// Lines are what was heard while here, never stored: the panel keeps the
 	// last hundred and a line keeps the name its speaker had when it was said.
 	const LINES_KEPT = 100;
@@ -199,6 +224,13 @@
 		} else if (event.type === 'peers') peers = event.peers;
 		else if (event.type === 'said') heard(event);
 		else if (event.type === 'anchors') anchors = event.anchors;
+		else if (event.type === 'palette') palette = event.colors;
+		else if (event.type === 'tool_changed') {
+			tool = event.tool;
+			paint = event.paint;
+			if (tool) refused = null;
+		} else if (event.type === 'build_refused') refused = event.reason;
+		else if (event.type === 'history') history = { undo: event.undo, redo: event.redo };
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
 			effects = event.effects;
@@ -224,6 +256,17 @@
 		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />
 	{/if}
 	<Settings {effects} {defaults} onchange={choose} />
+	<Build
+		{tool}
+		{paint}
+		{palette}
+		{refused}
+		{history}
+		onbuild={build}
+		onpaint={(next) => view?.command({ type: 'set_paint', paint: next })}
+		onundo={() => view?.command({ type: 'undo' })}
+		onredo={() => view?.command({ type: 'redo' })}
+	/>
 	<Help />
 	<SignIn bind:open={signingIn} ondone={() => location.reload()} />
 	<Panel {title}>

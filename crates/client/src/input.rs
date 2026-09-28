@@ -21,18 +21,37 @@ pub enum Key {
     NewSeed,
     /// Wear the next avatar on offer.
     NextAvatar,
+    /// Start building with the last tool, or stop.
+    Build,
+    /// Take a tool, which starts building if it was not.
+    Create,
+    Delete,
+    Paint,
+    /// The pointer's button while building: held down, a stroke is drawn.
+    Use,
+    /// Held as a stroke starts, it stands up from the side as a wall
+    /// instead of lying on it as a slab.
+    Upright,
+    /// Drop the stroke being drawn, or else stop building.
+    Cancel,
+    /// Take back the last stroke, or put it back.
+    Undo,
+    Redo,
 }
 
 /// Input gathered by a shell since the last update.
 #[derive(Clone, Debug, Default)]
 pub struct Input {
-    held: [bool; 7],
+    held: [bool; 9],
     /// One shot keys pressed since the last update.
     pressed: Vec<Key>,
     /// Pointer motion in pixels, x right, y down.
     pub look: [f32; 2],
     /// Wheel motion in lines, positive zooms in.
     pub zoom: f32,
+    /// Where the pointer is, as fractions of the view from the top left.
+    /// `None` while it is captured: then it aims through the middle.
+    pub pointer: Option<[f32; 2]>,
 }
 
 impl Input {
@@ -78,6 +97,17 @@ fn held_slot(key: Key) -> Option<usize> {
         Key::Up => Some(4),
         Key::Down => Some(5),
         Key::Sprint => Some(6),
-        Key::ToggleMode | Key::NewSeed | Key::NextAvatar => None,
+        Key::Use => Some(7),
+        Key::Upright => Some(8),
+        Key::ToggleMode
+        | Key::NewSeed
+        | Key::NextAvatar
+        | Key::Build
+        | Key::Create
+        | Key::Delete
+        | Key::Paint
+        | Key::Cancel
+        | Key::Undo
+        | Key::Redo => None,
     }
 }

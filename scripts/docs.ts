@@ -106,7 +106,7 @@ const ALLOWED: Record<string, string[]> = {
 	worldgen: ['topology'],
 	avatar: ['scene'],
 	render: ['scene'],
-	client: ['topology', 'worldgen', 'scene', 'avatar', 'protocol'],
+	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'protocol'],
 	'ui-native': ['client', 'scene'],
 };
 const ours = readdirSync(`${ROOT}/crates`).filter((d) => existsSync(`${ROOT}/crates/${d}/Cargo.toml`));

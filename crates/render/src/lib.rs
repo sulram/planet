@@ -1,6 +1,6 @@
 //! The renderer. All of wgpu lives here.
 //!
-//! It draws a [`scene::Frame`]: terrain patches, boxes, sky. It knows nothing
+//! It draws a [`scene::Frame`]: terrain patches, volumes, boxes, sky. It knows nothing
 //! about recipes, addresses or input. Rules it keeps (CLAUDE.md invariants):
 //! - **camera-relative**: the GPU never sees a planet space position. Every
 //!   `f64` origin is subtracted from the camera on the CPU, per frame.
@@ -17,10 +17,11 @@ mod headless;
 mod shadow;
 mod skinned;
 mod terrain;
+mod volumes;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DVec3, Mat4, Vec3};
-use scene::{Camera, Frame, SkinnedChange, TerrainChange};
+use scene::{Camera, Frame, SkinnedChange, TerrainChange, VolumeChange};
 
 pub use gpu::{Gpu, surface_configuration};
 #[cfg(not(target_arch = "wasm32"))]
@@ -67,6 +68,7 @@ struct ViewResources {
     shadows: shadow::Maps,
     boxes: boxes::Instances,
     skinned: skinned::InstanceUniforms,
+    volumes: terrain::PatchUniforms,
 }
 
 pub struct Renderer {
@@ -78,6 +80,7 @@ pub struct Renderer {
     shadow_layout: wgpu::BindGroupLayout,
     views: Vec<ViewResources>,
     terrain: terrain::Terrain,
+    volumes: volumes::Volumes,
     boxes: boxes::Boxes,
     skinned: skinned::Skinned,
     sky: wgpu::RenderPipeline,
@@ -160,6 +163,13 @@ impl Renderer {
             composer.behind_layout(),
             scene,
         );
+        let volumes = volumes::Volumes::new(
+            &device,
+            &view_layout,
+            &shadow_layout,
+            terrain.patch_layout(),
+            scene,
+        );
         let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, scene);
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
@@ -173,6 +183,7 @@ impl Renderer {
             shadow_layout,
             views: Vec::new(),
             terrain,
+            volumes,
             boxes,
             skinned,
             sky,
@@ -185,6 +196,13 @@ impl Renderer {
     pub fn apply(&mut self, changes: Vec<TerrainChange>) {
         for change in changes {
             self.terrain.apply(&self.device, change);
+        }
+    }
+
+    /// Uploads and drops the meshes of volumes and of the ghost of a stroke.
+    pub fn apply_volumes(&mut self, changes: Vec<VolumeChange>) {
+        for change in changes {
+            self.volumes.apply(&self.device, change);
         }
     }
 
@@ -235,6 +253,14 @@ impl Renderer {
             &self.queue,
             &self.terrain,
             &frame.patches,
+            view.camera.position,
+        );
+        let volumes = self.volumes.place(
+            &self.device,
+            &self.queue,
+            &mut resources.volumes,
+            &frame.volumes,
+            frame.ghost,
             view.camera.position,
         );
         let box_count = resources.boxes.write(
@@ -300,6 +326,8 @@ impl Renderer {
             pass.set_bind_group(0, &resources.shadows.groups[cascade], &[]);
             self.terrain
                 .draw_shadow(&mut pass, &resources.casters, &casters, *matrix);
+            self.volumes
+                .draw_shadow(&mut pass, &resources.volumes, &volumes, *matrix);
             self.boxes
                 .draw_shadow(&mut pass, &resources.boxes, box_count);
             self.skinned
@@ -345,11 +373,14 @@ impl Renderer {
             self.terrain
                 .draw_grass(&mut pass, &resources.patches, &drawn);
         }
+        self.volumes.draw(&mut pass, &resources.volumes, &volumes);
         self.boxes.draw(&mut pass, &resources.boxes, box_count);
         self.skinned
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
+        self.volumes
+            .draw_ghost(&mut pass, &resources.volumes, &volumes);
         drop(pass);
 
         // Then the sea and the clouds, the nearer last: a camera under the
@@ -512,6 +543,7 @@ impl Renderer {
             patches: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             boxes: boxes::Instances::new(&self.device),
             skinned: skinned::InstanceUniforms::default(),
+            volumes: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
         }
     }
 }
@@ -546,6 +578,9 @@ enum Surface {
     Backdrop,
     /// Water: blended over what is there, seen from both sides.
     Translucent,
+    /// A preview over the world: blended, tested against depth and writing
+    /// none. Its fragment entry is `fs_ghost`.
+    Ghost,
     Foliage,
     Shadow,
     ShadowCutout,
@@ -569,7 +604,8 @@ fn pipeline(
     let shadow = matches!(spec.surface, Surface::Shadow | Surface::ShadowCutout);
     let targets = [Some(wgpu::ColorTargetState {
         format,
-        blend: (spec.surface == Surface::Translucent).then_some(wgpu::BlendState::ALPHA_BLENDING),
+        blend: matches!(spec.surface, Surface::Translucent | Surface::Ghost)
+            .then_some(wgpu::BlendState::ALPHA_BLENDING),
         write_mask: wgpu::ColorWrites::ALL,
     })];
     let groups: Vec<Option<&wgpu::BindGroupLayout>> =
@@ -590,12 +626,17 @@ fn pipeline(
         },
         fragment: (spec.surface != Surface::Shadow).then_some(wgpu::FragmentState {
             module: &module,
-            entry_point: Some(if shadow { "fs_shadow" } else { "fs" }),
+            entry_point: Some(match spec.surface {
+                _ if shadow => "fs_shadow",
+                Surface::Ghost => "fs_ghost",
+                _ => "fs",
+            }),
             targets: if shadow { &[] } else { &targets },
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            cull_mode: (spec.surface == Surface::Solid || shadow).then_some(wgpu::Face::Back),
+            cull_mode: (matches!(spec.surface, Surface::Solid | Surface::Ghost) || shadow)
+                .then_some(wgpu::Face::Back),
             ..Default::default()
         },
         // The sea reads the depth, so it cannot also be tested against it.

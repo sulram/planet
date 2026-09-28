@@ -37,6 +37,11 @@ describe('parseEvent', () => {
 			type: 'anchors',
 			anchors: [{ session: 2, x: 0.5, y: 0.4, distance_m: 3 }]
 		});
+		expect(parseEvent('{"type":"tool_changed","tool":"paint","paint":4}')).toEqual({ type: 'tool_changed', tool: 'paint', paint: 4 });
+		expect(parseEvent('{"type":"tool_changed","tool":null,"paint":0}')).toEqual({ type: 'tool_changed', tool: null, paint: 0 });
+		expect(parseEvent('{"type":"palette","colors":["#f2f0eb"]}')).toEqual({ type: 'palette', colors: ['#f2f0eb'] });
+		expect(parseEvent('{"type":"build_refused","reason":"sea"}')).toEqual({ type: 'build_refused', reason: 'sea' });
+		expect(parseEvent('{"type":"history","undo":true,"redo":false}')).toEqual({ type: 'history', undo: true, redo: false });
 	});
 
 	test('ignores unknown types and malformed payloads', () => {

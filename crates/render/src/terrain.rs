@@ -427,19 +427,34 @@ impl PatchUniforms {
             .iter()
             .filter(|draw| terrain.patches.contains_key(&draw.id))
             .collect();
-        let drawn: Vec<PatchId> = placed.iter().map(|draw| draw.id).collect();
-        if drawn.len() > self.capacity {
-            self.capacity = drawn.len().next_power_of_two();
+        // A patch is built around its body's centre; the body is wherever it
+        // is this frame.
+        let origins: Vec<(DVec3, DVec3)> = placed
+            .iter()
+            .map(|draw| (draw.body_center, terrain.patches[&draw.id].origin))
+            .collect();
+        self.place(device, queue, &origins, camera);
+        placed.iter().map(|draw| draw.id).collect()
+    }
+
+    /// Writes one slot per mesh, in order: `(body centre, origin from it)`.
+    /// Anything drawn at an origin binds its slot, terrain or not.
+    pub fn place(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        origins: &[(DVec3, DVec3)],
+        camera: DVec3,
+    ) {
+        if origins.len() > self.capacity {
+            self.capacity = origins.len().next_power_of_two();
             (self.buffer, self.bind_group) =
                 Self::allocate(device, &self.layout, self.stride, self.capacity);
         }
         self.centers.clear();
-        let mut bytes = vec![0u8; drawn.len() * self.stride as usize];
-        for (slot, draw) in placed.iter().enumerate() {
-            // A patch is built around its body's centre; the body is wherever
-            // it is this frame.
-            let origin = terrain.patches[&draw.id].origin;
-            let center = relative(draw.body_center + origin, camera);
+        let mut bytes = vec![0u8; origins.len() * self.stride as usize];
+        for (slot, &(body_center, origin)) in origins.iter().enumerate() {
+            let center = relative(body_center + origin, camera);
             self.centers.push(center);
             let offset = center.extend(0.0);
             // Wrapped in f64: exact, however far from the body's centre. It is
@@ -456,6 +471,19 @@ impl PatchUniforms {
             ]));
         }
         queue.write_buffer(&self.buffer, 0, &bytes);
-        drawn
+    }
+
+    /// Bytes between slots, for a dynamic offset.
+    pub fn stride(&self) -> u32 {
+        self.stride
+    }
+
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.bind_group
+    }
+
+    /// Camera relative centre of the mesh in each slot, this frame.
+    pub fn centers(&self) -> &[glam::Vec3] {
+        &self.centers
     }
 }

@@ -39,6 +39,9 @@ this file in the same change.
 | Paint | What a solid cell is: an index into the palette a volume is shown with. |
 | Gesture | Create, delete or paint over a box of cells, with one paint: what a volume applies. What an op carries. |
 | Plot | The ground a stamp holds flat under a volume: worked earth, where nothing grows. |
+| Tool | Create, delete or paint, in hand while building. |
+| Stroke | One click and drag of a tool: a slab on the side it started on, or with Alt a wall standing up from it. Lands as one gesture. |
+| Ghost | The see-through preview of exactly the cells a stroke would change. |
 | Brush | A terrain edit tool: dig, add, smooth, flatten, paint. |
 | Stored chunk | A chunk present in `world.db` because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |

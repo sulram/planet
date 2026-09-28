@@ -243,6 +243,13 @@ fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) ->
 }
 
 fn lit_surface(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>, geometric_normal: vec3<f32>) -> vec3<f32> {
+    return lit_occluded(albedo, normal, gloss, relative, geometric_normal, 1.0);
+}
+
+// The same, with `open` the share of the sky a point sees: what a corner
+// shut in by cubes keeps of the light that comes from everywhere. The sun is
+// the shadow map's.
+fn lit_occluded(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>, geometric_normal: vec3<f32>, open: f32) -> vec3<f32> {
     let distance = length(relative);
     let dir = relative / distance;
     let up = surface_up(relative);
@@ -258,9 +265,9 @@ fn lit_surface(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<
     // A cast shadow also hides the bright sky around the sun and the ground
     // it would have lit: less fill in there, or relief reads as a tint.
     let fill = mix(0.45, 1.0, visibility);
-    let ambient = mix(vec3<f32>(0.10, 0.09, 0.07), SKY * 0.38 + 0.06, facing_sky) * day * fill
+    let ambient = (mix(vec3<f32>(0.10, 0.09, 0.07), SKY * 0.38 + 0.06, facing_sky) * day * fill
         // Starlight: nights are dark, never blind.
-        + STARLIGHT * facing_sky;
+        + STARLIGHT * facing_sky) * open;
     var color = albedo * (direct * vec3<f32>(1.75, 1.66, 1.5) + ambient);
 
     color += albedo * max(dot(normal, view.moon_light.xyz), 0.0) * moonlight(up);

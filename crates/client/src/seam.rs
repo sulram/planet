@@ -41,6 +41,31 @@ impl Scope {
     }
 }
 
+/// What a stroke in a volume does: fill air with the paint, empty cells, or
+/// repaint what is solid. One drag is one stroke, however many cells it covers.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Tool {
+    Create,
+    Delete,
+    Paint,
+}
+
+/// Why a volume could not be opened where the body stands. A front end says
+/// it in its own words.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildRefusal {
+    /// Volumes stand on the planet.
+    Moon,
+    /// The ground here is under the sea.
+    Sea,
+    /// Too near the edge of a sector: a volume and its margin stay inside one.
+    Seam,
+    /// Another volume is too near.
+    Neighbour,
+}
+
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
@@ -91,6 +116,19 @@ pub enum Command {
         #[serde(default)]
         here: bool,
     },
+    /// Build with a tool, or stop building with `null`. Starting where no
+    /// volume stands opens one around the body, on flat ground.
+    SetTool {
+        tool: Option<Tool>,
+    },
+    /// The paint the next stroke lays: an index into [`Event::Palette`].
+    SetPaint {
+        paint: u8,
+    },
+    /// Takes back the last stroke that landed.
+    Undo,
+    /// Puts back the last stroke taken back.
+    Redo,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]
@@ -165,6 +203,27 @@ pub enum Event {
     /// screen is the world at the detail it is meant to have. Sent each time
     /// that becomes true again, after a new recipe, a leap or a walk.
     Settled,
+    /// The tool in hand, `None` when not building, and the paint it lays.
+    /// Sent once at the start too.
+    ToolChanged {
+        tool: Option<Tool>,
+        paint: u8,
+    },
+    /// The paints a cell can take, in order, as `#rrggbb`. Sent once, first
+    /// after [`Event::Ready`].
+    Palette {
+        colors: Vec<String>,
+    },
+    /// Building was asked for where no volume can be opened.
+    BuildRefused {
+        reason: BuildRefusal,
+    },
+    /// Whether there is a stroke to take back and one to put back, whenever
+    /// that changes.
+    History {
+        undo: bool,
+        redo: bool,
+    },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {
         message: String,
@@ -260,6 +319,28 @@ mod tests {
             }
             .to_json(),
             r#"{"type":"said","session":3,"scope":"near","text":"hi","place":null}"#
+        );
+    }
+
+    #[test]
+    fn a_tool_or_none() {
+        assert_eq!(
+            Command::from_json(r#"{"type":"set_tool","tool":"paint"}"#).unwrap(),
+            Command::SetTool {
+                tool: Some(Tool::Paint)
+            }
+        );
+        assert_eq!(
+            Command::from_json(r#"{"type":"set_tool","tool":null}"#).unwrap(),
+            Command::SetTool { tool: None }
+        );
+        assert_eq!(
+            Event::ToolChanged {
+                tool: Some(Tool::Create),
+                paint: 3
+            }
+            .to_json(),
+            r#"{"type":"tool_changed","tool":"create","paint":3}"#
         );
     }
 

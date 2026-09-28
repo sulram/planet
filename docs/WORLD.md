@@ -90,9 +90,11 @@ m4-K7M42Q@40,180,-5
 - Nature is a surface (58): one ground per direction, no cave, no overhang,
   nothing to be inside of, and not editable by anyone in world. A landlord
   shapes it at the recipe level, through a volume's stamp.
-- A volume is an integer address box where building is granted. Inside it the
-  world is cubic voxels with an inside, and that is where digging, cellars and
-  overhangs live.
+- A volume is an integer address box where building is granted, with an
+  inside: digging, cellars and overhangs live there. One opens where someone
+  takes a tool and none stands: 64 cells a side and as tall, its floor at the
+  ground under the feet, 32 blocks from a sector's edge and from another
+  volume. It lives in the client alone: nothing is sent or kept (76).
 - The two meet at a containment boundary: authored, integer, and decided by a
   person or by the recipe, never by where a quadtree runs out of levels.
 - A stamp is how anything that is not terrain seats into terrain. A volume
@@ -183,8 +185,6 @@ m4-K7M42Q@40,180,-5
 - Streaming is around the body, never around the camera: the camera is a boom
   that swings metres away and may look from orbit, and the ground under the
   avatar may not depend on where it points.
-- A volume streams by proximity, the way Cryptovoxels opens a parcel: far away
-  a silhouette, near it cells. Not built yet.
 - One read path inside a volume: `chunk(addr)` is the stored chunk if there is
   one and the generated chunk otherwise. On arrival the client asks which
   chunks near it are stored, at what version, and the server sends only those.

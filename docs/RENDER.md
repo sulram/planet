@@ -22,6 +22,20 @@ compositor. What the world *is* lives in WORLD.md.
 - `V` wears the next avatar on offer. The engine reports `avatar_changed`; the
   web app keeps it as the visitor's choice (`POST /avatar`).
 
+## Volumes
+
+- Every side of a solid cell that faces air is one quad, never merged, and its
+  corners are bent onto the body through the addresses they are
+  (`client::build`): neighbours share corners exactly, and a volume curves
+  with a small world (75). A chunk works out its column corners once.
+- `render::volumes` draws them flat (`volume.wgsl`), the paint's sRGB as
+  albedo, through `lit_occluded`: how shut in a corner is by the cells beside
+  it, squared, takes away ambient light only, and the sun is the shadow
+  map's. Volumes cast into the cascades and receive.
+- The ghost is the cells a stroke would change, lifted 12 mm off what they
+  cover and drawn after the sky, blended, tested against depth and writing
+  none (`Surface::Ghost`). Red over what a delete takes (76).
+
 ## Sea, sky and light
 
 - The terrain mesh is the real ground, sea floor included. A patch that dips
@@ -54,10 +68,10 @@ compositor. What the world *is* lives in WORLD.md.
 - Swimming is part of walking: in water too deep to stand you float at chest
   depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
 - What holds a body up is a **footing** (`client::collision`): the top of the
-  solid at or under its feet, and the bottom of the solid over its head, read
-  from one column of the density field. The surface out in the open, the
-  cave's own floor and roof inside one. No mesh: a footing costs 2 us, and a
-  step, which asks for four, costs 8 (DECISIONS 47).
+  solid at or under its feet, and the bottom of the solid over its head. The
+  ground out in the open; over a volume, its cells too (`client::build`),
+  where a body is 1.2 cells wide and stands on the highest cell under any of
+  it. No mesh: a footing costs 2 us, and a step asks for four (47).
 - A rise of one block is taken in stride and two is a wall, to be jumped or
   flown, going up and coming down. A body needs its own height of room to walk
   into a place, unless it already has less, so a tight place is not a trap.
@@ -72,7 +86,8 @@ compositor. What the world *is* lives in WORLD.md.
 - Inside the ground the third person boom is cut by the rock behind it instead
   of lifted over the terrain, so the camera stays in the cave with the body.
   Flight keeps its own floor over the drawn ground, except under the ground,
-  where the footing takes over.
+  where the footing takes over. With no tool in hand a volume's cells are
+  floor, roof and walls to a flyer too; building, it flies through (76).
 - Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world.
 - Bodies: the planet and the moon share one terrain quadtree (`Body`). Patches
   are built around their body's centre; the renderer adds where the body is
@@ -112,7 +127,7 @@ compositor. What the world *is* lives in WORLD.md.
   CPU in f64. Cosmetic: not simulated, not stored, the same for a clock.
 - Sun shadows: three cascades around the eye (40 m, 400 m, 4 km half side,
   1024 px each), snapped to their texel, in the frame of the nearest body.
-  Terrain, boxes and avatars cast; everything lit by `lit` receives.
+  Terrain, volumes, boxes and avatars cast; everything lit by `lit` receives.
 - Casters are not the drawn patches: `Frame::shadow_patches` holds built
   leaves before view culling, coarser with distance (1 m, 4 m, 16 m), and
   never schedules generation. Skirts do not cast.

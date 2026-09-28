@@ -15,6 +15,13 @@ export const LINE_CHARS = 500;
 /** The most a name carries. The server cuts longer ones. */
 export const NAME_CHARS = 24;
 
+/** What a stroke in a volume does. One drag is one stroke. */
+export type Tool = 'create' | 'delete' | 'paint';
+export const tools = ['create', 'delete', 'paint'] as const satisfies readonly Tool[];
+
+/** Why no volume could be opened where the body stands. */
+export type BuildRefusal = 'moon' | 'sea' | 'seam' | 'neighbour';
+
 export type ToneMap = 'aces' | 'agx' | 'neutral' | 'reinhard' | 'linear';
 export const toneMaps = ['aces', 'agx', 'neutral', 'reinhard', 'linear'] as const satisfies readonly ToneMap[];
 
@@ -53,7 +60,14 @@ export type Command =
 	/** Say a line. With `here`, where you stand rides along and comes back as a place. */
 	| { type: 'say'; scope: Scope; text: string; here?: boolean }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
-	| { type: 'set_name'; name: string };
+	| { type: 'set_name'; name: string }
+	/** Build with a tool, or stop with null. Where no volume stands, one opens around the body. */
+	| { type: 'set_tool'; tool: Tool | null }
+	/** The paint the next stroke lays: an index into the palette. */
+	| { type: 'set_paint'; paint: number }
+	/** Take back the last stroke that landed, or put back the last one taken back. */
+	| { type: 'undo' }
+	| { type: 'redo' };
 
 export type SessionStatus = 'offline' | 'connecting' | 'online';
 
@@ -92,6 +106,14 @@ export type EngineEvent =
 	/** Nothing is left to build for this view: the world is drawn whole. Again after a leap or a new recipe. */
 	| { type: 'settled' }
 	| { type: 'mode_changed'; mode: Mode }
+	/** The tool in hand, null when not building, and the paint it lays. Once at the start too. */
+	| { type: 'tool_changed'; tool: Tool | null; paint: number }
+	/** The paints a cell can take, as `#rrggbb`, in order. Once, at the start. */
+	| { type: 'palette'; colors: string[] }
+	/** Building was asked for where no volume can be opened. */
+	| { type: 'build_refused'; reason: BuildRefusal }
+	/** Whether there is a stroke to take back and one to put back, whenever that changes. */
+	| { type: 'history'; undo: boolean; redo: boolean }
 	| { type: 'avatar_changed'; path: string }
 	| { type: 'effects_changed'; effects: Effects }
 	| {
@@ -123,7 +145,11 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'session',
 	'peers',
 	'said',
-	'anchors'
+	'anchors',
+	'tool_changed',
+	'palette',
+	'build_refused',
+	'history'
 ]);
 
 /** Parses one event. Unknown types and malformed payloads yield null. */

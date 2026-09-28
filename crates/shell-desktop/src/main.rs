@@ -4,6 +4,7 @@
 //! planet [--seed HEX] [--bits N] [--avatar NAME] [--at U,V]
 //! planet shot --out FILE [--seed HEX] [--bits N] [--avatar NAME] [--size WxH] [--clock S]
 //!             [--altitude M] [--pitch DEG] [--boom M] [--walk S] [--at U,V] [--moon M]
+//!             [--command JSON]... [--drag X0,Y0,X1,Y1]...
 //! ```
 
 mod args;

@@ -9,15 +9,15 @@
 //! This is the far field of the terrain layer: a heightfield of the
 //! generator's ground, sea floor included, sampled with the generator's LOD
 //! filter so a coarse patch is a smooth version of the fine one. Where a patch
-//! dips under a sea it also carries a water surface. Editable terrain near the
-//! player (density + surface nets, ROADMAP M1/M3) will replace the deepest
-//! levels, not this structure.
+//! dips under a sea it also carries a water surface. Nature is not editable
+//! (DECISIONS 58): a stamp under a volume changes the ground the generator
+//! gives, and the patches over it are built again (`Terrain::reshape`).
 //!
 //! Everything here is relative to the centre of the body: the planet sits at
 //! the world origin, the moon moves, and whoever draws a patch adds the body's
 //! centre for that frame.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use glam::{DVec3, Vec3};
 use scene::{
@@ -177,6 +177,9 @@ struct Built {
 pub struct Terrain {
     body: Body,
     built: HashMap<Node, Built>,
+    /// Built patches whose ground has changed under them: each keeps being
+    /// drawn until the one that replaces it is built.
+    stale: HashSet<Node>,
     changes: Vec<TerrainChange>,
     frame: u64,
     casters: Vec<PatchId>,
@@ -189,6 +192,7 @@ impl Terrain {
         Terrain {
             body,
             built: HashMap::new(),
+            stale: HashSet::new(),
             changes: Vec::new(),
             frame: 0,
             casters: Vec::new(),
@@ -206,7 +210,21 @@ impl Terrain {
             self.changes.push(TerrainChange::Remove(node.id()));
         }
         self.built.clear();
+        self.stale.clear();
         self.casters.clear();
+    }
+
+    /// The ground changed within `angle` radians of `middle` (unit, from the
+    /// body's centre): every patch that reaches there is built again. Nothing
+    /// comes down first, so there is never a hole.
+    pub fn reshape(&mut self, middle: DVec3, angle: f64) {
+        let radius_m = self.body.radius_m();
+        for (node, built) in &self.built {
+            let reach = (angle + built.radius_m / radius_m).min(core::f64::consts::PI);
+            if built.center.normalize().dot(middle) >= reach.cos() {
+                self.stale.insert(*node);
+            }
+        }
     }
 
     /// Mesh uploads and removals since the last call, in order.
@@ -272,6 +290,9 @@ impl Terrain {
             let (center, radius_m) = (built.center, built.radius_m);
 
             let distance = (center - camera.position).length();
+            if self.stale.contains(&node) {
+                missing.push((distance, node));
+            }
             if node.depth < body.max_depth() && distance < node.side_m() * SPLIT_DISTANCE {
                 let children = node.children();
                 let mut ready = true;
@@ -316,6 +337,7 @@ impl Terrain {
                     last_used: self.frame,
                 },
             );
+            self.stale.remove(&node);
             self.changes.push(TerrainChange::Add(node.id(), mesh));
         }
         self.select_shadow_lod(camera.position);
@@ -426,6 +448,7 @@ impl Terrain {
         let excess = self.built.len() - CACHE_PATCHES;
         for (_, node) in idle.into_iter().take(excess) {
             self.built.remove(&node);
+            self.stale.remove(&node);
             self.changes.push(TerrainChange::Remove(node.id()));
         }
     }

@@ -14,6 +14,11 @@
 		{ keys: 'Shift', does: t('engine.hint.sprint') },
 		{ keys: 'F', does: t('engine.hint.mode') },
 		{ keys: 'V', does: t('engine.hint.avatar') },
+		{ keys: 'B', does: t('engine.hint.build') },
+		{ keys: '1 2 3', does: t('engine.hint.tools') },
+		{ keys: t('engine.hint.lookBuilding.keys'), does: t('engine.hint.lookBuilding') },
+		{ keys: t('engine.hint.upright.keys'), does: t('engine.hint.upright') },
+		{ keys: t('engine.hint.undo.keys'), does: t('engine.hint.undo') },
 		{ keys: 'Enter', does: t('engine.hint.chat') },
 		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },
 		{ keys: 'Esc', does: t('engine.hint.release') }

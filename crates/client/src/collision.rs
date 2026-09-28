@@ -1,13 +1,12 @@
-//! What holds a body up, read from the ground the terrain is meshed from.
+//! What holds a body up: the ground the terrain is meshed from, and the cells
+//! of any volume under or over it.
 //!
 //! Nature is a surface (docs/BRIEF.md): one ground per direction, no cave, no
-//! overhang, nothing to be inside of. So a footing is the ground height, and
-//! it is read from the generator rather than from a mesh of it, because a mesh
-//! is filtered by how far the camera is and what a body stands on may not be.
-//!
-//! The shape here still carries a ceiling and a room, and `admits` still asks
-//! about them. That is not dead weight: a build volume has an inside, and when
-//! one is under the feet this reads its cells the way it reads the ground now.
+//! overhang, nothing to be inside of. So a footing over nature is the ground
+//! height, read from the generator rather than from a mesh of it, because a
+//! mesh is filtered by how far the camera is and what a body stands on may not
+//! be. A volume has an inside, and its footing (`build`) carries a roof as
+//! well, which is what `admits` asks about.
 
 use glam::DVec3;
 use topology::BLOCK_M;
@@ -33,11 +32,30 @@ pub struct Footing {
 }
 
 impl Footing {
+    /// Open air: nothing under, nothing over.
+    pub const OPEN: Footing = Footing {
+        floor_m: None,
+        ceiling_m: None,
+    };
+
     /// A ground that is only ever a height, which is all of nature.
     pub fn solid(ground_m: f64) -> Footing {
         Footing {
             floor_m: Some(ground_m),
             ceiling_m: None,
+        }
+    }
+
+    /// Both at once: the higher floor and the lower roof. What a body over
+    /// the ground and a volume together stands on.
+    pub fn with(self, other: Footing) -> Footing {
+        let pick = |a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64| match (a, b) {
+            (Some(a), Some(b)) => Some(f(a, b)),
+            (a, b) => a.or(b),
+        };
+        Footing {
+            floor_m: pick(self.floor_m, other.floor_m, f64::max),
+            ceiling_m: pick(self.ceiling_m, other.ceiling_m, f64::min),
         }
     }
 

@@ -3,11 +3,12 @@
 //! No window, no DOM, no GPU. A platform shell feeds [`Input`] and a time
 //! step, forwards [`Command`]s from its UI, hands over the frames of a link to
 //! a world server and sends back what is queued for it, and hands the
-//! resulting [`scene::Frame`] and terrain changes to a renderer. An agent
+//! resulting [`scene::Frame`], terrain and volume changes to a renderer. An agent
 //! drives the same type and simply never renders.
 
 mod assets;
 mod box_figure;
+mod build;
 pub mod collision;
 mod controller;
 mod figure;
@@ -21,20 +22,22 @@ mod terrain;
 mod wardrobe;
 
 use glam::DVec3;
-use scene::{SkinnedChange, TerrainChange};
+use scene::{SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
 use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
+pub use build::PALETTE;
+use build::{Build, Eye};
 pub use controller::{Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Input, Key};
 use peers::Peers;
 pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{Anchor, Command, Event, Mode, PeerInfo, Scope, SessionStatus};
+pub use seam::{Anchor, BuildRefusal, Command, Event, Mode, PeerInfo, Scope, SessionStatus, Tool};
 pub use session::Outbound;
 use session::Session;
 use terrain::{Body, Terrain};
@@ -56,6 +59,11 @@ pub struct Client {
     controller: Controller,
     terrain: Terrain,
     moon_terrain: Terrain,
+    /// Volumes, and the tool that builds in them.
+    build: Build,
+    /// Whether there was a stroke to take back and one to put back, as last
+    /// said: [`Event::History`] goes out when that changes.
+    history: (bool, bool),
     /// The player's own body.
     figure: Figure,
     /// The clips every figure shares.
@@ -113,6 +121,8 @@ impl Client {
             controller,
             terrain: Terrain::new(Body::new(terrain::Kind::Planet, sphere)),
             moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
+            build: Build::default(),
+            history: (false, false),
             figure: Figure::default(),
             clips: Clips::new(),
             wardrobe: Wardrobe::default(),
@@ -123,9 +133,17 @@ impl Client {
             wants_random_avatar: false,
             wanted_avatar: None,
             wanted_name: String::new(),
-            events: vec![Event::Ready {
-                generator_version: GENERATOR_VERSION,
-            }],
+            events: vec![
+                Event::Ready {
+                    generator_version: GENERATOR_VERSION,
+                },
+                Event::Palette {
+                    colors: PALETTE
+                        .iter()
+                        .map(|[r, g, b]| format!("#{r:02x}{g:02x}{b:02x}"))
+                        .collect(),
+                },
+            ],
             effects: Effects::default(),
             aspect: 16.0 / 9.0,
             clock_s: 0.0,
@@ -150,6 +168,7 @@ impl Client {
             status: SessionStatus::Offline,
             session: None,
         });
+        client.tool_changed();
         Ok(client)
     }
 
@@ -354,7 +373,74 @@ impl Client {
                 self.session.rename(&name);
                 self.wanted_name = name;
             }
+            Command::SetTool { tool } => self.take_tool(tool),
+            Command::SetPaint { paint } => {
+                self.build.set_paint(paint);
+                self.tool_changed();
+            }
+            Command::Undo => {
+                self.build.undo(self.generator.sphere());
+                self.history_changed();
+            }
+            Command::Redo => {
+                self.build.redo(self.generator.sphere());
+                self.history_changed();
+            }
         }
+    }
+
+    /// Says whether there is a stroke to take back or to put back, when that
+    /// changed.
+    fn history_changed(&mut self) {
+        let history = self.build.history();
+        if history != self.history {
+            self.history = history;
+            let (undo, redo) = history;
+            self.events.push(Event::History { undo, redo });
+        }
+    }
+
+    /// Whether a tool is in hand: a shell hands the pointer's button to the
+    /// tool then, and keeps the pointer free to aim with.
+    pub fn building(&self) -> bool {
+        self.build.tool().is_some()
+    }
+
+    /// Takes a tool, or puts it down with `None`. Taking one where no volume
+    /// stands opens one around the body, on ground held flat under it, and
+    /// where none can be opened says why and builds nothing.
+    fn take_tool(&mut self, tool: Option<Tool>) {
+        if tool.is_some() && !self.build.covers(self.controller.point()) {
+            let opened = if self.controller.on_moon() {
+                Err(BuildRefusal::Moon)
+            } else {
+                self.build
+                    .open(&mut self.generator, self.controller.point())
+            };
+            match opened {
+                Ok(stamp) => {
+                    let (middle, angle) = stamp.cap();
+                    self.terrain.reshape(DVec3::from(middle), angle);
+                    // The ground under the feet moved to the stamp's height.
+                    if self.controller.grounded() {
+                        self.controller.stand_at(None, &self.generator);
+                    }
+                }
+                Err(reason) => {
+                    self.events.push(Event::BuildRefused { reason });
+                    return;
+                }
+            }
+        }
+        self.build.take(tool);
+        self.tool_changed();
+    }
+
+    fn tool_changed(&mut self) {
+        self.events.push(Event::ToolChanged {
+            tool: self.build.tool(),
+            paint: self.build.paint(),
+        });
     }
 
     /// Commands arriving as JSON over the seam. Bad JSON becomes a
@@ -709,6 +795,11 @@ impl Client {
         }
     }
 
+    /// Volume mesh uploads and removals since the last call, in order.
+    pub fn drain_volume_changes(&mut self) -> Vec<VolumeChange> {
+        self.build.drain_changes()
+    }
+
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
         let mut changes = self.terrain.drain_changes();
         changes.extend(self.moon_terrain.drain_changes());
@@ -735,6 +826,24 @@ impl Client {
                     self.command(Command::SetRecipe { recipe });
                 }
                 Key::NextAvatar => self.next_avatar(),
+                Key::Build => {
+                    let tool = match self.build.tool() {
+                        Some(_) => None,
+                        None => Some(self.build.last_tool()),
+                    };
+                    self.take_tool(tool);
+                }
+                Key::Create => self.take_tool(Some(Tool::Create)),
+                Key::Delete => self.take_tool(Some(Tool::Delete)),
+                Key::Paint => self.take_tool(Some(Tool::Paint)),
+                // A stroke half drawn goes first, then the tool itself.
+                Key::Cancel => {
+                    if !self.build.cancel() && self.build.tool().is_some() {
+                        self.take_tool(None);
+                    }
+                }
+                Key::Undo => self.command(Command::Undo),
+                Key::Redo => self.command(Command::Redo),
                 _ => {}
             }
         }
@@ -764,7 +873,8 @@ impl Client {
         };
         let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
         self.controller.set_drawn_footprint(footprint_m);
-        self.controller.update(dt, wish, &self.generator);
+        self.controller
+            .update(dt, wish, &self.generator, &self.build);
         let motion = Motion::of(&self.controller);
         self.figure.update(dt, &motion, &self.clips);
         self.peers.update(dt, moon, &self.clips);
@@ -780,6 +890,21 @@ impl Client {
 
         let camera = self.controller.camera(&self.generator);
         self.anchors(&camera);
+        let eye = Eye {
+            position: camera.position,
+            rotation: camera.rotation,
+            fov_y: f64::from(camera.fov_y),
+            aspect: f64::from(self.aspect),
+            // A captured pointer aims through the middle of the view.
+            pointer: input.pointer.unwrap_or([0.5, 0.5]).map(f64::from),
+        };
+        self.build.update(
+            self.generator.sphere(),
+            &eye,
+            input.held(Key::Use),
+            input.held(Key::Upright),
+        );
+        self.history_changed();
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -941,6 +1066,8 @@ impl Client {
             },
             boxes,
             skinned,
+            volumes: self.build.drawn(),
+            ghost: self.build.ghost(),
         }
     }
 
@@ -969,6 +1096,13 @@ impl Client {
             && self.controller.sphere() == generator.sphere()
             && standable(&generator, held);
         self.generator = generator;
+        // Volumes stood on the old ground, and its stamps went with it.
+        self.build.clear();
+        self.history_changed();
+        if self.build.tool().is_some() {
+            self.build.take(None);
+            self.tool_changed();
+        }
         if keep {
             // A flyer keeps its altitude, which `stand_at` lifts if the new
             // ground rose through it; a walker lands on whatever is there now.

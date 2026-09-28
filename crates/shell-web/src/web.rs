@@ -4,7 +4,7 @@ use std::rc::Rc;
 use client::{Client, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, MouseEvent, WheelEvent};
+use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, PointerEvent, WheelEvent};
 
 #[wasm_bindgen(start)]
 fn start() {
@@ -34,6 +34,8 @@ struct State {
     last_frame_ms: f64,
     /// The socket to a world server, while the page wants one.
     link: Option<Link>,
+    /// Building, the right button is held: the pointer turns the camera.
+    looking: bool,
 }
 
 /// Where the web app serves the asset root.
@@ -71,6 +73,7 @@ impl Engine {
             on_event,
             last_frame_ms: now_ms(),
             link: None,
+            looking: false,
         }));
         let alive = Rc::new(RefCell::new(true));
         let listeners = listen(&canvas, &state);
@@ -275,7 +278,15 @@ impl State {
 
         self.client.set_aspect(width as f32 / height as f32);
         let frame = self.client.update(dt, &mut self.input);
+        // A tool aims with a free pointer: taking one lets a captured one go.
+        if self.client.building() && locked(&self.canvas) {
+            if let Some(document) = web_sys::window().and_then(|w| w.document()) {
+                document.exit_pointer_lock();
+            }
+        }
         self.renderer.apply(self.client.drain_terrain_changes());
+        self.renderer
+            .apply_volumes(self.client.drain_volume_changes());
         self.renderer
             .apply_skinned(self.client.drain_skinned_changes());
         let events: Vec<JsValue> = self
@@ -392,24 +403,49 @@ impl Listener {
     }
 }
 
+/// Whether the pointer is captured by this canvas.
+fn locked(canvas: &HtmlCanvasElement) -> bool {
+    let locked = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.pointer_lock_element());
+    let own: &web_sys::Element = canvas.as_ref();
+    locked.is_some_and(|element| &element == own)
+}
+
+/// Where a pointer event is over the canvas, as fractions from the top left.
+fn fraction(canvas: &HtmlCanvasElement, event: &PointerEvent) -> [f32; 2] {
+    [
+        event.offset_x() as f32 / canvas.client_width().max(1) as f32,
+        event.offset_y() as f32 / canvas.client_height().max(1) as f32,
+    ]
+}
+
+/// Pointer buttons as the DOM numbers them.
+const PRIMARY: i16 = 0;
+const SECONDARY: i16 = 2;
+
 fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listener> {
     let target: &web_sys::EventTarget = canvas.as_ref();
-    let is_locked = {
-        let canvas = canvas.clone();
-        move || {
-            let locked = web_sys::window()
-                .and_then(|w| w.document())
-                .and_then(|d| d.pointer_lock_element());
-            let own: &web_sys::Element = canvas.as_ref();
-            locked.is_some_and(|element| &element == own)
-        }
-    };
 
     let key = |down: bool| {
         let state = state.clone();
         move |event: web_sys::Event| {
             let event: KeyboardEvent = event.unchecked_into();
-            if let Some(key) = binding(&event.code()) {
+            // Command on a Mac, Control elsewhere; the page has nothing of
+            // its own to take back here.
+            let command = event.meta_key() || event.ctrl_key();
+            let undo = match event.code().as_str() {
+                "KeyZ" if command && event.shift_key() => Some(Key::Redo),
+                "KeyZ" if command => Some(Key::Undo),
+                "KeyY" if command => Some(Key::Redo),
+                _ => None,
+            };
+            if let Some(key) = undo {
+                event.prevent_default();
+                if down && !event.repeat() {
+                    state.borrow_mut().input.key(key, true);
+                }
+            } else if let Some(key) = binding(&event.code()) {
                 event.prevent_default();
                 // One shot keys must not fire again while held.
                 if !(down && event.repeat()) {
@@ -418,21 +454,62 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             }
         }
     };
-    let click = {
-        let canvas = canvas.clone();
-        move |_: web_sys::Event| {
+    // Building, the primary button is the tool's and the secondary one looks
+    // while it is held, so the pointer stays free to aim. Otherwise a press
+    // captures the pointer, and the camera has it until Escape.
+    let press = {
+        let (state, canvas) = (state.clone(), canvas.clone());
+        move |event: web_sys::Event| {
+            let event: PointerEvent = event.unchecked_into();
             let _ = canvas.focus();
-            canvas.request_pointer_lock();
+            let mut state = state.borrow_mut();
+            if state.client.building() {
+                event.prevent_default();
+                let _ = canvas.set_pointer_capture(event.pointer_id());
+                state.input.pointer = Some(fraction(&canvas, &event));
+                match event.button() {
+                    PRIMARY => state.input.key(Key::Use, true),
+                    SECONDARY => state.looking = true,
+                    _ => {}
+                }
+            } else if event.button() == PRIMARY {
+                canvas.request_pointer_lock();
+            }
+        }
+    };
+    let release = {
+        let state = state.clone();
+        move |event: web_sys::Event| {
+            let event: PointerEvent = event.unchecked_into();
+            let mut state = state.borrow_mut();
+            match event.button() {
+                PRIMARY => state.input.key(Key::Use, false),
+                SECONDARY => state.looking = false,
+                _ => {}
+            }
         }
     };
     let motion = {
-        let (state, is_locked) = (state.clone(), is_locked.clone());
+        let (state, canvas) = (state.clone(), canvas.clone());
         move |event: web_sys::Event| {
-            if is_locked() {
-                let event: MouseEvent = event.unchecked_into();
-                let mut state = state.borrow_mut();
+            let event: PointerEvent = event.unchecked_into();
+            let mut state = state.borrow_mut();
+            let turning = locked(&canvas) || state.looking;
+            if !locked(&canvas) {
+                state.input.pointer = Some(fraction(&canvas, &event));
+            }
+            if turning {
                 state.input.look[0] += event.movement_x() as f32;
                 state.input.look[1] += event.movement_y() as f32;
+            }
+        }
+    };
+    // The secondary button looks while building; the page keeps its menu.
+    let menu = {
+        let state = state.clone();
+        move |event: web_sys::Event| {
+            if state.borrow().client.building() {
+                event.prevent_default();
             }
         }
     };
@@ -446,14 +523,20 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
     };
     let blur = {
         let state = state.clone();
-        move |_: web_sys::Event| state.borrow_mut().input.release_all()
+        move |_: web_sys::Event| {
+            let mut state = state.borrow_mut();
+            state.input.release_all();
+            state.looking = false;
+        }
     };
 
     vec![
         Listener::add(target, "keydown", key(true)),
         Listener::add(target, "keyup", key(false)),
-        Listener::add(target, "click", click),
-        Listener::add(target, "mousemove", motion),
+        Listener::add(target, "pointerdown", press),
+        Listener::add(target, "pointerup", release),
+        Listener::add(target, "pointermove", motion),
+        Listener::add(target, "contextmenu", menu),
         Listener::add(target, "wheel", wheel),
         Listener::add(target, "blur", blur),
     ]
@@ -472,6 +555,14 @@ fn binding(code: &str) -> Option<Key> {
         "KeyF" => Key::ToggleMode,
         "KeyR" => Key::NewSeed,
         "KeyV" => Key::NextAvatar,
+        "KeyB" => Key::Build,
+        "Digit1" => Key::Create,
+        "Digit2" => Key::Delete,
+        "Digit3" => Key::Paint,
+        "AltLeft" | "AltRight" => Key::Upright,
+        // The browser takes Escape to let a captured pointer go; building,
+        // the pointer is free and Escape is the tool's.
+        "Escape" => Key::Cancel,
         _ => return None,
     })
 }

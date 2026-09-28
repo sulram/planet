@@ -13,7 +13,7 @@ use winit::event::{
     DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent,
 };
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 use worldgen::{Recipe, format_seed};
 
@@ -38,6 +38,7 @@ pub fn run(
     let mut app = App {
         client,
         input: Input::default(),
+        modifiers: ModifiersState::empty(),
         stage: None,
         failure: None,
     };
@@ -48,6 +49,8 @@ pub fn run(
 struct App {
     client: Client,
     input: Input,
+    /// Held modifiers, for the keys that take one: undo and redo.
+    modifiers: ModifiersState,
     /// Exists between `resumed` and exit.
     stage: Option<Stage>,
     failure: Option<String>,
@@ -134,6 +137,7 @@ impl Stage {
         assets::serve(client);
         let frame = client.update(dt, input);
         self.renderer.apply(client.drain_terrain_changes());
+        self.renderer.apply_volumes(client.drain_volume_changes());
         self.renderer.apply_skinned(client.drain_skinned_changes());
         for event in client.drain_events() {
             self.panel.event(&event);
@@ -151,6 +155,9 @@ impl Stage {
                     ));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
+                // A tool aims with a free pointer: taking one lets it go.
+                Event::ToolChanged { tool: Some(_), .. } => self.set_looking(false),
+                Event::BuildRefused { reason } => log::info!("no volume here: {reason:?}"),
                 // The desktop has no socket yet (ROADMAP M2): the link stays
                 // offline and nobody else is ever here.
                 Event::RecipeChanged { .. }
@@ -161,6 +168,9 @@ impl Stage {
                 | Event::Peers { .. }
                 | Event::Said { .. }
                 | Event::Anchors { .. }
+                | Event::ToolChanged { .. }
+                | Event::Palette { .. }
+                | Event::History { .. }
                 | Event::Settled => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
@@ -256,12 +266,24 @@ impl ApplicationHandler for App {
                 self.input.release_all();
                 stage.set_looking(false);
             }
-            WindowEvent::MouseInput {
-                state: ElementState::Pressed,
-                button: MouseButton::Left,
-                ..
-            } => {
-                stage.set_looking(true);
+            // Building, the left button is the tool's and the right one looks
+            // while it is held. Otherwise a click captures the pointer, and
+            // the camera has it until Escape.
+            WindowEvent::MouseInput { state, button, .. } => {
+                let down = state == ElementState::Pressed;
+                match (self.client.building(), button) {
+                    (true, MouseButton::Left) => self.input.key(Key::Use, down),
+                    (true, MouseButton::Right) => stage.set_looking(down),
+                    (false, MouseButton::Left) if down => stage.set_looking(true),
+                    _ => {}
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } if !stage.looking => {
+                let size = stage.window.inner_size();
+                self.input.pointer = Some([
+                    position.x as f32 / size.width.max(1) as f32,
+                    position.y as f32 / size.height.max(1) as f32,
+                ]);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.input.zoom += match delta {
@@ -269,13 +291,32 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(pixels) => pixels.y as f32 / 40.0,
                 };
             }
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
             WindowEvent::KeyboardInput { event, .. } => {
                 let PhysicalKey::Code(code) = event.physical_key else {
                     return;
                 };
                 let down = event.state == ElementState::Pressed;
-                if code == KeyCode::Escape && down {
-                    stage.set_looking(false);
+                // Command on a Mac, Control elsewhere.
+                let command = self.modifiers.super_key() || self.modifiers.control_key();
+                let undo = match code {
+                    KeyCode::KeyZ if command && self.modifiers.shift_key() => Some(Key::Redo),
+                    KeyCode::KeyZ if command => Some(Key::Undo),
+                    KeyCode::KeyY if command => Some(Key::Redo),
+                    _ => None,
+                };
+                if let Some(key) = undo {
+                    if down && !event.repeat {
+                        self.input.key(key, true);
+                    }
+                } else if code == KeyCode::Escape && down {
+                    // A captured pointer goes back first; building, Escape
+                    // drops the stroke, then the tool.
+                    if stage.looking {
+                        stage.set_looking(false);
+                    } else {
+                        self.input.key(Key::Cancel, true);
+                    }
                 } else if let Some(key) = binding(code) {
                     // One shot keys must not fire again while held.
                     if !(down && event.repeat) {
@@ -313,6 +354,11 @@ fn binding(code: KeyCode) -> Option<Key> {
         KeyCode::KeyF => Key::ToggleMode,
         KeyCode::KeyR => Key::NewSeed,
         KeyCode::KeyV => Key::NextAvatar,
+        KeyCode::KeyB => Key::Build,
+        KeyCode::Digit1 => Key::Create,
+        KeyCode::Digit2 => Key::Delete,
+        KeyCode::Digit3 => Key::Paint,
+        KeyCode::AltLeft | KeyCode::AltRight => Key::Upright,
         _ => return None,
     })
 }

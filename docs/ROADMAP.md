@@ -18,7 +18,7 @@ Every milestone ends runnable end to end.
 - [x] `worldgen`: layered 3D noise on the sphere, params as knobs, golden hashes
 - [ ] Golden hashes also run on WASM in CI (wasmtime)
 - [x] ~~Terrain layer + surface nets mesher, in address space~~ Twice superseded: first by a volume bolted to the deepest quadtree level, which cannot hold a world with an inside (48), then by voxels at every level, which was measured and is not payable on a Pi and in a tab. Nature is a surface and voxels live inside volumes (58, docs/BRIEF.md). What shipped and survives: collision reading the generator rather than a mesh (47), and the size of a world being a recipe value (49, 50)
-- [ ] **Blocky is a cosmetic toggle** inside a volume, one viewer's choice, never the world's. Its greedy face merging is the build layer's mesher of M3, so it is written once
+- [ ] **Blocky is a cosmetic toggle** inside a volume, one viewer's choice, never the world's. Its sides are the build layer's (75), so they are written once
 - [x] Camera-relative rendering, reversed-Z depth, quadtree LOD ground to orbit
 - [ ] Motion vector target; patch building on worker threads
 - [x] Controller: walk with radial gravity and auto-step, fly (superman), smooth up-vector
@@ -30,8 +30,8 @@ Every milestone ends runnable end to end.
 - [x] Generator v3: the shape is a source; plates for a seed world, a baked field for a real one (DECISIONS 44)
 - [x] "Earth or generated" when a planet is made, in `/play` and in the recipe
 - [ ] Fix the generated shape: only the Earth one reads right today. Four named faults, all in `plates.rs`
-  - [ ] **The wall.** `match (near.continental, far.continental)` switches branch on the bisector between two plates, and the two mixed cases are not each other: one adds `0.16 * force` to `land`, the other takes `0.85` away. So `land` steps by about 1 along every ocean to continent boundary, and the ground stands up in a cliff with the patch skirts showing through it as a picket fence. A v3 regression: v2 had no such branch. The asymmetry itself is right (the trench belongs to the ocean side and the arc to the continent side); it has to be a blend on the same `across` the crust level already uses, so both sides weigh a half on the line and nothing steps
-  - [ ] No test caught it. `moon_has_no_cliffs` walks the moon and asserts no jump; the planet has no equivalent, and that is the test that would have failed the day the branch was written
+  - [x] **The wall.** `match (near.continental, far.continental)` switches branch on the bisector between two plates, and the two mixed cases are not each other: one adds `0.16 * force` to `land`, the other takes `0.85` away. So `land` steps by about 1 along every ocean to continent boundary, and the ground stands up in a cliff with the patch skirts showing through it as a picket fence. A v3 regression: v2 had no such branch. The asymmetry itself is right (the trench belongs to the ocean side and the arc to the continent side); it has to be a blend on the same `across` the crust level already uses, so both sides weigh a half on the line and nothing steps
+  - [x] No test caught it. `moon_has_no_cliffs` walks the moon and asserts no jump; the planet has no equivalent, and that is the test that would have failed the day the branch was written
   - [ ] `Plates::shape` takes no footprint at all, so a coarse patch reads the field at full detail and the shore lands somewhere else at every level: from orbit the coastline comes out in straight steps along the patch edges. A different fault from the wall, and the smaller of the two
   - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
   - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (DECISIONS 45); this side needs its own answer
@@ -80,7 +80,9 @@ Every milestone ends runnable end to end.
 - [ ] A horizon map in the shader, so terrain self shadows at any range and nothing coarse enters a cascade (55, 57)
 - [ ] Per pixel voxelization of the far ground, so it reads as the same world as the near cubes without being the same data (57)
 - [ ] LOD by projected error with hysteresis; geomorph between levels. Nothing comes down before its replacement is up (53)
-- [ ] The volume: draw one, stamp the ground under it, greedy mesh it, bake its light, stream it by proximity, put one under the sea
+- [x] The volume, first cut (75, 76): opened where you stand, on ground a stamp holds flat; create, delete and paint by click and drag, with a ghost and undo; walked on, and flown into with no tool in hand. In the client alone
+- [ ] The rest of the volume: bake its light (flood fill sun, a glow channel), stream it by proximity, put one under the sea
+- [ ] The camera boom cut by a volume's cells, as it is by rock under the ground: today it passes through a wall to stay behind the body
 - [ ] What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), and the frame on a Pi and in a tab
 - [ ] The sphere leaves the seam: `scene::Frame` names the planet four times (radius, moon, sun, sea) and the own-indices mesh is the exception in `render`. One `Sky` struct and the volume mesh as the primary shape, so a renderer with no sphere ignores one field (65)
 
@@ -113,7 +115,8 @@ Every milestone ends runnable end to end.
 
 ## M3: build and dig, persisted
 
-- [ ] Build layer: cubes + ramp, wedge, half slab; greedy mesher
+- [ ] Build layer: ramp, wedge and half slab beside the cube (75)
+- [ ] A stroke as an op on the socket: the actor checks it, keeps it and sends it to everyone in the world, and a volume is opened by someone allowed to (76)
 - [ ] Terrain brushes: dig, add, smooth, flatten
 - [ ] Copy on first write, chunk versions, reduced LOD levels on save
 - [ ] Op log; undo; per-user rollback. It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it

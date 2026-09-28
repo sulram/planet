@@ -130,6 +130,13 @@ Numbers marked (p) are proposed and not yet confirmed.
   no setting of its own. Both UIs put a button in the top right corner.
 - Web: `engine/Settings.svelte`; the choice stays in the browser
   (`localStorage`), since it belongs to the machine, not the account.
+- Building (76): `set_tool` takes a tool or `null`, then `set_paint`, `undo`,
+  `redo`; the engine says `tool_changed`, `palette`, `build_refused`,
+  `history`. Both UIs put Build in the bottom right corner (web
+  `engine/Build.svelte`). Building, the pointer is free and `Input` carries
+  where it is: the primary button is the tool's, the secondary one looks. 1 2 3
+  take a tool, Alt stands a stroke up as a wall, Escape drops the stroke and
+  then the tool, Cmd or Ctrl Z takes a stroke back and with Shift puts it back.
 - Desktop: `ui-native`, where all of egui lives. egui and egui-winit from
   crates, the painter ours (`egui-wgpu` pins an older wgpu). The shell hands it
   window events first while the pointer is free. `shot --panel` paints it over

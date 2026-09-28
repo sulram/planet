@@ -250,6 +250,41 @@ pub struct BoxPart {
     pub color: Vec3,
 }
 
+/// Stable identity of a volume mesh while it is in the scene: one chunk of
+/// one volume, or the ghost of a stroke.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct VolumeMeshId(pub u64);
+
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct VolumeVertex {
+    /// Metres from [`VolumeMesh::origin`].
+    pub position: [f32; 3],
+    /// Of the side this vertex is a corner of: a cube is lit flat.
+    pub normal: [f32; 3],
+    /// `rgb`: sRGB albedo. `a`: gloss, 0 matte up to 255 for a mirror.
+    pub color: [u8; 4],
+    /// How much of the sky the corner sees, `0..=1`: ambient light only.
+    pub open: f32,
+}
+
+/// Cubes of the build layer around an `f64` origin in planet space. Every
+/// vertex is a corner the client already bent onto the body, so a renderer
+/// draws it as it is.
+#[derive(Clone, Debug)]
+pub struct VolumeMesh {
+    pub origin: DVec3,
+    pub vertices: Vec<VolumeVertex>,
+    pub indices: Vec<u32>,
+}
+
+/// A change to the set of volume meshes a renderer holds.
+#[derive(Clone, Debug)]
+pub enum VolumeChange {
+    Add(VolumeMeshId, VolumeMesh),
+    Remove(VolumeMeshId),
+}
+
 /// Most joints a skinned mesh may have: what fits the smallest uniform buffer
 /// every target offers (WebGL2, 16 KiB).
 pub const MAX_JOINTS: usize = 128;
@@ -351,4 +386,10 @@ pub struct Frame {
     pub effects: Effects,
     pub boxes: Vec<BoxPart>,
     pub skinned: Vec<SkinnedInstance>,
+    /// The cubes of every volume in reach. All were announced by a
+    /// [`VolumeChange::Add`].
+    pub volumes: Vec<VolumeMeshId>,
+    /// The stroke a build tool would make: drawn see-through over the world,
+    /// cast by nothing.
+    pub ghost: Option<VolumeMeshId>,
 }

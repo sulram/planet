@@ -11,6 +11,7 @@ use scene::Camera;
 use topology::{QuadSphere, SurfacePoint};
 use worldgen::Generator;
 
+use crate::build::Build;
 use crate::collision::{self, BODY_M, Footing, STEP_M};
 use crate::seam::Mode;
 
@@ -305,18 +306,40 @@ impl Controller {
         }
     }
 
-    /// What the body at this direction stands on, and what is over its head.
-    /// Out in the open the floor is the surface and there is no roof; in a
-    /// cave both are the cave's own, which is the whole reason the ground
-    /// under the feet is a volume and not a height.
-    fn footing(&self, generator: &Generator) -> Footing {
+    /// The volumes whose cells hold this body: on foot always; in flight only
+    /// with no tool in hand, so a builder flies through what they build and
+    /// anyone else flies into it.
+    fn cells<'a>(&self, build: &'a Build) -> Option<&'a Build> {
+        (self.mode == Mode::Walk || build.tool().is_none()).then_some(build)
+    }
+
+    /// What the body stands on, and what is over its head. Out in the open
+    /// the floor is the surface and there is no roof; inside a volume both
+    /// are its cells.
+    fn footing(&self, generator: &Generator, cells: Option<&Build>) -> Footing {
         match self.site {
-            Site::Planet => collision::footing(generator, self.point_direction(), self.height_m),
+            Site::Planet => self.footing_at(self.point, generator, cells),
             // The moon is a height all the way down, and so is any world on a
             // generator version frozen before caves.
             Site::Moon { direction } => {
                 Footing::solid(generator.moon_sample_at(direction.to_array(), 0.0).height_m)
             }
+        }
+    }
+
+    /// What a body with its feet where they are would stand on at a point of
+    /// the planet: the ground, and the cells of any volume under or over it.
+    fn footing_at(
+        &self,
+        point: SurfacePoint,
+        generator: &Generator,
+        cells: Option<&Build>,
+    ) -> Footing {
+        let direction = self.sphere.blocks().direction(point);
+        let ground = collision::footing(generator, direction, self.height_m);
+        match cells.and_then(|build| build.footing(point, self.height_m)) {
+            Some(built) => ground.with(built),
+            None => ground,
         }
     }
 
@@ -537,7 +560,7 @@ impl Controller {
         self.height_m - surface
     }
 
-    pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator) {
+    pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator, build: &Build) {
         // `up` is the avatar's own frame: look, steer and fly by it. `gravity`
         // is the world's: fall and float by it. On foot the two agree within a
         // moment; in flight they may not, and the frame wins.
@@ -613,7 +636,7 @@ impl Controller {
             }
         };
 
-        self.step(velocity * dt, generator);
+        self.step(velocity * dt, generator, build);
         self.resolve_site();
         self.speed_mps = velocity.length();
         self.sprinting = wish.sprint && self.speed_mps > 0.1;
@@ -646,9 +669,9 @@ impl Controller {
 
     /// Moves by a world space displacement: in address space on the planet,
     /// over a plain sphere on the moon.
-    fn step(&mut self, delta: DVec3, generator: &Generator) {
+    fn step(&mut self, delta: DVec3, generator: &Generator, build: &Build) {
         match self.site {
-            Site::Planet => self.step_on_planet(delta, generator),
+            Site::Planet => self.step_on_planet(delta, generator, build),
             Site::Moon { direction } => {
                 let radius = self.body().1 + self.height_m;
                 let along = delta - direction * direction.dot(delta);
@@ -665,14 +688,21 @@ impl Controller {
             self.height_m = self.height_m.min(FLOAT_M).max(ground);
             return;
         }
-        let footing = self.footing(generator);
+        let cells = self.cells(build);
+        let footing = self.footing(generator, cells);
         let floor_m = match self.mode {
             // A flyer is held over the ground as it is drawn, so it never
-            // ends up looking at the terrain from underneath. Under the
-            // ground that rule points the wrong way, and the footing, which
-            // knows about the cave, takes over.
+            // ends up looking at the terrain from underneath, and over the
+            // cells of a volume it may not pass. Under the ground that rule
+            // points the wrong way, and the footing, which knows about the
+            // cave, takes over.
             Mode::Fly if !self.underground(ground) => {
-                Some(self.shown_ground_m(generator, self.radial()) + 0.5)
+                let shown_m = self.shown_ground_m(generator, self.radial()) + 0.5;
+                let built_m = cells
+                    .filter(|_| self.site == Site::Planet)
+                    .and_then(|build| build.footing(self.point, self.height_m))
+                    .and_then(|footing| footing.floor_m);
+                Some(built_m.map_or(shown_m, |built_m| shown_m.max(built_m)))
             }
             _ => footing.floor_m,
         };
@@ -709,7 +739,7 @@ impl Controller {
         }
     }
 
-    fn step_on_planet(&mut self, delta: DVec3, generator: &Generator) {
+    fn step_on_planet(&mut self, delta: DVec3, generator: &Generator, build: &Build) {
         let tangents = self.sphere.blocks().tangents(self.point);
         let up = DVec3::from(tangents.up);
         let radius = self.sphere.radius_m() + self.height_m;
@@ -726,8 +756,15 @@ impl Controller {
         let det = a * c - b * b;
         let (du, dv) = ((c * p - b * q) / det, (a * q - b * p) / det);
 
+        let cells = self.cells(build);
         self.point = if self.stopped_by_rock(generator) {
-            self.walk_to(du, dv, generator)
+            self.walk_to(du, dv, |point| self.footing_at(point, generator, cells))
+        } else if let Some(build) = cells.filter(|_| self.mode == Mode::Fly) {
+            // Open ground holds a flyer up and never stops it; the cells of a
+            // volume are walls to it all the same.
+            self.walk_to(du, dv, |point| {
+                build.footing(point, self.height_m).unwrap_or(Footing::OPEN)
+            })
         } else {
             self.sphere.blocks().wrapped(SurfacePoint::new(
                 self.point.sector,
@@ -753,8 +790,8 @@ impl Controller {
     /// either is to jump or to fly. Blocked, the step is tried one address
     /// axis at a time, which is what slides a body along a wall instead of
     /// sticking it to one.
-    fn walk_to(&self, du: f64, dv: f64, generator: &Generator) -> SurfacePoint {
-        let here = self.footing(generator);
+    fn walk_to(&self, du: f64, dv: f64, footing: impl Fn(SurfacePoint) -> Footing) -> SurfacePoint {
+        let here = footing(self.point);
         for (du, dv) in [(du, dv), (du, 0.0), (0.0, dv)] {
             if du == 0.0 && dv == 0.0 {
                 continue;
@@ -764,11 +801,7 @@ impl Controller {
                 self.point.u + du,
                 self.point.v + dv,
             ));
-            let there = collision::footing(
-                generator,
-                self.sphere.blocks().direction(point),
-                self.height_m,
-            );
+            let there = footing(point);
             if collision::admits(here, there, self.height_m) {
                 return point;
             }
@@ -846,4 +879,54 @@ fn turn_toward(from: DVec3, to: DVec3, fraction: f64, fallback_axis: DVec3) -> D
 /// `from` turned a `fraction` of the way to `to`.
 fn rotate_toward(from: DVec3, to: DVec3, fraction: f64, fallback_axis: DVec3) -> DVec3 {
     (turn_toward(from, to, fraction, fallback_axis) * from).normalize()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::seam::Tool;
+    use topology::{BLOCK_M, Sector};
+    use voxel::{Gesture, Span};
+    use worldgen::Recipe;
+
+    /// A flyer a metre over a plot, in front of a wall four metres high that
+    /// runs the width of it, flying at it for two seconds. How far along `u`
+    /// it ends short of the wall, in cells: negative past it.
+    fn fly_at_a_wall(tool: Option<Tool>) -> f64 {
+        let mut generator = Generator::new(Recipe::new(1)).unwrap();
+        let side = f64::from(generator.sphere().blocks().side());
+        let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
+        let mut build = Build::default();
+        let floor_m = build.open(&mut generator, point).unwrap().height_m();
+        // The volume opens 32 cells either side of the point's column.
+        let x = (point.u.floor() - (point.u.floor() - 32.0)) as i32 + 8;
+        build.lay(
+            generator.sphere(),
+            Gesture::Create {
+                span: Span::between([x, 0, 0], [x, 63, 7]),
+                paint: 0,
+            },
+        );
+        build.take(tool);
+        let mut controller = Controller::spawn(point, &generator);
+        controller.stand_at(Some(floor_m + 2.0 * BLOCK_M), &generator);
+        controller.set_pitch(0.0);
+        let wish = Wish {
+            movement: [0.0, 1.0],
+            ..Wish::default()
+        };
+        for _ in 0..120 {
+            controller.update(1.0 / 60.0, wish, &generator, &build);
+        }
+        point.u.floor() + 8.0 - controller.point().u
+    }
+
+    #[test]
+    fn a_flyer_is_stopped_by_a_wall_unless_it_is_building() {
+        // Its middle stops half a body short of the wall, as a walker's does.
+        let short = fly_at_a_wall(None);
+        assert!((0.6..1.2).contains(&short), "{short}");
+        let past = fly_at_a_wall(Some(Tool::Create));
+        assert!(past < -4.0, "{past}");
+    }
 }

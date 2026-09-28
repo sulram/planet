@@ -59,15 +59,15 @@ game chose not to build a voxel pyramid.
 
 ### Construction: the build layer
 
-- Cubic voxels, greedy meshed, **only inside a volume**, which is the unit of
-  streaming, storage, permission and budget. All four already wanted to be the
-  same box (M3, M4).
+- Cubic voxels, one quad per side that shows (75), **only inside a volume**,
+  the unit of streaming, storage, permission and budget. All four already
+  wanted to be the same box (M3, M4).
 - A volume has an inside: digging, cellars, caves and overhangs live here and
   nowhere else.
 - **Proximity streamed**, in the manner of Cryptovoxels: far away a volume is
   a silhouette, not cells.
 - Light baked at mesh time: flood fill sun, per face AO, a glow channel.
-- `crates/voxel` holds the storage. The greedy mesher is not written.
+- `crates/voxel` holds cells, gestures, sight, faces and footing (75).
 
 ### The platform: a volume stamps the ground
 
@@ -157,8 +157,9 @@ Do not check out `feat/world-earth`. Branch from `feat/voxel` and restore.
    recipe. Patches read it. Measure the settle time against 7.4 s.
 4. Horizon map in the shader; nothing coarse in a cascade.
 5. Per pixel voxelization of the far ground, so the seam stops showing.
-6. The volume: draw one, stamp the ground under it, greedy mesh it, bake its
-   light, stream it by proximity, put one under the sea.
+6. The volume, taken ahead of 3 to 5 (76). Done: one opens where you stand on
+   a stamp, its sides are drawn, and it is built in by click and drag. Left:
+   bake its light, stream it by proximity, put one under the sea.
 7. Persist a volume and permission its edits. That is M3 and M4 arriving
    together, because they were always the same box.
 

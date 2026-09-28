@@ -43,6 +43,17 @@ pub struct Shot {
     /// Paint a vertical cut through the ground instead of rendering it, this
     /// many metres wide. Zero renders the world as usual.
     pub slice_m: f64,
+    /// What a hand does before the shot, in the order given.
+    pub steps: Vec<Step>,
+}
+
+/// One thing a hand does before a shot is taken.
+pub enum Step {
+    /// A command as the seam takes it: `{"type":"set_tool","tool":"create"}`.
+    Command(String),
+    /// Press the pointer's button at one point of the view and let go at
+    /// another, fractions from the top left: a stroke of the tool in hand.
+    Drag([f32; 4]),
 }
 
 /// The seed every preview starts from unless told otherwise.
@@ -71,6 +82,7 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
         panel: false,
         effects: None,
         slice_m: 0.0,
+        steps: Vec::new(),
     };
 
     while let Some(flag) = args.next() {
@@ -102,6 +114,18 @@ pub fn parse(args: impl Iterator<Item = String>) -> Result<Invocation, String> {
             "--panel" if is_shot => shot.panel = true,
             "--slice" if is_shot => shot.slice_m = number(&value()?, "--slice")?,
             "--effects" if is_shot => shot.effects = Some(value()?),
+            "--command" if is_shot => shot.steps.push(Step::Command(value()?)),
+            "--drag" if is_shot => {
+                let text = value()?;
+                let parts: Vec<f32> = text
+                    .split(',')
+                    .map(|part| number(part, "--drag"))
+                    .collect::<Result<_, _>>()?;
+                let points: [f32; 4] = parts
+                    .try_into()
+                    .map_err(|_| "--drag wants X0,Y0,X1,Y1".to_owned())?;
+                shot.steps.push(Step::Drag(points));
+            }
             "--clock" if is_shot => shot.clock_s = number(&value()?, "--clock")?,
             "--altitude" if is_shot => shot.altitude_m = number(&value()?, "--altitude")?,
             "--pitch" if is_shot => shot.pitch_deg = number(&value()?, "--pitch")?,

@@ -4,7 +4,7 @@
 use client::Client;
 use render::{Headless, write_png};
 
-use crate::args::Shot;
+use crate::args::{Shot, Step};
 use crate::assets;
 
 pub fn run(shot: Shot) -> Result<(), String> {
@@ -49,6 +49,28 @@ pub fn run(shot: Shot) -> Result<(), String> {
 
     // A fixed step keeps the stride, and so the picture, reproducible.
     let mut input = client::Input::default();
+    let tick = |client: &mut Client, input: &mut client::Input| {
+        client.update(1.0 / 60.0, input);
+    };
+    for step in &shot.steps {
+        match step {
+            Step::Command(json) => client.command_json(json),
+            Step::Drag([x0, y0, x1, y1]) => {
+                input.pointer = Some([*x0, *y0]);
+                input.key(client::Key::Use, true);
+                tick(&mut client, &mut input);
+                input.pointer = Some([*x1, *y1]);
+                tick(&mut client, &mut input);
+                input.key(client::Key::Use, false);
+                tick(&mut client, &mut input);
+            }
+        }
+    }
+    for event in client.drain_events() {
+        if let client::Event::BuildRefused { reason } = event {
+            log::warn!("no volume here: {reason:?}");
+        }
+    }
     input.key(client::Key::Forward, true);
     for _ in 0..(shot.walk_s * 60.0) as u32 {
         client.update(1.0 / 60.0, &mut input);
@@ -58,6 +80,9 @@ pub fn run(shot: Shot) -> Result<(), String> {
     let frame = client.settled_frame();
     let mut headless = Headless::new(width, height)?;
     headless.renderer.apply(client.drain_terrain_changes());
+    headless
+        .renderer
+        .apply_volumes(client.drain_volume_changes());
     headless
         .renderer
         .apply_skinned(client.drain_skinned_changes());
