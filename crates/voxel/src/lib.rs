@@ -277,13 +277,14 @@ impl Volume {
         true
     }
 
-    /// Whether a chunk holds anything at all.
+    /// Whether a chunk holds anything at all. `false` outside the box.
     pub fn chunk_stored(&self, chunk: [u32; 3]) -> bool {
-        let [cx, cy, _] = self.chunk_count();
+        let [cx, cy, cz] = self.chunk_count();
+        if chunk[0] >= cx || chunk[1] >= cy || chunk[2] >= cz {
+            return false;
+        }
         let index = (chunk[2] * cy + chunk[1]) * cx + chunk[0];
-        self.chunks
-            .get(index as usize)
-            .is_some_and(|slot| slot.is_some())
+        self.chunks[index as usize].is_some()
     }
 
     /// The cells of one chunk, clipped to the box.
@@ -372,6 +373,16 @@ mod tests {
         assert!(volume.chunk_stored([1, 0, 0]));
         assert!(volume.set([20, 3, 5], Cell::AIR));
         assert!(!volume.chunk_stored([1, 0, 0]));
+    }
+
+    #[test]
+    fn a_chunk_outside_the_box_is_never_stored() {
+        let mut volume = Volume::new([40, 20, 16]);
+        assert!(volume.set([0, 16, 0], Cell::solid(1)));
+        assert!(volume.chunk_stored([0, 1, 0]));
+        assert!(!volume.chunk_stored([3, 0, 0]));
+        assert!(!volume.chunk_stored([0, 2, 0]));
+        assert!(!volume.chunk_stored([0, 0, 1]));
     }
 
     #[test]
