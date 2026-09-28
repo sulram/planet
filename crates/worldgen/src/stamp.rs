@@ -34,6 +34,8 @@ pub struct Stamp {
 impl Stamp {
     /// The ground over columns `u[0]..u[1]` by `v[0]..v[1]` of a sector held
     /// at `height_m` over the datum, easing back over `blend_m` around them.
+    /// A stamp holds within its own sector: a margin that crosses a sector
+    /// edge ends hard at the seam, so keep the footprint `blend_m` inside.
     pub fn new(
         sphere: QuadSphere,
         sector: Sector,
@@ -97,6 +99,11 @@ impl Stamp {
         let du = out(point.u, self.u) * self.block_m[0];
         let dv = out(point.v, self.v) * self.block_m[1];
         let outside_m = libm::sqrt(du * du + dv * dv);
+        // On the footprint the stamp takes all, whatever the blend: a blend
+        // of zero is a hard edge, never a division by it.
+        if outside_m <= 0.0 {
+            return 1.0;
+        }
         1.0 - smoothstep(0.0, self.blend_m, outside_m)
     }
 }
@@ -146,6 +153,24 @@ mod tests {
             assert_eq!(generator.sample_at(inside, footprint_m).height_m, 37.5);
         }
         assert_eq!(generator.sample(far).height_m, before);
+    }
+
+    #[test]
+    fn a_blend_of_zero_is_a_hard_edge() {
+        let sphere = QuadSphere::new(16).unwrap();
+        let sector = Sector::new(0).unwrap();
+        let stamp = Stamp::new(
+            sphere,
+            sector,
+            [1000.0, 1064.0],
+            [2000.0, 2064.0],
+            12.0,
+            0.0,
+        );
+        let at = |u: f64, v: f64| stamp.weight(SurfacePoint::new(sector, u, v));
+        assert_eq!(at(1032.0, 2032.0), 1.0);
+        assert_eq!(at(1064.0, 2000.0), 1.0);
+        assert_eq!(at(1064.1, 2032.0), 0.0);
     }
 
     #[test]
