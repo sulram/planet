@@ -136,9 +136,9 @@ Numbers marked (p) are proposed and not yet confirmed.
   the headless picture. It does not persist the choice yet.
   JSON tagged by `type`: `client::Command`, `client::Event`.
 - Crates: `topology` and `worldgen` (deterministic, `libm`), `scene` (plain
-  data a client hands a renderer), `avatar` (VRM + clips, no GPU), `protocol`
-  (the wire, generated), `client`, `render`, `shell-desktop`, `shell-web`.
-  `voxel` appears when volumes are built.
+  data a client hands a renderer), `avatar` (VRM + clips, no GPU), `voxel`
+  (a volume's cells, no sphere, no GPU), `protocol` (the wire, generated),
+  `client`, `render`, `shell-desktop`, `shell-web`.
 - The link is the shell's, the protocol the client's: `shell-web` opens the
   socket (`Engine.connect(url)`), hands every frame to `Client::receive` and
   sends what `drain_outbound` queues. The client says hello, keeps the peers,

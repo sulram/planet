@@ -16,7 +16,7 @@ ARCHITECTURE.md; how the picture is made is in RENDER.md.
   neighbours and the warp; a `QuadSphere` is one body, a block grid plus the
   radius that turns cells into metres. The chunk grid is the block grid
   coarsened by `CHUNK_BITS`, so chunk seams are block seams (49).
-- Block edge 0.5 m (p). Blocks per sector side is `2^sector_bits`, a recipe
+- Block edge 0.5 m (75). Blocks per sector side is `2^sector_bits`, a recipe
   field frozen per world, `4..=16`: 16 because u and v fill a `u16`, 4 because
   a sector must hold a chunk. Radius follows, four sector sides to a great
   circle: 5.09 m at `2^4`, 326 m at `2^10`, 20.9 km at `2^16`.
@@ -85,7 +85,7 @@ m4-K7M42Q@40,180,-5
 | Layer | What it is | Mesher | Edited with | Where |
 |---|---|---|---|---|
 | Terrain | one ground per direction, sampled | quadtree patches | nothing, in world | everywhere |
-| Build | block type (palette), cells with an inside | greedy cubes + ramps, wedges, half slabs | place and remove blocks | inside a volume |
+| Build | air or a paint per cell, an inside | one quad per side facing air, each corner bent onto the body | create, delete, paint | inside a volume |
 
 - Nature is a surface (58): one ground per direction, no cave, no overhang,
   nothing to be inside of, and not editable by anyone in world. A landlord
@@ -97,12 +97,12 @@ m4-K7M42Q@40,180,-5
   person or by the recipe, never by where a quadtree runs out of levels.
 - A stamp is how anything that is not terrain seats into terrain. A volume
   carries a flatten and blend footprint applied when the ground is sampled, so
-  a platform is part of the recipe and not an edit.
-- Chunk 16x16x16, inside a volume. The chunk blob (palette + bit-packed
-  indices, zstd) serves disk, wire and client cache, and each stored chunk
-  carries a version number and its reduced levels.
-- `crates/voxel` and `crates/terrain` were deleted with 58. They are written
-  again from scratch when volumes are built.
+  a platform is part of the recipe and not an edit. It holds the volume's floor
+  and eases back over 8 m, as `Material::Plot`, where nothing grows (75).
+- A cell is a 0.5 m block of the address, air or a paint (75). A gesture fills
+  air, empties, or repaints what is solid over a box. Chunks of 16 a side are
+  what a volume is stored and redrawn in; an empty one takes no room.
+- `crates/voxel`: cells, gestures, sight, faces and footing, and no sphere.
 
 ## The world is a recipe
 

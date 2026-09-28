@@ -102,6 +102,7 @@ const ALLOWED: Record<string, string[]> = {
 	topology: [],
 	scene: [],
 	protocol: [],
+	voxel: [],
 	worldgen: ['topology'],
 	avatar: ['scene'],
 	render: ['scene'],
@@ -114,7 +115,7 @@ for (const [crate, allowed] of Object.entries(ALLOWED)) {
 	const toml = read(`crates/${crate}/Cargo.toml`);
 	const deps = toml.slice(toml.indexOf('[dependencies]'), toml.indexOf('[dev-dependencies]') === -1 ? undefined : toml.indexOf('[dev-dependencies]'));
 	for (const m of deps.matchAll(/^([a-z-]+)(?:\.workspace| *=)/gm)) {
-		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`crates/${crate}: imports \`${m[1]}\`, which CLAUDE.md § How the engine stays reusable forbids`);
+		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`crates/${crate}: imports \`${m[1]}\`, which CLAUDE.md § How it grows forbids`);
 	}
 }
 

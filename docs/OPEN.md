@@ -19,11 +19,8 @@ The address is the save format: settled before the first volume is stored.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **Block edge**: 0.5 m like Cryptovoxels, or finer (0.25 m)? | the block address | WORLD.md § Topology |
-| **Chunk size**: 16 or 32 per side? | the chunk address and its codec | WORLD.md |
 | **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? | where a volume may sit | DECISIONS 49 |
 | **What a body collides with inside a GLB shell.** 47 says collision is the generator, always, and a shell is a mesh we cannot read. Either the volume is the truth and the GLB a skin over the same cells (one rule, a voxelizer at import), or mesh collision becomes a capability we build. The first is cheaper | the cave: a shell and a room | DECISIONS 47, 58 |
-| **Cubes on sloped terrain**: auto-flatten on build, or leave gaps? | the stamp that seats a volume | DECISIONS 58 |
 | **Look**: terrain material style: flat colours, pixel textures, triplanar? | the material contract past procedural detail | RENDER.md |
 | **How fine per-user rollback has to be.** Per cell attribution costs an owner byte in every cell, doubling a chunk. Chunk granularity is nearly free but takes a neighbour's edits in the same chunk with it. With volumes a chunk usually has one owner, so chunk granularity is probably enough; a choice, not a fact | what the op log's digest tier carries | ROADMAP M3 |
 

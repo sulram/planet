@@ -18,6 +18,7 @@ avatar = { path = "crates/avatar" }
 client = { path = "crates/client" }
 render = { path = "crates/render" }
 protocol = { path = "crates/protocol" }
+voxel = { path = "crates/voxel" }
 ui-native = { path = "crates/ui-native" }
 
 # Pins shared with vybe (CLAUDE.md, Toolchain pins).

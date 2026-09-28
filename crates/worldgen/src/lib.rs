@@ -14,6 +14,7 @@ mod moon;
 mod noise;
 mod plates;
 mod recipe;
+mod stamp;
 mod v1;
 mod v2;
 mod v3;
@@ -24,6 +25,7 @@ pub use field::{Field, FieldError, Ground};
 pub use recipe::{
     Params, Recipe, RecipeError, Source, format_id, format_seed, parse_id, parse_seed,
 };
+pub use stamp::Stamp;
 
 /// The version new worlds are created with.
 pub const GENERATOR_VERSION: u32 = 3;
@@ -48,6 +50,9 @@ pub enum Material {
     Seabed = 6,
     /// The dust of an airless moon. Generator v2 and later.
     Regolith = 7,
+    /// Ground a stamp holds flat for something built on it: worked earth,
+    /// where nothing grows. No generator version makes it; a stamp does.
+    Plot = 8,
 }
 
 impl Material {
@@ -63,6 +68,7 @@ impl Material {
             5 => Material::Snow,
             6 => Material::Seabed,
             7 => Material::Regolith,
+            8 => Material::Plot,
             _ => return None,
         })
     }
@@ -136,6 +142,10 @@ pub struct Generator {
     moon_basins: moon::Basins,
     plates: plates::Plates,
     field: Option<Field>,
+    /// Ground held flat under what is built on it. Not part of the recipe:
+    /// the recipe is the world as it was made, and these are what was put on
+    /// it since, which the ground under it answers to.
+    stamps: Vec<Stamp>,
 }
 
 impl Generator {
@@ -180,6 +190,7 @@ impl Generator {
                 moon_basins: moon::Basins::new(&recipe),
                 plates: plates::Plates::new(&recipe),
                 field,
+                stamps: Vec::new(),
                 sphere,
                 scale: reference_scale(sphere),
                 recipe,
@@ -277,7 +288,28 @@ impl Generator {
     pub fn sample_at(&self, direction: Direction, footprint_m: f64) -> Sample {
         let mut sample = self.reference_sample(direction, footprint_m / self.scale);
         sample.height_m *= self.scale;
+        // Stamps are in this body's own metres, so they come after the scale.
+        let mut point = None;
+        for stamp in self.stamps.iter().filter(|stamp| stamp.near(direction)) {
+            let point = *point.get_or_insert_with(|| self.sphere.blocks().surface_point(direction));
+            let weight = stamp.weight(point);
+            sample.height_m += (stamp.height_m() - sample.height_m) * weight;
+            if weight > 0.5 {
+                sample.material = Material::Plot;
+            }
+        }
         sample
+    }
+
+    /// Holds the ground flat under something built on it, from now on. The
+    /// ground it changes is whatever [`Stamp::cap`] reaches.
+    pub fn stamp(&mut self, stamp: Stamp) {
+        self.stamps.push(stamp);
+    }
+
+    /// The stamps the ground answers to, in the order they were laid.
+    pub fn stamps(&self) -> &[Stamp] {
+        &self.stamps
     }
 
     /// The ground as the reference body has it, in reference metres.

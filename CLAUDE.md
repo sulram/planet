@@ -83,10 +83,10 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
     Pure integer logic where possible. No GPU, no IO.
   - `worldgen`: the generator. Deterministic; also built to WASM for the
     server. A world's shape is a source: plates over the seed, or a baked field.
-  - `protocol`: the wire messages generated from `proto/`. Only `lib.rs` is
-    written by hand.
+  - `protocol`: wire messages generated from `proto/`; `lib.rs` alone by hand.
   - `scene`: the plain data a client hands a renderer. No GPU, no generator.
   - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
+  - `voxel`: a volume's cells, gestures, sight, faces and footing. No sphere.
   - `render`: all of wgpu lives here.
   - `client`: controller, streaming, tools, media manager. No window, no DOM.
   - `ui-native`: the desktop settings panel. All of egui lives here.

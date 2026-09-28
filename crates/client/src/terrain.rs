@@ -590,5 +590,7 @@ fn color(sample: Sample) -> [u8; 4] {
         // v1 calls everything under the sea water; it is sea floor all the same.
         Material::Seabed | Material::Water => [112, 116, 98, 0],
         Material::Regolith => [112, 110, 105, 0],
+        // Worked earth under a volume: bare, a little warmer than rock.
+        Material::Plot => [128, 112, 90, 0],
     }
 }

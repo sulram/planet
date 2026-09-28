@@ -1,0 +1,12 @@
+[package]
+name = "voxel"
+description = "The build layer: cubes in an integer box. Gestures, rays, faces, footing. No sphere."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

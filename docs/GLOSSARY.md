@@ -35,7 +35,10 @@ this file in the same change.
 | Chunk | A 16x16x16 block of cells. Unit of storage, streaming and meshing. |
 | Footing | What holds a body up at one direction: the ground under its feet, and any roof over them. Read from the generator, never from a mesh of it. Over nature there is no roof. |
 | Terrain layer | Nature: one ground per direction, sampled from the recipe and meshed as quadtree patches. Not editable in world. |
-| Build layer | Cubic voxels inside a volume: block types, plus ramp, wedge and half slab shapes. The only part of a world with an inside. |
+| Build layer | Cubic voxels inside a volume, each air or a paint. The only part of a world with an inside. |
+| Paint | What a solid cell is: an index into the palette a volume is shown with. |
+| Gesture | Create, delete or paint over a box of cells, with one paint: what a volume applies. What an op carries. |
+| Plot | The ground a stamp holds flat under a volume: worked earth, where nothing grows. |
 | Brush | A terrain edit tool: dig, add, smooth, flatten, paint. |
 | Stored chunk | A chunk present in `world.db` because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
