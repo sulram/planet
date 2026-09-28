@@ -64,7 +64,7 @@
 		{#if refused}
 			<Alert variant="info">{t(`engine.build.refused.${refused}`)}</Alert>
 		{/if}
-		<Button variant="ghost" type="button" aria-expanded="false" onclick={() => onbuild(last)}>{t('engine.build')}</Button>
+		<Button variant="ghost" type="button" onclick={() => onbuild(last)}>{t('engine.build')}</Button>
 	</div>
 {/if}
 
