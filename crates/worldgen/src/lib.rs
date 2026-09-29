@@ -293,6 +293,13 @@ impl Generator {
         for stamp in self.stamps.iter().filter(|stamp| stamp.near(direction)) {
             let point = *point.get_or_insert_with(|| self.sphere.blocks().surface_point(direction));
             let weight = stamp.weight(point);
+            // A footprint holds its ground whatever margins reach over it, so
+            // stamps side by side each stay flat.
+            if weight >= 1.0 {
+                sample.height_m = stamp.height_m();
+                sample.material = Material::Plot;
+                break;
+            }
             sample.height_m += (stamp.height_m() - sample.height_m) * weight;
             if weight > 0.5 {
                 sample.material = Material::Plot;

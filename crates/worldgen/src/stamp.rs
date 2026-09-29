@@ -5,7 +5,8 @@
 //! and a margin around it where the ground eases back to its own. It is
 //! applied when the ground is sampled, at every footprint, so the heightfield,
 //! collision, spawning and grass all see the same ground, and none of it is an
-//! edit.
+//! edit. A footprint holds its ground under the margin of any other stamp, so
+//! stamps laid side by side make terraces, each one flat.
 
 use topology::{QuadSphere, Sector, SurfacePoint, vec3};
 
@@ -153,6 +154,36 @@ mod tests {
             assert_eq!(generator.sample_at(inside, footprint_m).height_m, 37.5);
         }
         assert_eq!(generator.sample(far).height_m, before);
+    }
+
+    #[test]
+    fn stamps_side_by_side_each_hold_their_ground() {
+        let mut generator = crate::Generator::new(crate::Recipe::new(7)).unwrap();
+        let sphere = generator.sphere();
+        let sector = Sector::new(2).unwrap();
+        let stamp = |u: f64, height_m: f64| {
+            Stamp::new(
+                sphere,
+                sector,
+                [u, u + 64.0],
+                [4000.0, 4064.0],
+                height_m,
+                10.0,
+            )
+        };
+        generator.stamp(stamp(4000.0, 37.5));
+        generator.stamp(stamp(4064.0, 40.0));
+        let at = |u: f64| {
+            let point = SurfacePoint::new(sector, u, 4032.0);
+            generator.sample(sphere.blocks().direction(point)).height_m
+        };
+        // The margin of each reaches over the other, and neither gives way.
+        for u in [4001.0, 4032.0, 4063.0] {
+            assert_eq!(at(u), 37.5, "{u}");
+        }
+        for u in [4065.0, 4096.0, 4127.0] {
+            assert_eq!(at(u), 40.0, "{u}");
+        }
     }
 
     #[test]
