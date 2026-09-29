@@ -161,7 +161,7 @@ Every milestone ends runnable end to end.
 - [ ] Clouds: temporal reprojection to spend fewer samples; high cirrus; weather as a recipe param; shade on water
 - [ ] Flattened grass trails with timed recovery
 - [ ] Softer shadows: a wider rotated PCF kernel, penumbra that widens with distance from the caster
-- [ ] Volumes cast their far sides, with no bias: a closed solid has no way to shadow the side the sun reaches (80)
+- [x] ~~Volumes cast their far sides, with no bias~~ (82)
 - [ ] Shadow cascades fitted to the view, or a fourth between the first two: a cube 35 m from the eye is smaller than a texel of the cascade that holds it (80)
 - [x] Compositor: HDR scene target, a chain of stages, one final tone map
 - [x] Bloom as a compositor stage, haze and a choice of tone map as knobs
