@@ -237,6 +237,11 @@ fn moonlight(up: vec3<f32>) -> vec3<f32> {
     return moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
 }
 
+// How far a side turns towards the sun, as the cosine of the angle, before
+// the sun reaches it whole: the width of the terminator. Narrow, so ground
+// under a low sun keeps its light.
+const TERMINATOR: f32 = 0.1;
+
 // Sun and sky light on a surface, then the medium between it and the camera.
 fn lit(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3<f32>) -> vec3<f32> {
     return lit_surface(albedo,normal,gloss,relative,normal);
@@ -257,7 +262,14 @@ fn lit_occluded(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3
 
     // Bodies shadow themselves and each other: night, and eclipses.
     let day = sunlight(relative);
-    let visibility = terrain_shadow(relative, geometric_normal);
+    // A side turned from the sun stands in its own shadow, by geometry. Only
+    // a side the sun reaches asks the map: behind a silhouette the map holds
+    // the far side of the same body, and what it answers there is its bias.
+    let sunward = smoothstep(0.0, TERMINATOR, dot(geometric_normal, sun));
+    var visibility = 0.0;
+    if sunward > 0.0 {
+        visibility = sunward * terrain_shadow(relative, geometric_normal);
+    }
     let direct = max(dot(normal, sun), 0.0) * day * visibility * cloud_shadow(relative);
     // Sky from above, warm bounce from the ground below: shadowed sides keep
     // their own colour instead of going blue.

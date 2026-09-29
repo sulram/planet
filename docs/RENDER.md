@@ -128,6 +128,8 @@ compositor. What the world *is* lives in WORLD.md.
 - Sun shadows: three cascades around the eye (40 m, 400 m, 4 km half side,
   1024 px each), snapped to their texel, in the frame of the nearest body.
   Terrain, volumes, boxes and avatars cast; everything lit by `lit` receives.
+- A side turned from the sun is in its own shadow by its normal; only a side
+  the sun reaches asks the map, across `TERMINATOR` in `common.wgsl` (80).
 - Casters are not the drawn patches: `Frame::shadow_patches` holds built
   leaves before view culling, coarser with distance (1 m, 4 m, 16 m), and
   never schedules generation. Skirts do not cast.
