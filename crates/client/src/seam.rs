@@ -60,10 +60,9 @@ pub enum BuildRefusal {
     Moon,
     /// The ground here is under the sea.
     Sea,
-    /// Too near the edge of a sector: a volume and its margin stay inside one.
+    /// The plot is on the edge of a sector: a volume and its margin stay
+    /// inside one.
     Seam,
-    /// Another volume is too near.
-    Neighbour,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -117,7 +116,7 @@ pub enum Command {
         here: bool,
     },
     /// Build with a tool, or stop building with `null`. Starting where no
-    /// volume stands opens one around the body, on flat ground.
+    /// volume stands opens the one of the plot under the body, on flat ground.
     SetTool {
         tool: Option<Tool>,
     },

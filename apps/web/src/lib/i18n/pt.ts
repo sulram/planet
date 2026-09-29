@@ -110,7 +110,6 @@ export const pt: Messages = {
 	'engine.build.refused.moon': 'Constrói-se no planeta, não na lua.',
 	'engine.build.refused.sea': 'O chão aqui está sob o mar. Construa em terra firme.',
 	'engine.build.refused.seam': 'Perto demais da borda de um setor. Ande um pouco mais para dentro.',
-	'engine.build.refused.neighbour': 'Outro lote de construção está perto demais. Construa nele, ou afaste-se.',
 	'engine.stats.fps': 'Quadros',
 	'engine.stats.altitude': 'Altitude',
 	'engine.stats.speed': 'Velocidade',

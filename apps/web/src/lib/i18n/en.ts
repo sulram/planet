@@ -109,7 +109,6 @@ export const en = {
 	'engine.build.refused.moon': 'Building happens on the planet, not on the moon.',
 	'engine.build.refused.sea': 'The ground here is under the sea. Build on dry land.',
 	'engine.build.refused.seam': 'Too close to the edge of a sector. Walk a little further in.',
-	'engine.build.refused.neighbour': 'Another building plot is too close. Build on it, or walk further away.',
 	'engine.stats.fps': 'Frames',
 	'engine.stats.altitude': 'Altitude',
 	'engine.stats.speed': 'Speed',

@@ -407,10 +407,10 @@ impl Client {
     }
 
     /// Takes a tool, or puts it down with `None`. Taking one where no volume
-    /// stands opens one around the body, on ground held flat under it, and
-    /// where none can be opened says why and builds nothing.
+    /// stands opens the one of the plot under the body, on ground held flat
+    /// under it, and where none can be opened says why and builds nothing.
     fn take_tool(&mut self, tool: Option<Tool>) {
-        if tool.is_some() && !self.build.covers(self.controller.point()) {
+        if tool.is_some() {
             let opened = if self.controller.on_moon() {
                 Err(BuildRefusal::Moon)
             } else {
@@ -418,7 +418,7 @@ impl Client {
                     .open(&mut self.generator, self.controller.point())
             };
             match opened {
-                Ok(stamp) => {
+                Ok(Some(stamp)) => {
                     let (middle, angle) = stamp.cap();
                     self.terrain.reshape(DVec3::from(middle), angle);
                     // The ground under the feet moved to the stamp's height.
@@ -426,6 +426,7 @@ impl Client {
                         self.controller.stand_at(None, &self.generator);
                     }
                 }
+                Ok(None) => {}
                 Err(reason) => {
                     self.events.push(Event::BuildRefused { reason });
                     return;

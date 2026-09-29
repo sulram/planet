@@ -26,7 +26,7 @@ ARCHITECTURE.md; how the picture is made is in RENDER.md.
   core keeping its share. At `2^16` that is the +-128 m it has always been (p),
   and a column tapers 0.6%, so the band is a regular grid in practice. On a
   small body the radius wins and the taper is the price shells will pay (49).
-- The 8 sector corners are zoned as nature. No volume may include them.
+- A sector's edge plots, its 8 corners with them, are nature: no volume (77).
 - Small bodies (moons, micro worlds) use a second topology: a Cartesian ball
   of cubes, diggable to the core. Both sit behind one `Topology` trait.
 - On foot the planet reads as flat: horizon at about 260 m from eye height.
@@ -91,20 +91,20 @@ m4-K7M42Q@40,180,-5
   nothing to be inside of, and not editable by anyone in world. A landlord
   shapes it at the recipe level, through a volume's stamp.
 - A volume is an integer address box where building is granted, with an
-  inside: digging, cellars and overhangs live there. One opens where someone
-  takes a tool and none stands: 64 cells a side and as tall, its floor at the
-  ground under the feet, 32 blocks from a sector's edge and from another
-  volume. It lives in the client alone: nothing is sent or kept (76).
+  inside: cellars and overhangs. In the client alone, nothing sent or kept (76).
+- The address cuts volumes (77): plots of 64 blocks a side, `(u >> 6, v >> 6)`,
+  a volume 64 cells tall over each, opened under the body that takes a tool.
+  They touch and a sector's are read as one, so a build stands over two
+  neighbours, on one floor: one opened beside another takes its floor.
 - The two meet at a containment boundary: authored, integer, and decided by a
   person or by the recipe, never by where a quadtree runs out of levels.
-- A stamp is how anything that is not terrain seats into terrain. A volume
-  carries a flatten and blend footprint applied when the ground is sampled, so
-  a platform is part of the recipe and not an edit. It holds the volume's floor
-  and eases back over 8 m, as `Material::Plot`, where nothing grows (75).
-- A cell is a 0.5 m block of the address, air or a paint (75). A gesture fills
-  air, empties, or repaints what is solid over a box. Chunks of 16 a side are
-  what a volume is stored and redrawn in; an empty one takes no room.
-- `crates/voxel`: cells, gestures, sight, faces and footing, and no sphere.
+- A stamp is how anything that is not terrain seats into terrain: a flatten
+  and blend footprint read when the ground is sampled, never an edit. It holds
+  a volume's floor under any other stamp's margin and eases back over 8 m as
+  `Material::Plot`, where nothing grows (75, 77).
+- A cell is a 0.5 m block of the address, air or a paint; a gesture fills air,
+  empties or repaints over a box (75). Chunks of 16 a side are what is stored
+  and redrawn, and an empty one takes no room. All in `crates/voxel`: no sphere.
 
 ## The world is a recipe
 

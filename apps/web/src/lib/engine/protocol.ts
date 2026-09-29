@@ -20,7 +20,7 @@ export type Tool = 'create' | 'delete' | 'paint';
 export const tools = ['create', 'delete', 'paint'] as const satisfies readonly Tool[];
 
 /** Why no volume could be opened where the body stands. */
-export type BuildRefusal = 'moon' | 'sea' | 'seam' | 'neighbour';
+export type BuildRefusal = 'moon' | 'sea' | 'seam';
 
 export type ToneMap = 'aces' | 'agx' | 'neutral' | 'reinhard' | 'linear';
 export const toneMaps = ['aces', 'agx', 'neutral', 'reinhard', 'linear'] as const satisfies readonly ToneMap[];
@@ -61,7 +61,7 @@ export type Command =
 	| { type: 'say'; scope: Scope; text: string; here?: boolean }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
 	| { type: 'set_name'; name: string }
-	/** Build with a tool, or stop with null. Where no volume stands, one opens around the body. */
+	/** Build with a tool, or stop with null. Where no volume stands, the one of the plot under the body opens. */
 	| { type: 'set_tool'; tool: Tool | null }
 	/** The paint the next stroke lays: an index into the palette. */
 	| { type: 'set_paint'; paint: number }

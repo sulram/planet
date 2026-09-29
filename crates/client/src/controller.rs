@@ -897,13 +897,19 @@ mod tests {
         let side = f64::from(generator.sphere().blocks().side());
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut build = Build::default();
-        let floor_m = build.open(&mut generator, point).unwrap().height_m();
-        // The volume opens 32 cells either side of the point's column.
-        let x = (point.u.floor() - (point.u.floor() - 32.0)) as i32 + 8;
+        build.open(&mut generator, point).unwrap();
+        // A cell is the address it has: the wall stands eight columns on
+        // from the body, across the whole of the plot.
+        let cells = build.cells_over(point).unwrap();
+        let floor_m = f64::from(cells.min[2]) * BLOCK_M;
+        let x = point.u.floor() as i32 + 8;
         build.lay(
             generator.sphere(),
             Gesture::Create {
-                span: Span::between([x, 0, 0], [x, 63, 7]),
+                span: Span::between(
+                    [x, cells.min[1], cells.min[2]],
+                    [x, cells.max[1], cells.min[2] + 7],
+                ),
                 paint: 0,
             },
         );
