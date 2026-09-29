@@ -9,13 +9,12 @@
 
 use crate::{Cells, Face, Volume};
 
-/// Where a line of sight stops: a solid cell, or the floor under a volume
-/// (`z = -1` in its own frame), and the side of it the line came in through.
+/// Where a line of sight stops: a solid cell, and the side of it the line
+/// came in through.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Hit {
     pub cell: [i32; 3],
     pub face: Face,
-    floor: bool,
 }
 
 impl Hit {
@@ -23,11 +22,6 @@ impl Hit {
     pub fn before(self) -> [i32; 3] {
         let n = self.face.normal();
         [0, 1, 2].map(|i| self.cell[i] + n[i])
-    }
-
-    /// Whether the line stopped on the floor rather than on a cell.
-    pub fn on_floor(self) -> bool {
-        self.floor
     }
 }
 
@@ -81,8 +75,6 @@ pub(crate) fn trace(cells: &impl Cells, path: &[[f64; 3]]) -> Option<Hit> {
                 return Some(Hit {
                     cell,
                     face: Face::new(axis, step[axis] < 0),
-                    // Solid and not a cell: a floor.
-                    floor: cells.get(cell).is_air(),
                 });
             }
             in_air |= !solid;
@@ -143,21 +135,20 @@ mod tests {
     }
 
     #[test]
-    fn looking_down_meets_the_floor() {
-        let volume = with(&[]);
+    fn looking_down_meets_the_top_of_a_cell() {
+        let volume = with(&[[3, 4, 0]]);
         let hit = volume
             .trace(&[[3.2, 4.7, 6.0], [3.2, 4.7, -3.0]])
             .expect("hit");
-        assert!(hit.on_floor());
-        assert_eq!(hit.cell, [3, 4, -1]);
+        assert_eq!(hit.cell, [3, 4, 0]);
         assert_eq!(hit.face, Face::UP);
-        assert_eq!(hit.before(), [3, 4, 0]);
+        assert_eq!(hit.before(), [3, 4, 1]);
     }
 
     #[test]
-    fn the_floor_ends_at_the_box() {
+    fn a_line_through_air_meets_nothing() {
         let volume = with(&[]);
-        assert_eq!(volume.trace(&[[20.0, 4.0, 6.0], [20.0, 4.0, -3.0]]), None);
+        assert_eq!(volume.trace(&[[3.2, 4.7, 6.0], [3.2, 4.7, -3.0]]), None);
     }
 
     #[test]

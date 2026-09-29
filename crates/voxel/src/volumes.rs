@@ -1,13 +1,12 @@
 //! Volumes side by side, read as one.
 //!
-//! The ground a build stands on is cut into plots, the squares of a fixed
-//! grid, and a volume stands over one plot, on a floor of its own. They share
-//! a frame: `x` and `y` across, cut every [`Volumes::side`] cells, and `z` up.
-//! A gesture, a line of sight, the sides that show and a footing read across
-//! the plots as if the cells were one store, so what is too big for one
-//! volume stands over two neighbours. Two neighbours on floors of different
-//! heights meet as terraces: the higher floor is a wall to the lower volume.
-//! Off every open plot there is nothing, neither a cell nor a floor.
+//! The frame is cut into plots, the squares of a fixed grid, and a volume
+//! stands over one plot, as low and as tall as whoever opens it says. They
+//! share the frame: `x` and `y` across, cut every [`Volumes::side`] cells,
+//! and `z` up, cut by the chunk. A gesture, a line of sight, the sides that
+//! show and a footing read across the plots as if the cells were one store,
+//! so what is too big for one volume stands over two neighbours. Off every
+//! open plot there is nothing.
 
 use std::collections::BTreeMap;
 
@@ -16,7 +15,7 @@ use crate::trace::trace;
 use crate::{CHUNK, CHUNK_BITS, Cell, Cells, Gap, Gesture, Hit, Quad, Span, Volume};
 
 /// A volume over its plot, and where its first cell is in the frame: the
-/// corner of the plot, at the height of the floor.
+/// corner of the plot, at the height the volume starts from.
 #[derive(Clone)]
 struct Standing {
     origin: [i32; 3],
@@ -45,8 +44,6 @@ impl Standing {
 pub struct Volumes {
     /// Cells along the side of a plot, as a power of two.
     bits: u32,
-    /// Cells a volume is tall.
-    height: u32,
     standing: BTreeMap<[i32; 2], Standing>,
 }
 
@@ -54,19 +51,17 @@ impl core::fmt::Debug for Volumes {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Volumes")
             .field("side", &self.side())
-            .field("height", &self.height)
             .field("plots", &self.standing.keys().collect::<Vec<_>>())
             .finish()
     }
 }
 
 impl Volumes {
-    /// No volume yet, over plots of `2^plot_bits` cells a side, each volume
-    /// `height` cells tall. A plot holds at least a chunk.
-    pub fn new(plot_bits: u32, height: u32) -> Volumes {
+    /// No volume yet, over plots of `2^plot_bits` cells a side. A plot holds
+    /// at least a chunk.
+    pub fn new(plot_bits: u32) -> Volumes {
         Volumes {
             bits: plot_bits.max(CHUNK_BITS),
-            height: height.max(1),
             standing: BTreeMap::new(),
         }
     }
@@ -81,25 +76,29 @@ impl Volumes {
         [x >> self.bits, y >> self.bits]
     }
 
-    /// Opens a volume over a plot, with its floor at `floor`. False where one
-    /// stands already, which keeps its floor and its cells.
-    pub fn open(&mut self, plot: [i32; 2], floor: i32) -> bool {
+    /// Opens a volume over a plot, holding the cells from `low` up to
+    /// `height` over it, and as many more as bring its bottom and its top to
+    /// a chunk of the frame: a chunk is cut by the frame along `z` as along
+    /// `x` and `y`. False where a volume stands already, which stays as it is.
+    pub fn open(&mut self, plot: [i32; 2], low: i32, height: u32) -> bool {
         if self.standing.contains_key(&plot) {
             return false;
         }
+        let chunk = CHUNK as i32;
+        let bottom = low.div_euclid(chunk) * chunk;
+        let top = (low + height.max(1) as i32 + chunk - 1).div_euclid(chunk) * chunk;
         let side = self.side();
         let standing = Standing {
-            origin: [plot[0] << self.bits, plot[1] << self.bits, floor],
-            volume: Volume::new([side, side, self.height]),
+            origin: [plot[0] << self.bits, plot[1] << self.bits, bottom],
+            volume: Volume::new([side, side, (top - bottom) as u32]),
         };
         self.standing.insert(plot, standing);
         true
     }
 
-    /// The height of the floor of the volume over a plot, `None` where no
-    /// volume stands.
-    pub fn floor(&self, plot: [i32; 2]) -> Option<i32> {
-        self.standing.get(&plot).map(|standing| standing.origin[2])
+    /// Whether a volume stands over a plot.
+    pub fn is_open(&self, plot: [i32; 2]) -> bool {
+        self.standing.contains_key(&plot)
     }
 
     /// The cells of the volume over a plot.
@@ -146,10 +145,9 @@ impl Volumes {
     }
 
     /// Whether a place is solid to a ray, a body or the light: a cell that is
-    /// not air, or the floor under a volume.
+    /// not air.
     pub fn solid(&self, at: [i32; 3]) -> bool {
-        self.over(at[0], at[1])
-            .is_some_and(|standing| standing.volume.solid(standing.local(at)))
+        !self.get(at).is_air()
     }
 
     /// Applies a gesture to every volume its box reaches into. Returns the
@@ -233,8 +231,8 @@ impl Volumes {
     }
 
     /// The visible sides of the cells of one chunk, named by its lowest
-    /// corner. A side against a solid cell or the floor of the volume next
-    /// door is hidden as one against its own.
+    /// corner. A side against a solid cell of the volume next door is hidden
+    /// as one against its own.
     pub fn faces(&self, chunk: [i32; 3]) -> Vec<Quad> {
         let Some(standing) = self.over(chunk[0], chunk[1]) else {
             return Vec::new();
@@ -282,24 +280,26 @@ impl Volumes {
     /// its step reaches `reach` cells up the frame. `None` off every volume.
     pub fn gap(&self, x: i32, y: i32, reach: f64) -> Option<Gap> {
         let standing = self.over(x, y)?;
-        let [x0, y0, floor] = standing.origin;
+        let [x0, y0, low] = standing.origin;
         let gap = standing
             .volume
-            .gap(x - x0, y - y0, reach - f64::from(floor))?;
+            .gap(x - x0, y - y0, reach - f64::from(low))?;
         Some(Gap {
-            floor: gap.floor + floor,
-            ceiling: gap.ceiling.map(|z| z + floor),
+            floor: gap.floor.map(|z| z + low),
+            ceiling: gap.ceiling.map(|z| z + low),
         })
+    }
+
+    /// Whether a column holds a solid cell with any part of it between two
+    /// heights: what stands in the way of something that tall.
+    pub fn covers(&self, x: i32, y: i32, from: f64, to: f64) -> bool {
+        (from.floor() as i32..=to.floor() as i32).any(|z| self.solid([x, y, z]))
     }
 }
 
 impl Cells for Volumes {
     fn get(&self, at: [i32; 3]) -> Cell {
         Volumes::get(self, at)
-    }
-
-    fn solid(&self, at: [i32; 3]) -> bool {
-        Volumes::solid(self, at)
     }
 }
 
@@ -310,34 +310,18 @@ struct Home<'a> {
     standing: &'a Standing,
 }
 
-impl Home<'_> {
-    fn at_home(&self, at: [i32; 3]) -> Option<[i32; 3]> {
-        let local = self.standing.local(at);
-        self.standing
-            .volume
-            .over_floor(local[0], local[1])
-            .then_some(local)
-    }
-}
-
 impl Cells for Home<'_> {
     fn get(&self, at: [i32; 3]) -> Cell {
-        match self.at_home(at) {
-            Some(local) => self.standing.volume.get(local),
-            None => self.volumes.get(at),
-        }
-    }
-
-    fn solid(&self, at: [i32; 3]) -> bool {
-        match self.at_home(at) {
-            Some(local) => self.standing.volume.solid(local),
-            None => self.volumes.solid(at),
+        let local = self.standing.local(at);
+        if self.standing.volume.over(local[0], local[1]) {
+            self.standing.volume.get(local)
+        } else {
+            self.volumes.get(at)
         }
     }
 }
 
-/// The cells a gesture would take, each one solid, over the floors of the
-/// volumes and nothing else.
+/// The cells a gesture would take, each one solid, and nothing else.
 struct Taken<'a> {
     volumes: &'a Volumes,
     span: Span,
@@ -350,11 +334,6 @@ impl Cells for Taken<'_> {
             && self.volumes.holds(at)
             && self.volumes.get(at).is_air() == self.takes_air;
         if taken { Cell::solid(0) } else { Cell::AIR }
-    }
-
-    fn solid(&self, at: [i32; 3]) -> bool {
-        let floor = !self.volumes.holds(at) && self.volumes.solid(at);
-        floor || !self.get(at).is_air()
     }
 }
 
@@ -375,12 +354,13 @@ mod tests {
     use super::*;
     use crate::Face;
 
-    /// Two volumes side by side along `x`, 32 cells a side and 16 tall, the
-    /// second on a floor `step` cells over the first.
-    fn pair(step: i32) -> Volumes {
-        let mut volumes = Volumes::new(5, 16);
-        assert!(volumes.open([0, 0], 0));
-        assert!(volumes.open([1, 0], step));
+    /// Two volumes side by side along `x`, 32 cells a side: the first from
+    /// the bottom of the frame and 32 tall, the second from `low` and as
+    /// tall.
+    fn pair(low: i32) -> Volumes {
+        let mut volumes = Volumes::new(5);
+        assert!(volumes.open([0, 0], 0, 32));
+        assert!(volumes.open([1, 0], low, 32));
         volumes
     }
 
@@ -393,17 +373,21 @@ mod tests {
 
     #[test]
     fn a_plot_is_cut_by_the_frame_and_opens_once() {
-        let mut volumes = Volumes::new(5, 16);
+        let mut volumes = Volumes::new(5);
         assert_eq!(volumes.plot_of(31, 32), [0, 1]);
         assert_eq!(volumes.plot_of(-1, 0), [-1, 0]);
-        assert!(volumes.open([2, -1], 7));
-        assert!(!volumes.open([2, -1], 9));
-        assert_eq!(volumes.floor([2, -1]), Some(7));
-        assert_eq!(volumes.floor([0, 0]), None);
+        assert!(volumes.open([2, -1], 7, 20));
+        assert!(!volumes.open([2, -1], 90, 20));
+        assert!(volumes.is_open([2, -1]));
+        assert!(!volumes.is_open([0, 0]));
+        // From 7 to 27, and out to the chunks that hold them.
         assert_eq!(
             volumes.bounds([2, -1]),
-            Some(Span::between([64, -32, 7], [95, -1, 22]))
+            Some(Span::between([64, -32, 0], [95, -1, 31]))
         );
+        assert!(volumes.open([0, 0], -20, 20));
+        let bounds = volumes.bounds([0, 0]).unwrap();
+        assert_eq!((bounds.min[2], bounds.max[2]), (-32, -1));
     }
 
     #[test]
@@ -423,8 +407,7 @@ mod tests {
         assert_eq!(changed, Some(Span::between([60, 3, 0], [63, 3, 0])));
         assert!(volumes.get([64, 3, 0]).is_air());
         assert!(!volumes.holds([64, 3, 0]));
-        assert!(!volumes.solid([64, 3, -1]));
-        assert!(volumes.solid([63, 3, -1]));
+        assert!(!volumes.holds([63, 3, -1]));
         assert_eq!(volumes.gap(64, 3, 1.0), None);
     }
 
@@ -434,8 +417,8 @@ mod tests {
         create(&mut volumes, [31, 3, 0], [32, 3, 0], 0);
         let mut quads = volumes.faces([16, 0, 0]);
         quads.extend(volumes.faces([32, 0, 0]));
-        // Two cubes in a row on a floor: five sides each, less the one between.
-        assert_eq!(quads.len(), 8);
+        // Two cubes in a row: six sides each, less the one between.
+        assert_eq!(quads.len(), 10);
         assert!(
             !quads
                 .iter()
@@ -464,23 +447,19 @@ mod tests {
     }
 
     #[test]
-    fn a_higher_floor_is_a_wall_to_the_volume_beside_it() {
-        let mut volumes = pair(2);
-        create(&mut volumes, [31, 3, 0], [31, 3, 2], 0);
-        let quads = volumes.faces([16, 0, 0]);
-        let beside = |z: i32| {
-            quads
-                .iter()
-                .any(|q| q.cell == [31, 3, z] && q.face == Face::new(0, true))
-        };
-        // The floor next door stands two cells up: under it a side is shut.
-        assert!(!beside(0));
-        assert!(!beside(1));
-        assert!(beside(2));
-        // Nothing is written under a floor.
-        assert_eq!(create(&mut volumes, [32, 3, 0], [32, 3, 1], 0), None);
-        assert_eq!(volumes.gap(31, 3, 1.0).unwrap().floor, 3);
-        assert_eq!(volumes.gap(32, 3, 1.0).unwrap().floor, 2);
+    fn volumes_that_start_at_different_heights_are_read_as_one() {
+        // The second starts a chunk higher: what both hold meets, and what
+        // only one holds is its own.
+        let mut volumes = pair(16);
+        create(&mut volumes, [31, 3, 20], [32, 3, 20], 0);
+        let mut quads = volumes.faces([16, 0, 16]);
+        quads.extend(volumes.faces([32, 0, 16]));
+        assert_eq!(quads.len(), 10);
+        let changed = create(&mut volumes, [31, 3, 4], [32, 3, 4], 0);
+        assert_eq!(changed, Some(Span::cell([31, 3, 4])));
+        assert_eq!(volumes.gap(31, 3, 5.0).unwrap().floor, Some(5));
+        assert_eq!(volumes.gap(32, 3, 5.0).unwrap().floor, None);
+        assert_eq!(volumes.gap(32, 3, 21.0).unwrap().floor, Some(21));
     }
 
     #[test]
@@ -492,12 +471,7 @@ mod tests {
             .expect("hit");
         assert_eq!(hit.cell, [40, 3, 2]);
         assert_eq!(hit.face, Face::new(0, false));
-        assert!(!hit.on_floor());
-        let floor = volumes
-            .trace(&[[30.5, 3.5, 4.0], [36.5, 3.5, -2.0]])
-            .expect("hit");
-        assert_eq!(floor.cell, [34, 3, -1]);
-        assert!(floor.on_floor());
+        assert_eq!(volumes.trace(&[[30.5, 3.5, 4.0], [36.5, 3.5, -2.0]]), None);
     }
 
     #[test]
@@ -522,24 +496,28 @@ mod tests {
 
     #[test]
     fn what_is_held_of_a_box_is_what_volumes_have_of_it() {
-        let volumes = pair(3);
+        let volumes = pair(16);
         let span = Span::between([-9, 3, -5], [200, 3, 40]);
         assert_eq!(
             volumes.held(span),
-            Some(Span::between([0, 3, 0], [63, 3, 18]))
+            Some(Span::between([0, 3, 0], [63, 3, 40]))
         );
         assert_eq!(volumes.held(Span::cell([70, 3, 0])), None);
     }
 
     #[test]
     fn chunks_are_named_by_their_corner_in_the_frame() {
-        let mut volumes = pair(3);
-        let span = Span::between([30, 0, 0], [33, 0, 4]);
-        assert_eq!(volumes.chunks_in(span), vec![[16, 0, 0], [32, 0, 3]]);
-        create(&mut volumes, [33, 0, 3], [33, 0, 3], 0);
-        assert_eq!(volumes.faces([32, 0, 3]).len(), 5);
+        let mut volumes = pair(16);
+        let span = Span::between([30, 0, 14], [33, 0, 17]);
+        assert_eq!(
+            volumes.chunks_in(span),
+            vec![[16, 0, 0], [16, 0, 16], [32, 0, 16]]
+        );
+        create(&mut volumes, [33, 0, 17], [33, 0, 17], 0);
+        assert_eq!(volumes.faces([32, 0, 16]).len(), 6);
         assert!(volumes.faces([32, 0, 0]).is_empty());
-        assert!(volumes.faces([16, 0, 0]).is_empty());
+        assert!(volumes.faces([16, 0, 16]).is_empty());
+        assert!(volumes.faces([32, 0, 17]).is_empty());
     }
 
     #[test]
@@ -548,13 +526,24 @@ mod tests {
         create(&mut volumes, [31, 3, 0], [32, 3, 0], 0);
         let span = Span::between([30, 3, 0], [33, 3, 0]);
         // Creating takes the air either side of the two cubes: two cells
-        // apart, five sides each.
+        // apart, six sides each.
         let ghost = volumes.ghost(Gesture::Create { span, paint: 1 });
-        assert_eq!(ghost.len(), 10);
+        assert_eq!(ghost.len(), 12);
         assert!(ghost.iter().all(|q| q.cell[0] == 30 || q.cell[0] == 33));
-        // Deleting takes the cubes, across the two volumes as one: eight.
-        assert_eq!(volumes.ghost(Gesture::Delete { span }).len(), 8);
+        // Deleting takes the cubes, across the two volumes as one: ten.
+        assert_eq!(volumes.ghost(Gesture::Delete { span }).len(), 10);
         let off = Span::between([64, 3, 0], [70, 3, 0]);
         assert!(volumes.ghost(Gesture::Delete { span: off }).is_empty());
+    }
+
+    #[test]
+    fn a_column_is_covered_where_a_cell_stands_in_the_way() {
+        let mut volumes = pair(0);
+        create(&mut volumes, [5, 5, 9], [5, 5, 9], 0);
+        assert!(volumes.covers(5, 5, 8.2, 9.1));
+        assert!(volumes.covers(5, 5, 9.9, 12.0));
+        assert!(!volumes.covers(5, 5, 7.0, 8.9));
+        assert!(!volumes.covers(5, 5, 10.0, 12.0));
+        assert!(!volumes.covers(6, 5, 8.2, 9.1));
     }
 }

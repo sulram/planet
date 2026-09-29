@@ -60,8 +60,7 @@ pub enum BuildRefusal {
     Moon,
     /// The ground here is under the sea.
     Sea,
-    /// The plot is on the edge of a sector: a volume and its margin stay
-    /// inside one.
+    /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
 }
 
@@ -116,10 +115,19 @@ pub enum Command {
         here: bool,
     },
     /// Build with a tool, or stop building with `null`. Starting where no
-    /// volume stands opens the one of the plot under the body, on flat ground.
+    /// volume stands opens the one of the plot under the body, and lays a
+    /// platform under its feet.
     SetTool {
         tool: Option<Tool>,
     },
+    /// The side of the platform laid next, in cells: the size on offer
+    /// nearest to it, 8, 16, 32 or 64.
+    SetPlatform {
+        side: u32,
+    },
+    /// Lays a platform where the body stands: a slab at the height of its
+    /// feet, on pillars down to the ground.
+    LayPlatform,
     /// The paint the next stroke lays: an index into [`Event::Palette`].
     SetPaint {
         paint: u8,
@@ -202,11 +210,13 @@ pub enum Event {
     /// screen is the world at the detail it is meant to have. Sent each time
     /// that becomes true again, after a new recipe, a leap or a walk.
     Settled,
-    /// The tool in hand, `None` when not building, and the paint it lays.
-    /// Sent once at the start too.
+    /// The tool in hand, `None` when not building, the paint it lays, and
+    /// the side of the platform laid next, in cells. Sent once at the start
+    /// too.
     ToolChanged {
         tool: Option<Tool>,
         paint: u8,
+        platform: u32,
     },
     /// The paints a cell can take, in order, as `#rrggbb`. Sent once, first
     /// after [`Event::Ready`].
@@ -336,10 +346,23 @@ mod tests {
         assert_eq!(
             Event::ToolChanged {
                 tool: Some(Tool::Create),
-                paint: 3
+                paint: 3,
+                platform: 16
             }
             .to_json(),
-            r#"{"type":"tool_changed","tool":"create","paint":3}"#
+            r#"{"type":"tool_changed","tool":"create","paint":3,"platform":16}"#
+        );
+    }
+
+    #[test]
+    fn a_platform_is_picked_and_laid() {
+        assert_eq!(
+            Command::from_json(r#"{"type":"set_platform","side":32}"#).unwrap(),
+            Command::SetPlatform { side: 32 }
+        );
+        assert_eq!(
+            Command::from_json(r#"{"type":"lay_platform"}"#).unwrap(),
+            Command::LayPlatform
         );
     }
 

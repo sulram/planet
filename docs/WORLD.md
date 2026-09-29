@@ -88,20 +88,20 @@ m4-K7M42Q@40,180,-5
 | Build | air or a paint per cell, an inside | one quad per side facing air, each corner bent onto the body | create, delete, paint | inside a volume |
 
 - Nature is a surface (58): one ground per direction, no cave, no overhang,
-  nothing to be inside of, and not editable by anyone in world. A landlord
-  shapes it at the recipe level, through a volume's stamp.
+  nothing to be inside of, and not editable by anyone in world. What is built
+  leaves it as it is (78).
 - A volume is an integer address box where building is granted, with an
   inside: cellars and overhangs. In the client alone, nothing sent or kept (76).
 - The address cuts volumes (77): plots of 64 blocks a side, `(u >> 6, v >> 6)`,
-  a volume 64 cells tall over each, opened under the body that takes a tool.
-  They touch and a sector's are read as one, so a build stands over two
-  neighbours, on one floor: one opened beside another takes its floor.
+  a volume over each from its lowest ground to 64 cells over its highest.
+  They touch and are read as one, so a build stands over two neighbours.
+- A build stands on a platform (78): a slab of cells, 8 to 64 a side as
+  picked, cut by the address, its top over the highest ground under it, on
+  pillars down to the ground. Taking a tool where no volume stands lays one.
 - The two meet at a containment boundary: authored, integer, and decided by a
   person or by the recipe, never by where a quadtree runs out of levels.
-- A stamp is how anything that is not terrain seats into terrain: a flatten
-  and blend footprint read when the ground is sampled, never an edit. It holds
-  a volume's floor under any other stamp's margin and eases back over 8 m as
-  `Material::Plot`, where nothing grows (75, 77).
+- A stamp seats what is not a volume into terrain: a flatten and blend
+  footprint read when the ground is sampled, in the recipe, never an edit.
 - A cell is a 0.5 m block of the address, air or a paint; a gesture fills air,
   empties or repaints over a box (75). Chunks of 16 a side are what is stored
   and redrawn, and an empty one takes no room. All in `crates/voxel`: no sphere.

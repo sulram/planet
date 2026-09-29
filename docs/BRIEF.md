@@ -69,15 +69,14 @@ game chose not to build a voxel pyramid.
 - Light baked at mesh time: flood fill sun, per face AO, a glow channel.
 - `crates/voxel` holds cells, gestures, sight, faces and footing (75).
 
-### The platform: a volume stamps the ground
+### The platform: built, and the ground left as it is
 
-- A volume carries a flatten and blend footprint applied by `sample_at`, so
-  the ground under a platform is part of **the recipe**, not an edit.
-- Deterministic, tiny to store, server side, and applied at every LOD level by
-  construction. The platform seam is solved rather than biased away.
+- A build stands on a slab of cells on pillars down to the ground, and the
+  ground under a volume stays nature's (78, WORLD.md § Two layers).
+- **A stamp is how what is not a volume seats into terrain**: a flatten and
+  blend footprint applied by `sample_at`, part of the recipe and never an
+  edit, at every LOD level by construction. A cave mouth, below.
 - One read path survives: the ground is the field plus the stamps over it.
-- **A stamp is how anything that is not terrain seats into terrain**: a
-  platform, and a cave mouth below.
 
 ### Water: the sea stays, and volumes go under it
 
@@ -157,8 +156,8 @@ Do not check out `feat/world-earth`. Branch from `feat/voxel` and restore.
    recipe. Patches read it. Measure the settle time against 7.4 s.
 4. Horizon map in the shader; nothing coarse in a cascade.
 5. Per pixel voxelization of the far ground, so the seam stops showing.
-6. The volume, taken ahead of 3 to 5 (76). Done: one opens where you stand on
-   a stamp, its sides are drawn, and it is built in by click and drag. Left:
+6. The volume, taken ahead of 3 to 5 (76). Done: one opens where you stand,
+   on a platform, its sides are drawn, and it is built in by click and drag. Left:
    bake its light, stream it by proximity, put one under the sea.
 7. Persist a volume and permission its edits. That is M3 and M4 arriving
    together, because they were always the same box.

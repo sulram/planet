@@ -1,17 +1,19 @@
 <script lang="ts">
 	import { Alert, Button, Panel, Segmented } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { tools, type BuildRefusal, type Tool } from './index';
+	import { platforms, tools, type BuildRefusal, type Tool } from './index';
 
 	// Building: a button in the bottom right corner, and the panel it opens
-	// while a tool is in hand. A front-end only: it shows the tool and paint
-	// the engine says are in hand and asks for others; where a volume opens
-	// and what a stroke does are the engine's.
+	// while a tool is in hand. A front-end only: it shows the tool, the paint
+	// and the platform the engine says are picked and asks for others; where a
+	// volume opens, what a platform is and what a stroke does are the engine's.
 	interface Props {
 		/** The tool in hand, null when not building. */
 		tool: Tool | null;
 		/** Index into `palette`. */
 		paint: number;
+		/** The side of the platform laid next, in cells. */
+		platform: number;
 		/** The paints a cell can take, as `#rrggbb`, in order. */
 		palette: string[];
 		/** Why the last try to build found no room, until the next one. */
@@ -20,13 +22,17 @@
 		history: { undo: boolean; redo: boolean };
 		onbuild: (tool: Tool | null) => void;
 		onpaint: (paint: number) => void;
+		onplatform: (side: number) => void;
+		/** Lay a platform where the body stands. */
+		onlay: () => void;
 		onundo: () => void;
 		onredo: () => void;
 	}
 
-	let { tool, paint, palette, refused, history, onbuild, onpaint, onundo, onredo }: Props = $props();
+	let { tool, paint, platform, palette, refused, history, onbuild, onpaint, onplatform, onlay, onundo, onredo }: Props = $props();
 
 	const toolOptions = $derived(tools.map((value) => ({ value, label: t(`engine.build.tool.${value}`) })));
+	const platformOptions = platforms.map((side) => ({ value: String(side), label: String(side) }));
 
 	// Building again takes the tool put down last, as B does in the engine.
 	let last = $state<Tool>('create');
@@ -41,6 +47,8 @@
 			<button class="close" type="button" onclick={() => onbuild(null)}>{t('common.close')}</button>
 		{/snippet}
 		<Segmented options={toolOptions} value={tool} label={t('engine.build.tool')} onselect={(value) => onbuild(value)} />
+		{@render size()}
+		<Button variant="ghost" type="button" onclick={onlay}>{t('engine.build.platform.lay')}</Button>
 		<div class="palette" role="group" aria-label={t('engine.build.paint')}>
 			{#each palette as color, index (index)}
 				<button
@@ -64,9 +72,24 @@
 		{#if refused}
 			<Alert variant="info">{t(`engine.build.refused.${refused}`)}</Alert>
 		{/if}
+		{@render size()}
 		<Button variant="ghost" type="button" onclick={() => onbuild(last)}>{t('engine.build')}</Button>
 	</div>
 {/if}
+
+<!-- The side of the platform laid next: picked before building starts, since
+     starting lays the first one, and at any time after. -->
+{#snippet size()}
+	<div class="platform">
+		<span>{t('engine.build.platform')}</span>
+		<Segmented
+			options={platformOptions}
+			value={String(platform)}
+			label={t('engine.build.platform')}
+			onselect={(value) => onplatform(Number(value))}
+		/>
+	</div>
+{/snippet}
 
 <style>
 	.toggle {
@@ -82,6 +105,12 @@
 	}
 	.toggle :global(button) {
 		background: var(--bg-overlay);
+	}
+	.platform {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+		color: var(--text-muted);
 	}
 	.close {
 		border: none;

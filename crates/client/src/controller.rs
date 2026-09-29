@@ -272,6 +272,18 @@ impl Controller {
         self.vertical_mps = 0.0;
     }
 
+    /// Lifts the avatar onto something built under it, when it stands lower:
+    /// on foot it stands there as it does on the ground, and in flight it
+    /// keeps flying.
+    pub fn lift_onto(&mut self, floor_m: f64) {
+        if self.height_m >= floor_m {
+            return;
+        }
+        self.height_m = floor_m;
+        self.vertical_mps = 0.0;
+        self.grounded = self.mode == Mode::Walk;
+    }
+
     /// Puts the avatar on the moon, at a direction from its centre. The moon
     /// has to be where the clock says before this, because a body without one
     /// has nothing to stand on.
@@ -893,23 +905,20 @@ mod tests {
     /// runs the width of it, flying at it for two seconds. How far along `u`
     /// it ends short of the wall, in cells: negative past it.
     fn fly_at_a_wall(tool: Option<Tool>) -> f64 {
-        let mut generator = Generator::new(Recipe::new(1)).unwrap();
+        let generator = Generator::new(Recipe::new(1)).unwrap();
         let side = f64::from(generator.sphere().blocks().side());
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut build = Build::default();
-        build.open(&mut generator, point).unwrap();
-        // A cell is the address it has: the wall stands eight columns on
-        // from the body, across the whole of the plot.
+        let floor_m = build.lay_platform(&generator, point).unwrap();
+        // A cell is the address it has: the wall stands on the slab eight
+        // columns on from the body, across the whole of the plot.
+        let top = (floor_m / BLOCK_M) as i32;
         let cells = build.cells_over(point).unwrap();
-        let floor_m = f64::from(cells.min[2]) * BLOCK_M;
         let x = point.u.floor() as i32 + 8;
         build.lay(
-            generator.sphere(),
+            &generator,
             Gesture::Create {
-                span: Span::between(
-                    [x, cells.min[1], cells.min[2]],
-                    [x, cells.max[1], cells.min[2] + 7],
-                ),
+                span: Span::between([x, cells.min[1], top], [x, cells.max[1], top + 7]),
                 paint: 0,
             },
         );

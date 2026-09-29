@@ -1,6 +1,8 @@
 //! Cosmetic vegetation from existing terrain samples, with no generator calls.
 //! A tuft is identified by integers (sector, tier, tier cell), never by the
-//! patch that happens to carry it, so subdivision does not move it.
+//! patch that happens to carry it, so subdivision does not move it. Where
+//! something built stands in its way a tuft does not grow: the ground is as
+//! it was, and nothing comes up through a floor.
 
 use glam::{DVec3, Vec3};
 use scene::{GRASS_TIER_0_REACH_M, GrassInstance, PATCH_GRID, TerrainVertex};
@@ -44,19 +46,35 @@ fn first_tier(side: u32) -> u32 {
     }
 }
 
+/// Whether a patch `side` blocks wide carries any tuft: fine enough to hold
+/// one, and near enough to be within reach of a tier.
+pub fn grows(side: u32) -> bool {
+    side >= PATCH_GRID && first_tier(side) < TIERS
+}
+
+/// A tuft at its tallest, metres.
+pub const TUFT_M: f64 = 1.05;
+
 /// Tufts of a patch, farthest reaching tier first: a renderer draws a prefix.
 /// Roots are interpolated on the triangles being drawn, so they sit on them.
+/// `covered` says whether something stands over a column of the sector, `u`
+/// and `v` in blocks, between two heights in metres over the datum.
 pub fn build(
     patch: Patch,
     origin: DVec3,
     vertices: &[TerrainVertex],
     samples: &[(DVec3, Sample)],
+    covered: &dyn Fn([f64; 2], [f64; 2]) -> bool,
 ) -> Vec<GrassInstance> {
     let side = patch.sector_side >> patch.depth;
-    if side < PATCH_GRID {
+    if !grows(side) {
         return Vec::new();
     }
     let g = PATCH_GRID as usize;
+    // Every sample stands its height over the datum.
+    let radius_m = samples.first().map_or(0.0, |(position, sample)| {
+        position.length() - sample.height_m
+    });
     let half_blocks = side * 2;
     let mut grass = Vec::new();
     for tier in (first_tier(side)..TIERS).rev() {
@@ -108,9 +126,19 @@ pub fn build(
                     continue;
                 }
                 let tint = random(16);
+                let height = 0.55 + tint * 0.50;
+                let at = [patch.cell[0], patch.cell[1]].map(f64::from);
+                let column = [
+                    (at[0] + f64::from(x) / g as f64) * f64::from(side),
+                    (at[1] + f64::from(y) / g as f64) * f64::from(side),
+                ];
+                let root_m = (origin + root.as_dvec3()).length() - radius_m;
+                if covered(column, [root_m, root_m + f64::from(height)]) {
+                    continue;
+                }
                 grass.push(GrassInstance {
                     root: (root - up * 0.015).to_array(),
-                    height: 0.55 + tint * 0.50,
+                    height,
                     normal: normal.to_array(),
                     reach_m,
                     color: [0.10 + tint * 0.05, 0.20 + tint * 0.09, 0.035 + tint * 0.02],
@@ -171,6 +199,7 @@ mod tests {
             origin,
             &vertices,
             &samples,
+            &|_, _| false,
         );
         (origin, grass)
     }

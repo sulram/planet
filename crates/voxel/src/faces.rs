@@ -1,8 +1,7 @@
 //! The sides of cells that show, and how shut in each of their corners is.
 //!
 //! Every side of a solid cell that looks at air is one quad; sides between
-//! two solids, across two volumes too, and the bottoms of cells on the floor,
-//! are never drawn. Sides
+//! two solids, across two volumes too, are never drawn. Sides
 //! are not merged into larger quads: whoever seats a volume on a curved body
 //! bends each corner onto it, and a merged quad would be a chord whose
 //! neighbours meet it in the middle of an edge, where the surface cracks.
@@ -163,16 +162,15 @@ mod tests {
     }
 
     #[test]
-    fn a_cube_on_the_floor_shows_five_sides() {
+    fn a_cube_alone_shows_six_sides() {
         let mut volume = Volume::new([8, 8, 8]);
         volume.apply(Gesture::Create {
             span: Span::cell([2, 2, 0]),
             paint: 3,
         });
         let quads = volume.faces([0, 0, 0]);
-        assert_eq!(quads.len(), 5);
+        assert_eq!(quads.len(), 6);
         assert!(quads.iter().all(|q| q.paint == 3));
-        assert!(!quads.iter().any(|q| q.face == Face::new(2, false)));
     }
 
     #[test]
@@ -186,19 +184,23 @@ mod tests {
     }
 
     #[test]
-    fn the_floor_shuts_in_the_foot_of_a_wall() {
+    fn a_slab_shuts_in_the_foot_of_a_wall() {
         let mut volume = Volume::new([8, 8, 8]);
         volume.apply(Gesture::Create {
-            span: Span::cell([2, 2, 0]),
+            span: Span::between([0, 0, 0], [7, 7, 0]),
+            paint: 0,
+        });
+        volume.apply(Gesture::Create {
+            span: Span::cell([2, 2, 1]),
             paint: 0,
         });
         let side = volume
             .faces([0, 0, 0])
             .into_iter()
-            .find(|q| q.face == Face::new(0, true))
+            .find(|q| q.cell == [2, 2, 1] && q.face == Face::new(0, true))
             .expect("the +x side");
         for (corner, open) in side.corners().into_iter().zip(side.open) {
-            let low = corner[2] == 0;
+            let low = corner[2] == 1;
             assert_eq!(open < 3, low, "{corner:?} {open}");
         }
     }

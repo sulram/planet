@@ -2,12 +2,13 @@
 //!
 //! A volume knows no sphere (CLAUDE.md, How it grows). Its cells are unit
 //! cubes in a frame of its own, `x` and `y` across and `z` up, and seating it
-//! on a body is the client's job. Under `z = 0` is the floor it stands on:
-//! solid to a ray, to a body and to the light, never a cell, never edited.
+//! on a body is the client's job. It knows no ground either: what is not a
+//! cell is air, and whoever seats a volume says where the ground passes.
 //!
-//! Volumes stand side by side on a fixed grid of plots ([`Volumes`]), each on
-//! a floor of its own, and are read as one, so what is too big for one volume
-//! stands over two neighbours.
+//! Volumes stand side by side on a fixed grid of plots ([`Volumes`]) and are
+//! read as one, so what is too big for one volume stands over two
+//! neighbours. What a build stands on is built too: a [`Platform`], a slab
+//! on columns down to the ground.
 //!
 //! What lives here is what every front end and the server will agree on: what
 //! a gesture does to the cells ([`Gesture`]), which cell a line of sight meets
@@ -17,11 +18,13 @@
 
 mod faces;
 mod gesture;
+mod platform;
 mod trace;
 mod volumes;
 
 pub use faces::Quad;
 pub use gesture::Gesture;
+pub use platform::Platform;
 pub use trace::{Hit, crossing};
 pub use volumes::Volumes;
 
@@ -80,7 +83,7 @@ impl Face {
         Face::new(2, false),
     ];
 
-    /// The top of a cell, and of the floor.
+    /// The top of a cell.
     pub const UP: Face = Face::new(2, true);
 
     pub const fn new(axis: usize, positive: bool) -> Face {
@@ -167,11 +170,12 @@ impl Span {
 }
 
 /// What holds up a body standing in one column: the top of the solid under
-/// its feet and the bottom of the solid over its head, in cells over the
-/// floor.
+/// its feet and the bottom of the solid over its head, in cells.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Gap {
-    pub floor: i32,
+    /// `None` when nothing is under the feet down to the bottom of the
+    /// volume.
+    pub floor: Option<i32>,
     /// `None` when nothing is over the head up to the top of the volume.
     pub ceiling: Option<i32>,
 }
@@ -182,18 +186,15 @@ pub(crate) trait Cells {
     /// The cell at a place, air where there is none.
     fn get(&self, at: [i32; 3]) -> Cell;
 
-    /// Whether a place is solid to a ray, a body or the light: a cell that is
-    /// not air, or a floor.
-    fn solid(&self, at: [i32; 3]) -> bool;
+    /// Whether a place is solid to a ray, a body or the light.
+    fn solid(&self, at: [i32; 3]) -> bool {
+        !self.get(at).is_air()
+    }
 }
 
 impl Cells for Volume {
     fn get(&self, at: [i32; 3]) -> Cell {
         Volume::get(self, at)
-    }
-
-    fn solid(&self, at: [i32; 3]) -> bool {
-        Volume::solid(self, at)
     }
 }
 
@@ -259,8 +260,8 @@ impl Volume {
         self.bounds().contains(at)
     }
 
-    /// Whether a column stands on the floor of this box.
-    pub fn over_floor(&self, x: i32, y: i32) -> bool {
+    /// Whether a column passes through this box.
+    pub fn over(&self, x: i32, y: i32) -> bool {
         (0..self.size[0] as i32).contains(&x) && (0..self.size[1] as i32).contains(&y)
     }
 
@@ -276,11 +277,8 @@ impl Volume {
     }
 
     /// Whether a place is solid to a ray, a body or the light: a cell that is
-    /// not air, or the floor under the box.
+    /// not air.
     pub fn solid(&self, at: [i32; 3]) -> bool {
-        if at[2] < 0 {
-            return self.over_floor(at[0], at[1]);
-        }
         !self.get(at).is_air()
     }
 
@@ -351,14 +349,14 @@ impl Volume {
     }
 
     /// What a body standing in column `x, y` rests on and bumps into, when its
-    /// step reaches `reach` cells over the floor. `None` off the floor.
+    /// step reaches `reach` cells up the box. `None` off the box.
     ///
     /// Solid at the height of the step is a wall, and the wall's top is the
     /// floor it offers, which a walker refuses when it is more than a step up.
     /// Air there means the first solid below is the floor, and the first
     /// solid above is the roof.
     pub fn gap(&self, x: i32, y: i32, reach: f64) -> Option<Gap> {
-        if !self.over_floor(x, y) {
+        if !self.over(x, y) {
             return None;
         }
         let top = self.size[2] as i32;
@@ -370,9 +368,12 @@ impl Volume {
                 z += 1;
             }
             let ceiling = (z..top).find(|&z| solid(z));
-            return Some(Gap { floor: z, ceiling });
+            return Some(Gap {
+                floor: Some(z),
+                ceiling,
+            });
         }
-        let floor = (0..probe).rev().find(|&z| solid(z)).map_or(0, |z| z + 1);
+        let floor = (0..probe).rev().find(|&z| solid(z)).map(|z| z + 1);
         let ceiling = (probe + 1..top).find(|&z| solid(z));
         Some(Gap { floor, ceiling })
     }
@@ -421,11 +422,10 @@ mod tests {
     }
 
     #[test]
-    fn outside_the_box_is_air_and_under_it_is_floor() {
+    fn outside_the_box_is_air_and_so_is_under_it() {
         let volume = Volume::new([4, 4, 4]);
         assert_eq!(volume.get([9, 0, 0]), Cell::AIR);
-        assert!(volume.solid([2, 2, -1]));
-        assert!(!volume.solid([5, 2, -1]));
+        assert!(!volume.solid([2, 2, -1]));
         assert!(!volume.solid([2, 2, 0]));
     }
 
@@ -438,19 +438,20 @@ mod tests {
         volume.set([2, 0, 1], Cell::solid(0));
         volume.set([3, 0, 9], Cell::solid(0));
         let reach = 1.0;
+        // Nothing under the feet: a volume holds up only what is built.
         assert_eq!(
             volume.gap(0, 0, reach),
             Some(Gap {
-                floor: 0,
+                floor: None,
                 ceiling: None
             })
         );
-        assert_eq!(volume.gap(1, 0, reach).unwrap().floor, 1);
-        assert_eq!(volume.gap(2, 0, reach).unwrap().floor, 2);
+        assert_eq!(volume.gap(1, 0, reach).unwrap().floor, Some(1));
+        assert_eq!(volume.gap(2, 0, reach).unwrap().floor, Some(2));
         assert_eq!(
             volume.gap(3, 0, reach),
             Some(Gap {
-                floor: 0,
+                floor: None,
                 ceiling: Some(9)
             })
         );

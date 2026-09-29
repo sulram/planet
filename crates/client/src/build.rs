@@ -10,6 +10,10 @@
 //! flat, render spherical). Each corner of each side is bent onto the planet
 //! on its own, which is why the sides are never merged.
 //!
+//! The ground under a volume stays as nature made it (DECISIONS 78). What a
+//! build stands on is a platform, built where the body stands: a slab as
+//! high as the highest ground under it, on pillars down to the ground.
+//!
 //! Volumes live here only: nothing is sent or kept yet (DECISIONS 76).
 
 use std::collections::BTreeSet;
@@ -17,20 +21,31 @@ use std::collections::BTreeSet;
 use glam::{DQuat, DVec3, Vec3};
 use scene::{VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
-use voxel::{CHUNK_BITS, Cell, Gesture, Hit, Quad, Span, Volumes, crossing};
-use worldgen::{Generator, Stamp};
+use voxel::{CHUNK_BITS, Cell, Gesture, Hit, Platform, Quad, Span, Volumes, crossing};
+use worldgen::Generator;
 
 use crate::collision::{Footing, STEP_M};
+use crate::grass::TUFT_M;
 use crate::seam::{BuildRefusal, Tool};
 
 /// Blocks along the side of a plot, as a power of two: 64 of them, 32 metres
 /// at the middle of a sector. The address of a column, less these bits, is
 /// the plot it is on.
 const PLOT_BITS: u32 = 6;
-/// Cells a volume is tall: as tall as its plot is wide.
-const HEIGHT: u32 = 1 << PLOT_BITS;
-/// Metres over which the ground around a volume eases back to its own.
-const BLEND_M: f64 = 8.0;
+/// Cells a volume rises over the highest ground of its plot: as many as the
+/// plot is wide.
+const HEIGHT: i32 = 1 << PLOT_BITS;
+/// Blocks between the columns whose ground is read to find how low and how
+/// high the ground of a plot stands.
+const SURVEY: i32 = 8;
+/// Cells a volume holds under the lowest ground its survey found: the dip
+/// between two columns of it.
+const UNDER: i32 = 8;
+/// The sides a platform can have, in cells: powers of two, up to a plot.
+pub const PLATFORMS: [u32; 4] = [8, 16, 32, 64];
+/// Metres between the points of a line of sight where the ground is asked
+/// whether it hides what the pointer is over.
+const GROUND_STEP_M: f64 = 1.0;
 /// How far a pointer reaches into the world to build, metres.
 const REACH_M: f64 = 80.0;
 /// Metres between the points of a line of sight bent into a volume's cells:
@@ -125,9 +140,10 @@ impl Seated {
             .then(|| [point.u, point.v, (p.length() - sphere.radius_m()) / BLOCK_M])
     }
 
-    /// Opens the volume of a plot, on a floor at `floor` blocks.
-    fn open(&mut self, sphere: QuadSphere, plot: [i32; 2], floor: i32) {
-        if !self.volumes.open(plot, floor) {
+    /// Opens the volume of a plot, holding the blocks from `low` to `height`
+    /// over it.
+    fn open(&mut self, sphere: QuadSphere, plot: [i32; 2], low: i32, height: u32) {
+        if !self.volumes.open(plot, low, height) {
             return;
         }
         let Some(bounds) = self.volumes.bounds(plot) else {
@@ -229,6 +245,8 @@ pub struct Build {
     /// The tool taken last, which starting to build again takes.
     last_tool: Tool,
     paint: u8,
+    /// The side of the next platform, in cells, as a power of two.
+    platform_bits: u32,
     aim: Option<Aim>,
     stroke: Option<Stroke>,
     using: bool,
@@ -236,6 +254,9 @@ pub struct Build {
     ghost: Option<Gesture>,
     drawn: BTreeSet<VolumeMeshId>,
     changes: Vec<VolumeChange>,
+    /// Where cells changed near enough the ground to cover or bare a tuft,
+    /// as a cap of the body: its middle, unit, and its angle.
+    touched: Vec<(DVec3, f64)>,
     /// Strokes to take back, the last one last, and those taken back.
     done: Vec<Change>,
     undone: Vec<Change>,
@@ -248,12 +269,14 @@ impl Default for Build {
             tool: None,
             last_tool: Tool::Create,
             paint: 0,
+            platform_bits: 4,
             aim: None,
             stroke: None,
             using: false,
             ghost: None,
             drawn: BTreeSet::new(),
             changes: Vec::new(),
+            touched: Vec::new(),
             done: Vec::new(),
             undone: Vec::new(),
         }
@@ -288,52 +311,34 @@ impl Build {
         self.paint = paint.min(PALETTE.len() as u8 - 1);
     }
 
+    /// The side of the platform that is laid next, in cells.
+    pub fn platform(&self) -> u32 {
+        1 << self.platform_bits
+    }
+
+    /// Picks the side of the platform that is laid next: the one on offer
+    /// nearest to `side` cells.
+    pub fn set_platform(&mut self, side: u32) {
+        let nearest = PLATFORMS.into_iter().min_by_key(|on| on.abs_diff(side));
+        self.platform_bits = nearest.unwrap_or(PLATFORMS[0]).trailing_zeros();
+    }
+
     /// Whether a volume stands on a column.
     pub fn covers(&self, point: SurfacePoint) -> bool {
-        self.floor_at(point.sector, plot_of(point)).is_some()
+        self.sites
+            .iter()
+            .find(|site| site.sector == point.sector)
+            .is_some_and(|site| site.volumes.is_open(plot_of(point)))
     }
 
-    /// The floor of the volume over a plot, in blocks, where one stands.
-    fn floor_at(&self, sector: Sector, plot: [i32; 2]) -> Option<i32> {
-        let site = self.sites.iter().find(|site| site.sector == sector)?;
-        site.volumes.floor(plot)
-    }
-
-    /// The floor a volume over `plot` takes from those around it: that of
-    /// the nearest to `point` of the volumes it touches, by a side or by a
-    /// corner. A platform grows by its neighbours.
-    fn floor_beside(&self, sector: Sector, plot: [i32; 2], point: SurfacePoint) -> Option<i32> {
-        let side = f64::from(1u32 << PLOT_BITS);
-        let away = |beside: [i32; 2]| {
-            let out = |at: f64, low: i32| {
-                let low = f64::from(low) * side;
-                (low - at).max(at - (low + side)).max(0.0)
-            };
-            out(point.u, beside[0]).hypot(out(point.v, beside[1]))
-        };
-        (-1..=1)
-            .flat_map(|dv| (-1..=1).map(move |du| [plot[0] + du, plot[1] + dv]))
-            .filter_map(|beside| Some((away(beside), self.floor_at(sector, beside)?)))
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, floor)| floor)
-    }
-
-    /// Opens the volume of the plot a column is on, and returns the stamp
-    /// that holds its ground flat: the ground under it has to be drawn again.
-    /// `None` where the volume stands already. Its floor is that of the
-    /// volume beside it, or the ground at the column where none is.
-    pub fn open(
-        &mut self,
-        generator: &mut Generator,
-        point: SurfacePoint,
-    ) -> Result<Option<Stamp>, BuildRefusal> {
+    /// Opens the volume of the plot a column is on, where none stands. The
+    /// ground stays as it is, and the volume holds the blocks from the lowest
+    /// of it to [`HEIGHT`] over the highest.
+    fn open(&mut self, generator: &Generator, point: SurfacePoint) -> Result<(), BuildRefusal> {
         let sphere = generator.sphere();
         let plot = plot_of(point);
-        if self.floor_at(point.sector, plot).is_some() {
-            return Ok(None);
-        }
-        // A stamp holds within its sector, so a plot on the edge of one stays
-        // nature, and the corners of a sector with it.
+        // The corners of a sector are nature, and a build does not fold over
+        // a seam: a plot on the edge of its sector stays as it is.
         let inside = sphere
             .blocks()
             .coarsened(PLOT_BITS)
@@ -341,24 +346,25 @@ impl Build {
         if !inside {
             return Err(BuildRefusal::Seam);
         }
-        let ground_m = generator.sample(sphere.blocks().direction(point)).height_m;
-        if ground_m < 0.0 {
+        if ground(generator, point.sector, point.u, point.v) < 0.0 {
             return Err(BuildRefusal::Sea);
         }
-        let floor = self
-            .floor_beside(point.sector, plot, point)
-            .unwrap_or_else(|| libm::round(ground_m / BLOCK_M) as i32);
-        let low = plot.map(|n| f64::from(n << PLOT_BITS));
-        let side = f64::from(1u32 << PLOT_BITS);
-        let stamp = Stamp::new(
-            sphere,
-            point.sector,
-            [low[0], low[0] + side],
-            [low[1], low[1] + side],
-            f64::from(floor) * BLOCK_M,
-            BLEND_M,
-        );
-        generator.stamp(stamp);
+        if self.covers(point) {
+            return Ok(());
+        }
+        let low = plot.map(|n| n << PLOT_BITS);
+        let side = 1 << PLOT_BITS;
+        let heights = (0..=side).step_by(SURVEY as usize).flat_map(|dv| {
+            (0..=side).step_by(SURVEY as usize).map(move |du| {
+                let (u, v) = (f64::from(low[0] + du), f64::from(low[1] + dv));
+                ground(generator, point.sector, u, v)
+            })
+        });
+        let (lowest, highest) = heights.fold((f64::MAX, f64::MIN), |(lo, hi), blocks| {
+            (lo.min(blocks), hi.max(blocks))
+        });
+        let bottom = lowest.floor() as i32 - UNDER;
+        let top = highest.ceil() as i32 + HEIGHT;
         let site = match self
             .sites
             .iter()
@@ -368,14 +374,71 @@ impl Build {
             None => {
                 self.sites.push(Seated {
                     sector: point.sector,
-                    volumes: Volumes::new(PLOT_BITS, HEIGHT),
+                    volumes: Volumes::new(PLOT_BITS),
                     balls: Vec::new(),
                 });
                 self.sites.len() - 1
             }
         };
-        self.sites[site].open(sphere, plot, floor);
-        Ok(Some(stamp))
+        self.sites[site].open(sphere, plot, bottom, (top - bottom) as u32);
+        Ok(())
+    }
+
+    /// Lays a platform where a body stands, opening the volume of its plot
+    /// if none stands there: a slab of the side picked, in the paint in hand,
+    /// its top over the highest ground under it, on pillars down to the
+    /// ground. It is a stroke like any other, kept to take back. Returns the
+    /// height of the top of the slab, metres.
+    pub fn lay_platform(
+        &mut self,
+        generator: &Generator,
+        point: SurfacePoint,
+    ) -> Result<f64, BuildRefusal> {
+        self.open(generator, point)?;
+        let sector = point.sector;
+        let (x, y) = (point.u.floor() as i32, point.v.floor() as i32);
+        let square = Platform::over(x, y, self.platform_bits, 0);
+        // The ground at every corner of every column of it, read once.
+        let [x0, y0] = square.corner;
+        let across = square.side as usize + 1;
+        let corners: Vec<f64> = (0..across * across)
+            .map(|i| {
+                let (dx, dy) = ((i % across) as i32, (i / across) as i32);
+                ground(generator, sector, f64::from(x0 + dx), f64::from(y0 + dy))
+            })
+            .collect();
+        let highest = corners.iter().copied().fold(f64::MIN, f64::max);
+        let platform = Platform {
+            top: highest.ceil() as i32,
+            ..square
+        };
+        // A pillar reaches the lowest ground at the foot of its column.
+        let under = |x: i32, y: i32| {
+            let (dx, dy) = ((x - x0) as usize, (y - y0) as usize);
+            let at = |dx: usize, dy: usize| corners[dy * across + dx];
+            let lowest = at(dx, dy)
+                .min(at(dx + 1, dy))
+                .min(at(dx, dy + 1))
+                .min(at(dx + 1, dy + 1));
+            lowest.floor() as i32
+        };
+        let lowest = corners.iter().copied().fold(f64::MAX, f64::min);
+        let mut reach = platform.slab();
+        reach.min[2] = reach.min[2].min(lowest.floor() as i32);
+        let site = self
+            .sites
+            .iter()
+            .position(|site| site.sector == sector)
+            .expect("a volume was opened on this sector");
+        let paint = self.paint;
+        self.change(generator, site, reach, |volumes| {
+            platform
+                .gestures(under, paint)
+                .into_iter()
+                .filter_map(|gesture| volumes.apply(gesture))
+                .reduce(|a, b| a.with(b.min).with(b.max))
+        });
+        Ok(f64::from(platform.top) * BLOCK_M)
     }
 
     /// Forgets every volume: another world.
@@ -387,6 +450,7 @@ impl Build {
             self.changes.push(VolumeChange::Remove(GHOST));
         }
         self.sites.clear();
+        self.touched.clear();
         self.aim = None;
         self.stroke = None;
         self.done.clear();
@@ -404,28 +468,28 @@ impl Build {
     }
 
     /// Takes back the last stroke that landed.
-    pub fn undo(&mut self, sphere: QuadSphere) {
+    pub fn undo(&mut self, generator: &Generator) {
         if let Some(change) = self.done.pop() {
             self.stroke = None;
             let changed = self.sites[change.site]
                 .volumes
                 .restore(change.span, &change.before);
             if let Some(changed) = changed {
-                self.redraw(sphere, change.site, changed);
+                self.redraw(generator, change.site, changed);
             }
             self.undone.push(change);
         }
     }
 
     /// Puts back the last stroke taken back.
-    pub fn redo(&mut self, sphere: QuadSphere) {
+    pub fn redo(&mut self, generator: &Generator) {
         if let Some(change) = self.undone.pop() {
             self.stroke = None;
             let changed = self.sites[change.site]
                 .volumes
                 .restore(change.span, &change.after);
             if let Some(changed) = changed {
-                self.redraw(sphere, change.site, changed);
+                self.redraw(generator, change.site, changed);
             }
             self.done.push(change);
         }
@@ -434,7 +498,8 @@ impl Build {
     /// One frame of the tool: what the line of sight through the pointer
     /// meets, the stroke while the button is held, and the gesture when it
     /// is let go. A stroke started with `upright` held stands up as a wall.
-    pub fn update(&mut self, sphere: QuadSphere, eye: &Eye, using: bool, upright: bool) {
+    pub fn update(&mut self, generator: &Generator, eye: &Eye, using: bool, upright: bool) {
+        let sphere = generator.sphere();
         let Some(tool) = self.tool else {
             self.using = using;
             self.show_ghost(sphere, None);
@@ -446,7 +511,7 @@ impl Build {
             .iter()
             .map(|site| site.sight(sphere, from, toward))
             .collect();
-        self.aim = self.aim_at(sphere, from, &paths);
+        self.aim = self.aim_at(generator, from, toward, &paths);
 
         let pressed = using && !self.using;
         let released = !using && self.using;
@@ -473,7 +538,7 @@ impl Build {
             }
         }
         if released && let Some(stroke) = self.stroke.take() {
-            self.apply(sphere, stroke.site, stroke.gesture(self.paint));
+            self.apply(generator, stroke.site, stroke.gesture(self.paint));
         }
 
         let preview = match (self.stroke, self.aim) {
@@ -486,27 +551,44 @@ impl Build {
         self.show_ghost(sphere, preview);
     }
 
-    /// The nearest thing the line of sight meets, over any sector.
-    fn aim_at(&self, sphere: QuadSphere, from: DVec3, paths: &[Vec<[f64; 3]>]) -> Option<Aim> {
-        paths
+    /// The nearest thing the line of sight meets, over any sector, unless
+    /// the ground stands between it and the eye: a cell a hill hides is not
+    /// under the pointer.
+    fn aim_at(
+        &self,
+        generator: &Generator,
+        from: DVec3,
+        toward: DVec3,
+        paths: &[Vec<[f64; 3]>],
+    ) -> Option<Aim> {
+        let sphere = generator.sphere();
+        let (away_m, aim) = paths
             .iter()
             .enumerate()
             .filter_map(|(site, path)| {
                 let hit = self.sites[site].volumes.trace(path)?;
                 let middle = self.sites[site].corner(sphere, hit.cell);
-                Some((middle.distance(from), Aim { site, hit }))
+                Some(((middle - from).dot(toward), Aim { site, hit }))
             })
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, aim)| aim)
+            .min_by(|a, b| a.0.total_cmp(&b.0))?;
+        // Up to the near side of the cell, which may itself stand in the
+        // ground.
+        let clear_m = away_m - BLOCK_M;
+        let steps = (clear_m / GROUND_STEP_M).floor().max(0.0) as usize;
+        let hidden = (1..=steps).any(|i| {
+            let at = from + toward * (i as f64 * GROUND_STEP_M);
+            let direction = at.normalize_or(DVec3::Y).to_array();
+            at.length() - sphere.radius_m() < generator.sample_at(direction, 0.0).height_m
+        });
+        (!hidden).then_some(aim)
     }
 
     /// The stroke a tool starts where it aims, if it can start there: a new
     /// cell goes in the air before the side hit, and what is taken away or
-    /// repainted is a cell, never the floor.
+    /// repainted is the cell hit.
     fn start(&self, tool: Tool, aim: Aim) -> Option<Stroke> {
         let cell = match tool {
             Tool::Create => aim.hit.before(),
-            Tool::Delete | Tool::Paint if aim.hit.on_floor() => return None,
             Tool::Delete | Tool::Paint => aim.hit.cell,
         };
         let face = aim.hit.face;
@@ -522,8 +604,8 @@ impl Build {
 
     /// Lays a gesture on the first sector built on, as a stroke would.
     #[cfg(test)]
-    pub(crate) fn lay(&mut self, sphere: QuadSphere, gesture: Gesture) {
-        self.apply(sphere, 0, gesture);
+    pub(crate) fn lay(&mut self, generator: &Generator, gesture: Gesture) {
+        self.apply(generator, 0, gesture);
     }
 
     /// The cells of the volume over a column.
@@ -534,14 +616,28 @@ impl Build {
     }
 
     /// Applies a gesture, keeps it to take back, and draws what it changed.
-    fn apply(&mut self, sphere: QuadSphere, site: usize, gesture: Gesture) {
+    fn apply(&mut self, generator: &Generator, site: usize, gesture: Gesture) {
+        self.change(generator, site, gesture.span(), |volumes| {
+            volumes.apply(gesture)
+        });
+    }
+
+    /// Changes the cells of a box by `stroke`, which says what it changed,
+    /// keeps the change to take back, and draws it.
+    fn change(
+        &mut self,
+        generator: &Generator,
+        site: usize,
+        reach: Span,
+        stroke: impl FnOnce(&mut Volumes) -> Option<Span>,
+    ) {
         let volumes = &mut self.sites[site].volumes;
         // What is kept is what volumes hold of the stroke, however far it ran.
-        let Some(span) = volumes.held(gesture.span()) else {
+        let Some(span) = volumes.held(reach) else {
             return;
         };
         let before = volumes.cells(span);
-        let Some(changed) = volumes.apply(gesture) else {
+        let Some(changed) = stroke(volumes) else {
             return;
         };
         let after = volumes.cells(span);
@@ -555,19 +651,41 @@ impl Build {
             self.done.remove(0);
         }
         self.undone.clear();
-        self.redraw(sphere, site, changed);
+        self.redraw(generator, site, changed);
     }
 
     /// Draws again every chunk whose sides a change to some cells could have
     /// changed: the cells, and one more all round, which is as far as a side
-    /// or a corner looks.
-    fn redraw(&mut self, sphere: QuadSphere, site: usize, changed: Span) {
+    /// or a corner looks. Where the change comes within a tuft of the ground
+    /// the grass under it is to grow again.
+    fn redraw(&mut self, generator: &Generator, site: usize, changed: Span) {
+        let sphere = generator.sphere();
         // The ghost showed what the cells were: it is meshed again from what
         // they are now.
         if self.ghost.take().is_some() {
             self.changes.push(VolumeChange::Remove(GHOST));
         }
         let seated = &self.sites[site];
+        let (low, high) = (changed.min, changed.max.map(|n| n + 1));
+        let middle = [0, 1].map(|i| f64::from(low[i] + high[i]) / 2.0);
+        let ends = [
+            [low[0], low[1]],
+            [high[0], low[1]],
+            [low[0], high[1]],
+            high[..2].try_into().expect("two of three"),
+        ];
+        let highest = ends
+            .iter()
+            .map(|&[x, y]| [f64::from(x), f64::from(y)])
+            .chain([middle])
+            .map(|[u, v]| ground(generator, seated.sector, u, v))
+            .fold(f64::MIN, f64::max);
+        if f64::from(low[2]) <= highest + TUFT_M / BLOCK_M {
+            let centre = seated.corner(sphere, [middle[0] as i32, middle[1] as i32, low[2]]);
+            let reach_m = seated.corner(sphere, low).distance(centre) + BLOCK_M;
+            self.touched
+                .push((centre.normalize(), reach_m / centre.length()));
+        }
         for chunk in seated.volumes.chunks_in(changed.grown(1)) {
             let id = seated.mesh_id(chunk);
             let quads = seated.volumes.faces(chunk);
@@ -627,15 +745,32 @@ impl Build {
             .flat_map(|x| columns(point.v).map(move |y| (x, y)))
             .filter_map(|(x, y)| site.volumes.gap(x, y, reach))
             .map(|gap| Footing {
-                floor_m: Some(metres(gap.floor)),
+                floor_m: gap.floor.map(metres),
                 ceiling_m: gap.ceiling.map(metres),
             })
             .reduce(Footing::with)
     }
 
+    /// Whether a cell stands in the way of something rooted at a column of a
+    /// sector, `u` and `v` in blocks, between two heights in metres.
+    pub fn covered(&self, sector: Sector, column: [f64; 2], heights: [f64; 2]) -> bool {
+        let Some(site) = self.sites.iter().find(|site| site.sector == sector) else {
+            return false;
+        };
+        let [x, y] = column.map(|at| at.floor() as i32);
+        let [from, to] = heights.map(|m| m / BLOCK_M);
+        site.volumes.covers(x, y, from, to)
+    }
+
     /// Mesh uploads and removals since the last call, in order.
     pub fn drain_changes(&mut self) -> Vec<VolumeChange> {
         core::mem::take(&mut self.changes)
+    }
+
+    /// Where the grass is to grow again since the last call: caps of the
+    /// body, each a middle, unit, and an angle.
+    pub fn drain_touched(&mut self) -> Vec<(DVec3, f64)> {
+        core::mem::take(&mut self.touched)
     }
 
     /// Every volume mesh to draw.
@@ -652,6 +787,14 @@ impl Build {
 /// The plot a column is on: its address, less the bits of a plot.
 fn plot_of(point: SurfacePoint) -> [i32; 2] {
     [point.u, point.v].map(|at| at.floor() as i32 >> PLOT_BITS)
+}
+
+/// How high the ground stands at a point of a sector, in blocks: the ground
+/// in full detail, as a body stands on it.
+fn ground(generator: &Generator, sector: Sector, u: f64, v: f64) -> f64 {
+    let point = SurfacePoint::new(sector, u, v);
+    let direction = generator.sphere().blocks().direction(point);
+    generator.sample_at(direction, 0.0).height_m / BLOCK_M
 }
 
 /// The layer a stroke stands up in from the side it started on: across
@@ -779,13 +922,32 @@ mod tests {
         )
     }
 
-    /// A world with a volume open where [`world`] stands, and the address of
-    /// its first cell: the tests speak in cells counted from it.
+    /// The platform a body standing at a point is given, of the side picked:
+    /// the square the address cuts, its top where the slab is found.
+    fn platform_at(build: &Build, point: SurfacePoint) -> Platform {
+        let (x, y) = (point.u.floor() as i32, point.v.floor() as i32);
+        let volumes = &build.sites[0].volumes;
+        let cells = build.cells_over(point).expect("an open volume");
+        let top = (cells.min[2]..=cells.max[2])
+            .rev()
+            .find(|&z| !volumes.get([x, y, z]).is_air())
+            .expect("a slab over the column");
+        Platform::over(x, y, build.platform_bits, top + 1)
+    }
+
+    /// A world with a platform of 64 cells a side laid where [`world`]
+    /// stands, a whole plot of it, and the first cell over the corner of its
+    /// slab: the tests speak in cells counted from there.
     fn opened() -> (Generator, Build, [i32; 3]) {
-        let (mut generator, point) = world();
+        let (generator, point) = world();
         let mut build = Build::default();
-        build.open(&mut generator, point).expect("dry land");
-        let origin = build.cells_over(point).expect("an open volume").min;
+        build.set_platform(64);
+        build.lay_platform(&generator, point).expect("dry land");
+        let platform = platform_at(&build, point);
+        let origin = [platform.corner[0], platform.corner[1], platform.top];
+        // The platform is there to stand on, not to take back.
+        build.done.clear();
+        build.drain_changes();
         (generator, build, origin)
     }
 
@@ -832,105 +994,168 @@ mod tests {
 
     /// A stroke from the top of one cell to the top of another, from high
     /// over the middle of the two, looking down.
-    fn stroke(build: &mut Build, sphere: QuadSphere, from: [i32; 3], to: [i32; 3]) {
+    fn stroke(build: &mut Build, generator: &Generator, from: [i32; 3], to: [i32; 3]) {
+        let sphere = generator.sphere();
         let (a, b) = (top(build, sphere, from), top(build, sphere, to));
         let middle = (a + b) / 2.0;
         let mut eye = eye_at(middle + middle.normalize() * 20.0, middle);
         point_at(&mut eye, a);
-        build.update(sphere, &eye, true, false);
+        build.update(generator, &eye, true, false);
         point_at(&mut eye, b);
-        build.update(sphere, &eye, true, false);
-        build.update(sphere, &eye, false, false);
+        build.update(generator, &eye, true, false);
+        build.update(generator, &eye, false, false);
     }
 
-    /// Every cell that is not air in the volume the tests open, counted
-    /// from its first.
+    /// Every cell over the slab that is not air, in the volume the tests
+    /// open, counted from the first.
     fn laid(build: &Build, origin: [i32; 3]) -> Vec<[i32; 3]> {
         let volumes = &build.sites[0].volumes;
         let plot = volumes.plot_of(origin[0], origin[1]);
-        let bounds = volumes.bounds(plot).expect("an open volume");
-        bounds
-            .cells()
+        let mut over = volumes.bounds(plot).expect("an open volume");
+        over.min[2] = origin[2];
+        over.cells()
             .filter(|&cell| !volumes.get(cell).is_air())
             .map(|cell| [0, 1, 2].map(|i| cell[i] - origin[i]))
             .collect()
     }
 
     #[test]
-    fn a_volume_opens_over_the_plot_under_the_body() {
-        let (mut generator, point) = world();
-        let mut build = Build::default();
-        let stamp = build
-            .open(&mut generator, point)
-            .expect("dry land")
-            .expect("no volume yet");
+    fn a_volume_opens_over_the_plot_under_the_body_and_leaves_the_ground() {
+        let (generator, point) = world();
         let direction = generator.sphere().blocks().direction(point);
-        assert_eq!(generator.sample(direction).height_m, stamp.height_m());
+        let ground_m = generator.sample(direction).height_m;
+        let mut build = Build::default();
+        build.open(&generator, point).expect("dry land");
         assert!(build.covers(point));
-        // The address cuts it: wherever on the plot the body stood.
+        assert!(!build.covers(along(point, 1)));
+        // The address cuts it, wherever on the plot the body stood, and it
+        // holds the ground of the plot and the air over it.
         let cells = build.cells_over(point).unwrap();
-        assert_eq!(cells.size(), [64, 64, 64]);
         assert_eq!(cells.min[0] % 64, 0);
         assert_eq!(cells.min[1] % 64, 0);
-        assert!(cells.contains([point.u as i32, point.v as i32, cells.min[2]]));
-        assert_eq!(f64::from(cells.min[2]) * BLOCK_M, stamp.height_m());
-        // Where one stands, nothing opens and the ground stays as it is.
-        assert_eq!(build.open(&mut generator, point), Ok(None));
-        assert_eq!(generator.stamps().len(), 1);
+        assert_eq!(cells.size()[0], 64);
+        assert_eq!(cells.min[2] % 16, 0);
+        let feet = (ground_m / BLOCK_M) as i32;
+        assert!(cells.contains([point.u as i32, point.v as i32, feet]));
+        assert!(cells.max[2] >= feet + HEIGHT);
+        // Nature is as it was: no stamp, and nothing built.
+        assert!(generator.stamps().is_empty());
+        assert_eq!(generator.sample(direction).height_m, ground_m);
+        assert!(build.drain_changes().is_empty());
     }
 
     #[test]
     fn a_plot_on_the_edge_of_a_sector_stays_nature() {
-        let (mut generator, point) = world();
+        let (generator, point) = world();
         let side = f64::from(generator.sphere().blocks().side());
         let mut build = Build::default();
         for (u, v) in [(10.0, point.v), (point.u, side - 10.0), (side - 1.0, 1.0)] {
             let edge = SurfacePoint::new(point.sector, u, v);
-            let opened = build.open(&mut generator, edge);
+            let opened = build.lay_platform(&generator, edge);
             assert_eq!(opened.err(), Some(BuildRefusal::Seam), "{u} {v}");
         }
         // One plot in, the edge is no reason: the sea may be.
         let inside = SurfacePoint::new(point.sector, 70.0, side - 70.0);
-        let opened = build.open(&mut generator, inside);
+        let opened = build.lay_platform(&generator, inside);
         assert_ne!(opened.err(), Some(BuildRefusal::Seam));
     }
 
     #[test]
-    fn a_volume_takes_the_floor_of_the_one_beside_it() {
-        let (mut generator, point) = world();
-        let sphere = generator.sphere();
+    fn a_platform_is_a_slab_over_the_highest_ground_on_pillars_down_to_it() {
+        let (generator, point) = world();
         let mut build = Build::default();
-        build.open(&mut generator, point).unwrap();
-        let floor = build.cells_over(point).unwrap().min[2];
-        // Two plots away nothing touches it: the ground there is its own.
-        let apart = along(point, 2);
-        let ground_m = generator.sample(sphere.blocks().direction(apart)).height_m;
-        assert_ne!(libm::round(ground_m / BLOCK_M) as i32, floor);
-        let beside = along(point, 1);
-        let stamp = build.open(&mut generator, beside).unwrap().unwrap();
-        assert_eq!(stamp.height_m(), f64::from(floor) * BLOCK_M);
-        assert_eq!(build.cells_over(beside).unwrap().min[2], floor);
-        // And the platform goes on: the third joins the second.
-        build.open(&mut generator, apart).unwrap();
-        assert_eq!(build.cells_over(apart).unwrap().min[2], floor);
-        // The ground is one floor under the three of them.
-        for plots in 0..3 {
-            let on = sphere.blocks().direction(along(point, plots));
-            assert_eq!(generator.sample(on).height_m, stamp.height_m());
+        build.set_platform(16);
+        build.set_paint(6);
+        assert_eq!(build.platform(), 16);
+        let top_m = build.lay_platform(&generator, point).unwrap();
+        let platform = platform_at(&build, point);
+        assert_eq!(f64::from(platform.top) * BLOCK_M, top_m);
+        let volumes = &build.sites[0].volumes;
+        // The slab is whole, in the paint in hand, and no ground under it
+        // stands over its top: the highest of it is within a cell of it.
+        let slab = platform.slab();
+        assert_eq!(slab.size(), [16, 16, 1]);
+        let mut highest = f64::MIN;
+        let mut pillars = 0;
+        for [x, y, z] in slab.cells() {
+            assert_eq!(volumes.get([x, y, z]).paint(), Some(6), "{x} {y}");
+            assert!(volumes.get([x, y, z + 1]).is_air());
+            let corners = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| {
+                ground(
+                    &generator,
+                    point.sector,
+                    f64::from(x + dx),
+                    f64::from(y + dy),
+                )
+            });
+            highest = corners.into_iter().fold(highest, f64::max);
+            // Under the slab it is open, but for a pillar, which reaches
+            // the lowest ground at its foot and goes no deeper.
+            let foot = corners.into_iter().fold(f64::MAX, f64::min).floor() as i32;
+            let below: Vec<i32> = (foot - 2..z)
+                .filter(|&z| !volumes.get([x, y, z]).is_air())
+                .collect();
+            if !below.is_empty() {
+                pillars += 1;
+                assert_eq!(below, (foot..z).collect::<Vec<_>>(), "{x} {y}");
+            }
+        }
+        assert!((0.0..1.0).contains(&(f64::from(platform.top) - highest)));
+        assert!(pillars <= 4);
+        // It is drawn, and one undo takes all of it back.
+        assert!(!build.drawn.is_empty());
+        assert_eq!(build.history(), (true, false));
+        build.undo(&generator);
+        assert!(build.drawn.is_empty());
+        assert!(build.covers(point));
+    }
+
+    #[test]
+    fn the_side_picked_is_one_on_offer() {
+        let mut build = Build::default();
+        for (asked, given) in [(0, 8), (8, 8), (20, 16), (32, 32), (50, 64), (900, 64)] {
+            build.set_platform(asked);
+            assert_eq!(build.platform(), given, "{asked}");
         }
     }
 
     #[test]
+    fn platforms_of_one_size_meet_edge_to_edge() {
+        let (generator, point) = world();
+        let mut build = Build::default();
+        build.set_platform(16);
+        build.lay_platform(&generator, point).unwrap();
+        let first = platform_at(&build, point).slab();
+        let beside = SurfacePoint::new(point.sector, point.u + 16.0, point.v);
+        build.lay_platform(&generator, beside).unwrap();
+        let second = platform_at(&build, beside).slab();
+        assert_eq!(second.min[0], first.max[0] + 1);
+        assert_eq!(second.min[1], first.min[1]);
+    }
+
+    #[test]
+    fn a_body_on_the_platform_stands_on_its_slab() {
+        let (generator, point) = world();
+        let mut build = Build::default();
+        let top_m = build.lay_platform(&generator, point).unwrap();
+        let footing = build.footing(point, top_m).unwrap();
+        assert_eq!(footing.floor_m, Some(top_m));
+        // The ground is under it everywhere, so it is the slab that holds.
+        let feet_m = ground(&generator, point.sector, point.u, point.v) * BLOCK_M;
+        assert!(feet_m <= top_m);
+    }
+
+    #[test]
     fn a_stroke_stands_over_two_neighbours() {
-        let (mut generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
+        let (generator, mut build, origin) = opened();
         let (_, point) = world();
-        build.open(&mut generator, along(point, 1)).unwrap();
+        build.open(&generator, along(point, 1)).unwrap();
         build.take(Some(Tool::Create));
         build.set_paint(4);
+        // From the slab out over the plot beside it, where there is none.
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [60, 20, -1]),
             at(origin, [67, 20, -1]),
         );
@@ -939,24 +1164,20 @@ mod tests {
             let cell = at(origin, [x, 20, 0]);
             assert_eq!(volumes.get(cell).paint(), Some(4), "{x}");
         }
-        // A chunk of each volume is drawn, and one stroke takes both back.
-        assert_eq!(build.drawn.len(), 2);
-        build.undo(sphere);
+        build.undo(&generator);
         let volumes = &build.sites[0].volumes;
         for x in 60..=67 {
             assert!(volumes.get(at(origin, [x, 20, 0])).is_air(), "{x}");
         }
-        assert!(build.drawn.is_empty());
     }
 
     #[test]
     fn a_stroke_stops_where_no_volume_stands() {
         let (generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
         build.take(Some(Tool::Create));
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [60, 20, -1]),
             at(origin, [67, 20, -1]),
         );
@@ -966,43 +1187,43 @@ mod tests {
 
     #[test]
     fn a_body_stands_astride_two_volumes() {
-        let (mut generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
+        let (generator, mut build, origin) = opened();
         let (_, point) = world();
-        build.open(&mut generator, along(point, 1)).unwrap();
-        // One cube at the edge of the second volume, and a body half on it,
-        // its middle over the first.
-        let cube = at(origin, [64, 20, 0]);
+        build.open(&generator, along(point, 1)).unwrap();
+        // One cube at the edge of the second volume, level with the slab of
+        // the first, and a body half on it, its middle over the first.
+        let cube = at(origin, [64, 20, -1]);
         build.lay(
-            sphere,
+            &generator,
             Gesture::Create {
                 span: Span::cell(cube),
                 paint: 0,
             },
         );
         let floor_m = f64::from(origin[2]) * BLOCK_M;
-        let astride = SurfacePoint::new(
-            point.sector,
-            f64::from(cube[0]) - 0.3,
-            f64::from(cube[1]) + 0.5,
-        );
-        let footing = build.footing(astride, floor_m).unwrap();
-        assert_eq!(footing.floor_m, Some(floor_m + BLOCK_M));
-        // Off the platform the volumes hold nothing up.
+        let beside = |du: f64| {
+            let (u, v) = (f64::from(cube[0]) + du, f64::from(cube[1]) + 0.5);
+            build.footing(SurfacePoint::new(point.sector, u, v), floor_m)
+        };
+        assert_eq!(beside(-0.3).unwrap().floor_m, Some(floor_m));
+        // Its middle over the cube, nothing else of it on anything built.
+        assert_eq!(beside(0.7).unwrap().floor_m, Some(floor_m));
+        // Past the cube the second volume holds nothing up.
+        assert_eq!(beside(2.0).unwrap().floor_m, None);
+        // And off every volume there is no footing to speak of.
         let off = SurfacePoint::new(point.sector, f64::from(origin[0]) - 5.0, point.v);
         assert_eq!(build.footing(off, floor_m), None);
     }
 
     #[test]
-    fn a_drag_on_the_floor_lays_a_row_and_a_body_stands_on_it() {
+    fn a_drag_on_the_slab_lays_a_row_and_a_body_stands_on_it() {
         let (generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
         build.take(Some(Tool::Create));
         build.set_paint(4);
-        // Aimed at the floor, the new cells go on it.
+        // Aimed at the slab, the new cells go on it.
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [10, 20, -1]),
             at(origin, [14, 20, -1]),
         );
@@ -1026,11 +1247,10 @@ mod tests {
     #[test]
     fn delete_and_paint_act_on_what_is_there() {
         let (generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
         build.take(Some(Tool::Create));
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [5, 5, -1]),
             at(origin, [7, 5, -1]),
         );
@@ -1038,14 +1258,14 @@ mod tests {
         build.set_paint(9);
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [5, 5, 0]),
             at(origin, [5, 5, 0]),
         );
         build.take(Some(Tool::Delete));
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [7, 5, 0]),
             at(origin, [7, 5, 0]),
         );
@@ -1056,16 +1276,64 @@ mod tests {
     }
 
     #[test]
+    fn the_slab_is_cells_like_any_other() {
+        let (generator, mut build, origin) = opened();
+        build.take(Some(Tool::Delete));
+        stroke(
+            &mut build,
+            &generator,
+            at(origin, [30, 30, -1]),
+            at(origin, [30, 30, -1]),
+        );
+        assert!(
+            build.sites[0]
+                .volumes
+                .get(at(origin, [30, 30, -1]))
+                .is_air()
+        );
+    }
+
+    #[test]
+    fn a_cell_the_ground_hides_is_not_under_the_pointer() {
+        let (generator, mut build, origin) = opened();
+        let sphere = generator.sphere();
+        build.take(Some(Tool::Create));
+        // A cube sunk two metres into the ground, under an eye over it.
+        let (x, y) = (origin[0] + 70, origin[1] + 20);
+        let under = ground(
+            &generator,
+            build.sites[0].sector,
+            f64::from(x),
+            f64::from(y),
+        );
+        let sunk = [x, y, under.floor() as i32 - 4];
+        let (_, point) = world();
+        build.open(&generator, along(point, 1)).unwrap();
+        build.lay(
+            &generator,
+            Gesture::Create {
+                span: Span::cell(sunk),
+                paint: 0,
+            },
+        );
+        let over = top(&build, sphere, [x, y, under.floor() as i32 + 20]);
+        let eye = eye_at(over, top(&build, sphere, sunk));
+        build.update(&generator, &eye, false, false);
+        assert_eq!(build.aim, None);
+        assert_eq!(build.ghost(), None);
+    }
+
+    #[test]
     fn the_ghost_shows_the_stroke_and_goes_with_the_tool() {
         let (generator, mut build, origin) = opened();
         let sphere = generator.sphere();
         build.take(Some(Tool::Create));
-        let floor = top(&build, sphere, at(origin, [3, 3, -1]));
-        let eye = eye_at(floor + floor.normalize() * 5.0, floor);
-        build.update(sphere, &eye, false, false);
+        let slab = top(&build, sphere, at(origin, [3, 3, -1]));
+        let eye = eye_at(slab + slab.normalize() * 5.0, slab);
+        build.update(&generator, &eye, false, false);
         assert_eq!(build.ghost(), Some(GHOST));
         build.take(None);
-        build.update(sphere, &eye, false, false);
+        build.update(&generator, &eye, false, false);
         assert_eq!(build.ghost(), None);
     }
 
@@ -1074,36 +1342,37 @@ mod tests {
         let (generator, mut build, origin) = opened();
         let sphere = generator.sphere();
         build.take(Some(Tool::Create));
-        let floor = top(&build, sphere, at(origin, [20, 20, -1]));
+        let slab = top(&build, sphere, at(origin, [20, 20, -1]));
         let site = &build.sites[0];
         let back = site.corner(sphere, at(origin, [14, 20, 0]))
             - site.corner(sphere, at(origin, [20, 20, 0]));
         // Low and far: a plane read half a cell up would land cells away.
-        let mut eye = eye_at(floor + back + floor.normalize() * 0.8, floor);
-        point_at(&mut eye, floor);
-        build.update(sphere, &eye, true, false);
-        build.update(sphere, &eye, false, false);
+        let mut eye = eye_at(slab + back + slab.normalize() * 0.8, slab);
+        point_at(&mut eye, slab);
+        build.update(&generator, &eye, true, false);
+        build.update(&generator, &eye, false, false);
         assert_eq!(laid(&build, origin), vec![[20, 20, 0]]);
     }
 
-    /// A low eye eight cells back from a floor cell, the pointer on it,
-    /// that presses, moves the pointer up the view and lets go.
+    /// A low eye eight cells back from a cell of the slab, the pointer on
+    /// it, that presses, moves the pointer up the view and lets go.
     fn up_the_view(
         build: &mut Build,
-        sphere: QuadSphere,
+        generator: &Generator,
         origin: [i32; 3],
         upright: bool,
     ) -> Vec<[i32; 3]> {
-        let floor = top(build, sphere, at(origin, [20, 20, -1]));
+        let sphere = generator.sphere();
+        let slab = top(build, sphere, at(origin, [20, 20, -1]));
         let site = &build.sites[0];
         let back = site.corner(sphere, at(origin, [12, 20, 0]))
             - site.corner(sphere, at(origin, [20, 20, 0]));
-        let mut eye = eye_at(floor + back + floor.normalize() * 2.0, floor);
-        point_at(&mut eye, floor);
-        build.update(sphere, &eye, true, upright);
+        let mut eye = eye_at(slab + back + slab.normalize() * 2.0, slab);
+        point_at(&mut eye, slab);
+        build.update(generator, &eye, true, upright);
         eye.pointer[1] -= 0.2;
-        build.update(sphere, &eye, true, upright);
-        build.update(sphere, &eye, false, upright);
+        build.update(generator, &eye, true, upright);
+        build.update(generator, &eye, false, upright);
         laid(build, origin)
     }
 
@@ -1111,7 +1380,7 @@ mod tests {
     fn a_drag_up_the_view_lays_a_slab_away_from_the_eye() {
         let (generator, mut build, origin) = opened();
         build.take(Some(Tool::Create));
-        let laid = up_the_view(&mut build, generator.sphere(), origin, false);
+        let laid = up_the_view(&mut build, &generator, origin, false);
         assert!(laid.len() >= 3, "{laid:?}");
         assert!(laid.iter().all(|at| at[2] == 0 && at[1] == 20), "{laid:?}");
     }
@@ -1120,7 +1389,7 @@ mod tests {
     fn upright_the_same_drag_stands_a_wall() {
         let (generator, mut build, origin) = opened();
         build.take(Some(Tool::Create));
-        let laid = up_the_view(&mut build, generator.sphere(), origin, true);
+        let laid = up_the_view(&mut build, &generator, origin, true);
         assert!(laid.len() >= 3, "{laid:?}");
         assert!(laid.iter().all(|at| at[0] == 20 && at[1] == 20), "{laid:?}");
         assert_eq!(laid.iter().map(|at| at[2]).min(), Some(0));
@@ -1129,26 +1398,25 @@ mod tests {
     #[test]
     fn undo_takes_back_a_stroke_and_redo_puts_it_back() {
         let (generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
         build.take(Some(Tool::Create));
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [5, 5, -1]),
             at(origin, [7, 5, -1]),
         );
         let middle = at(origin, [6, 5, 0]);
         assert_eq!(build.history(), (true, false));
-        build.undo(sphere);
+        build.undo(&generator);
         assert!(build.sites[0].volumes.get(middle).is_air());
         assert_eq!(build.history(), (false, true));
-        build.redo(sphere);
+        build.redo(&generator);
         assert!(!build.sites[0].volumes.get(middle).is_air());
         // A new stroke forgets what was taken back.
-        build.undo(sphere);
+        build.undo(&generator);
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [9, 9, -1]),
             at(origin, [9, 9, -1]),
         );
@@ -1160,11 +1428,11 @@ mod tests {
         let (generator, mut build, origin) = opened();
         let sphere = generator.sphere();
         build.take(Some(Tool::Create));
-        let floor = top(&build, sphere, at(origin, [3, 3, -1]));
-        let eye = eye_at(floor + floor.normalize() * 5.0, floor);
-        build.update(sphere, &eye, true, false);
+        let slab = top(&build, sphere, at(origin, [3, 3, -1]));
+        let eye = eye_at(slab + slab.normalize() * 5.0, slab);
+        build.update(&generator, &eye, true, false);
         assert!(build.cancel());
-        build.update(sphere, &eye, false, false);
+        build.update(&generator, &eye, false, false);
         assert!(build.sites[0].volumes.get(at(origin, [3, 3, 0])).is_air());
         assert!(!build.cancel());
     }
@@ -1172,11 +1440,10 @@ mod tests {
     #[test]
     fn the_ghost_is_meshed_again_after_a_stroke_lands() {
         let (generator, mut build, origin) = opened();
-        let sphere = generator.sphere();
         build.take(Some(Tool::Create));
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [3, 3, -1]),
             at(origin, [3, 3, -1]),
         );
@@ -1184,7 +1451,7 @@ mod tests {
         build.drain_changes();
         stroke(
             &mut build,
-            sphere,
+            &generator,
             at(origin, [3, 3, 0]),
             at(origin, [3, 3, 0]),
         );
@@ -1205,10 +1472,10 @@ mod tests {
     fn a_chunk_has_a_mesh_of_its_own_in_every_volume_and_sector() {
         let seated = |sector: u8| Seated {
             sector: Sector::new(sector).unwrap(),
-            volumes: Volumes::new(PLOT_BITS, HEIGHT),
+            volumes: Volumes::new(PLOT_BITS),
             balls: Vec::new(),
         };
-        let chunks = [[64, 128, 40], [80, 128, 40], [64, 144, 40], [64, 128, -40]];
+        let chunks = [[64, 128, 32], [80, 128, 32], [64, 144, 32], [64, 128, -32]];
         let mut ids = BTreeSet::new();
         for sector in [0, 5] {
             for chunk in chunks {

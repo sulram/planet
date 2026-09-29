@@ -137,6 +137,8 @@ compositor. What the world *is* lives in WORLD.md.
   is a shade off it and bare), built with the patch from its own samples:
   no generator call. Tier `k` has one tuft per `2^k` half blocks and reaches
   `20 m * 2^k` (six tiers, 640 m), so screen density stays level.
+- A tuft a cell stands in the way of is not grown, and the patches around a
+  change to what is built grow theirs again (78).
 - A tuft is (sector, tier, tier cell): subdivision never moves it. A patch
   carries only the tiers that can reach it before it splits, farthest first;
   the renderer draws the prefix in reach, near patches first, capped.

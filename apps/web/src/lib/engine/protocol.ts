@@ -19,6 +19,9 @@ export const NAME_CHARS = 24;
 export type Tool = 'create' | 'delete' | 'paint';
 export const tools = ['create', 'delete', 'paint'] as const satisfies readonly Tool[];
 
+/** The sides a platform can have, in cells. The engine takes the nearest. */
+export const platforms = [8, 16, 32, 64] as const;
+
 /** Why no volume could be opened where the body stands. */
 export type BuildRefusal = 'moon' | 'sea' | 'seam';
 
@@ -61,8 +64,12 @@ export type Command =
 	| { type: 'say'; scope: Scope; text: string; here?: boolean }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
 	| { type: 'set_name'; name: string }
-	/** Build with a tool, or stop with null. Where no volume stands, the one of the plot under the body opens. */
+	/** Build with a tool, or stop with null. Where no volume stands, the one of the plot under the body opens, with a platform under the feet. */
 	| { type: 'set_tool'; tool: Tool | null }
+	/** The side of the platform laid next, in cells. */
+	| { type: 'set_platform'; side: number }
+	/** Lay a platform where the body stands: a slab on pillars down to the ground. */
+	| { type: 'lay_platform' }
 	/** The paint the next stroke lays: an index into the palette. */
 	| { type: 'set_paint'; paint: number }
 	/** Take back the last stroke that landed, or put back the last one taken back. */
@@ -106,8 +113,8 @@ export type EngineEvent =
 	/** Nothing is left to build for this view: the world is drawn whole. Again after a leap or a new recipe. */
 	| { type: 'settled' }
 	| { type: 'mode_changed'; mode: Mode }
-	/** The tool in hand, null when not building, and the paint it lays. Once at the start too. */
-	| { type: 'tool_changed'; tool: Tool | null; paint: number }
+	/** The tool in hand, null when not building, the paint it lays, and the side of the next platform. Once at the start too. */
+	| { type: 'tool_changed'; tool: Tool | null; paint: number; platform: number }
 	/** The paints a cell can take, as `#rrggbb`, in order. Once, at the start. */
 	| { type: 'palette'; colors: string[] }
 	/** Building was asked for where no volume can be opened. */

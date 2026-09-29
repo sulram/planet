@@ -30,6 +30,7 @@ use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use build::PALETTE;
+pub use build::PLATFORMS;
 use build::{Build, Eye};
 pub use controller::{Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
@@ -40,7 +41,7 @@ pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Anchor, BuildRefusal, Command, Event, Mode, PeerInfo, Scope, SessionStatus, Tool};
 pub use session::Outbound;
 use session::Session;
-use terrain::{Body, Terrain};
+use terrain::{Body, Cover, Terrain};
 use wardrobe::Wardrobe;
 
 /// Seconds for the sun to go around once.
@@ -378,12 +379,19 @@ impl Client {
                 self.build.set_paint(paint);
                 self.tool_changed();
             }
+            Command::SetPlatform { side } => {
+                self.build.set_platform(side);
+                self.tool_changed();
+            }
+            Command::LayPlatform => {
+                self.lay_platform();
+            }
             Command::Undo => {
-                self.build.undo(self.generator.sphere());
+                self.build.undo(&self.generator);
                 self.history_changed();
             }
             Command::Redo => {
-                self.build.redo(self.generator.sphere());
+                self.build.redo(&self.generator);
                 self.history_changed();
             }
         }
@@ -407,40 +415,44 @@ impl Client {
     }
 
     /// Takes a tool, or puts it down with `None`. Taking one where no volume
-    /// stands opens the one of the plot under the body, on ground held flat
-    /// under it, and where none can be opened says why and builds nothing.
+    /// stands opens the one of the plot under the body and lays a platform
+    /// under its feet, and where none can be says why and builds nothing.
     fn take_tool(&mut self, tool: Option<Tool>) {
         if tool.is_some() {
-            let opened = if self.controller.on_moon() {
-                Err(BuildRefusal::Moon)
-            } else {
-                self.build
-                    .open(&mut self.generator, self.controller.point())
-            };
-            match opened {
-                Ok(Some(stamp)) => {
-                    let (middle, angle) = stamp.cap();
-                    self.terrain.reshape(DVec3::from(middle), angle);
-                    // The ground under the feet moved to the stamp's height.
-                    if self.controller.grounded() {
-                        self.controller.stand_at(None, &self.generator);
-                    }
-                }
-                Ok(None) => {}
-                Err(reason) => {
-                    self.events.push(Event::BuildRefused { reason });
-                    return;
-                }
+            let standing = !self.controller.on_moon() && self.build.covers(self.controller.point());
+            if !standing && !self.lay_platform() {
+                return;
             }
         }
         self.build.take(tool);
         self.tool_changed();
     }
 
+    /// Lays a platform where the body stands. False where none can be laid,
+    /// which is said.
+    fn lay_platform(&mut self) -> bool {
+        let laid = if self.controller.on_moon() {
+            Err(BuildRefusal::Moon)
+        } else {
+            self.build
+                .lay_platform(&self.generator, self.controller.point())
+        };
+        match laid {
+            Ok(top_m) => {
+                // The slab stands over the ground the body stood on.
+                self.controller.lift_onto(top_m);
+                self.history_changed();
+            }
+            Err(reason) => self.events.push(Event::BuildRefused { reason }),
+        }
+        laid.is_ok()
+    }
+
     fn tool_changed(&mut self) {
         self.events.push(Event::ToolChanged {
             tool: self.build.tool(),
             paint: self.build.paint(),
+            platform: self.build.platform(),
         });
     }
 
@@ -903,7 +915,7 @@ impl Client {
             pointer: input.pointer.unwrap_or([0.5, 0.5]).map(f64::from),
         };
         self.build.update(
-            self.generator.sphere(),
+            &self.generator,
             &eye,
             input.held(Key::Use),
             input.held(Key::Upright),
@@ -999,17 +1011,30 @@ impl Client {
     fn stream(
         &mut self,
         camera: &scene::Camera,
-        select: fn(&mut Terrain, &Generator, &scene::Camera, f32) -> Vec<scene::PatchId>,
+        select: fn(&mut Terrain, &Generator, Cover, &scene::Camera, f32) -> Vec<scene::PatchId>,
     ) -> Vec<scene::PatchDraw> {
         let moon = self.moon_position();
         let from_moon = scene::Camera {
             position: camera.position - moon,
             ..*camera
         };
-        let on_planet = select(&mut self.terrain, &self.generator, camera, self.aspect);
+        // Grass grows again where what is built over it changed.
+        for (middle, angle) in self.build.drain_touched() {
+            self.terrain.regrow(middle, angle);
+        }
+        let build = &self.build;
+        let on_planet = select(
+            &mut self.terrain,
+            &self.generator,
+            &|sector, column, heights| build.covered(sector, column, heights),
+            camera,
+            self.aspect,
+        );
+        // Nothing is built on the moon.
         let on_moon = select(
             &mut self.moon_terrain,
             &self.generator,
+            &|_, _, _| false,
             &from_moon,
             self.aspect,
         );
@@ -1100,7 +1125,7 @@ impl Client {
             && self.controller.sphere() == generator.sphere()
             && standable(&generator, held);
         self.generator = generator;
-        // Volumes stood on the old ground, and its stamps went with it.
+        // Volumes and their platforms stood on the old ground.
         self.build.clear();
         self.history_changed();
         if self.build.tool().is_some() {

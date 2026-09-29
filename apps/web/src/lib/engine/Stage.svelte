@@ -123,6 +123,7 @@
 	// Building: what the engine says is in hand, and why it last found no room.
 	let tool = $state<Tool | null>(null);
 	let paint = $state(0);
+	let platform = $state(16);
 	let palette = $state.raw<string[]>([]);
 	let refused = $state<BuildRefusal | null>(null);
 	let history = $state({ undo: false, redo: false });
@@ -228,6 +229,7 @@
 		else if (event.type === 'tool_changed') {
 			tool = event.tool;
 			paint = event.paint;
+			platform = event.platform;
 			if (tool) refused = null;
 		} else if (event.type === 'build_refused') refused = event.reason;
 		else if (event.type === 'history') history = { undo: event.undo, redo: event.redo };
@@ -259,11 +261,17 @@
 	<Build
 		{tool}
 		{paint}
+		{platform}
 		{palette}
 		{refused}
 		{history}
 		onbuild={build}
 		onpaint={(next) => view?.command({ type: 'set_paint', paint: next })}
+		onplatform={(side) => view?.command({ type: 'set_platform', side })}
+		onlay={() => {
+			refused = null;
+			view?.command({ type: 'lay_platform' });
+		}}
 		onundo={() => view?.command({ type: 'undo' })}
 		onredo={() => view?.command({ type: 'redo' })}
 	/>

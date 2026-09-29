@@ -38,7 +38,8 @@ this file in the same change.
 | Build layer | Cubic voxels inside a volume, each air or a paint. The only part of a world with an inside. |
 | Paint | What a solid cell is: an index into the palette a volume is shown with. |
 | Gesture | Create, delete or paint over a box of cells, with one paint: what a volume applies. What an op carries. |
-| Plot | One square of the grid volumes are cut by: 64 by 64 columns of a sector, named by their address less six bits. A volume stands over it, on ground a stamp holds flat: worked earth, where nothing grows. |
+| Plot | One square of the grid volumes are cut by: 64 by 64 columns of a sector, named by their address less six bits. A volume stands over it. |
+| Platform | What a build stands on: a slab of cells one thick, 8 to 64 a side as picked, cut by the address, its top over the highest ground under it, on pillars down to the ground. |
 | Tool | Create, delete or paint, in hand while building. |
 | Stroke | One click and drag of a tool: a slab on the side it started on, or with Alt a wall standing up from it. Lands as one gesture. |
 | Ghost | The see-through preview of exactly the cells a stroke would change. |
@@ -60,7 +61,7 @@ this file in the same change.
 | Ticket | A one-use, one-minute token the cold plane mints for a signed in person and the socket redeems. How an identity crosses to the hot plane without the session cookie. |
 | Link (code) | The socket between a client and a world server, as the platform shell holds it. The client owns the protocol, the shell owns the socket. |
 | Volume | An integer address box inside one sector where building is granted, over one plot. Nests. The only place voxels exist. |
-| Stamp | A volume's flatten and blend footprint, applied when the ground is sampled. How anything that is not terrain seats into terrain, at every level, without being an edit. |
+| Stamp | A flatten and blend footprint, applied when the ground is sampled. How what is not a volume seats into terrain, at every level, without being an edit. The ground it holds is worked earth, where nothing grows. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
 | Landlord | Role on a volume: build, subdivide, grant roles inside. |
 | Builder | Role on a volume: build only. |

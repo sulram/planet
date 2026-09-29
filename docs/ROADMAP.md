@@ -82,10 +82,10 @@ Every milestone ends runnable end to end.
 - [ ] LOD by projected error with hysteresis; geomorph between levels. Nothing comes down before its replacement is up (53)
 - [x] The volume, first cut (75, 76): opened where you stand, on ground a stamp holds flat; create, delete and paint by click and drag, with a ghost and undo; walked on, and flown into with no tool in hand. In the client alone
 - [x] Volumes are cut by the address (77): plots of 64 blocks a side, a volume over each, opened under the body. Neighbours touch, share a floor and are read as one, so a build too big for one volume stands over two
-- [ ] A volume on a plot at the edge of a sector, and a build across the seam: the stamp and the cells folded over it (77)
-- [ ] A volume seats by flattening or by a platform of built voxels, a slab on columns down to the ground, so a mountainside carries a build without the terrain giving way. Which of the two, or a choice made at opening, and how the platform's size is picked in the mountains, over one or more volumes of the grid: OPEN
+- [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
+- [x] A build stands on a platform of built cells (78): a slab over the highest ground under it, 8 to 64 cells a side as picked in the panel, on pillars down to the ground, so a mountainside carries a build and keeps its shape. Grass gives way under what is built
 - [ ] A volume on the moon: a tool taken there builds as on the planet (today it is refused)
-- [ ] First cut leftovers: the undo chord and the last tool said once in `client` rather than in each shell; the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
+- [ ] First cut leftovers: a key that lays a platform; the undo chord and the last tool said once in `client` rather than in each shell; the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
 - [ ] The rest of the volume: bake its light (flood fill sun, a glow channel), stream it by proximity, put one under the sea
 - [ ] The camera boom cut by a volume's cells, as it is by rock under the ground: today it passes through a wall to stay behind the body
 - [ ] What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), and the frame on a Pi and in a tab

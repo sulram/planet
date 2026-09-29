@@ -5,7 +5,7 @@
 
 mod paint;
 
-use client::{Command, Effects, Event, ToneMap, Tool};
+use client::{Command, Effects, Event, PLATFORMS, ToneMap, Tool};
 use winit::window::Window;
 
 pub struct Panel {
@@ -27,6 +27,8 @@ struct Building {
     /// The tool put down last, which building again takes.
     last: Tool,
     paint: u8,
+    /// The side of the platform laid next, in cells.
+    platform: u32,
     palette: Vec<egui::Color32>,
     /// Whether there is a stroke to take back, and one to put back.
     history: (bool, bool),
@@ -38,6 +40,7 @@ impl Default for Building {
             tool: None,
             last: Tool::Create,
             paint: 0,
+            platform: PLATFORMS[0],
             palette: Vec::new(),
             history: (false, false),
         }
@@ -102,10 +105,15 @@ impl Panel {
         match event {
             Event::EffectsChanged { effects } => self.effects = *effects,
             Event::Stats { fps, .. } => self.fps = *fps,
-            Event::ToolChanged { tool, paint } => {
+            Event::ToolChanged {
+                tool,
+                paint,
+                platform,
+            } => {
                 self.building.tool = *tool;
                 self.building.last = tool.unwrap_or(self.building.last);
                 self.building.paint = *paint;
+                self.building.platform = *platform;
             }
             Event::History { undo, redo } => self.building.history = (*undo, *redo),
             Event::Palette { colors } => {
@@ -318,6 +326,18 @@ fn build_layout(root: &mut egui::Ui, building: &Building) -> Option<Command> {
                     asked = Some(Command::Redo);
                 }
             });
+            ui.horizontal(|ui| {
+                ui.label("Platform");
+                for side in PLATFORMS {
+                    let chosen = building.platform == side;
+                    if ui.selectable_label(chosen, side.to_string()).clicked() {
+                        asked = Some(Command::SetPlatform { side });
+                    }
+                }
+                if ui.button("Lay").clicked() {
+                    asked = Some(Command::LayPlatform);
+                }
+            });
             ui.horizontal_wrapped(|ui| {
                 for (index, &fill) in building.palette.iter().enumerate() {
                     let chosen = index == usize::from(building.paint);
@@ -339,7 +359,8 @@ fn build_layout(root: &mut egui::Ui, building: &Building) -> Option<Command> {
             });
             ui.label(
                 "Click and drag for a slab. Hold Alt as you start for a wall. \
-                 Hold the right button to look around.",
+                 Hold the right button to look around. Lay a platform where \
+                 you stand to build from.",
             );
         });
     asked

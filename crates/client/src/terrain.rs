@@ -10,8 +10,9 @@
 //! generator's ground, sea floor included, sampled with the generator's LOD
 //! filter so a coarse patch is a smooth version of the fine one. Where a patch
 //! dips under a sea it also carries a water surface. Nature is not editable
-//! (DECISIONS 58): a stamp under a volume changes the ground the generator
-//! gives, and the patches over it are built again (`Terrain::reshape`).
+//! (DECISIONS 58), and what is built over it leaves it as it is: only the
+//! grass gives way, and the patches that grow it are built again where what
+//! stands over them changes (`Terrain::regrow`).
 //!
 //! Everything here is relative to the centre of the body: the planet sits at
 //! the world origin, the moon moves, and whoever draws a patch adds the body's
@@ -166,19 +167,27 @@ impl Node {
     }
 }
 
+/// What stands over the ground, as the grass asks: whether anything covers a
+/// column of a sector, `u` and `v` in blocks, between two heights in metres
+/// over the datum.
+pub type Cover<'a> = &'a dyn Fn(Sector, [f64; 2], [f64; 2]) -> bool;
+
 /// What the streamer remembers about a built patch.
 struct Built {
     center: DVec3,
     /// Bounding sphere radius around `center`, metres.
     radius_m: f64,
     last_used: u64,
+    /// Whether the patch is near enough the ground to grow grass, covered
+    /// or not.
+    grows: bool,
 }
 
 pub struct Terrain {
     body: Body,
     built: HashMap<Node, Built>,
-    /// Built patches whose ground has changed under them: each keeps being
-    /// drawn until the one that replaces it is built.
+    /// Built patches whose grass has changed: each keeps being drawn until
+    /// the one that replaces it is built.
     stale: HashSet<Node>,
     changes: Vec<TerrainChange>,
     frame: u64,
@@ -214,12 +223,13 @@ impl Terrain {
         self.casters.clear();
     }
 
-    /// The ground changed within `angle` radians of `middle` (unit, from the
-    /// body's centre): every patch that reaches there is built again. Nothing
-    /// comes down first, so there is never a hole.
-    pub fn reshape(&mut self, middle: DVec3, angle: f64) {
+    /// What stands over the ground changed within `angle` radians of
+    /// `middle` (unit, from the body's centre): every patch that grows grass
+    /// there is built again. Nothing comes down first, so there is never a
+    /// hole.
+    pub fn regrow(&mut self, middle: DVec3, angle: f64) {
         let radius_m = self.body.radius_m();
-        for (node, built) in &self.built {
+        for (node, built) in self.built.iter().filter(|(_, built)| built.grows) {
             let reach = (angle + built.radius_m / radius_m).min(core::f64::consts::PI);
             if built.center.normalize().dot(middle) >= reach.cos() {
                 self.stale.insert(*node);
@@ -235,15 +245,27 @@ impl Terrain {
     /// Picks the patches to draw from `camera`, building missing ones within
     /// the per update budget. The camera is relative to the body's centre;
     /// `aspect` is width over height.
-    pub fn update(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
-        self.select(generator, camera, aspect, BUILDS_PER_UPDATE)
+    pub fn update(
+        &mut self,
+        generator: &Generator,
+        cover: Cover,
+        camera: &Camera,
+        aspect: f32,
+    ) -> Vec<PatchId> {
+        self.select(generator, cover, camera, aspect, BUILDS_PER_UPDATE)
     }
 
     /// Like [`Terrain::update`], but builds until nothing is missing. For
     /// headless renders, where the first frame is the only frame.
-    pub fn settle(&mut self, generator: &Generator, camera: &Camera, aspect: f32) -> Vec<PatchId> {
+    pub fn settle(
+        &mut self,
+        generator: &Generator,
+        cover: Cover,
+        camera: &Camera,
+        aspect: f32,
+    ) -> Vec<PatchId> {
         loop {
-            let patches = self.select(generator, camera, aspect, usize::MAX);
+            let patches = self.select(generator, cover, camera, aspect, usize::MAX);
             if self.settled {
                 return patches;
             }
@@ -260,6 +282,7 @@ impl Terrain {
     fn select(
         &mut self,
         generator: &Generator,
+        cover: Cover,
         camera: &Camera,
         aspect: f32,
         budget: usize,
@@ -320,7 +343,7 @@ impl Terrain {
         // Coarse before fine, near before far: the picture sharpens evenly.
         missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
         for (_, node) in missing.into_iter().take(budget) {
-            let mesh = build(generator, node);
+            let mesh = build(generator, node, cover);
             // The sea counts: over deep water the ground is far below the surface
             // that is actually in view.
             let ground = mesh.vertices.iter().map(|v| v.position);
@@ -335,6 +358,7 @@ impl Terrain {
                     center: mesh.origin,
                     radius_m: f64::from(radius_m),
                     last_used: self.frame,
+                    grows: grows(node),
                 },
             );
             self.stale.remove(&node);
@@ -481,8 +505,15 @@ fn visible(body: Body, camera: &Camera, aspect: f32, center: DVec3, radius_m: f6
     !(outside(p.x, half_x) || outside(p.y, half_y))
 }
 
+/// Whether a node carries tufts: on a body that grows them, at a depth
+/// that holds any.
+fn grows(node: Node) -> bool {
+    let side = node.body.grid().side() >> node.depth;
+    node.body.kind == Kind::Planet && super::grass::grows(side)
+}
+
 /// Meshes one node.
-fn build(generator: &Generator, node: Node) -> TerrainMesh {
+fn build(generator: &Generator, node: Node, cover: Cover) -> TerrainMesh {
     let body = node.body;
     let radius = body.radius_m();
     // One ring of samples past the rim, so rim normals match the neighbours'.
@@ -563,7 +594,7 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
             .map(sea)
             .collect()
     });
-    let grass = if body.kind == Kind::Planet {
+    let grass = if grows(node) {
         super::grass::build(
             super::grass::Patch {
                 seed: generator.recipe().seed,
@@ -575,6 +606,7 @@ fn build(generator: &Generator, node: Node) -> TerrainMesh {
             origin,
             &vertices,
             &samples,
+            &|column, heights| cover(node.sector, column, heights),
         )
     } else {
         Vec::new()
