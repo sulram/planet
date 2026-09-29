@@ -47,16 +47,33 @@ fn shadow_sample(relative: vec3<f32>, normal: vec3<f32>, cascade: u32) -> vec2<f
         return vec2<f32>(1.0, 0.0);
     }
     let uv = p.xy * vec2<f32>(0.5, -0.5) + 0.5;
+    let valid = select(0.0, coverage, p.z > 0.0 && p.z < 1.0);
+    return vec2<f32>(shadow_tent(uv, p.z + 0.000008, cascade), valid);
+}
+
+// How much of a tent five texels wide the map leaves lit, in nine lookups.
+// A bilinear comparison weighs two texels by where it stands between them,
+// so each lookup is placed where the pair it covers has the weights the tent
+// gives them, and carries their sum.
+fn shadow_tent(uv: vec2<f32>, depth: f32, cascade: u32) -> f32 {
+    let at = uv * SHADOW_SIZE;
+    let nearest = floor(at + 0.5);
+    let f = at + 0.5 - nearest;
+    var weight = array<vec2<f32>, 3>(4.0 - 3.0 * f, vec2<f32>(7.0), 1.0 + 3.0 * f);
+    var place = array<vec2<f32>, 3>(
+        (3.0 - 2.0 * f) / weight[0] - 2.0,
+        (3.0 + f) / 7.0,
+        f / weight[2] + 2.0,
+    );
     var sum = 0.0;
-    // Four bilinear comparison samples form a small, deterministic PCF kernel.
-    for (var y = 0; y < 2; y++) {
-        for (var x = 0; x < 2; x++) {
-            let tap = (vec2<f32>(f32(x), f32(y)) - 0.5) / SHADOW_SIZE;
-            sum += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + tap, i32(cascade), p.z + 0.000008);
+    for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 3; x++) {
+            let tap = (nearest - 0.5 + vec2<f32>(place[x].x, place[y].y)) / SHADOW_SIZE;
+            sum += weight[x].x * weight[y].y
+                * textureSampleCompareLevel(shadow_map, shadow_sampler, tap, i32(cascade), depth);
         }
     }
-    let valid = select(0.0, coverage, p.z > 0.0 && p.z < 1.0);
-    return vec2<f32>(sum * 0.25, valid);
+    return sum / 144.0;
 }
 
 fn terrain_shadow(relative: vec3<f32>, normal: vec3<f32>) -> f32 {

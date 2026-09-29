@@ -130,6 +130,7 @@ compositor. What the world *is* lives in WORLD.md.
   Terrain, volumes, boxes and avatars cast; everything lit by `lit` receives.
 - A side turned from the sun is in its own shadow by its normal; only a side
   the sun reaches asks the map, across `TERMINATOR` in `common.wgsl` (80).
+- The map is read through a tent five texels wide, nine lookups (83).
 - Casters are not the drawn patches: `Frame::shadow_patches` holds built
   leaves before view culling, coarser with distance (1 m, 4 m, 16 m), and
   never schedules generation. Skirts do not cast.
