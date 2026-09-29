@@ -19,9 +19,7 @@ The address is the save format: settled before the first volume is stored.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? | where a volume may sit | DECISIONS 49 |
-| **How a volume seats.** The stamp's flatten (75), a platform of built voxels (a slab on columns down to the ground), or a choice made at opening? And how the platform's size is picked in the mountains, over one or more volumes of the grid. Today it is the flatten, a plot at a time: a volume takes the floor of the one it is opened beside, and two platforms that meet make a terrace | the seat of a volume (ROADMAP M1.75) | DECISIONS 75, 76, 77 |
-| **Whether a chunk is cut by the address along `h` too.** A volume counts its chunks from its floor, so two volumes on floors of different heights cut theirs at different heights, and a stored chunk is named by its volume before its address. Cut by the address, a floor passes through the middle of a chunk | the key of a stored chunk (ROADMAP M3) | DECISIONS 75, 77 |
+| **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? A volume holds from the lowest ground of its plot up, and nature is not dug | where a volume may sit | DECISIONS 49, 78 |
 | **What a body collides with inside a GLB shell.** 47 says collision is the generator, always, and a shell is a mesh we cannot read. Either the volume is the truth and the GLB a skin over the same cells (one rule, a voxelizer at import), or mesh collision becomes a capability we build. The first is cheaper | the cave: a shell and a room | DECISIONS 47, 58 |
 | **Look**: terrain material style: flat colours, pixel textures, triplanar? | the material contract past procedural detail | RENDER.md |
 | **How fine per-user rollback has to be.** Per cell attribution costs an owner byte in every cell, doubling a chunk. Chunk granularity is nearly free but takes a neighbour's edits in the same chunk with it. With volumes a chunk usually has one owner, so chunk granularity is probably enough; a choice, not a fact | what the op log's digest tier carries | ROADMAP M3 |
