@@ -20,7 +20,8 @@ The address is the save format: settled before the first volume is stored.
 | Question | Unblocks | Context |
 |---|---|---|
 | **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? | where a volume may sit | DECISIONS 49 |
-| **How a volume seats.** The stamp's flatten (75), a platform of built voxels (a slab on columns down to the ground), or a choice made at opening? And how the platform's size is picked in the mountains, over one or more volumes of the fixed grid | the volume grid rework (ROADMAP M1.75) | DECISIONS 75, 76 |
+| **How a volume seats.** The stamp's flatten (75), a platform of built voxels (a slab on columns down to the ground), or a choice made at opening? And how the platform's size is picked in the mountains, over one or more volumes of the grid. Today it is the flatten, a plot at a time: a volume takes the floor of the one it is opened beside, and two platforms that meet make a terrace | the seat of a volume (ROADMAP M1.75) | DECISIONS 75, 76, 77 |
+| **Whether a chunk is cut by the address along `h` too.** A volume counts its chunks from its floor, so two volumes on floors of different heights cut theirs at different heights, and a stored chunk is named by its volume before its address. Cut by the address, a floor passes through the middle of a chunk | the key of a stored chunk (ROADMAP M3) | DECISIONS 75, 77 |
 | **What a body collides with inside a GLB shell.** 47 says collision is the generator, always, and a shell is a mesh we cannot read. Either the volume is the truth and the GLB a skin over the same cells (one rule, a voxelizer at import), or mesh collision becomes a capability we build. The first is cheaper | the cave: a shell and a room | DECISIONS 47, 58 |
 | **Look**: terrain material style: flat colours, pixel textures, triplanar? | the material contract past procedural detail | RENDER.md |
 | **How fine per-user rollback has to be.** Per cell attribution costs an owner byte in every cell, doubling a chunk. Chunk granularity is nearly free but takes a neighbour's edits in the same chunk with it. With volumes a chunk usually has one owner, so chunk granularity is probably enough; a choice, not a fact | what the op log's digest tier carries | ROADMAP M3 |
@@ -46,6 +47,7 @@ The address is the save format: settled before the first volume is stored.
 
 | Problem | Context |
 |---|---|
+| **WORLD.md stands at its 200 lines.** The next fact about the world has no room, and which theme leaves for a doc of its own is not chosen: where you are (the place code and the pose), or the recipe and its generators | CLAUDE.md § Docs · `scripts/docs.ts` |
 | **The simplex kernel steps, and the warp rides on it.** `simplex_d` uses `0.6 - r²` over four corners, so value and gradient both jump a little at every simplex boundary, and `plates::shape` warps its domain by that gradient. Worst seen: 21 m of seabed, 250 m under water. `0.5 - r²` is continuous and costs amplitude; either way every world and every golden changes, so it waits for a reason to spend that | DECISIONS 63 · `worldgen/tests/cliffs.rs` guards at 60 m |
 | The magic link is consumed on GET; a mail scanner that prefetches could burn it. Hardened variant: a confirm button page | ARCHITECTURE § Identity |
 | PocketBase rate limits are off, and the code request both mails and creates accounts. On before any public deploy. No `SMTP_TLS` env yet | `server/` |
