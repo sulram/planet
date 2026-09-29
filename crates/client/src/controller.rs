@@ -56,6 +56,10 @@ const FLY_ALIGN_PER_S: f64 = 1.5;
 const FLY_ALIGN_NEAR: f64 = 0.02;
 const FLY_ALIGN_FAR: f64 = 0.30;
 const EYE_M: f64 = 1.5;
+/// How stiffly the eye comes after a body that took a step, per second. The
+/// spring is critically damped: it starts and ends with ease and never passes
+/// the body. A third of a second and it is there.
+const EYE_SETTLE_PER_S: f64 = 16.0;
 const LOOK_RAD_PER_PX: f64 = 0.0025;
 const PITCH_LIMIT: f64 = 1.45;
 const TURN_PER_S: f64 = 12.0;
@@ -132,6 +136,12 @@ pub struct Controller {
     /// the flyer's frame wins. Look at the planet from the moon and fly: you go
     /// to the planet, and nothing turns you on the way.
     frame_up: DVec3,
+    /// How far the eye stands off the body's own height, metres along the
+    /// frame's up, and how fast that closes. A body takes a step whole, in
+    /// the frame it happens, and the eye is left where it was to come after:
+    /// see [`Controller::stand_on`].
+    eye_off_m: f64,
+    eye_off_mps: f64,
 }
 
 impl Controller {
@@ -160,6 +170,8 @@ impl Controller {
             moon: None,
             drawn_footprint_m: 0.0,
             frame_up: DVec3::from(tangents.up),
+            eye_off_m: 0.0,
+            eye_off_mps: 0.0,
         }
     }
 
@@ -648,6 +660,7 @@ impl Controller {
             }
         };
 
+        self.settle_eye(dt);
         self.step(velocity * dt, generator, build);
         self.resolve_site();
         self.speed_mps = velocity.length();
@@ -722,7 +735,7 @@ impl Controller {
             // Nothing within reach under the feet: keep falling.
             None => self.grounded = false,
             Some(floor_m) if self.height_m <= floor_m => {
-                self.height_m = floor_m;
+                self.stand_on(floor_m);
                 if self.mode == Mode::Walk {
                     self.grounded = true;
                     self.vertical_mps = 0.0;
@@ -732,7 +745,7 @@ impl Controller {
                 // Walking downhill: stay glued to the ground over a step
                 // (auto step), fall off anything deeper.
                 if self.height_m - floor_m < STEP_M {
-                    self.height_m = floor_m;
+                    self.stand_on(floor_m);
                 } else {
                     self.grounded = false;
                 }
@@ -749,6 +762,27 @@ impl Controller {
                 self.vertical_mps = self.vertical_mps.min(0.0);
             }
         }
+    }
+
+    /// Puts the feet on the floor under them. On foot, a change of a step or
+    /// less leaves the eye where it was, to come after with ease: a stair
+    /// jolts the body and never the view. More than a step is the world
+    /// changing under the body, and the eye goes with it at once.
+    fn stand_on(&mut self, floor_m: f64) {
+        let rise_m = floor_m - self.height_m;
+        if self.mode == Mode::Walk && rise_m.abs() <= STEP_M + 1e-6 {
+            self.eye_off_m -= rise_m;
+        }
+        self.height_m = floor_m;
+    }
+
+    /// Closes what a step left between the eye and the body, exactly for any
+    /// `dt`: a long frame settles further, never past.
+    fn settle_eye(&mut self, dt: f64) {
+        let pull = (self.eye_off_mps + EYE_SETTLE_PER_S * self.eye_off_m) * dt;
+        let decay = (-EYE_SETTLE_PER_S * dt).exp();
+        self.eye_off_m = (self.eye_off_m + pull) * decay;
+        self.eye_off_mps = (self.eye_off_mps - EYE_SETTLE_PER_S * pull) * decay;
     }
 
     fn step_on_planet(&mut self, delta: DVec3, generator: &Generator, build: &Build) {
@@ -840,7 +874,7 @@ impl Controller {
     pub fn camera(&self, generator: &Generator) -> Camera {
         let up = self.frame_up;
         let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
-        let target = self.position() + up * EYE_M;
+        let target = self.position() + up * (EYE_M + self.eye_off_m);
         let mut position = target - forward * self.boom_m;
 
         // Never inside the body the avatar stands on, as drawn. In a cave
@@ -934,6 +968,66 @@ mod tests {
             controller.update(1.0 / 60.0, wish, &generator, &build);
         }
         point.u.floor() + 8.0 - controller.point().u
+    }
+
+    /// A walker on a slab, walking onto a stair one cell high that runs the
+    /// width of the plot. The most the feet rise in one tick and the most the
+    /// camera does, metres, and how far the camera ends from where a camera
+    /// with no ease stands.
+    fn walk_up_a_stair() -> (f64, f64, f64) {
+        let generator = Generator::new(Recipe::new(1)).unwrap();
+        let side = f64::from(generator.sphere().blocks().side());
+        let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
+        let mut build = Build::default();
+        let floor_m = build.lay_platform(&generator, point).unwrap();
+        let top = (floor_m / BLOCK_M) as i32;
+        let cells = build.cells_over(point).unwrap();
+        let x = point.u.floor() as i32 + 3;
+        build.lay(
+            &generator,
+            Gesture::Create {
+                span: Span::between([x, cells.min[1], top], [x + 8, cells.max[1], top]),
+                paint: 0,
+            },
+        );
+        let mut controller = Controller::spawn(point, &generator);
+        controller.lift_onto(floor_m);
+        let wish = Wish {
+            movement: [0.0, 1.0],
+            ..Wish::default()
+        };
+        let radius = |c: &Controller| c.camera(&generator).position.length();
+        let rigid_m = radius(&controller) - controller.height_m;
+        let (mut feet_m, mut eye_m) = (0.0f64, 0.0f64);
+        for _ in 0..48 {
+            let before = (controller.height_m, radius(&controller));
+            controller.update(1.0 / 60.0, wish, &generator, &build);
+            feet_m = feet_m.max(controller.height_m - before.0);
+            eye_m = eye_m.max(radius(&controller) - before.1);
+        }
+        assert!((controller.height_m - floor_m - BLOCK_M).abs() < 1e-6);
+        let off_m = radius(&controller) - controller.height_m - rigid_m;
+        (feet_m, eye_m, off_m)
+    }
+
+    #[test]
+    fn the_eye_eases_over_a_step_the_body_takes_at_once() {
+        let (feet_m, eye_m, off_m) = walk_up_a_stair();
+        assert!((feet_m - BLOCK_M).abs() < 1e-6, "{feet_m}");
+        // A spring this stiff moves the eye three metres a second at most
+        // over a step: a twentieth of a metre a tick.
+        assert!(eye_m < 0.06, "{eye_m}");
+        assert!(off_m.abs() < 0.01, "{off_m}");
+    }
+
+    #[test]
+    fn a_platform_laid_under_a_body_takes_the_eye_with_it() {
+        let generator = Generator::new(Recipe::new(1)).unwrap();
+        let side = f64::from(generator.sphere().blocks().side());
+        let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
+        let mut controller = Controller::spawn(point, &generator);
+        controller.lift_onto(controller.height_m + 4.0);
+        assert_eq!(controller.eye_off_m, 0.0);
     }
 
     #[test]

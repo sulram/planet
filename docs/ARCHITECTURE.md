@@ -169,6 +169,8 @@ Numbers marked (p) are proposed and not yet confirmed.
 - The controller keeps its state in address space; a wish direction in metres
   becomes an address delta through the local tangents. Tangent vectors are
   parallel transported, so seams and corners need no special case.
+- On foot the body takes a step at once and the camera's eye comes after on
+  a spring, along up only; all else the camera follows with no play (81).
 - Web app: SvelteKit on adapter-node. One PocketBase client per request,
   session in the httpOnly `pb_auth` cookie, operator barrier in
   `hooks.server.ts`. It holds no superuser credentials.
