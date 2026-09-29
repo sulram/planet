@@ -1,7 +1,7 @@
 //! Building, as a front end asks for it: a tool in hand builds nothing, and
 //! a platform is laid where it is asked for.
 
-use client::{BuildRefusal, Client, Command, Event, Input, Recipe, Tool};
+use client::{Base, BuildRefusal, Client, Command, Event, Input, Recipe, Tool};
 use scene::VolumeChange;
 
 /// A client standing on dry land, in the middle of a sector.
@@ -43,7 +43,9 @@ fn a_tool_in_hand_builds_nothing() {
 fn a_platform_is_laid_where_it_is_asked_for() {
     let mut client = client();
     client.command(Command::SetPlatform { side: 16 });
-    client.command(Command::LayPlatform);
+    client.command(Command::LayPlatform {
+        base: Base::Pillars,
+    });
     assert!(refusals(&mut client).is_empty());
     let built = |change: &VolumeChange| matches!(change, VolumeChange::Add(..));
     assert!(client.drain_volume_changes().iter().any(built));

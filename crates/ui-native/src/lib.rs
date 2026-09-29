@@ -5,7 +5,7 @@
 
 mod paint;
 
-use client::{Command, Effects, Event, PLATFORMS, ToneMap, Tool};
+use client::{Base, Command, Effects, Event, PLATFORMS, ToneMap, Tool};
 use winit::window::Window;
 
 pub struct Panel {
@@ -334,8 +334,12 @@ fn build_layout(root: &mut egui::Ui, building: &Building) -> Option<Command> {
                         asked = Some(Command::SetPlatform { side });
                     }
                 }
-                if ui.button("Lay").clicked() {
-                    asked = Some(Command::LayPlatform);
+            });
+            ui.horizontal(|ui| {
+                for (label, base) in [("Platform", Base::Pillars), ("Solid", Base::Solid)] {
+                    if ui.button(label).clicked() {
+                        asked = Some(Command::LayPlatform { base });
+                    }
                 }
             });
             ui.horizontal_wrapped(|ui| {

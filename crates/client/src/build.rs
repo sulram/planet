@@ -26,7 +26,7 @@ use worldgen::Generator;
 
 use crate::collision::{Footing, STEP_M};
 use crate::grass::TUFT_M;
-use crate::seam::{BuildRefusal, Tool};
+use crate::seam::{Base, BuildRefusal, Tool};
 
 /// Blocks along the side of a plot, as a power of two: 64 of them, 32 metres
 /// at the middle of a sector. The address of a column, less these bits, is
@@ -410,13 +410,14 @@ impl Build {
 
     /// Lays a platform where a body stands, opening the volume of its plot
     /// if none stands there: a slab of the side picked, in the paint in hand,
-    /// its top over the highest ground under it, on pillars down to the
+    /// its top over the highest ground under it, on `base` down to the
     /// ground. It is a stroke like any other, kept to take back. Returns the
     /// height of the top of the slab, metres.
     pub fn lay_platform(
         &mut self,
         generator: &Generator,
         point: SurfacePoint,
+        base: Base,
     ) -> Result<f64, BuildRefusal> {
         self.open(generator, point)?;
         let sector = point.sector;
@@ -436,7 +437,8 @@ impl Build {
             top: highest.ceil() as i32,
             ..square
         };
-        // A pillar reaches the lowest ground at the foot of its column.
+        // A base reaches the lowest ground at the foot of its column, so
+        // no ground shows under it.
         let under = |x: i32, y: i32| {
             let (dx, dy) = ((x - x0) as usize, (y - y0) as usize);
             let at = |dx: usize, dy: usize| corners[dy * across + dx];
@@ -455,9 +457,13 @@ impl Build {
             .position(|site| site.sector == sector)
             .expect("a volume was opened on this sector");
         let paint = self.paint;
+        let base = match base {
+            Base::Pillars => voxel::Base::Pillars,
+            Base::Solid => voxel::Base::Solid,
+        };
         self.change(generator, site, reach, |volumes| {
             platform
-                .gestures(under, paint)
+                .gestures(base, under, paint)
                 .into_iter()
                 .filter_map(|gesture| volumes.apply(gesture))
                 .reduce(|a, b| a.with(b.min).with(b.max))
@@ -1010,7 +1016,9 @@ mod tests {
         let (generator, point) = world();
         let mut build = Build::default();
         build.set_platform(64);
-        build.lay_platform(&generator, point).expect("dry land");
+        build
+            .lay_platform(&generator, point, Base::Pillars)
+            .expect("dry land");
         let platform = platform_at(&build, point);
         let origin = [platform.corner[0], platform.corner[1], platform.top];
         // The platform is there to stand on, not to take back.
@@ -1119,12 +1127,12 @@ mod tests {
         let mut build = Build::default();
         for (u, v) in [(10.0, point.v), (point.u, side - 10.0), (side - 1.0, 1.0)] {
             let edge = SurfacePoint::new(point.sector, u, v);
-            let opened = build.lay_platform(&generator, edge);
+            let opened = build.lay_platform(&generator, edge, Base::Pillars);
             assert_eq!(opened.err(), Some(BuildRefusal::Seam), "{u} {v}");
         }
         // One plot in, the edge is no reason: the sea may be.
         let inside = SurfacePoint::new(point.sector, 70.0, side - 70.0);
-        let opened = build.lay_platform(&generator, inside);
+        let opened = build.lay_platform(&generator, inside, Base::Pillars);
         assert_ne!(opened.err(), Some(BuildRefusal::Seam));
     }
 
@@ -1135,7 +1143,9 @@ mod tests {
         build.set_platform(16);
         build.set_paint(6);
         assert_eq!(build.platform(), 16);
-        let top_m = build.lay_platform(&generator, point).unwrap();
+        let top_m = build
+            .lay_platform(&generator, point, Base::Pillars)
+            .unwrap();
         let platform = platform_at(&build, point);
         assert_eq!(f64::from(platform.top) * BLOCK_M, top_m);
         let volumes = &build.sites[0].volumes;
@@ -1179,6 +1189,42 @@ mod tests {
     }
 
     #[test]
+    fn a_solid_base_fills_every_column_down_to_the_ground_on_a_steep_plot() {
+        // The steepest plot found near the test world: 32 m of fall across
+        // its 32 m, where a volume's bottom is most likely to cut a column.
+        let (generator, point) = world();
+        let side = f64::from(generator.sphere().blocks().side());
+        let point = SurfacePoint::new(point.sector, side * 0.312, side * 0.372);
+        let mut build = Build::default();
+        build.set_platform(64);
+        build.lay_platform(&generator, point, Base::Solid).unwrap();
+        let platform = platform_at(&build, point);
+        let volumes = &build.sites[0].volumes;
+        let slab = platform.slab();
+        let mut deepest = 0;
+        for [x, y, z] in slab.cells() {
+            let foot = [(0, 0), (1, 0), (0, 1), (1, 1)]
+                .map(|(dx, dy)| {
+                    ground(
+                        &generator,
+                        point.sector,
+                        f64::from(x + dx),
+                        f64::from(y + dy),
+                    )
+                })
+                .into_iter()
+                .fold(f64::MAX, f64::min)
+                .floor() as i32;
+            deepest = deepest.max(z - foot);
+            assert!(volumes.get([x, y, foot - 1]).is_air(), "{x} {y}");
+            for z in foot..=z {
+                assert!(!volumes.get([x, y, z]).is_air(), "{x} {y} {z}");
+            }
+        }
+        assert!(deepest > 50, "{deepest}");
+    }
+
+    #[test]
     fn the_side_picked_is_one_on_offer() {
         let mut build = Build::default();
         for (asked, given) in [(0, 8), (8, 8), (20, 16), (32, 32), (50, 64), (900, 64)] {
@@ -1192,10 +1238,14 @@ mod tests {
         let (generator, point) = world();
         let mut build = Build::default();
         build.set_platform(16);
-        build.lay_platform(&generator, point).unwrap();
+        build
+            .lay_platform(&generator, point, Base::Pillars)
+            .unwrap();
         let first = platform_at(&build, point).slab();
         let beside = SurfacePoint::new(point.sector, point.u + 16.0, point.v);
-        build.lay_platform(&generator, beside).unwrap();
+        build
+            .lay_platform(&generator, beside, Base::Pillars)
+            .unwrap();
         let second = platform_at(&build, beside).slab();
         assert_eq!(second.min[0], first.max[0] + 1);
         assert_eq!(second.min[1], first.min[1]);
@@ -1205,7 +1255,9 @@ mod tests {
     fn a_body_on_the_platform_stands_on_its_slab() {
         let (generator, point) = world();
         let mut build = Build::default();
-        let top_m = build.lay_platform(&generator, point).unwrap();
+        let top_m = build
+            .lay_platform(&generator, point, Base::Pillars)
+            .unwrap();
         let footing = build.footing(point, top_m).unwrap();
         assert_eq!(footing.floor_m, Some(top_m));
         // The ground is under it everywhere, so it is the slab that holds.

@@ -267,9 +267,9 @@
 		onbuild={build}
 		onpaint={(next) => view?.command({ type: 'set_paint', paint: next })}
 		onplatform={(side) => view?.command({ type: 'set_platform', side })}
-		onlay={() => {
+		onlay={(base) => {
 			refused = null;
-			view?.command({ type: 'lay_platform' });
+			view?.command({ type: 'lay_platform', base });
 		}}
 		onundo={() => view?.command({ type: 'undo' })}
 		onredo={() => view?.command({ type: 'redo' })}

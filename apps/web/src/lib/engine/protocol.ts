@@ -22,6 +22,10 @@ export const tools = ['create', 'delete', 'paint'] as const satisfies readonly T
 /** The sides a platform can have, in cells. The engine takes the nearest. */
 export const platforms = [8, 16, 32, 64] as const;
 
+/** What carries a platform down to the ground: pillars under an open slab, or every column filled. */
+export type Base = 'pillars' | 'solid';
+export const bases = ['pillars', 'solid'] as const satisfies readonly Base[];
+
 /** Why no platform could be laid where the body stands. */
 export type BuildRefusal = 'moon' | 'sea' | 'seam';
 
@@ -68,8 +72,8 @@ export type Command =
 	| { type: 'set_tool'; tool: Tool | null }
 	/** The side of the platform laid next, in cells. */
 	| { type: 'set_platform'; side: number }
-	/** Lay a platform where the body stands: a slab on pillars down to the ground. */
-	| { type: 'lay_platform' }
+	/** Lay a platform where the body stands: a slab on a base down to the ground, pillars when left out. */
+	| { type: 'lay_platform'; base?: Base }
 	/** The paint the next stroke lays: an index into the palette. */
 	| { type: 'set_paint'; paint: number }
 	/** Take back the last stroke that landed, or put back the last one taken back. */

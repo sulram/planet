@@ -38,7 +38,9 @@ pub use input::{Input, Key};
 use peers::Peers;
 pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{Anchor, BuildRefusal, Command, Event, Mode, PeerInfo, Scope, SessionStatus, Tool};
+pub use seam::{
+    Anchor, Base, BuildRefusal, Command, Event, Mode, PeerInfo, Scope, SessionStatus, Tool,
+};
 pub use session::Outbound;
 use session::Session;
 use terrain::{Body, Cover, Terrain};
@@ -383,8 +385,8 @@ impl Client {
                 self.build.set_platform(side);
                 self.tool_changed();
             }
-            Command::LayPlatform => {
-                self.lay_platform();
+            Command::LayPlatform { base } => {
+                self.lay_platform(base);
             }
             Command::Undo => {
                 self.build.undo(&self.generator);
@@ -423,12 +425,12 @@ impl Client {
 
     /// Lays a platform where the body stands. False where none can be laid,
     /// which is said.
-    fn lay_platform(&mut self) -> bool {
+    fn lay_platform(&mut self, base: Base) -> bool {
         let laid = if self.controller.on_moon() {
             Err(BuildRefusal::Moon)
         } else {
             self.build
-                .lay_platform(&self.generator, self.controller.point())
+                .lay_platform(&self.generator, self.controller.point(), base)
         };
         match laid {
             Ok(top_m) => {

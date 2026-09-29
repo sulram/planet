@@ -1,14 +1,25 @@
 //! A platform: what a build stands on, built.
 //!
-//! A slab one cell thick with its top at one height, on pillars down to the
-//! ground. Nothing here knows what the ground is: whoever seats the volumes
-//! says how high the slab stands and how high the ground is under each
-//! column, in cells, and a pillar is as tall as the drop under it.
+//! A slab one cell thick with its top at one height, on a base down to the
+//! ground: pillars, or every column filled. Nothing here knows what the
+//! ground is: whoever seats the volumes says how high the slab stands and how
+//! high the ground is under each column, in cells, and the base is as tall as
+//! the drop under it.
 //!
 //! A platform is cut by the frame, as a plot is: those of one size tile it,
 //! and two side by side meet edge to edge with their pillars paired.
 
 use crate::{Gesture, Span};
+
+/// What carries a slab down to the ground.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Base {
+    /// A pillar at the corners of every bay, and open under the slab.
+    #[default]
+    Pillars,
+    /// Every column filled down to the ground: a block standing on it.
+    Solid,
+}
 
 /// A square of columns under a slab.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -52,21 +63,40 @@ impl Platform {
     }
 
     /// The gestures that build it in one paint, over ground `ground(x, y)`
-    /// cells high: the slab, then a pillar from the ground to the slab
-    /// wherever there is a drop to span.
-    pub fn gestures(&self, ground: impl Fn(i32, i32) -> i32, paint: u8) -> Vec<Gesture> {
+    /// cells high: the slab, then its base from the ground to the slab
+    /// wherever there is a drop to span. A solid base is one box for each run
+    /// of columns along a row whose ground stands as high, so a slope is a
+    /// staircase of a few boxes and level ground one.
+    pub fn gestures(
+        &self,
+        base: Base,
+        ground: impl Fn(i32, i32) -> i32,
+        paint: u8,
+    ) -> Vec<Gesture> {
         let slab = self.slab();
         let z = self.top - 1;
         let mut gestures = vec![Gesture::Create { span: slab, paint }];
         for y in slab.min[1]..=slab.max[1] {
-            for x in slab.min[0]..=slab.max[0] {
+            let mut x = slab.min[0];
+            while x <= slab.max[0] {
                 let foot = ground(x, y);
-                if self.pillar(x, y) && foot < z {
+                let mut end = x;
+                let carried = match base {
+                    Base::Pillars => self.pillar(x, y),
+                    Base::Solid => {
+                        while end < slab.max[0] && ground(end + 1, y) == foot {
+                            end += 1;
+                        }
+                        true
+                    }
+                };
+                if carried && foot < z {
                     gestures.push(Gesture::Create {
-                        span: Span::between([x, y, foot], [x, y, z - 1]),
+                        span: Span::between([x, y, foot], [end, y, z - 1]),
                         paint,
                     });
                 }
+                x = end + 1;
             }
         }
         gestures
@@ -79,11 +109,15 @@ mod tests {
     use crate::Volumes;
 
     fn built(platform: Platform, ground: impl Fn(i32, i32) -> i32) -> Volumes {
+        built_on(Base::Pillars, platform, ground)
+    }
+
+    fn built_on(base: Base, platform: Platform, ground: impl Fn(i32, i32) -> i32) -> Volumes {
         let mut volumes = Volumes::new(6);
         for plot in [[0, 0], [1, 0]] {
             volumes.open(plot, 0, 64);
         }
-        for gesture in platform.gestures(ground, 1) {
+        for gesture in platform.gestures(base, ground, 1) {
             volumes.apply(gesture);
         }
         volumes
@@ -129,6 +163,41 @@ mod tests {
         // Between the pillars it is open under the slab.
         assert!(volumes.get([24, 24, 5]).is_air());
         assert_eq!(volumes.get([24, 24, 9]).paint(), Some(1));
+    }
+
+    #[test]
+    fn a_solid_base_fills_every_column_down_to_the_ground() {
+        // The ground falls a cell every two columns along `x`, and rises a
+        // cell every three along `y`.
+        let ground = |x: i32, y: i32| 9 - (x - 16) / 2 + (y - 16) / 3;
+        let platform = Platform::over(20, 20, 4, 18);
+        let volumes = built_on(Base::Solid, platform, ground);
+        for y in 16..32 {
+            for x in 16..32 {
+                let foot = ground(x, y);
+                for z in foot..18 {
+                    assert_eq!(volumes.get([x, y, z]).paint(), Some(1), "{x} {y} {z}");
+                }
+                assert!(volumes.get([x, y, foot - 1]).is_air(), "{x} {y}");
+            }
+        }
+        // Around it there is nothing.
+        assert!(volumes.get([15, 20, 8]).is_air());
+        assert!(volumes.get([32, 20, 8]).is_air());
+    }
+
+    #[test]
+    fn a_solid_base_is_a_box_for_each_run_of_level_ground() {
+        let platform = Platform::over(0, 0, 4, 10);
+        // Level: the slab and one box a row.
+        let level = platform.gestures(Base::Solid, |_, _| 4, 1);
+        assert_eq!(level.len(), 1 + 16);
+        // A step down half way along every row: two boxes a row.
+        let step = platform.gestures(Base::Solid, |x, _| if x < 8 { 4 } else { 3 }, 1);
+        assert_eq!(step.len(), 1 + 2 * 16);
+        // Ground as high as the slab needs nothing under it.
+        let flush = platform.gestures(Base::Solid, |_, _| 9, 1);
+        assert_eq!(flush.len(), 1);
     }
 
     #[test]

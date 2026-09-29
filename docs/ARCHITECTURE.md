@@ -130,10 +130,11 @@ Numbers marked (p) are proposed and not yet confirmed.
   no setting of its own. Both UIs put a button in the top right corner.
 - Web: `engine/Settings.svelte`; the choice stays in the browser
   (`localStorage`), since it belongs to the machine, not the account.
-- Building (76, 78, 79): `set_tool` takes a tool or `null`, then `set_paint`,
-  `set_platform`, `lay_platform`, `undo`, `redo`; the engine says
-  `tool_changed`, `palette`, `build_refused`, `history`. Both UIs put Build in
-  the bottom right corner (web `engine/Build.svelte`). Building, the pointer
+- Building (76, 78, 79, 85): `set_tool` takes a tool or `null`, then
+  `set_paint`, `set_platform`, `lay_platform` with its base, `undo`, `redo`;
+  the engine says `tool_changed`, `palette`, `build_refused`, `history`. Both
+  UIs put Build in the bottom right corner (web `engine/Build.svelte`), with a
+  button to lay a platform on each base. Building, the pointer
   is free and `Input` carries where it is and whether Alt is held with it: the
   primary button is the tool's, the secondary one looks. 1 2 3 take a tool,
   Alt turns a stroke, Escape drops the stroke and then the tool, Cmd or Ctrl

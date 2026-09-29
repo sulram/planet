@@ -51,6 +51,16 @@ pub enum Tool {
     Paint,
 }
 
+/// What carries the slab of a platform down to the ground: a pillar at the
+/// corners of every bay, open under the slab, or every column filled.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Base {
+    #[default]
+    Pillars,
+    Solid,
+}
+
 /// Why no platform could be laid where the body stands. A front end says it
 /// in its own words.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
@@ -125,9 +135,12 @@ pub enum Command {
         side: u32,
     },
     /// Lays a platform where the body stands, opening the volume of its
-    /// plot where none stands: a slab over the highest ground under it, on
-    /// pillars down to the ground.
-    LayPlatform,
+    /// plot where none stands: a slab over the highest ground under it, on a
+    /// base down to the ground. Pillars when the base is left out.
+    LayPlatform {
+        #[serde(default)]
+        base: Base,
+    },
     /// The paint the next stroke lays: an index into [`Event::Palette`].
     SetPaint {
         paint: u8,
@@ -362,7 +375,13 @@ mod tests {
         );
         assert_eq!(
             Command::from_json(r#"{"type":"lay_platform"}"#).unwrap(),
-            Command::LayPlatform
+            Command::LayPlatform {
+                base: Base::Pillars
+            }
+        );
+        assert_eq!(
+            Command::from_json(r#"{"type":"lay_platform","base":"solid"}"#).unwrap(),
+            Command::LayPlatform { base: Base::Solid }
         );
     }
 

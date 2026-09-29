@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Alert, Button, Panel, Segmented } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { platforms, tools, type BuildRefusal, type Tool } from './index';
+	import { bases, platforms, tools, type Base, type BuildRefusal, type Tool } from './index';
 
 	// Building: a button in the bottom right corner, and the panel it opens
 	// while a tool is in hand. A front-end only: it shows the tool, the paint
@@ -23,8 +23,8 @@
 		onbuild: (tool: Tool | null) => void;
 		onpaint: (paint: number) => void;
 		onplatform: (side: number) => void;
-		/** Lay a platform where the body stands. */
-		onlay: () => void;
+		/** Lay a platform where the body stands, on a base. */
+		onlay: (base: Base) => void;
 		onundo: () => void;
 		onredo: () => void;
 	}
@@ -56,7 +56,11 @@
 				onselect={(value) => onplatform(Number(value))}
 			/>
 		</div>
-		<Button variant="ghost" type="button" onclick={onlay}>{t('engine.build.platform.lay')}</Button>
+		<div class="lay">
+			{#each bases as base (base)}
+				<Button variant="ghost" type="button" onclick={() => onlay(base)}>{t(`engine.build.lay.${base}`)}</Button>
+			{/each}
+		</div>
 		{#if refused}
 			<Alert variant="info">{t(`engine.build.refused.${refused}`)}</Alert>
 		{/if}
@@ -99,6 +103,10 @@
 		align-items: center;
 		gap: var(--sp-2);
 		color: var(--text-muted);
+	}
+	.lay {
+		display: flex;
+		gap: var(--sp-2);
 	}
 	.close {
 		border: none;

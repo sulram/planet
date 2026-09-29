@@ -930,7 +930,7 @@ fn rotate_toward(from: DVec3, to: DVec3, fraction: f64, fallback_axis: DVec3) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::seam::Tool;
+    use crate::seam::{Base, Tool};
     use topology::{BLOCK_M, Sector};
     use voxel::{Gesture, Span};
     use worldgen::Recipe;
@@ -943,7 +943,9 @@ mod tests {
         let side = f64::from(generator.sphere().blocks().side());
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut build = Build::default();
-        let floor_m = build.lay_platform(&generator, point).unwrap();
+        let floor_m = build
+            .lay_platform(&generator, point, Base::Pillars)
+            .unwrap();
         // A cell is the address it has: the wall stands on the slab eight
         // columns on from the body, across the whole of the plot.
         let top = (floor_m / BLOCK_M) as i32;
@@ -979,7 +981,9 @@ mod tests {
         let side = f64::from(generator.sphere().blocks().side());
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut build = Build::default();
-        let floor_m = build.lay_platform(&generator, point).unwrap();
+        let floor_m = build
+            .lay_platform(&generator, point, Base::Pillars)
+            .unwrap();
         let top = (floor_m / BLOCK_M) as i32;
         let cells = build.cells_over(point).unwrap();
         let x = point.u.floor() as i32 + 3;
