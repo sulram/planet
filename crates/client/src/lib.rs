@@ -414,16 +414,9 @@ impl Client {
         self.build.tool().is_some()
     }
 
-    /// Takes a tool, or puts it down with `None`. Taking one where no volume
-    /// stands opens the one of the plot under the body and lays a platform
-    /// under its feet, and where none can be says why and builds nothing.
+    /// Takes a tool, or puts it down with `None`. It builds nothing: what a
+    /// stroke starts on is laid by asking for a platform.
     fn take_tool(&mut self, tool: Option<Tool>) {
-        if tool.is_some() {
-            let standing = !self.controller.on_moon() && self.build.covers(self.controller.point());
-            if !standing && !self.lay_platform() {
-                return;
-            }
-        }
         self.build.take(tool);
         self.tool_changed();
     }
@@ -918,7 +911,7 @@ impl Client {
             &self.generator,
             &eye,
             input.held(Key::Use),
-            input.held(Key::Upright),
+            input.held(Key::Turn),
         );
         self.history_changed();
         let patches = self.stream(&camera, Terrain::update);

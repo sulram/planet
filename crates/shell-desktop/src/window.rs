@@ -360,7 +360,7 @@ fn binding(code: KeyCode) -> Option<Key> {
         KeyCode::Digit1 => Key::Create,
         KeyCode::Digit2 => Key::Delete,
         KeyCode::Digit3 => Key::Paint,
-        KeyCode::AltLeft | KeyCode::AltRight => Key::Upright,
+        KeyCode::AltLeft | KeyCode::AltRight => Key::Turn,
         _ => return None,
     })
 }

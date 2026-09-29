@@ -199,17 +199,24 @@ struct Aim {
 }
 
 /// A stroke being drawn: from the cell it started on, across a layer of cells
-/// through it, to where the pointer meets that layer.
+/// through it, to the cell the pointer is over, or to where it meets that
+/// layer when it is over nothing of it.
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Stroke {
     site: usize,
     tool: Tool,
     start: [i32; 3],
+    /// The side the stroke started on: the axis it faces, and where along it
+    /// the surface is.
+    side: (usize, f64),
+    /// The axes of the three layers through the start, in the order a hand
+    /// turns the stroke through them: the side it started on first.
+    turns: [usize; 3],
     /// The axis the layer is across, and where along it the pointer is read.
-    /// A slab lies on the side the stroke started on and is read on that
-    /// side; a wall stands up from it, across another axis, and is read on
-    /// its face toward the eye. Read anywhere else, the cell under the
-    /// pointer is not the one the stroke shows.
+    /// A stroke lies on the side it started on and is read on that side;
+    /// turned, or led onto another surface, it lies across another axis and
+    /// is read on its face toward the eye. Read anywhere else, the cell
+    /// under the pointer is not the one the stroke shows.
     across: (usize, f64),
     end: [i32; 3],
 }
@@ -217,6 +224,15 @@ struct Stroke {
 impl Stroke {
     fn span(self) -> Span {
         Span::between(self.start, self.end)
+    }
+
+    /// The cell a tool takes where it aims: a new one goes in the air before
+    /// the side hit, and what is taken away or repainted is the cell hit.
+    fn cell(tool: Tool, hit: Hit) -> [i32; 3] {
+        match tool {
+            Tool::Create => hit.before(),
+            Tool::Delete | Tool::Paint => hit.cell,
+        }
     }
 
     fn gesture(self, paint: u8) -> Gesture {
@@ -250,6 +266,11 @@ pub struct Build {
     aim: Option<Aim>,
     stroke: Option<Stroke>,
     using: bool,
+    /// Whether the key that turns a stroke was down last frame: a stroke
+    /// turns as it goes down.
+    turning: bool,
+    /// How many times the stroke being drawn, or the next one, was turned.
+    turned: usize,
     /// What the ghost shows now: it is meshed again only when that changes.
     ghost: Option<Gesture>,
     drawn: BTreeSet<VolumeMeshId>,
@@ -273,6 +294,8 @@ impl Default for Build {
             aim: None,
             stroke: None,
             using: false,
+            turning: false,
+            turned: 0,
             ghost: None,
             drawn: BTreeSet::new(),
             changes: Vec::new(),
@@ -304,6 +327,7 @@ impl Build {
             self.last_tool = tool;
         }
         self.stroke = None;
+        self.turned = 0;
         self.aim = None;
     }
 
@@ -459,6 +483,7 @@ impl Build {
 
     /// Drops the stroke being drawn, if there is one. True when there was.
     pub fn cancel(&mut self) -> bool {
+        self.turned = 0;
         self.stroke.take().is_some()
     }
 
@@ -497,14 +522,20 @@ impl Build {
 
     /// One frame of the tool: what the line of sight through the pointer
     /// meets, the stroke while the button is held, and the gesture when it
-    /// is let go. A stroke started with `upright` held stands up as a wall.
-    pub fn update(&mut self, generator: &Generator, eye: &Eye, using: bool, upright: bool) {
+    /// is let go. Each time `turn` goes down the stroke turns to the next of
+    /// the three layers through its start.
+    pub fn update(&mut self, generator: &Generator, eye: &Eye, using: bool, turn: bool) {
         let sphere = generator.sphere();
+        let turned = turn && !self.turning;
+        self.turning = turn;
         let Some(tool) = self.tool else {
             self.using = using;
             self.show_ghost(sphere, None);
             return;
         };
+        if turned {
+            self.turned = (self.turned + 1) % 3;
+        }
         let (from, toward) = eye.sight();
         let paths: Vec<Vec<[f64; 3]>> = self
             .sites
@@ -519,26 +550,63 @@ impl Build {
         if pressed {
             self.stroke = self.aim.and_then(|aim| {
                 let mut stroke = self.start(tool, aim)?;
-                if upright {
-                    let site = &self.sites[stroke.site];
-                    stroke.across = standing(site, sphere, eye, stroke.start, stroke.across.0);
-                }
+                let site = &self.sites[stroke.site];
+                stroke.turns = turns(site, sphere, eye, stroke.start, stroke.side.0);
                 Some(stroke)
             });
         }
-        if let Some(stroke) = &mut self.stroke {
-            let (across, at) = stroke.across;
-            // On the layer the stroke goes in, whatever is behind it, and
-            // over as many volumes as it reaches: a gesture takes of each
-            // what it holds.
-            if let Some(p) = crossing(&paths[stroke.site], across, at) {
-                let mut end = p.map(|n| n.floor() as i32);
-                end[across] = stroke.start[across];
-                stroke.end = end;
+        if let Some(mut stroke) = self.stroke {
+            let site = &self.sites[stroke.site];
+            let toward_eye = |axis: usize| near(site, sphere, eye, stroke.start, axis);
+            if pressed || turned {
+                let axis = stroke.turns[self.turned];
+                stroke.across = match axis == stroke.side.0 {
+                    true => stroke.side,
+                    false => (axis, toward_eye(axis)),
+                };
             }
+            // The cell the pointer is over, read as the start was. It ends
+            // the stroke when it lies in its layer. A stroke no hand turned
+            // also follows the pointer onto another surface its start lies
+            // on, as from the foot of a wall up the wall.
+            let (axis, at) = stroke.across;
+            let over = self.aim.filter(|aim| aim.site == stroke.site);
+            let led = over.and_then(|aim| {
+                let cell = Stroke::cell(tool, aim.hit);
+                let on = aim.hit.face.axis;
+                if cell[axis] == stroke.start[axis] {
+                    Some((stroke.across, cell))
+                } else if self.turned == 0 && cell[on] == stroke.start[on] {
+                    Some(((on, toward_eye(on)), cell))
+                } else {
+                    None
+                }
+            });
+            match led {
+                Some((across, cell)) => {
+                    stroke.across = across;
+                    stroke.end = cell;
+                }
+                // Over nothing of the layer, the pointer is read where its
+                // line of sight crosses it, whatever is behind, and over as
+                // many volumes as it reaches.
+                None => {
+                    if let Some(p) = crossing(&paths[stroke.site], axis, at) {
+                        stroke.end = p.map(|n| n.floor() as i32);
+                    }
+                }
+            }
+            // Whatever it was before it turned, the stroke is one layer
+            // thick: an end kept from another layer is brought into this one.
+            let (axis, _) = stroke.across;
+            stroke.end[axis] = stroke.start[axis];
+            self.stroke = Some(stroke);
         }
-        if released && let Some(stroke) = self.stroke.take() {
-            self.apply(generator, stroke.site, stroke.gesture(self.paint));
+        if released {
+            self.turned = 0;
+            if let Some(stroke) = self.stroke.take() {
+                self.apply(generator, stroke.site, stroke.gesture(self.paint));
+            }
         }
 
         let preview = match (self.stroke, self.aim) {
@@ -583,20 +651,18 @@ impl Build {
         (!hidden).then_some(aim)
     }
 
-    /// The stroke a tool starts where it aims, if it can start there: a new
-    /// cell goes in the air before the side hit, and what is taken away or
-    /// repainted is the cell hit.
+    /// The stroke a tool starts where it aims, if it can start there, lying
+    /// on the side it aims at.
     fn start(&self, tool: Tool, aim: Aim) -> Option<Stroke> {
-        let cell = match tool {
-            Tool::Create => aim.hit.before(),
-            Tool::Delete | Tool::Paint => aim.hit.cell,
-        };
+        let cell = Stroke::cell(tool, aim.hit);
         let face = aim.hit.face;
         let surface = f64::from(aim.hit.cell[face.axis] + i32::from(face.positive));
         self.sites[aim.site].volumes.holds(cell).then_some(Stroke {
             site: aim.site,
             tool,
             start: cell,
+            side: (face.axis, surface),
+            turns: [0, 1, 2].map(|turn| (face.axis + turn) % 3),
             across: (face.axis, surface),
             end: cell,
         })
@@ -797,33 +863,35 @@ fn ground(generator: &Generator, sector: Sector, u: f64, v: f64) -> f64 {
     generator.sample_at(direction, 0.0).height_m / BLOCK_M
 }
 
-/// The layer a stroke stands up in from the side it started on: across
-/// whichever of the other two axes runs most into the view, so the wall
-/// faces the eye as squarely as the grid allows, read on its face toward it.
-fn standing(
-    site: &Seated,
-    sphere: QuadSphere,
-    eye: &Eye,
-    start: [i32; 3],
-    facing: usize,
-) -> (usize, f64) {
-    let middle = |cell: [i32; 3]| {
-        let low = site.corner(sphere, cell);
-        let high = site.corner(sphere, cell.map(|n| n + 1));
-        (low + high) / 2.0
-    };
-    let step = |axis: usize| {
-        let mut next = start;
-        next[axis] += 1;
-        middle(next) - middle(start)
-    };
+/// The step from a cell to the next along an axis, in the world.
+fn step(site: &Seated, sphere: QuadSphere, cell: [i32; 3], axis: usize) -> DVec3 {
+    let mut next = cell;
+    next[axis] += 1;
+    site.corner(sphere, next) - site.corner(sphere, cell)
+}
+
+/// Where along an axis the pointer is read for the layer across it through
+/// a cell: its face toward the eye, the low one when the eye looks up the
+/// axis.
+fn near(site: &Seated, sphere: QuadSphere, eye: &Eye, cell: [i32; 3], axis: usize) -> f64 {
     let (_, forward) = eye.sight();
-    let depth = |axis: usize| step(axis).normalize_or_zero().dot(forward).abs();
-    let [p, q] = [(facing + 1) % 3, (facing + 2) % 3];
-    let across = if depth(p) >= depth(q) { p } else { q };
-    // Its face toward the eye: the low side when the eye looks up the axis.
-    let near = f64::from(start[across] + i32::from(step(across).dot(forward) < 0.0));
-    (across, near)
+    f64::from(cell[axis] + i32::from(step(site, sphere, cell, axis).dot(forward) < 0.0))
+}
+
+/// The axes of the three layers through a cell, in the order a hand turns a
+/// stroke through them: the side it started on, then of the other two the
+/// one the eye looks at more squarely, then the last.
+fn turns(site: &Seated, sphere: QuadSphere, eye: &Eye, cell: [i32; 3], side: usize) -> [usize; 3] {
+    let (_, forward) = eye.sight();
+    let depth = |axis: usize| {
+        let along = step(site, sphere, cell, axis).normalize_or_zero();
+        along.dot(forward).abs()
+    };
+    let [p, q] = [(side + 1) % 3, (side + 2) % 3];
+    match depth(p) >= depth(q) {
+        true => [side, p, q],
+        false => [side, q, p],
+    }
 }
 
 /// The colour and gloss a paint is drawn with.
@@ -1383,6 +1451,141 @@ mod tests {
         let laid = up_the_view(&mut build, &generator, origin, false);
         assert!(laid.len() >= 3, "{laid:?}");
         assert!(laid.iter().all(|at| at[2] == 0 && at[1] == 20), "{laid:?}");
+    }
+
+    /// The middle of a side of a cell.
+    fn side(build: &Build, sphere: QuadSphere, cell: [i32; 3], face: voxel::Face) -> DVec3 {
+        let quad = Quad {
+            cell,
+            face,
+            paint: 0,
+            open: [3; 4],
+        };
+        let site = &build.sites[0];
+        let corners = quad.corners().map(|corner| site.corner(sphere, corner));
+        corners.into_iter().sum::<DVec3>() / 4.0
+    }
+
+    /// Cells laid on the slab, in the paint of the platform.
+    fn stand(build: &mut Build, generator: &Generator, a: [i32; 3], b: [i32; 3]) {
+        build.lay(
+            generator,
+            Gesture::Create {
+                span: Span::between(a, b),
+                paint: 0,
+            },
+        );
+    }
+
+    #[test]
+    fn from_the_foot_of_a_wall_a_stroke_goes_up_the_wall() {
+        let (generator, mut build, origin) = opened();
+        let sphere = generator.sphere();
+        stand(
+            &mut build,
+            &generator,
+            at(origin, [30, 10, 0]),
+            at(origin, [30, 20, 5]),
+        );
+        build.take(Some(Tool::Create));
+        build.set_paint(4);
+        // From the slab at the foot of the wall, onto the wall itself.
+        let foot = top(&build, sphere, at(origin, [29, 15, -1]));
+        let wall = side(
+            &build,
+            sphere,
+            at(origin, [30, 12, 4]),
+            voxel::Face::new(0, false),
+        );
+        let back = build.sites[0].corner(sphere, at(origin, [14, 14, 0]))
+            - build.sites[0].corner(sphere, at(origin, [29, 14, 0]));
+        let mut eye = eye_at(foot + back + foot.normalize() * 6.0, foot);
+        point_at(&mut eye, foot);
+        build.update(&generator, &eye, true, false);
+        point_at(&mut eye, wall);
+        build.update(&generator, &eye, true, false);
+        build.update(&generator, &eye, false, false);
+        // A sheet against the wall, from the slab up to where it pointed.
+        let sheet: Vec<[i32; 3]> = laid(&build, origin)
+            .into_iter()
+            .filter(|cell| cell[0] != 30)
+            .collect();
+        assert_eq!(sheet.len(), 4 * 5, "{sheet:?}");
+        assert!(sheet.iter().all(|cell| cell[0] == 29), "{sheet:?}");
+        assert!(sheet.contains(&[29, 12, 4]) && sheet.contains(&[29, 15, 0]));
+    }
+
+    #[test]
+    fn a_hand_turns_a_stroke_through_the_three_layers() {
+        let (generator, mut build, origin) = opened();
+        let sphere = generator.sphere();
+        build.take(Some(Tool::Create));
+        let from = top(&build, sphere, at(origin, [20, 20, -1]));
+        let to = top(&build, sphere, at(origin, [24, 23, -1]));
+        let mut eye = eye_at(from + from.normalize() * 20.0, from);
+        point_at(&mut eye, from);
+        build.update(&generator, &eye, true, false);
+        point_at(&mut eye, to);
+        let mut across = Vec::new();
+        for turn in [false, true, false, true, false, true] {
+            build.update(&generator, &eye, true, turn);
+            let stroke = build.stroke.expect("a stroke being drawn");
+            // Whichever way it lies, it is one cell thick, through its start.
+            let (axis, _) = stroke.across;
+            assert_eq!(stroke.end[axis], stroke.start[axis]);
+            across.push(axis);
+        }
+        // On the slab it lies flat; turned, it stands one way, then the
+        // other, and then lies flat again.
+        assert_eq!(across[0], 2);
+        assert_eq!(across[1], across[2]);
+        assert_eq!(across[3], across[4]);
+        assert_eq!(across[5], 2);
+        let mut stood = [across[1], across[3]];
+        stood.sort_unstable();
+        assert_eq!(stood, [0, 1]);
+    }
+
+    #[test]
+    fn turned_a_stroke_from_the_side_of_a_pillar_lies_flat() {
+        let (generator, mut build, origin) = opened();
+        let sphere = generator.sphere();
+        stand(
+            &mut build,
+            &generator,
+            at(origin, [30, 30, 0]),
+            at(origin, [30, 30, 6]),
+        );
+        build.take(Some(Tool::Create));
+        build.set_paint(4);
+        let face = voxel::Face::new(0, false);
+        let from = side(&build, sphere, at(origin, [30, 30, 4]), face);
+        // From high over it, the eye looks at the flat layer most squarely.
+        let out = build.sites[0].corner(sphere, at(origin, [22, 30, 0]))
+            - build.sites[0].corner(sphere, at(origin, [30, 30, 0]));
+        let mut eye = eye_at(from + out + from.normalize() * 16.0, from);
+        point_at(&mut eye, from);
+        build.update(&generator, &eye, true, false);
+        // Left alone it hugs the side it started on: a sheet, standing.
+        let up = side(&build, sphere, at(origin, [29, 33, 6]), face);
+        point_at(&mut eye, up);
+        build.update(&generator, &eye, true, false);
+        assert_eq!(build.stroke.unwrap().across.0, 0);
+        // Turned once, it lies flat at the height it started at.
+        let away = top(&build, sphere, at(origin, [25, 33, 4]));
+        point_at(&mut eye, away);
+        build.update(&generator, &eye, true, true);
+        build.update(&generator, &eye, false, true);
+        let shelf: Vec<[i32; 3]> = laid(&build, origin)
+            .into_iter()
+            .filter(|cell| cell[0] != 30)
+            .collect();
+        assert_eq!(shelf.len(), 5 * 4, "{shelf:?}");
+        assert!(shelf.iter().all(|cell| cell[2] == 4), "{shelf:?}");
+        assert!(shelf.contains(&[29, 30, 4]) && shelf.contains(&[25, 33, 4]));
+        // The next stroke lies on its side again.
+        build.update(&generator, &eye, false, false);
+        assert_eq!(build.turned, 0);
     }
 
     #[test]

@@ -84,7 +84,8 @@ Every milestone ends runnable end to end.
 - [x] Volumes are cut by the address (77): plots of 64 blocks a side, a volume over each, opened under the body. Neighbours touch, share a floor and are read as one, so a build too big for one volume stands over two
 - [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
 - [x] A build stands on a platform of built cells (78): a slab over the highest ground under it, 8 to 64 cells a side as picked in the panel, on pillars down to the ground, so a mountainside carries a build and keeps its shape. Grass gives way under what is built
-- [ ] A volume on the moon: a tool taken there builds as on the planet (today it is refused)
+- [x] The builder reviewed against Cryptovoxels' (79): a stroke ends on the cell the pointer is over and follows it up a wall, Alt turns it through the three layers, and a platform is laid by its button alone
+- [ ] A volume on the moon: a platform asked for there is laid as on the planet (today it is refused)
 - [ ] First cut leftovers: a key that lays a platform; the undo chord and the last tool said once in `client` rather than in each shell; the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
 - [ ] The rest of the volume: bake its light (flood fill sun, a glow channel), stream it by proximity, put one under the sea
 - [ ] The camera boom cut by a volume's cells, as it is by rock under the ground: today it passes through a wall to stay behind the body

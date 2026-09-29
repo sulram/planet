@@ -230,7 +230,6 @@
 			tool = event.tool;
 			paint = event.paint;
 			platform = event.platform;
-			if (tool) refused = null;
 		} else if (event.type === 'build_refused') refused = event.reason;
 		else if (event.type === 'history') history = { undo: event.undo, redo: event.redo };
 		else if (event.type === 'effects_changed') {

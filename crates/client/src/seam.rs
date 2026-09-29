@@ -51,8 +51,8 @@ pub enum Tool {
     Paint,
 }
 
-/// Why a volume could not be opened where the body stands. A front end says
-/// it in its own words.
+/// Why no platform could be laid where the body stands. A front end says it
+/// in its own words.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BuildRefusal {
@@ -114,9 +114,8 @@ pub enum Command {
         #[serde(default)]
         here: bool,
     },
-    /// Build with a tool, or stop building with `null`. Starting where no
-    /// volume stands opens the one of the plot under the body, and lays a
-    /// platform under its feet.
+    /// Build with a tool, or stop building with `null`. It builds nothing:
+    /// a stroke starts on what is built, and a platform is the first of it.
     SetTool {
         tool: Option<Tool>,
     },
@@ -125,8 +124,9 @@ pub enum Command {
     SetPlatform {
         side: u32,
     },
-    /// Lays a platform where the body stands: a slab at the height of its
-    /// feet, on pillars down to the ground.
+    /// Lays a platform where the body stands, opening the volume of its
+    /// plot where none stands: a slab over the highest ground under it, on
+    /// pillars down to the ground.
     LayPlatform,
     /// The paint the next stroke lays: an index into [`Event::Palette`].
     SetPaint {
@@ -223,7 +223,7 @@ pub enum Event {
     Palette {
         colors: Vec<String>,
     },
-    /// Building was asked for where no volume can be opened.
+    /// A platform was asked for where no volume can be opened.
     BuildRefused {
         reason: BuildRefusal,
     },

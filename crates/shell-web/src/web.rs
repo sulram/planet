@@ -424,6 +424,18 @@ fn fraction(canvas: &HtmlCanvasElement, event: &PointerEvent) -> [f32; 2] {
 const PRIMARY: i16 = 0;
 const SECONDARY: i16 = 2;
 
+/// Whether the page has the keys for something typed into: a field of the
+/// panels, which the canvas leaves them to.
+fn typing() -> bool {
+    let focused = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.active_element());
+    focused.is_some_and(|element| {
+        let editable = element.has_attribute("contenteditable");
+        editable || matches!(element.tag_name().as_str(), "INPUT" | "TEXTAREA" | "SELECT")
+    })
+}
+
 fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listener> {
     let target: &web_sys::EventTarget = canvas.as_ref();
 
@@ -467,6 +479,9 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
                 event.prevent_default();
                 let _ = canvas.set_pointer_capture(event.pointer_id());
                 state.input.pointer = Some(fraction(&canvas, &event));
+                // The pointer says what is held with it, whoever had the
+                // keys when it went down.
+                state.input.key(Key::Turn, event.alt_key());
                 match event.button() {
                     PRIMARY => state.input.key(Key::Use, true),
                     SECONDARY => state.looking = true,
@@ -497,6 +512,15 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             let turning = locked(&canvas) || state.looking;
             if !locked(&canvas) {
                 state.input.pointer = Some(fraction(&canvas, &event));
+            }
+            // Building, the keys are the tool's while the pointer is over
+            // the world: a button of the panel that was clicked last keeps
+            // them otherwise, and a key meant for the stroke is lost.
+            if state.client.building() {
+                state.input.key(Key::Turn, event.alt_key());
+                if !typing() {
+                    let _ = canvas.focus();
+                }
             }
             if turning {
                 state.input.look[0] += event.movement_x() as f32;
@@ -559,7 +583,7 @@ fn binding(code: &str) -> Option<Key> {
         "Digit1" => Key::Create,
         "Digit2" => Key::Delete,
         "Digit3" => Key::Paint,
-        "AltLeft" | "AltRight" => Key::Upright,
+        "AltLeft" | "AltRight" => Key::Turn,
         // The browser takes Escape to let a captured pointer go; building,
         // the pointer is free and Escape is the tool's.
         "Escape" => Key::Cancel,

@@ -358,9 +358,9 @@ fn build_layout(root: &mut egui::Ui, building: &Building) -> Option<Command> {
                 }
             });
             ui.label(
-                "Click and drag for a slab. Hold Alt as you start for a wall. \
-                 Hold the right button to look around. Lay a platform where \
-                 you stand to build from.",
+                "Lay a platform where you stand, then click and drag on it. \
+                 A stroke lies on the side you start on and follows what you \
+                 point at. Alt turns it. Hold the right button to look around.",
             );
         });
     asked

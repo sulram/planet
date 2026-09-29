@@ -16,7 +16,7 @@
 		platform: number;
 		/** The paints a cell can take, as `#rrggbb`, in order. */
 		palette: string[];
-		/** Why the last try to build found no room, until the next one. */
+		/** Why the last platform asked for could not be laid, until the next one. */
 		refused: BuildRefusal | null;
 		/** Whether there is a stroke to take back, and one to put back. */
 		history: { undo: boolean; redo: boolean };
@@ -47,8 +47,19 @@
 			<button class="close" type="button" onclick={() => onbuild(null)}>{t('common.close')}</button>
 		{/snippet}
 		<Segmented options={toolOptions} value={tool} label={t('engine.build.tool')} onselect={(value) => onbuild(value)} />
-		{@render size()}
+		<div class="platform">
+			<span>{t('engine.build.platform')}</span>
+			<Segmented
+				options={platformOptions}
+				value={String(platform)}
+				label={t('engine.build.platform')}
+				onselect={(value) => onplatform(Number(value))}
+			/>
+		</div>
 		<Button variant="ghost" type="button" onclick={onlay}>{t('engine.build.platform.lay')}</Button>
+		{#if refused}
+			<Alert variant="info">{t(`engine.build.refused.${refused}`)}</Alert>
+		{/if}
 		<div class="palette" role="group" aria-label={t('engine.build.paint')}>
 			{#each palette as color, index (index)}
 				<button
@@ -69,27 +80,9 @@
 	</Panel>
 {:else}
 	<div class="toggle">
-		{#if refused}
-			<Alert variant="info">{t(`engine.build.refused.${refused}`)}</Alert>
-		{/if}
-		{@render size()}
 		<Button variant="ghost" type="button" onclick={() => onbuild(last)}>{t('engine.build')}</Button>
 	</div>
 {/if}
-
-<!-- The side of the platform laid next: picked before building starts, since
-     starting lays the first one, and at any time after. -->
-{#snippet size()}
-	<div class="platform">
-		<span>{t('engine.build.platform')}</span>
-		<Segmented
-			options={platformOptions}
-			value={String(platform)}
-			label={t('engine.build.platform')}
-			onselect={(value) => onplatform(Number(value))}
-		/>
-	</div>
-{/snippet}
 
 <style>
 	.toggle {
@@ -97,11 +90,6 @@
 		right: var(--sp-4);
 		bottom: var(--sp-5);
 		z-index: var(--z-panel);
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: var(--sp-2);
-		max-width: min(var(--panel-w), calc(100% - 2 * var(--sp-4)));
 	}
 	.toggle :global(button) {
 		background: var(--bg-overlay);

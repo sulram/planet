@@ -29,9 +29,10 @@ pub enum Key {
     Paint,
     /// The pointer's button while building: held down, a stroke is drawn.
     Use,
-    /// Held as a stroke starts, it stands up from the side as a wall
-    /// instead of lying on it as a slab.
-    Upright,
+    /// Each time it goes down, the stroke turns to the next of the three
+    /// layers through its start: on its side, then standing one way, then
+    /// the other.
+    Turn,
     /// Drop the stroke being drawn, or else stop building.
     Cancel,
     /// Take back the last stroke, or put it back.
@@ -109,7 +110,7 @@ fn held_slot(key: Key) -> Option<usize> {
         Key::Down => Some(5),
         Key::Sprint => Some(6),
         Key::Use => Some(7),
-        Key::Upright => Some(8),
+        Key::Turn => Some(8),
         Key::ToggleMode
         | Key::NewSeed
         | Key::NextAvatar

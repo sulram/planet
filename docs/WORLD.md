@@ -97,7 +97,7 @@ m4-K7M42Q@40,180,-5
   They touch and are read as one, so a build stands over two neighbours.
 - A build stands on a platform (78): a slab of cells, 8 to 64 a side as
   picked, cut by the address, its top over the highest ground under it, on
-  pillars down to the ground. Taking a tool where no volume stands lays one.
+  pillars down to the ground, laid where it is asked for (79).
 - The two meet at a containment boundary: authored, integer, and decided by a
   person or by the recipe, never by where a quadtree runs out of levels.
 - A stamp seats what is not a volume into terrain: a flatten and blend
