@@ -5,19 +5,25 @@
 //! on a body is the client's job. Under `z = 0` is the floor it stands on:
 //! solid to a ray, to a body and to the light, never a cell, never edited.
 //!
+//! Volumes stand side by side on a fixed grid of plots ([`Volumes`]), each on
+//! a floor of its own, and are read as one, so what is too big for one volume
+//! stands over two neighbours.
+//!
 //! What lives here is what every front end and the server will agree on: what
 //! a gesture does to the cells ([`Gesture`]), which cell a line of sight meets
-//! ([`Volume::trace`]), which faces show and how shut in their corners are
-//! ([`Volume::faces`]), and what a body standing in a column has under and over
-//! it ([`Volume::gap`]).
+//! ([`Volumes::trace`]), which faces show and how shut in their corners are
+//! ([`Volumes::faces`]), and what a body standing in a column has under and
+//! over it ([`Volumes::gap`]).
 
 mod faces;
 mod gesture;
 mod trace;
+mod volumes;
 
 pub use faces::Quad;
 pub use gesture::Gesture;
 pub use trace::{Hit, crossing};
+pub use volumes::Volumes;
 
 /// Cells per chunk side, as a power of two.
 pub const CHUNK_BITS: u32 = 4;
@@ -134,6 +140,14 @@ impl Span {
         }
     }
 
+    /// The same box `by` cells away.
+    pub fn moved(self, by: [i32; 3]) -> Span {
+        Span {
+            min: [0, 1, 2].map(|i| self.min[i] + by[i]),
+            max: [0, 1, 2].map(|i| self.max[i] + by[i]),
+        }
+    }
+
     /// What this box and another have in common.
     pub fn meet(self, other: Span) -> Option<Span> {
         let min = [0, 1, 2].map(|i| self.min[i].max(other.min[i]));
@@ -160,6 +174,27 @@ pub struct Gap {
     pub floor: i32,
     /// `None` when nothing is over the head up to the top of the volume.
     pub ceiling: Option<i32>,
+}
+
+/// What the sides that show and a line of sight read of cells, whether one
+/// volume holds them or several side by side.
+pub(crate) trait Cells {
+    /// The cell at a place, air where there is none.
+    fn get(&self, at: [i32; 3]) -> Cell;
+
+    /// Whether a place is solid to a ray, a body or the light: a cell that is
+    /// not air, or a floor.
+    fn solid(&self, at: [i32; 3]) -> bool;
+}
+
+impl Cells for Volume {
+    fn get(&self, at: [i32; 3]) -> Cell {
+        Volume::get(self, at)
+    }
+
+    fn solid(&self, at: [i32; 3]) -> bool {
+        Volume::solid(self, at)
+    }
 }
 
 /// Cells of a chunk, and how many of them are solid, so an emptied chunk is
@@ -251,7 +286,7 @@ impl Volume {
 
     /// Writes one cell; a place outside the box is ignored. True when the cell
     /// changed.
-    fn set(&mut self, at: [i32; 3], cell: Cell) -> bool {
+    pub(crate) fn set(&mut self, at: [i32; 3], cell: Cell) -> bool {
         if !self.contains(at) {
             return false;
         }

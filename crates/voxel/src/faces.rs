@@ -1,7 +1,8 @@
 //! The sides of cells that show, and how shut in each of their corners is.
 //!
 //! Every side of a solid cell that looks at air is one quad; sides between
-//! two solids, and the bottoms of cells on the floor, are never drawn. Sides
+//! two solids, across two volumes too, and the bottoms of cells on the floor,
+//! are never drawn. Sides
 //! are not merged into larger quads: whoever seats a volume on a curved body
 //! bends each corner onto it, and a merged quad would be a chord whose
 //! neighbours meet it in the middle of an edge, where the surface cracks.
@@ -11,7 +12,7 @@
 //! cheap half of the light a volume is meant to bake, and what makes a corner
 //! of a room read as one.
 
-use crate::{Face, Span, Volume};
+use crate::{Cells, Face, Span, Volume};
 
 /// One visible side of one cell.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -73,52 +74,62 @@ impl Volume {
 
     /// The visible sides of the cells in a box.
     pub fn faces_in(&self, span: Span) -> Vec<Quad> {
-        let mut quads = Vec::new();
-        for at in span.cells() {
-            let Some(paint) = self.get(at).paint() else {
-                continue;
-            };
-            for face in Face::ALL {
-                let n = face.normal();
-                let out = [0, 1, 2].map(|i| at[i] + n[i]);
-                if self.solid(out) {
-                    continue;
-                }
-                quads.push(Quad {
-                    cell: at,
-                    face,
-                    paint,
-                    open: self.openness(at, face),
-                });
-            }
-        }
-        quads
+        faces_in(self, span)
     }
+}
 
-    fn openness(&self, cell: [i32; 3], face: Face) -> [u8; 4] {
-        let (_, b, c) = axes(face);
-        let n = face.normal();
-        let out = [0, 1, 2].map(|i| cell[i] + n[i]);
-        let solid = |sb: i32, sc: i32| {
-            let mut p = out;
-            p[b] += sb;
-            p[c] += sc;
-            self.solid(p)
+/// The visible sides of the cells in a box, into `quads`.
+pub(crate) fn faces_into(cells: &impl Cells, span: Span, quads: &mut Vec<Quad>) {
+    for at in span.cells() {
+        let Some(paint) = cells.get(at).paint() else {
+            continue;
         };
-        let corner = |sb: i32, sc: i32| {
-            let (edge_b, edge_c) = (solid(sb, 0), solid(0, sc));
-            if edge_b && edge_c {
-                0
-            } else {
-                3 - u8::from(edge_b) - u8::from(edge_c) - u8::from(solid(sb, sc))
+        for face in Face::ALL {
+            let n = face.normal();
+            let out = [0, 1, 2].map(|i| at[i] + n[i]);
+            if cells.solid(out) {
+                continue;
             }
-        };
-        let square = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
-        if face.positive {
-            square
-        } else {
-            [square[0], square[3], square[2], square[1]]
+            quads.push(Quad {
+                cell: at,
+                face,
+                paint,
+                open: openness(cells, at, face),
+            });
         }
+    }
+}
+
+/// The visible sides of the cells in a box.
+pub(crate) fn faces_in(cells: &impl Cells, span: Span) -> Vec<Quad> {
+    let mut quads = Vec::new();
+    faces_into(cells, span, &mut quads);
+    quads
+}
+
+fn openness(cells: &impl Cells, cell: [i32; 3], face: Face) -> [u8; 4] {
+    let (_, b, c) = axes(face);
+    let n = face.normal();
+    let out = [0, 1, 2].map(|i| cell[i] + n[i]);
+    let solid = |sb: i32, sc: i32| {
+        let mut p = out;
+        p[b] += sb;
+        p[c] += sc;
+        cells.solid(p)
+    };
+    let corner = |sb: i32, sc: i32| {
+        let (edge_b, edge_c) = (solid(sb, 0), solid(0, sc));
+        if edge_b && edge_c {
+            0
+        } else {
+            3 - u8::from(edge_b) - u8::from(edge_c) - u8::from(solid(sb, sc))
+        }
+    };
+    let square = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+    if face.positive {
+        square
+    } else {
+        [square[0], square[3], square[2], square[1]]
     }
 }
 

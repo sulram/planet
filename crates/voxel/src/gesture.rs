@@ -26,6 +26,20 @@ impl Gesture {
             | Gesture::Paint { span, .. } => span,
         }
     }
+
+    /// The same gesture over another box.
+    pub fn over(self, span: Span) -> Gesture {
+        match self {
+            Gesture::Create { paint, .. } => Gesture::Create { span, paint },
+            Gesture::Delete { .. } => Gesture::Delete { span },
+            Gesture::Paint { paint, .. } => Gesture::Paint { span, paint },
+        }
+    }
+
+    /// Whether the gesture takes the air of its box, or what is solid in it.
+    pub fn takes_air(self) -> bool {
+        matches!(self, Gesture::Create { .. })
+    }
 }
 
 impl Volume {

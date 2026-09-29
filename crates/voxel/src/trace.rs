@@ -7,14 +7,15 @@
 //! piece is walked exactly, cell by cell (Amanatides and Woo), so no cell a
 //! piece passes through is ever skipped.
 
-use crate::{Face, Volume};
+use crate::{Cells, Face, Volume};
 
-/// Where a line of sight stops: a solid cell, or the floor under the box
-/// (`z = -1`), and the side of it the line came in through.
+/// Where a line of sight stops: a solid cell, or the floor under a volume
+/// (`z = -1` in its own frame), and the side of it the line came in through.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Hit {
     pub cell: [i32; 3],
     pub face: Face,
+    floor: bool,
 }
 
 impl Hit {
@@ -26,7 +27,7 @@ impl Hit {
 
     /// Whether the line stopped on the floor rather than on a cell.
     pub fn on_floor(self) -> bool {
-        self.cell[2] < 0
+        self.floor
     }
 }
 
@@ -34,52 +35,60 @@ impl Volume {
     /// The first solid the path meets after leaving any solid it starts in:
     /// a camera inside a wall looks out of it, not at it.
     pub fn trace(&self, path: &[[f64; 3]]) -> Option<Hit> {
-        let mut in_air = path.first().is_some_and(|&p| !self.solid(cell_of(p)));
-        for piece in path.windows(2) {
-            let (from, to) = (piece[0], piece[1]);
-            let mut cell = cell_of(from);
-            let delta = [0, 1, 2].map(|i| to[i] - from[i]);
-            let step = delta.map(|d| if d > 0.0 { 1 } else { -1 });
-            // How far along the piece, `0..=1`, the next boundary on each axis
-            // lies, and how far apart boundaries are.
-            let mut next = [0, 1, 2].map(|i| {
-                let d = delta[i];
-                if d > 0.0 {
-                    (f64::from(cell[i] + 1) - from[i]) / d
-                } else if d < 0.0 {
-                    (f64::from(cell[i]) - from[i]) / d
-                } else {
-                    f64::INFINITY
-                }
-            });
-            let apart = delta.map(|d| {
-                if d == 0.0 {
-                    f64::INFINITY
-                } else {
-                    1.0 / d.abs()
-                }
-            });
-            loop {
-                let axis = (0..3)
-                    .min_by(|&a, &b| next[a].total_cmp(&next[b]))
-                    .expect("three axes");
-                if next[axis] > 1.0 {
-                    break;
-                }
-                cell[axis] += step[axis];
-                next[axis] += apart[axis];
-                let solid = self.solid(cell);
-                if solid && in_air {
-                    return Some(Hit {
-                        cell,
-                        face: Face::new(axis, step[axis] < 0),
-                    });
-                }
-                in_air |= !solid;
-            }
-        }
-        None
+        trace(self, path)
     }
+}
+
+/// The first solid a path meets in some cells, after leaving any solid it
+/// starts in.
+pub(crate) fn trace(cells: &impl Cells, path: &[[f64; 3]]) -> Option<Hit> {
+    let mut in_air = path.first().is_some_and(|&p| !cells.solid(cell_of(p)));
+    for piece in path.windows(2) {
+        let (from, to) = (piece[0], piece[1]);
+        let mut cell = cell_of(from);
+        let delta = [0, 1, 2].map(|i| to[i] - from[i]);
+        let step = delta.map(|d| if d > 0.0 { 1 } else { -1 });
+        // How far along the piece, `0..=1`, the next boundary on each axis
+        // lies, and how far apart boundaries are.
+        let mut next = [0, 1, 2].map(|i| {
+            let d = delta[i];
+            if d > 0.0 {
+                (f64::from(cell[i] + 1) - from[i]) / d
+            } else if d < 0.0 {
+                (f64::from(cell[i]) - from[i]) / d
+            } else {
+                f64::INFINITY
+            }
+        });
+        let apart = delta.map(|d| {
+            if d == 0.0 {
+                f64::INFINITY
+            } else {
+                1.0 / d.abs()
+            }
+        });
+        loop {
+            let axis = (0..3)
+                .min_by(|&a, &b| next[a].total_cmp(&next[b]))
+                .expect("three axes");
+            if next[axis] > 1.0 {
+                break;
+            }
+            cell[axis] += step[axis];
+            next[axis] += apart[axis];
+            let solid = cells.solid(cell);
+            if solid && in_air {
+                return Some(Hit {
+                    cell,
+                    face: Face::new(axis, step[axis] < 0),
+                    // Solid and not a cell: a floor.
+                    floor: cells.get(cell).is_air(),
+                });
+            }
+            in_air |= !solid;
+        }
+    }
+    None
 }
 
 /// The cell a point is in.
