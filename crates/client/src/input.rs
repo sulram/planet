@@ -99,23 +99,6 @@ impl Input {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn losing_focus_lets_go_and_interrupts_once() {
-        let mut input = Input::default();
-        input.key(Key::Use, true);
-        input.release_all();
-        assert!(!input.held(Key::Use));
-        let (_, _, _, interrupted) = input.take_frame();
-        assert!(interrupted);
-        let (_, _, _, interrupted) = input.take_frame();
-        assert!(!interrupted);
-    }
-}
-
 fn held_slot(key: Key) -> Option<usize> {
     match key {
         Key::Forward => Some(0),
@@ -137,5 +120,22 @@ fn held_slot(key: Key) -> Option<usize> {
         | Key::Cancel
         | Key::Undo
         | Key::Redo => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn losing_focus_lets_go_and_interrupts_once() {
+        let mut input = Input::default();
+        input.key(Key::Use, true);
+        input.release_all();
+        assert!(!input.held(Key::Use));
+        let (_, _, _, interrupted) = input.take_frame();
+        assert!(interrupted);
+        let (_, _, _, interrupted) = input.take_frame();
+        assert!(!interrupted);
     }
 }

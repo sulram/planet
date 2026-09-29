@@ -255,10 +255,7 @@ impl ApplicationHandler for App {
                 ..
             }
         );
-        if !released
-            && !stage.looking
-            && stage.panel.window_event(&stage.window, &event)
-        {
+        if !released && !stage.looking && stage.panel.window_event(&stage.window, &event) {
             return;
         }
         if released {
