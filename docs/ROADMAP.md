@@ -166,7 +166,7 @@ Every milestone ends runnable end to end.
 - [x] Compositor: HDR scene target, a chain of stages, one final tone map
 - [x] Bloom as a compositor stage, haze and a choice of tone map as knobs
 - [x] Settings panel over the command/event seam: Svelte on the web, egui on desktop, a button in the top right corner
-- [ ] More of the compositor as knobs: cloud layer height, shadow quality, a reduced preset for the Pi; the desktop remembers the choice
+- [ ] More of the compositor as knobs: cloud layer height, shadow quality in levels with off the lowest (84), a reduced preset for the Pi; the desktop remembers the choice
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
 
