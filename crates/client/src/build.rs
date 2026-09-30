@@ -21,7 +21,7 @@ use std::collections::BTreeSet;
 use glam::{DQuat, DVec3, Vec3};
 use scene::{VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
-use voxel::{CHUNK_BITS, Cell, Gesture, Hit, Platform, Quad, Span, Volumes, crossing};
+use voxel::{CHUNK, CHUNK_BITS, Cell, Gesture, Hit, Platform, Quad, Span, Volumes, crossing};
 use worldgen::Generator;
 
 use crate::collision::{Footing, STEP_M};
@@ -60,6 +60,13 @@ const GHOST_LIFT_M: f32 = 0.012;
 const GHOST: VolumeMeshId = VolumeMeshId(u64::MAX);
 /// Strokes kept to take back.
 const HISTORY: usize = 100;
+/// Rows of the ground under a platform read in one update: a platform of 64
+/// reads 65 rows of 65 corners, each a sample of the ground in full detail.
+const GROUND_ROWS_PER_UPDATE: usize = 13;
+/// Chunks meshed in one update, the nearest the eye first. A change to more
+/// is drawn over as many updates as it takes, each chunk keeping the mesh it
+/// had until its new one is made, so no frame pays for a platform whole.
+const MESHES_PER_UPDATE: usize = 8;
 
 /// The eye a tool aims from: where the camera is, how it looks, and where
 /// the pointer is on the view.
@@ -245,6 +252,16 @@ impl Stroke {
     }
 }
 
+/// A platform asked for, and the ground under it read so far: the height of
+/// each corner of each column, in blocks, row by row.
+struct Laying {
+    site: usize,
+    square: Platform,
+    base: Base,
+    paint: u8,
+    corners: Vec<f64>,
+}
+
 /// A stroke that landed, as the cells of its box before and after.
 struct Change {
     site: usize,
@@ -274,6 +291,13 @@ pub struct Build {
     /// What the ghost shows now: it is meshed again only when that changes.
     ghost: Option<Gesture>,
     drawn: BTreeSet<VolumeMeshId>,
+    /// Chunks owed a mesh since their cells changed, by site.
+    stale: BTreeSet<(usize, [i32; 3])>,
+    /// The platform asked for whose ground is still being read.
+    laying: Option<Laying>,
+    /// The height of the top of the platform laid last, metres, until the
+    /// client takes it.
+    laid: Option<f64>,
     changes: Vec<VolumeChange>,
     /// Where cells changed near enough the ground to cover or bare a tuft,
     /// as a cap of the body: its middle, unit, and its angle.
@@ -298,6 +322,9 @@ impl Default for Build {
             turned: 0,
             ghost: None,
             drawn: BTreeSet::new(),
+            stale: BTreeSet::new(),
+            laying: None,
+            laid: None,
             changes: Vec::new(),
             touched: Vec::new(),
             done: Vec::new(),
@@ -408,30 +435,65 @@ impl Build {
         Ok(())
     }
 
-    /// Lays a platform where a body stands, opening the volume of its plot
-    /// if none stands there: a slab of the side picked, in the paint in hand,
-    /// its top over the highest ground under it, on `base` down to the
-    /// ground. It is a stroke like any other, kept to take back. Returns the
-    /// height of the top of the slab, metres.
+    /// Asks for a platform where a body stands, opening the volume of its
+    /// plot if none stands there: a slab of the side picked, in the paint in
+    /// hand, its top over the highest ground under it, on `base` down to the
+    /// ground. The ground under it is read a few rows an update and the
+    /// platform lands when all of it is read, a stroke like any other, kept
+    /// to take back; [`Build::take_laid`] says how high its top stands. A
+    /// platform asked for while another is being read takes its place.
     pub fn lay_platform(
         &mut self,
         generator: &Generator,
         point: SurfacePoint,
         base: Base,
-    ) -> Result<f64, BuildRefusal> {
+    ) -> Result<(), BuildRefusal> {
         self.open(generator, point)?;
-        let sector = point.sector;
         let (x, y) = (point.u.floor() as i32, point.v.floor() as i32);
         let square = Platform::over(x, y, self.platform_bits, 0);
-        // The ground at every corner of every column of it, read once.
-        let [x0, y0] = square.corner;
         let across = square.side as usize + 1;
-        let corners: Vec<f64> = (0..across * across)
-            .map(|i| {
-                let (dx, dy) = ((i % across) as i32, (i / across) as i32);
-                ground(generator, sector, f64::from(x0 + dx), f64::from(y0 + dy))
-            })
-            .collect();
+        let site = self
+            .sites
+            .iter()
+            .position(|site| site.sector == point.sector)
+            .expect("a volume was opened on this sector");
+        self.laying = Some(Laying {
+            site,
+            square,
+            base,
+            paint: self.paint,
+            corners: Vec::with_capacity(across * across),
+        });
+        Ok(())
+    }
+
+    /// Reads up to `rows` more rows of the ground under the platform being
+    /// laid, and lays it once every corner of every column is read. True
+    /// when it landed.
+    fn read_ground(&mut self, generator: &Generator, rows: usize) -> bool {
+        let Some(laying) = &mut self.laying else {
+            return false;
+        };
+        let sector = self.sites[laying.site].sector;
+        let [x0, y0] = laying.square.corner;
+        let across = laying.square.side as usize + 1;
+        let read = laying.corners.len() / across;
+        for row in read..(read.saturating_add(rows)).min(across) {
+            laying.corners.extend((0..across).map(|dx| {
+                let (u, v) = (x0 + dx as i32, y0 + row as i32);
+                ground(generator, sector, f64::from(u), f64::from(v))
+            }));
+        }
+        if laying.corners.len() < across * across {
+            return false;
+        }
+        let Laying {
+            site,
+            square,
+            base,
+            paint,
+            corners,
+        } = self.laying.take().expect("a platform being laid");
         let highest = corners.iter().copied().fold(f64::MIN, f64::max);
         let platform = Platform {
             top: highest.ceil() as i32,
@@ -451,12 +513,6 @@ impl Build {
         let lowest = corners.iter().copied().fold(f64::MAX, f64::min);
         let mut reach = platform.slab();
         reach.min[2] = reach.min[2].min(lowest.floor() as i32);
-        let site = self
-            .sites
-            .iter()
-            .position(|site| site.sector == sector)
-            .expect("a volume was opened on this sector");
-        let paint = self.paint;
         let base = match base {
             Base::Pillars => voxel::Base::Pillars,
             Base::Solid => voxel::Base::Solid,
@@ -468,7 +524,28 @@ impl Build {
                 .filter_map(|gesture| volumes.apply(gesture))
                 .reduce(|a, b| a.with(b.min).with(b.max))
         });
-        Ok(f64::from(platform.top) * BLOCK_M)
+        self.laid = Some(f64::from(platform.top) * BLOCK_M);
+        true
+    }
+
+    /// The height of the top of the platform laid since the last call,
+    /// metres: what a body standing lower is lifted onto.
+    pub fn take_laid(&mut self) -> Option<f64> {
+        self.laid.take()
+    }
+
+    /// Asks for a platform and lays it at once, however long the ground
+    /// takes to read: for tests.
+    #[cfg(test)]
+    pub(crate) fn lay_platform_now(
+        &mut self,
+        generator: &Generator,
+        point: SurfacePoint,
+        base: Base,
+    ) -> Result<f64, BuildRefusal> {
+        self.lay_platform(generator, point, base)?;
+        self.read_ground(generator, usize::MAX);
+        Ok(self.take_laid().expect("a platform laid"))
     }
 
     /// Forgets every volume: another world.
@@ -480,6 +557,9 @@ impl Build {
             self.changes.push(VolumeChange::Remove(GHOST));
         }
         self.sites.clear();
+        self.stale.clear();
+        self.laying = None;
+        self.laid = None;
         self.touched.clear();
         self.aim = None;
         self.stroke = None;
@@ -531,6 +611,29 @@ impl Build {
     /// is let go. Each time `turn` goes down the stroke turns to the next of
     /// the three layers through its start.
     pub fn update(&mut self, generator: &Generator, eye: &Eye, using: bool, turn: bool) {
+        self.handle(generator, eye, using, turn);
+        // A platform lands in an update of its own: its cells are the work
+        // of that one, and their meshes start with the next.
+        if !self.read_ground(generator, GROUND_ROWS_PER_UPDATE) {
+            self.mesh_owed(generator.sphere(), eye.position, MESHES_PER_UPDATE);
+        }
+    }
+
+    /// Whether every platform asked for is laid, and every chunk that
+    /// changed is drawn as it is now.
+    pub fn settled(&self) -> bool {
+        self.laying.is_none() && self.stale.is_empty()
+    }
+
+    /// Lays the platform asked for and meshes every chunk owed one: for a
+    /// picture that must show all of it.
+    pub fn settle(&mut self, generator: &Generator, eye: DVec3) {
+        self.read_ground(generator, usize::MAX);
+        self.mesh_owed(generator.sphere(), eye, usize::MAX);
+    }
+
+    /// Aims, strokes and lands what the tool in hand does this update.
+    fn handle(&mut self, generator: &Generator, eye: &Eye, using: bool, turn: bool) {
         let sphere = generator.sphere();
         let turned = turn && !self.turning;
         self.turning = turn;
@@ -726,10 +829,10 @@ impl Build {
         self.redraw(generator, site, changed);
     }
 
-    /// Draws again every chunk whose sides a change to some cells could have
-    /// changed: the cells, and one more all round, which is as far as a side
-    /// or a corner looks. Where the change comes within a tuft of the ground
-    /// the grass under it is to grow again.
+    /// Owes a mesh to every chunk whose sides a change to some cells could
+    /// have changed: the cells, and one more all round, which is as far as a
+    /// side or a corner looks. Where the change comes within a tuft of the
+    /// ground the grass under it is to grow again.
     fn redraw(&mut self, generator: &Generator, site: usize, changed: Span) {
         let sphere = generator.sphere();
         // The ghost showed what the cells were: it is meshed again from what
@@ -759,6 +862,30 @@ impl Build {
                 .push((centre.normalize(), reach_m / centre.length()));
         }
         for chunk in seated.volumes.chunks_in(changed.grown(1)) {
+            self.stale.insert((site, chunk));
+        }
+    }
+
+    /// Meshes up to `budget` of the chunks owed one, the nearest to `eye`
+    /// first.
+    fn mesh_owed(&mut self, sphere: QuadSphere, eye: DVec3, budget: usize) {
+        if self.stale.is_empty() {
+            return;
+        }
+        let half = CHUNK as i32 / 2;
+        let mut owed: Vec<(f64, (usize, [i32; 3]))> = self
+            .stale
+            .iter()
+            .map(|&(site, chunk)| {
+                let middle = self.sites[site].corner(sphere, chunk.map(|n| n + half));
+                (middle.distance_squared(eye), (site, chunk))
+            })
+            .collect();
+        owed.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, owed) in owed.into_iter().take(budget) {
+            self.stale.remove(&owed);
+            let (site, chunk) = owed;
+            let seated = &self.sites[site];
             let id = seated.mesh_id(chunk);
             let quads = seated.volumes.faces(chunk);
             if quads.is_empty() {
@@ -1017,7 +1144,7 @@ mod tests {
         let mut build = Build::default();
         build.set_platform(64);
         build
-            .lay_platform(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Pillars)
             .expect("dry land");
         let platform = platform_at(&build, point);
         let origin = [platform.corner[0], platform.corner[1], platform.top];
@@ -1127,12 +1254,12 @@ mod tests {
         let mut build = Build::default();
         for (u, v) in [(10.0, point.v), (point.u, side - 10.0), (side - 1.0, 1.0)] {
             let edge = SurfacePoint::new(point.sector, u, v);
-            let opened = build.lay_platform(&generator, edge, Base::Pillars);
+            let opened = build.lay_platform_now(&generator, edge, Base::Pillars);
             assert_eq!(opened.err(), Some(BuildRefusal::Seam), "{u} {v}");
         }
         // One plot in, the edge is no reason: the sea may be.
         let inside = SurfacePoint::new(point.sector, 70.0, side - 70.0);
-        let opened = build.lay_platform(&generator, inside, Base::Pillars);
+        let opened = build.lay_platform_now(&generator, inside, Base::Pillars);
         assert_ne!(opened.err(), Some(BuildRefusal::Seam));
     }
 
@@ -1144,7 +1271,7 @@ mod tests {
         build.set_paint(6);
         assert_eq!(build.platform(), 16);
         let top_m = build
-            .lay_platform(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Pillars)
             .unwrap();
         let platform = platform_at(&build, point);
         assert_eq!(f64::from(platform.top) * BLOCK_M, top_m);
@@ -1181,11 +1308,49 @@ mod tests {
         assert!((0.0..1.0).contains(&(f64::from(platform.top) - highest)));
         assert!(pillars <= 4);
         // It is drawn, and one undo takes all of it back.
+        let eye = generator.sphere().position(point, top_m + 2.0).into();
+        build.settle(&generator, eye);
         assert!(!build.drawn.is_empty());
         assert_eq!(build.history(), (true, false));
         build.undo(&generator);
+        build.settle(&generator, eye);
         assert!(build.drawn.is_empty());
         assert!(build.covers(point));
+    }
+
+    #[test]
+    fn a_platform_of_64_is_drawn_over_updates_the_nearest_chunks_first() {
+        let (generator, point) = world();
+        let sphere = generator.sphere();
+        let mut build = Build::default();
+        build.set_platform(64);
+        let top_m = build
+            .lay_platform_now(&generator, point, Base::Solid)
+            .unwrap();
+        assert!(build.drawn.is_empty(), "nothing is meshed as it is laid");
+        let owed = build.stale.len();
+        assert!(owed > MESHES_PER_UPDATE, "{owed}");
+        let eye = DVec3::from(sphere.position(point, top_m + 2.0));
+        let half = CHUNK as i32 / 2;
+        let far = |build: &Build, (site, chunk): (usize, [i32; 3])| {
+            build.sites[site]
+                .corner(sphere, chunk.map(|n| n + half))
+                .distance(eye)
+        };
+        let mut nearest: Vec<(usize, [i32; 3])> = build.stale.iter().copied().collect();
+        nearest.sort_by(|&a, &b| far(&build, a).total_cmp(&far(&build, b)));
+        // The first update meshes the nearest of what is owed, and no more.
+        build.mesh_owed(sphere, eye, MESHES_PER_UPDATE);
+        assert!(build.drain_changes().len() <= MESHES_PER_UPDATE);
+        let left: BTreeSet<_> = nearest[MESHES_PER_UPDATE..].iter().copied().collect();
+        assert_eq!(build.stale, left);
+        let mut updates = 1;
+        while !build.settled() {
+            build.mesh_owed(sphere, eye, MESHES_PER_UPDATE);
+            updates += 1;
+        }
+        assert_eq!(updates, owed.div_ceil(MESHES_PER_UPDATE));
+        assert!(!build.drawn.is_empty());
     }
 
     #[test]
@@ -1197,7 +1362,9 @@ mod tests {
         let point = SurfacePoint::new(point.sector, side * 0.312, side * 0.372);
         let mut build = Build::default();
         build.set_platform(64);
-        build.lay_platform(&generator, point, Base::Solid).unwrap();
+        build
+            .lay_platform_now(&generator, point, Base::Solid)
+            .unwrap();
         let platform = platform_at(&build, point);
         let volumes = &build.sites[0].volumes;
         let slab = platform.slab();
@@ -1239,12 +1406,12 @@ mod tests {
         let mut build = Build::default();
         build.set_platform(16);
         build
-            .lay_platform(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Pillars)
             .unwrap();
         let first = platform_at(&build, point).slab();
         let beside = SurfacePoint::new(point.sector, point.u + 16.0, point.v);
         build
-            .lay_platform(&generator, beside, Base::Pillars)
+            .lay_platform_now(&generator, beside, Base::Pillars)
             .unwrap();
         let second = platform_at(&build, beside).slab();
         assert_eq!(second.min[0], first.max[0] + 1);
@@ -1256,7 +1423,7 @@ mod tests {
         let (generator, point) = world();
         let mut build = Build::default();
         let top_m = build
-            .lay_platform(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Pillars)
             .unwrap();
         let footing = build.footing(point, top_m).unwrap();
         assert_eq!(footing.floor_m, Some(top_m));

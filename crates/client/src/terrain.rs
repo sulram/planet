@@ -32,10 +32,22 @@ use worldgen::{Generator, MOON_RADIUS_M, Material, Sample};
 const SPLIT_DISTANCE: f64 = 2.4;
 /// Patches generated per update. Each costs about a millisecond or two.
 const BUILDS_PER_UPDATE: usize = 6;
+/// Of those, patches built again because what stands over their grass
+/// changed. Grass is cosmetic: it gives way a patch an update, first so a
+/// walk never starves it, and never takes a frame from the ground.
+const REGROWS_PER_UPDATE: usize = 1;
 /// Patches kept before the least recently used ones are dropped.
 const CACHE_PATCHES: usize = 1400;
 
 const G: i32 = PATCH_GRID as i32;
+
+/// Patches one select may build: in all, and of those, built again for
+/// their grass.
+#[derive(Clone, Copy)]
+struct Budget {
+    builds: usize,
+    regrows: usize,
+}
 
 /// The body a terrain streamer covers. Every body is a quad sphere meshed by
 /// the same quadtree; they differ in size, in depth, and in having a sea.
@@ -252,7 +264,11 @@ impl Terrain {
         camera: &Camera,
         aspect: f32,
     ) -> Vec<PatchId> {
-        self.select(generator, cover, camera, aspect, BUILDS_PER_UPDATE)
+        let budget = Budget {
+            builds: BUILDS_PER_UPDATE,
+            regrows: REGROWS_PER_UPDATE,
+        };
+        self.select(generator, cover, camera, aspect, budget)
     }
 
     /// Like [`Terrain::update`], but builds until nothing is missing. For
@@ -265,7 +281,11 @@ impl Terrain {
         aspect: f32,
     ) -> Vec<PatchId> {
         loop {
-            let patches = self.select(generator, cover, camera, aspect, usize::MAX);
+            let everything = Budget {
+                builds: usize::MAX,
+                regrows: usize::MAX,
+            };
+            let patches = self.select(generator, cover, camera, aspect, everything);
             if self.settled {
                 return patches;
             }
@@ -285,12 +305,13 @@ impl Terrain {
         cover: Cover,
         camera: &Camera,
         aspect: f32,
-        budget: usize,
+        budget: Budget,
     ) -> Vec<PatchId> {
         self.frame += 1;
         self.casters.clear();
         let mut draw = Vec::new();
         let mut missing: Vec<(f64, Node)> = Vec::new();
+        let mut regrown: Vec<(f64, Node)> = Vec::new();
 
         let body = self.body;
         let mut stack: Vec<Node> = Sector::ALL
@@ -314,7 +335,7 @@ impl Terrain {
 
             let distance = (center - camera.position).length();
             if self.stale.contains(&node) {
-                missing.push((distance, node));
+                regrown.push((distance, node));
             }
             if node.depth < body.max_depth() && distance < node.side_m() * SPLIT_DISTANCE {
                 let children = node.children();
@@ -339,10 +360,15 @@ impl Terrain {
             }
         }
 
-        self.settled = missing.is_empty();
-        // Coarse before fine, near before far: the picture sharpens evenly.
+        self.settled = missing.is_empty() && regrown.is_empty();
+        // Near before far for grass, then coarse before fine, near before
+        // far, for ground: the picture sharpens evenly.
+        regrown.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let regrows = budget.regrows.min(budget.builds);
         missing.sort_by(|a, b| (a.1.depth, a.0).partial_cmp(&(b.1.depth, b.0)).unwrap());
-        for (_, node) in missing.into_iter().take(budget) {
+        let regrow = regrown.into_iter().take(regrows);
+        let fill = missing.into_iter().take(budget.builds - regrow.len());
+        for (_, node) in regrow.chain(fill) {
             let mesh = build(generator, node, cover);
             // The sea counts: over deep water the ground is far below the surface
             // that is actually in view.

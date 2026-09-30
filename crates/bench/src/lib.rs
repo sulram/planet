@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 
 use client::collision;
-use client::{Client, Input, Key, Recipe};
+use client::{Client, Event, Input, Key, Recipe};
 use topology::{Sector, SurfacePoint};
 use wasm_bindgen::prelude::wasm_bindgen;
 use worldgen::{Field, Generator, Source};
@@ -188,4 +188,59 @@ pub fn descent_frame() {
         client.drain_events();
         client.drain_terrain_changes();
     });
+}
+
+thread_local! {
+    static LAY: RefCell<Option<Client>> = const { RefCell::new(None) };
+}
+
+/// The steepest plot found near the test world, on sector 4: 32 m of fall
+/// across its 32 m, where a solid base is the most cells a platform lays.
+const STEEP_AT: [f64; 2] = [0.312, 0.372];
+
+/// Stands a body on the steepest plot and lets the ground settle there, so
+/// what follows times the build alone.
+#[wasm_bindgen]
+pub fn lay_start() {
+    let mut client = Client::new(Recipe::new(1)).expect("the current generator version");
+    {
+        let side = f64::from(client.sphere().blocks().side());
+        client.teleport(SurfacePoint::new(
+            Sector::ALL[4],
+            STEEP_AT[0] * side,
+            STEEP_AT[1] * side,
+        ));
+    }
+    client.command_json(r#"{"type":"set_platform","side":64}"#);
+    client.settled_frame();
+    client.drain_events();
+    client.drain_terrain_changes();
+    client.drain_volume_changes();
+    LAY.with(|lay| *lay.borrow_mut() = Some(client));
+}
+
+/// Lays a platform of 64 on a solid base, as a front end asks for it
+/// between two frames. The host times the call.
+#[wasm_bindgen]
+pub fn lay_platform() {
+    LAY.with(|lay| {
+        let mut lay = lay.borrow_mut();
+        let client = lay.as_mut().expect("lay_start comes first");
+        client.command_json(r#"{"type":"lay_platform","base":"solid"}"#);
+    });
+}
+
+/// One frame after it. True once the platform is laid and drawn whole,
+/// which the client says as it settles.
+#[wasm_bindgen]
+pub fn lay_frame() -> bool {
+    LAY.with(|lay| {
+        let mut lay = lay.borrow_mut();
+        let client = lay.as_mut().expect("lay_start comes first");
+        client.update(1.0 / 60.0, &mut Input::default());
+        client.drain_terrain_changes();
+        client.drain_volume_changes();
+        let events = client.drain_events();
+        events.iter().any(|event| matches!(event, Event::Settled))
+    })
 }

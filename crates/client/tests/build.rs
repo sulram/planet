@@ -47,8 +47,15 @@ fn a_platform_is_laid_where_it_is_asked_for() {
         base: Base::Pillars,
     });
     assert!(refusals(&mut client).is_empty());
+    // It is laid and drawn over the next few frames, none of them at once.
     let built = |change: &VolumeChange| matches!(change, VolumeChange::Add(..));
-    assert!(client.drain_volume_changes().iter().any(built));
+    assert!(!client.drain_volume_changes().iter().any(built));
+    let mut drawn = false;
+    for _ in 0..10 {
+        client.update(1.0 / 60.0, &mut Input::default());
+        drawn |= client.drain_volume_changes().iter().any(built);
+    }
+    assert!(drawn);
     // Asking lays it with no tool in hand, and takes none.
     assert!(!client.building());
 }

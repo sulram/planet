@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::faces::{faces_in, faces_into};
+use crate::faces::{Padded, faces_into};
 use crate::trace::trace;
 use crate::{CHUNK, CHUNK_BITS, Cell, Cells, Gap, Gesture, Hit, Quad, Span, Volume};
 
@@ -177,9 +177,10 @@ impl Volumes {
             let Some(held) = span.meet(standing.bounds()) else {
                 continue;
             };
-            for at in held.cells() {
-                cells[index_in(span, at)] = standing.volume.get(standing.local(at));
-            }
+            let local = standing.local_span(held);
+            standing
+                .volume
+                .read(local, standing.origin, span, &mut cells);
         }
         cells
     }
@@ -196,7 +197,7 @@ impl Volumes {
                 continue;
             };
             for at in held.cells() {
-                let Some(&cell) = cells.get(index_in(span, at)) else {
+                let Some(&cell) = cells.get(span.index(at)) else {
                     continue;
                 };
                 if standing.volume.set(standing.local(at), cell) {
@@ -232,7 +233,8 @@ impl Volumes {
 
     /// The visible sides of the cells of one chunk, named by its lowest
     /// corner. A side against a solid cell of the volume next door is hidden
-    /// as one against its own.
+    /// as one against its own. The chunk and one cell all round are read
+    /// once, since each side and its corners look at their neighbours.
     pub fn faces(&self, chunk: [i32; 3]) -> Vec<Quad> {
         let Some(standing) = self.over(chunk[0], chunk[1]) else {
             return Vec::new();
@@ -246,11 +248,12 @@ impl Volumes {
             return Vec::new();
         }
         let span = standing.volume.chunk_span(index).moved(standing.origin);
-        let home = Home {
-            volumes: self,
-            standing,
+        let around = span.grown(1);
+        let padded = Padded {
+            span: around,
+            cells: self.cells(around),
         };
-        faces_in(&home, span)
+        padded.faces(span)
     }
 
     /// The sides of exactly the cells a gesture would change, as if nothing
@@ -303,24 +306,6 @@ impl Cells for Volumes {
     }
 }
 
-/// The cells as the chunks of one volume read them: its own at once, and a
-/// neighbour's looked up only past the edge of the plot.
-struct Home<'a> {
-    volumes: &'a Volumes,
-    standing: &'a Standing,
-}
-
-impl Cells for Home<'_> {
-    fn get(&self, at: [i32; 3]) -> Cell {
-        let local = self.standing.local(at);
-        if self.standing.volume.over(local[0], local[1]) {
-            self.standing.volume.get(local)
-        } else {
-            self.volumes.get(at)
-        }
-    }
-}
-
 /// The cells a gesture would take, each one solid, and nothing else.
 struct Taken<'a> {
     volumes: &'a Volumes,
@@ -340,13 +325,6 @@ impl Cells for Taken<'_> {
 /// A box grown just enough to hold another.
 fn join(span: Option<Span>, other: Span) -> Span {
     span.map_or(other, |span| span.with(other.min).with(other.max))
-}
-
-/// Where a cell of a box comes in [`Span::cells`] order.
-fn index_in(span: Span, at: [i32; 3]) -> usize {
-    let [sx, sy, _] = span.size().map(|n| n as usize);
-    let [x, y, z] = [0, 1, 2].map(|i| (at[i] - span.min[i]) as usize);
-    (z * sy + y) * sx + x
 }
 
 #[cfg(test)]
@@ -492,6 +470,45 @@ mod tests {
         volumes.restore(span, &after);
         assert_eq!(volumes.get([33, 3, 0]).paint(), Some(2));
         assert_eq!(volumes.restore(span, &after), None);
+    }
+
+    #[test]
+    fn a_box_read_whole_is_each_of_its_cells() {
+        // Two volumes at different heights, cells in a few chunks of each,
+        // and a box that runs off both, across chunks and past the frame.
+        let mut volumes = pair(16);
+        create(&mut volumes, [3, 5, 2], [40, 9, 20], 4);
+        create(&mut volumes, [14, 0, 15], [18, 31, 17], 7);
+        volumes.apply(Gesture::Delete {
+            span: Span::between([30, 6, 16], [35, 8, 30]),
+        });
+        let span = Span::between([-2, -1, -3], [66, 12, 50]);
+        let whole = volumes.cells(span);
+        for at in span.cells() {
+            assert_eq!(whole[span.index(at)], volumes.get(at), "{at:?}");
+        }
+    }
+
+    #[test]
+    fn the_sides_of_a_chunk_are_those_its_cells_show_read_one_by_one() {
+        // Cells over both volumes, into the corners of chunks and plots,
+        // with holes, so sides and their corners look across every edge.
+        let mut volumes = pair(8);
+        create(&mut volumes, [10, 3, 4], [45, 20, 30], 2);
+        volumes.apply(Gesture::Delete {
+            span: Span::between([14, 5, 8], [40, 15, 20]),
+        });
+        create(&mut volumes, [31, 0, 15], [33, 31, 16], 5);
+        create(&mut volumes, [20, 25, 31], [20, 25, 31], 1);
+        let whole = Span::between([0, 0, 0], [63, 31, 47]);
+        let mut seen = 0;
+        for chunk in volumes.chunks_in(whole) {
+            let span = Span::between(chunk, chunk.map(|n| n + CHUNK as i32 - 1));
+            let expected = crate::faces::faces_in(&volumes, span);
+            assert_eq!(volumes.faces(chunk), expected, "{chunk:?}");
+            seen += expected.len();
+        }
+        assert!(seen > 1000, "{seen}");
     }
 
     #[test]

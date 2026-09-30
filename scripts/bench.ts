@@ -98,6 +98,32 @@ const FOOTING_BUDGET_MS = 0.05;
 	report('planet: worst frame of a 10 s walk in cave country', worst, FRAME_BUDGET_MS);
 }
 
+// A platform of 64 laid on a solid base over the steepest plot near the test
+// world: the frame the command lands in, and every frame after it until each
+// chunk it changed is drawn. The worst of them is what a hand feels.
+{
+	bench.lay_start();
+	const before = performance.now();
+	bench.lay_platform();
+	const command = performance.now() - before;
+	let worst = 0;
+	let after = 0;
+	let frames = 0;
+	for (; frames < 240; frames++) {
+		const start = performance.now();
+		const settled = bench.lay_frame();
+		const ms = performance.now() - start;
+		after = Math.max(after, ms);
+		worst = Math.max(worst, frames === 0 ? command + ms : ms);
+		if (settled) break;
+	}
+	report('planet: worst frame while a platform of 64 is laid', worst, FRAME_BUDGET_MS);
+	console.log(
+		`     the command ${command.toFixed(2)} ms, the worst frame after it ` +
+			`${after.toFixed(2)} ms, laid and drawn whole after ${frames + 1} frames`
+	);
+}
+
 // One patch of the finest quadtree level, as a volume instead of a height:
 // 32 x 32 columns and a 32 m window of cells up each. What this costs against
 // `samples` is what says whether the volume layer can be meshed in a frame.

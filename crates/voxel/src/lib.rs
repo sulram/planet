@@ -167,6 +167,13 @@ impl Span {
             (min[1]..=max[1]).flat_map(move |y| (min[0]..=max[0]).map(move |x| [x, y, z]))
         })
     }
+
+    /// Where a cell of the box comes in [`Span::cells`] order.
+    pub(crate) fn index(self, at: [i32; 3]) -> usize {
+        let [sx, sy, _] = self.size().map(|n| n as usize);
+        let [x, y, z] = [0, 1, 2].map(|i| (at[i] - self.min[i]) as usize);
+        (z * sy + y) * sx + x
+    }
 }
 
 /// What holds up a body standing in one column: the top of the solid under
@@ -376,6 +383,34 @@ impl Volume {
         let floor = (0..probe).rev().find(|&z| solid(z)).map(|z| z + 1);
         let ceiling = (probe + 1..top).find(|&z| solid(z));
         Some(Gap { floor, ceiling })
+    }
+
+    /// Copies the cells of `span`, a box of this volume, into `out`, which
+    /// holds the box `frame` in [`Span::cells`] order with the volume's
+    /// first cell at `origin` of it. A row of a chunk is copied whole, and
+    /// a chunk with nothing stored is left as `out` has it.
+    pub(crate) fn read(&self, span: Span, origin: [i32; 3], frame: Span, out: &mut [Cell]) {
+        let Some(span) = span.meet(self.bounds()) else {
+            return;
+        };
+        for index in self.chunks_in(span) {
+            let Some(held) = self.chunk_span(index).meet(span) else {
+                continue;
+            };
+            let (slot, _) = self.locate(held.min);
+            let Some(chunk) = &self.chunks[slot] else {
+                continue;
+            };
+            let run = (held.max[0] - held.min[0] + 1) as usize;
+            for z in held.min[2]..=held.max[2] {
+                for y in held.min[1]..=held.max[1] {
+                    let (_, from) = self.locate([held.min[0], y, z]);
+                    let at = [held.min[0] + origin[0], y + origin[1], z + origin[2]];
+                    let to = frame.index(at);
+                    out[to..to + run].copy_from_slice(&chunk.cells[from..from + run]);
+                }
+            }
+        }
     }
 
     /// Chunk slot and index within it of a place inside the box.

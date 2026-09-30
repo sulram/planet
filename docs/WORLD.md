@@ -180,8 +180,8 @@ m4-K7M42Q@40,180,-5
 - A patch samples the generator at its own footprint, so a coarse patch is a
   band limited version of the fine one and a hill does not change size because
   the camera moved (29, 43).
-- Until its children are ready a node keeps drawing itself, so there are never
-  holes. Patches are built a few per update, closest first, under a budget.
+- A node keeps drawing itself until its children are ready: never a hole. Six
+  patches are built an update, closest first, one of them for its grass (86).
 - Streaming is around the body, never around the camera: the camera is a boom
   that swings metres away and may look from orbit, and the ground under the
   avatar may not depend on where it points.

@@ -28,6 +28,8 @@ compositor. What the world *is* lives in WORLD.md.
   corners are bent onto the body through the addresses they are
   (`client::build`): neighbours share corners exactly, and a volume curves
   with a small world (75). A chunk works out its column corners once.
+- A chunk whose cells changed is owed a mesh; eight are meshed an update, the
+  nearest first, each drawn as it was until then (86).
 - `render::volumes` draws them flat (`volume.wgsl`), the paint's sRGB as
   albedo, through `lit_occluded`: how shut in a corner is by the cells beside
   it, squared, takes away ambient light only, and the sun is the shadow

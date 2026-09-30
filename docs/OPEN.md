@@ -46,7 +46,6 @@ The address is the save format: settled before the first volume is stored.
 
 | Problem | Context |
 |---|---|
-| **Laying a platform of 64 takes a frame whole.** In WASM on the development machine: 6.8 ms on pillars and 7.8 ms solid over 5 m of fall, 9.8 and 15.6 ms on the steepest plot near the test world, against a frame budget of 12. A Pi pays several times as much. The time is in meshing every chunk the platform touches in the frame it lands, and more quads solid. Spreading the redraw over frames and reading a chunk's faces from a copy of it are the candidates | DECISIONS 85 · `client::build` (`redraw`), `voxel::faces` |
 | **WORLD.md stands at its 200 lines.** The next fact about the world has no room, and which theme leaves for a doc of its own is not chosen: where you are (the place code and the pose), or the recipe and its generators | CLAUDE.md § Docs · `scripts/docs.ts` |
 | **The simplex kernel steps, and the warp rides on it.** `simplex_d` uses `0.6 - r²` over four corners, so value and gradient both jump a little at every simplex boundary, and `plates::shape` warps its domain by that gradient. Worst seen: 21 m of seabed, 250 m under water. `0.5 - r²` is continuous and costs amplitude; either way every world and every golden changes, so it waits for a reason to spend that | DECISIONS 63 · `worldgen/tests/cliffs.rs` guards at 60 m |
 | The magic link is consumed on GET; a mail scanner that prefetches could burn it. Hardened variant: a confirm button page | ARCHITECTURE § Identity |

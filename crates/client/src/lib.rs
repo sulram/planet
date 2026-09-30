@@ -423,24 +423,27 @@ impl Client {
         self.tool_changed();
     }
 
-    /// Lays a platform where the body stands. False where none can be laid,
-    /// which is said.
+    /// Asks for a platform where the body stands, laid over the next few
+    /// updates. False where none can be laid, which is said.
     fn lay_platform(&mut self, base: Base) -> bool {
-        let laid = if self.controller.on_moon() {
+        let asked = if self.controller.on_moon() {
             Err(BuildRefusal::Moon)
         } else {
             self.build
                 .lay_platform(&self.generator, self.controller.point(), base)
         };
-        match laid {
-            Ok(top_m) => {
-                // The slab stands over the ground the body stood on.
-                self.controller.lift_onto(top_m);
-                self.history_changed();
-            }
-            Err(reason) => self.events.push(Event::BuildRefused { reason }),
+        if let Err(reason) = asked {
+            self.events.push(Event::BuildRefused { reason });
         }
-        laid.is_ok()
+        asked.is_ok()
+    }
+
+    /// Lifts the body onto a platform laid since the last update, when it
+    /// stands lower: the slab stands over the ground the body stood on.
+    fn stand_on_laid(&mut self) {
+        if let Some(top_m) = self.build.take_laid() {
+            self.controller.lift_onto(top_m);
+        }
     }
 
     fn tool_changed(&mut self) {
@@ -915,11 +918,12 @@ impl Client {
             input.held(Key::Use),
             input.held(Key::Turn),
         );
+        self.stand_on_laid();
         self.history_changed();
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
-        let settled = self.terrain.settled() && self.moon_terrain.settled();
+        let settled = self.terrain.settled() && self.moon_terrain.settled() && self.build.settled();
         if settled && !self.settled {
             self.events.push(Event::Settled);
         }
@@ -985,6 +989,9 @@ impl Client {
     /// The frame as it would look once streaming caught up. Blocks until every
     /// patch is built: for headless renders only.
     pub fn settled_frame(&mut self) -> Frame {
+        let eye = self.controller.camera(&self.generator).position;
+        self.build.settle(&self.generator, eye);
+        self.stand_on_laid();
         let camera = self.controller.camera(&self.generator);
         let patches = self.stream(&camera, Terrain::settle);
         self.frame(camera, patches)
