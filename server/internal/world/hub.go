@@ -1,6 +1,6 @@
-// Package world is the world core. It knows nothing of HTTP, of mundos or of
-// the world folder: the recipe and who a session is are handed to it through
-// small types of its own, never the other way round.
+// Package world is the world core. The recipe and who a session is are handed
+// to it through small types of its own: HTTP, mundos and the world folder
+// stand outside it.
 package world
 
 import (
@@ -26,8 +26,8 @@ const (
 	readTimeout  = 15 * time.Second
 )
 
-// ErrUnfounded is what a Catalog answers while the world has no recipe.
-var ErrUnfounded = errors.New("the world is not made yet")
+// ErrUnfounded is what a Catalog answers while the world awaits its recipe.
+var ErrUnfounded = errors.New("the world awaits its founding")
 
 // ErrRefused wraps the reason a connection was turned away before it became
 // a session: the other side heard Refused and the socket is closed.

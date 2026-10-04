@@ -56,7 +56,7 @@ message Stance {
 }
 
 // What a client says first. Who it is was settled before: the key it was
-// given on entering rides the socket URL, and no key is a visitor.
+// given on entering rides the socket URL, and a visitor comes as a guest.
 message Hello {
   // The protocol this client speaks. Refused when it is not the server's.
   uint32 protocol = 1;

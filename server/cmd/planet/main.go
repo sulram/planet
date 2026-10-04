@@ -80,7 +80,7 @@ func serve() error {
 	}()
 
 	if cfg.PublicKey == nil {
-		log.Printf("planet %s on %s, no mundos: every session is %s", version, server.Addr, cfg.DevLevel)
+		log.Printf("planet %s on %s, alone: every session is %s", version, server.Addr, cfg.DevLevel)
 	} else {
 		log.Printf("planet %s on %s, the world %q of %s", version, server.Addr, cfg.Name, cfg.MundosURL)
 	}

@@ -379,7 +379,7 @@ func (x *Stance) GetSprint() bool {
 }
 
 // What a client says first. Who it is was settled before: the key it was
-// given on entering rides the socket URL, and no key is a visitor.
+// given on entering rides the socket URL, and a visitor comes as a guest.
 type Hello struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The protocol this client speaks. Refused when it is not the server's.

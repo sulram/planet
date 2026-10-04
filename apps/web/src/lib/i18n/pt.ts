@@ -161,12 +161,12 @@ export const pt: Messages = {
 
 	// a world under mundos: the door, the founding
 	'door.signIn': 'Entrar',
-	'world.unfounded.title': 'Este mundo ainda não foi feito',
-	'world.unfounded.lede': 'O admin ainda vai escolher o planeta dele. Volte em breve.',
+	'world.unfounded.title': 'Este mundo está a caminho',
+	'world.unfounded.lede': 'O admin está escolhendo o planeta. Volte em breve.',
 	'found.title': 'Fundar este mundo',
 	'found.lede': 'Ande pelos planetas que uma semente dá e escolha um. Ele vira este mundo.',
 	'found.submit': 'Fundar o mundo',
-	'found.hint': 'Congela este planeta como o mundo. Depois não dá para mudar.',
+	'found.hint': 'Congela este planeta como o mundo, para sempre.',
 	'found.error.level': 'Só um admin deste mundo pode fundá-lo.',
 	'found.error.failed': 'Não conseguimos fundar o mundo. Tente de novo em instantes.',
 	'error.retry': 'Tentar de novo'

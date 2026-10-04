@@ -160,12 +160,12 @@ export const en = {
 
 	// a world under mundos: the door, the founding
 	'door.signIn': 'Sign in',
-	'world.unfounded.title': 'This world is not made yet',
-	'world.unfounded.lede': 'Its admin has yet to choose its planet. Come back soon.',
+	'world.unfounded.title': 'This world is on its way',
+	'world.unfounded.lede': 'Its admin is choosing its planet. Come back soon.',
 	'found.title': 'Found this world',
 	'found.lede': 'Walk the planets a seed gives and choose one. It becomes this world.',
 	'found.submit': 'Found the world',
-	'found.hint': 'Freezes this planet as the world. It cannot be changed after.',
+	'found.hint': 'Freezes this planet as the world, for good.',
 	'found.error.level': 'Only an admin of this world can found it.',
 	'found.error.failed': 'We could not found the world. Try again in a moment.',
 	'error.retry': 'Try again'

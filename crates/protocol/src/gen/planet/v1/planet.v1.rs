@@ -37,7 +37,7 @@ pub struct Stance {
     pub sprint: bool,
 }
 /// What a client says first. Who it is was settled before: the key it was
-/// given on entering rides the socket URL, and no key is a visitor.
+/// given on entering rides the socket URL, and a visitor comes as a guest.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Hello {
     /// The protocol this client speaks. Refused when it is not the server's.
