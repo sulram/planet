@@ -60,7 +60,8 @@ confirmed. What of it is built: BRIEF.md.
 - A Docker volume, named by mundos after the generation's id and mounted at
   `/world`, which the image gives to the user the server runs as. In it:
   `world.json`, the recipe, `plugins.json`, the plugins its admin switched,
-  and each plugin's SQLite file (89).
+  and a SQLite file for each owner that keeps something: `cells.sqlite`,
+  what was built (89, 110).
 - It is the whole world: deleting a generation deletes its folder and its
   bucket folder.
 

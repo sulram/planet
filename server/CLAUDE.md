@@ -22,7 +22,10 @@ The root `CLAUDE.md` applies here too.
   `bun run module` builds: run it before `go build`, `go vet` or `go test`.
   A service a plugin asks for is a message in `proto/planet/module/v1` and a
   method of `world.Room`.
-- The dependencies are the standard library, the socket, protobuf and
-  wazero. Another one is a decision before it is an import.
+- The dependencies are the standard library, the socket, protobuf, wazero
+  and SQLite in Go, with no C (DECISIONS 110). Another one is a decision
+  before it is an import.
+- `internal/store` is what owners keep: a SQLite file apiece in the world
+  folder, rows of a key and a value the server never reads.
 - `internal/protocol`, the world's wire and the module's bridge, is generated
   by `bun run proto` and committed. Never edited by hand.
