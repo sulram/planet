@@ -123,10 +123,10 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   signature and keeps a level for the session's life.
 - **A plugin imports the core**, never another plugin, and draws through
   `scene`. The core runs alone, with every plugin off.
-- **An agent is a client without a renderer.** Same protocol, same levels.
 - **A heavy file is named by the hash of its content.** Records name it so.
-- **UI is a front-end.** Svelte and the native UI sit over one command/event
-  seam. Tool logic (gizmos, brushes, selection) lives in Rust.
+- **A person and an agent do the same things the same way** (DECISIONS 94),
+  over one command/event seam: a front end is a UI on it, an agent a client
+  with no renderer on the same protocol and levels. Tool logic lives in Rust.
 - **Integrations enter through seams**, never through the core: one trait
   inside, library glue behind it in its own crate. No `cfg` sprawl.
 

@@ -1,7 +1,7 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak. The why
-is in DECISIONS 88, 91 and 93; the order they are made in is in BRIEF.md.
+is in DECISIONS 88, 91, 93 and 94; the order they are made in is in BRIEF.md.
 
 ## The core and a plugin
 
@@ -79,3 +79,13 @@ is in DECISIONS 88, 91 and 93; the order they are made in is in BRIEF.md.
   world folder; files.
 - A hook is written when a plugin asks: who may do what and where, which
   avatars are offered.
+
+## A person and an agent
+
+- What a world offers, it offers to a person and to an agent alike (94).
+- A capability is a command at the seam, named, its parameters said. A tool
+  is how a hand composes one; an agent sends the command itself.
+- Every op a tool makes has a command that asks for it by its parameters.
+- Whatever a picture shows has a reading that says the same as data: the
+  ground, the cells in a box, who is near, where an account may build.
+- An agent is an account as a person is: a door, a level, permissions.

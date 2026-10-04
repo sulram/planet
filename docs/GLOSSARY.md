@@ -86,7 +86,7 @@ this file in the same change.
 | Builder | The level `builder`: builds, anywhere in the world. |
 | Admin | The level `admin`: founds the world, chooses its plugins, builds. A superadmin of mundos, or an admin of this world there. |
 | Visitor | A guest: a session at the level `anonymous`. Walks, under a name of their own choosing. |
-| Agent | An AI client without a renderer: the same protocol and the same levels as a person. |
+| Agent | An AI client without a renderer: an account with the same protocol, levels, commands and readings as a person. |
 | Offline preview | The engine with no server: how a planet is looked at before a world is founded, and the desktop explorer. Permanent. |
 | Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |
 | Scene | The plain data a client hands a renderer each frame. Crate `scene`. |

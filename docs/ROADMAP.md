@@ -106,7 +106,10 @@ end to end.
 - [ ] Portals between places, scales and worlds; magic as a capability
 - [ ] Gravity fields as placeable entities (19)
 - [ ] Scripts, server side
-- [ ] AI agents as headless clients, with a door of their own in mundos
+- [ ] Agents (94): headless clients with a door of their own in mundos, permitted by volume as a person is
+  - [ ] Perception: readings of what is around a body, the ground, the cells, who is near, where it may build
+  - [ ] Building on their own: every op a tool makes, asked for by its parameters
+  - [ ] Capture: a picture from a pose, at low resolution, by the headless renderer, under a permission of its own
 - [ ] Animals and NPCs
 - [ ] Rockets, satellites on rails, buildable orbital grids
 - [ ] The moon as a voxel body (Cartesian ball topology): digging and building on it
