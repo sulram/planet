@@ -46,7 +46,7 @@ pub fn serve(call: &[u8]) -> Vec<Vec<u8>> {
 fn measure_of(_recipe: &protocol::Recipe) -> Option<Measure> {
     Some(Measure {
         sphere: Recipe::new(0).sphere()?,
-        moon_radius_m: worldgen::MOON_RADIUS_M,
+        moon: worldgen::moon(),
     })
 }
 

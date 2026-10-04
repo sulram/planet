@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use glam::DVec3;
-use scene::{Frame, GuideVertex, Lamp, VolumeChange, VolumeMeshId, VolumeVertex};
+use scene::{Frame, GuideVertex, Lamp, VolumeChange, VolumeDraw, VolumeMeshId, VolumeVertex};
 use wgpu::util::DeviceExt;
 
 use crate::terrain::PatchUniforms;
@@ -97,7 +97,8 @@ impl Volumes {
                         array_stride: size_of::<GuideVertex>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: &wgpu::vertex_attr_array![
-                            0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4, 3 => Unorm8x4
+                            0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4, 3 => Unorm8x4,
+                            4 => Unorm8x4
                         ],
                     })],
                     surface,
@@ -185,31 +186,34 @@ impl Volumes {
         frame: &Frame,
         camera: DVec3,
     ) -> Placed {
-        let held = |wanted: &[VolumeMeshId]| -> Vec<VolumeMeshId> {
-            let held = wanted.iter().filter(|id| self.meshes.contains_key(id));
+        let held = |wanted: &[VolumeDraw]| -> Vec<VolumeDraw> {
+            let held = wanted
+                .iter()
+                .filter(|draw| self.meshes.contains_key(&draw.id));
             held.copied().collect()
         };
         let solid = held(&frame.volumes);
         // Glass blends over glass: the far panes go first.
         let mut glass = held(&frame.glass);
-        let away = |id: &VolumeMeshId| self.meshes[id].origin.distance_squared(camera);
+        let at = |draw: &VolumeDraw| draw.body_center + self.meshes[&draw.id].origin;
+        let away = |draw: &VolumeDraw| at(draw).distance_squared(camera);
         glass.sort_by(|a, b| away(b).total_cmp(&away(a)));
         let guides = held(&frame.guides);
-        let ghost = frame.ghost.filter(|id| self.meshes.contains_key(id));
-        // Volumes stand on the planet, whose centre is the world origin.
-        let origins: Vec<(DVec3, DVec3)> = solid
-            .iter()
-            .chain(&glass)
-            .chain(&guides)
-            .chain(&ghost)
-            .map(|id| (DVec3::ZERO, self.meshes[id].origin))
+        let ghost = frame
+            .ghost
+            .filter(|draw| self.meshes.contains_key(&draw.id));
+        // A mesh is counted from the centre of its body, which moves.
+        let drawn = solid.iter().chain(&glass).chain(&guides).chain(&ghost);
+        let origins: Vec<(DVec3, DVec3)> = drawn
+            .map(|draw| (draw.body_center, self.meshes[&draw.id].origin))
             .collect();
         uniforms.place(device, queue, &origins, camera);
+        let ids = |draws: Vec<VolumeDraw>| draws.into_iter().map(|draw| draw.id).collect();
         Placed {
-            solid,
-            glass,
-            guides,
-            ghost,
+            solid: ids(solid),
+            glass: ids(glass),
+            guides: ids(guides),
+            ghost: ghost.map(|draw| draw.id),
         }
     }
 

@@ -127,12 +127,12 @@ impl Turn<'_> {
 /// Where the feet of this client's own body are.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Feet {
-    /// The column they are over.
+    /// The seat they are over: a sector of the body that holds them.
+    pub seat: Seat,
+    /// The column of it they are over, in that body's own blocks.
     pub point: SurfacePoint,
-    /// How high over the datum, metres.
+    /// How high over the datum of that body, metres.
     pub height_m: f64,
-    /// Whether they are on the moon, where `point` names nothing.
-    pub moon: bool,
 }
 
 /// What of the core a host lends a plugin for one call.
@@ -210,19 +210,20 @@ impl Host<'_> {
         self.lent.generator.sphere()
     }
 
-    /// How high the ground stands at a column, in blocks: the ground in full
-    /// detail, as a body stands on it.
-    pub fn ground(&self, point: SurfacePoint) -> f64 {
-        cells::ground(self.lent.generator, point)
+    /// How high the ground of a seat stands at a column of it, in blocks:
+    /// the ground in full detail, as a body stands on it.
+    pub fn ground(&self, seat: Seat, point: SurfacePoint) -> f64 {
+        cells::ground(self.lent.generator, seat, point)
     }
 
     /// Where the feet of this client's own body are.
     pub fn feet(&self) -> Feet {
         let controller = &self.lent.controller;
+        let (seat, point) = controller.over(self.lent.generator);
         Feet {
-            point: controller.point(),
+            seat,
+            point,
             height_m: controller.height_m(),
-            moon: controller.on_moon(),
         }
     }
 
@@ -264,14 +265,15 @@ impl Host<'_> {
     }
 
     /// A line of sight from a point of the world along a direction, unit,
-    /// bent into the cells, and what it meets.
+    /// bent into the cells, and what it meets: a cell, or the ground of a
+    /// volume.
     pub fn sight(&self, from: DVec3, toward: DVec3) -> Sight {
         self.lent.cells.sight(self.lent.generator, from, toward)
     }
 
     /// Where a lattice point of a seat's cells is in the world.
     pub fn corner(&self, seat: Seat, p: [i32; 3]) -> DVec3 {
-        self.lent.cells.corner(self.sphere(), seat, p)
+        self.lent.cells.corner(self.lent.generator, seat, p)
     }
 
     /// Whether this session may change the cells: a builder's and an
@@ -288,25 +290,27 @@ impl Host<'_> {
         }
     }
 
-    /// The cells the volume of the plot a column is on holds, or would hold
-    /// once opened: the room there is to build in. Why none can stand there,
-    /// where none can.
-    pub fn room(&self, point: SurfacePoint) -> Result<Span, Refusal> {
-        self.lent.cells.room(self.lent.generator, point)
+    /// The cells the volume of the plot a column of a seat is on holds, or
+    /// would hold once opened: the room there is to build in. Why none can
+    /// stand there, where none can.
+    pub fn room(&self, seat: Seat, point: SurfacePoint) -> Result<Span, Refusal> {
+        self.lent.cells.room(self.lent.generator, seat, point)
     }
 
-    /// Opens the volume of the plot a column is on, where none stands.
-    pub fn open(&mut self, point: SurfacePoint) -> Result<(), Refusal> {
+    /// Opens the volume of the plot a column of a seat is on, where none
+    /// stands: room to build in, with nothing built. A stroke starts on its
+    /// ground.
+    pub fn open(&mut self, seat: Seat, point: SurfacePoint) -> Result<(), Refusal> {
         self.permitted()?;
-        self.lent.cells.open(self.lent.generator, point)
+        self.lent.cells.open(self.lent.generator, seat, point)
     }
 
-    /// Closes the volume over a column: what was built in it goes with it,
-    /// and its plot is nature again. A change like any other, taken back as
-    /// one. `Ok(false)` where no volume stands.
-    pub fn close(&mut self, point: SurfacePoint) -> Result<bool, Refusal> {
+    /// Closes the volume over a column of a seat: what was built in it goes
+    /// with it, and its plot is nature again. A change like any other, taken
+    /// back as one. `Ok(false)` where no volume stands.
+    pub fn close(&mut self, seat: Seat, point: SurfacePoint) -> Result<bool, Refusal> {
         self.permitted()?;
-        Ok(self.lent.cells.close(point))
+        Ok(self.lent.cells.close(seat, point))
     }
 
     /// Applies gestures to the cells of a seat as one change, taken back as
@@ -319,15 +323,13 @@ impl Host<'_> {
     /// Shows the ghost of a gesture over a seat's cells, or of none: exactly
     /// the cells it would change.
     pub fn preview(&mut self, gesture: Option<(Seat, Gesture)>) {
-        let sphere = self.sphere();
-        self.lent.cells.preview(sphere, gesture);
+        self.lent.cells.preview(gesture);
     }
 
     /// Shows guides over the world, in place of those shown before, and
     /// none with none to show: each a box of a seat's cells as a faint grid.
     pub fn guide(&mut self, guides: &[Guide]) {
-        let sphere = self.sphere();
-        self.lent.cells.guide(sphere, guides);
+        self.lent.cells.guide(self.lent.generator, guides);
     }
 
     /// Takes back the last change that landed.

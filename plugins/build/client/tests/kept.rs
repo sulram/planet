@@ -188,7 +188,10 @@ impl World {
 /// The solid cells two clients hold of the volume over a column, when both
 /// hold it: the same, cell for cell.
 fn same(a: &Client, b: &Client, point: SurfacePoint) -> Option<usize> {
-    let (held, also) = (a.cells().bounds_over(point)?, b.cells().bounds_over(point)?);
+    let (held, also) = (
+        a.cells().bounds_over(point.sector.into(), point)?,
+        b.cells().bounds_over(point.sector.into(), point)?,
+    );
     assert_eq!(held, also);
     let mut solid = 0;
     for at in held.cells() {
@@ -225,7 +228,7 @@ fn what_is_built_is_the_worlds() {
     assert_eq!(world.client(a).cells().history(), (true, false));
     let slab = same(&world.here[a].client, &world.here[b].client, point).expect("both hold it");
     assert!(slab >= 256, "{slab}");
-    assert!(!world.client(far).cells().covers(point));
+    assert!(!world.client(far).cells().covers(point.sector.into(), point));
     assert_eq!(world.client(b).cells().history(), (false, false));
 
     // The visitor walks over, and is shown what stands there.
@@ -238,7 +241,11 @@ fn what_is_built_is_the_worlds() {
 
     // Both builders fill the same box at once, each in a paint of its own.
     // The world takes one first, and both end with what the world holds.
-    let held = world.client(a).cells().bounds_over(point).unwrap();
+    let held = world
+        .client(a)
+        .cells()
+        .bounds_over(point.sector.into(), point)
+        .unwrap();
     let top = (held.min[2]..=held.max[2])
         .rev()
         .find(|&z| {
@@ -306,10 +313,13 @@ fn what_is_built_is_the_worlds() {
     // all. It is a change of theirs: taken back, the volume stands again for
     // everyone as it was, and put back, it is gone again.
     world.client(a).command_json(r#"{"type":"build.close"}"#);
-    assert!(!world.client(a).cells().covers(point));
+    assert!(!world.client(a).cells().covers(point.sector.into(), point));
     world.live(0.2);
     for who in [a, b, far] {
-        assert!(!world.client(who).cells().covers(point), "client {who}");
+        assert!(
+            !world.client(who).cells().covers(point.sector.into(), point),
+            "client {who}"
+        );
     }
     assert_eq!(world.client(a).cells().history(), (true, false));
     world.client(a).command_json(r#"{"type":"build.undo"}"#);
@@ -323,7 +333,7 @@ fn what_is_built_is_the_worlds() {
     }
     world.client(a).command_json(r#"{"type":"build.redo"}"#);
     world.live(0.2);
-    assert!(!world.client(b).cells().covers(point));
+    assert!(!world.client(b).cells().covers(point.sector.into(), point));
     world.client(a).command_json(r#"{"type":"build.undo"}"#);
     world.live(0.2);
     assert_eq!(
@@ -333,13 +343,13 @@ fn what_is_built_is_the_worlds() {
     // A visitor closes none.
     world.client(far).command_json(r#"{"type":"build.close"}"#);
     world.live(0.2);
-    assert!(world.client(a).cells().covers(point));
+    assert!(world.client(a).cells().covers(point.sector.into(), point));
 
     // Who walks away lets the volume go, and a link that drops takes what
     // the world kept with it.
     world.client(b).teleport(away);
     world.live(1.5);
-    assert!(!world.client(b).cells().covers(point));
+    assert!(!world.client(b).cells().covers(point.sector.into(), point));
     world.client(a).link_closed();
-    assert!(!world.client(a).cells().covers(point));
+    assert!(!world.client(a).cells().covers(point.sector.into(), point));
 }

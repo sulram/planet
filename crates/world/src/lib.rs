@@ -64,20 +64,33 @@ impl Moment {
 pub struct Measure {
     /// The planet, and the grid every stance is said on: the moon's too.
     pub sphere: QuadSphere,
-    /// The moon's datum radius.
-    pub moon_radius_m: f64,
+    /// The moon: its size, and the grid what is built on it is cut by.
+    pub moon: QuadSphere,
 }
 
 impl Measure {
-    /// Where a stance on the planet is in the world, metres from its centre.
-    /// `None` on the moon, or for a stance that names no sector.
-    pub fn position(&self, stance: &Stance) -> Option<[f64; 3]> {
-        if stance.body() != protocol::Body::Planet {
-            return None;
+    /// A body of this world: its size, and the grid its cells are cut by.
+    pub fn body(&self, body: protocol::Body) -> QuadSphere {
+        match body {
+            protocol::Body::Moon => self.moon,
+            _ => self.sphere,
         }
+    }
+
+    /// Where a stance is, metres from the centre of the body it is on.
+    /// `None` for a stance that names no sector.
+    pub fn position(&self, stance: &Stance) -> Option<[f64; 3]> {
         let sector = Sector::new(u8::try_from(stance.sector).ok()?)?;
         let point = SurfacePoint::new(sector, f64::from(stance.u), f64::from(stance.v));
-        Some(self.sphere.position(point, f64::from(stance.height_m)))
+        let height_m = f64::from(stance.height_m);
+        match stance.body() {
+            protocol::Body::Planet => Some(self.sphere.position(point, height_m)),
+            protocol::Body::Moon => {
+                let from_centre = self.moon.radius_m() + height_m;
+                let direction = self.sphere.blocks().direction(point);
+                Some(direction.map(|axis| axis * from_centre))
+            }
+        }
     }
 
     /// How far apart two stances stand, in blocks: the great circle along the
@@ -104,7 +117,7 @@ impl Measure {
     fn radius_blocks(&self, body: protocol::Body) -> f64 {
         match body {
             protocol::Body::Planet => self.sphere.radius_blocks(),
-            protocol::Body::Moon => self.moon_radius_m / BLOCK_M,
+            protocol::Body::Moon => self.moon.radius_blocks(),
         }
     }
 }
@@ -173,13 +186,13 @@ mod tests {
     use super::*;
     use protocol::Body;
 
-    /// The moon of every generator so far, `worldgen::MOON_RADIUS_M`.
-    const MOON_RADIUS_M: f64 = 8000.0;
+    /// The moon of every generator so far, `worldgen::MOON_BITS`.
+    const MOON_BITS: u32 = 14;
 
     fn measure(bits: u32) -> Measure {
         Measure {
             sphere: QuadSphere::new(bits).unwrap(),
-            moon_radius_m: MOON_RADIUS_M,
+            moon: QuadSphere::new(MOON_BITS).unwrap(),
         }
     }
 

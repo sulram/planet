@@ -27,8 +27,8 @@ ARCHITECTURE.md; how the picture is made is in RENDER.md.
   and a column tapers 0.6%, so the band is a regular grid in practice. On a
   small body the radius wins and the taper is the price shells will pay (49).
 - A sector's edge plots, its 8 corners with them, are nature: no volume (77).
-- Small bodies (moons, micro worlds) use a second topology: a Cartesian ball
-  of cubes, diggable to the core. Both sit behind one `Topology` trait.
+- The moon is a quad sphere of its own, `2^14` blocks a side, 5.2 km of radius:
+  a volume stands on it as on the planet, cut by its grid, from its centre.
 - On foot the planet reads as flat: horizon at about 260 m from eye height.
   The curve shows from altitude.
 

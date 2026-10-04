@@ -49,8 +49,9 @@ use wardrobe::Wardrobe;
 const DAY_S: f64 = 1200.0;
 /// Turns of the moon per turn of the sun.
 const MOON_PACE: f64 = 0.93;
-/// Centre of the planet to centre of the moon, metres.
-const MOON_ORBIT_M: f64 = 160_000.0;
+/// Centre of the planet to centre of the moon, metres: twenty of its radii,
+/// so it fills as much of the sky whatever its size.
+const MOON_ORBIT_M: f64 = 20.0 * MOON_RADIUS_M;
 use worldgen::MOON_RADIUS_M;
 const STATS_EVERY_S: f64 = 0.5;
 
@@ -248,6 +249,12 @@ impl Client {
     /// that follows from it. Frozen with the recipe.
     pub fn sphere(&self) -> topology::QuadSphere {
         self.generator.sphere()
+    }
+
+    /// The moon of the world: its size, and the grid what is built on it is
+    /// cut by.
+    pub fn moon(&self) -> topology::QuadSphere {
+        self.generator.moon()
     }
 
     /// Stands the avatar at a point of any sector. Arrival, not travel.
@@ -926,6 +933,7 @@ impl Client {
         };
         let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
         self.controller.set_drawn_footprint(footprint_m);
+        self.cells.orbit(moon);
         self.controller
             .update(dt, wish, &self.generator, &self.cells);
         let motion = Motion::of(&self.controller);
@@ -955,9 +963,8 @@ impl Client {
         // and kept in step with what the world holds near the body.
         let (plugins, lent) = self.lend();
         plugins.turn(&eye, input, taken.interrupted, lent);
-        self.cells.update(self.generator.sphere(), eye.position);
-        let body = (!self.controller.on_moon()).then(|| self.controller.position());
-        self.cells.look(self.generator.sphere(), body, dt);
+        self.cells.update(eye.position);
+        self.cells.look(self.controller.held_by(), dt);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -1030,10 +1037,18 @@ impl Client {
     /// The frame as it would look once streaming caught up. Blocks until every
     /// patch is built: for headless renders only.
     pub fn settled_frame(&mut self) -> Frame {
+        // The moon is where the clock says now, for whoever stands on it and
+        // for what is built there, as for its ground.
+        let moon = self.moon_position();
+        self.controller.set_moon(controller::MoonBody {
+            center: moon,
+            radius_m: MOON_RADIUS_M,
+        });
+        self.cells.orbit(moon);
         let eye = self.controller.camera(&self.generator).position;
         let (plugins, lent) = self.lend();
         plugins.settle(lent);
-        self.cells.settle(self.generator.sphere(), eye);
+        self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
         let patches = self.stream(&camera, Terrain::settle);
         self.frame(camera, patches)
@@ -1074,7 +1089,7 @@ impl Client {
             camera,
             self.aspect,
         );
-        // Nothing is built on the moon.
+        // No grass grows on the moon for what is built there to cover.
         let on_moon = select(
             &mut self.moon_terrain,
             &self.generator,

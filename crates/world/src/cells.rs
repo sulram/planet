@@ -13,11 +13,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use prost::Message;
 use protocol::cells as wire;
+use protocol::{Body, Stance};
 use seat::{HOLD_M, PLOT_BITS, Seat, Stand, TELL_M};
-use topology::{Sector, SurfacePoint};
+use topology::SurfacePoint;
 use voxel::{CHUNK, Cell, Gesture, Span, Volumes, pack, unpack};
 
-use crate::{Level, Op, Plugin, Room, Who};
+use crate::{Level, Measure, Op, Plugin, Room, Who};
 
 /// The version of the cells' wire.
 pub const VERSION: u32 = 1;
@@ -126,27 +127,27 @@ pub fn system() -> Box<dyn Plugin> {
     Box::new(Cells::default())
 }
 
-fn plot_key(tag: u8, sector: Sector, plot: [i32; 2]) -> Vec<u8> {
-    let mut key = vec![tag, sector.index() as u8];
+fn plot_key(tag: u8, seat: Seat, plot: [i32; 2]) -> Vec<u8> {
+    let mut key = vec![tag, seat.key()];
     key.extend(plot[0].to_be_bytes());
     key.extend(plot[1].to_be_bytes());
     key
 }
 
 /// The key a volume's record is kept under.
-fn volume_key(sector: Sector, plot: [i32; 2]) -> Vec<u8> {
-    plot_key(b'v', sector, plot)
+fn volume_key(seat: Seat, plot: [i32; 2]) -> Vec<u8> {
+    plot_key(b'v', seat, plot)
 }
 
 /// The start of the keys a volume's chunks are kept under.
-fn chunks_key(sector: Sector, plot: [i32; 2]) -> Vec<u8> {
-    plot_key(b'c', sector, plot)
+fn chunks_key(seat: Seat, plot: [i32; 2]) -> Vec<u8> {
+    plot_key(b'c', seat, plot)
 }
 
 /// The key a chunk is kept under: its volume's, and its lowest corner.
-fn chunk_key(sector: Sector, chunk: [i32; 3]) -> Vec<u8> {
+fn chunk_key(seat: Seat, chunk: [i32; 3]) -> Vec<u8> {
     let plot = [chunk[0] >> PLOT_BITS, chunk[1] >> PLOT_BITS];
-    let mut key = chunks_key(sector, plot);
+    let mut key = chunks_key(seat, plot);
     for at in chunk {
         key.extend(at.to_be_bytes());
     }
@@ -163,7 +164,7 @@ impl Cells {
         self.index.get_or_insert_with(|| {
             let rows = room.scan(b"v");
             let volumes = rows.iter().filter_map(|(key, value)| {
-                let sector = Sector::new(*key.get(1)?)?;
+                let seat = Seat::from_key(*key.get(1)?)?;
                 let plot = [number(key.get(2..6)?)?, number(key.get(6..10)?)?];
                 let kept = wire::Stood::decode(value.as_slice()).ok()?;
                 let stand = Stand {
@@ -174,22 +175,22 @@ impl Cells {
                     stand,
                     version: kept.version,
                 };
-                Some(((Seat::Sector(sector), plot), stood))
+                Some(((seat, plot), stood))
             });
             volumes.collect()
         })
     }
 
-    /// The volumes that boxes of a sector's cells reach, each opened where
-    /// it stands, with the chunks the boxes reach read from the store.
-    fn load(&mut self, room: &mut dyn Room, sector: Sector, spans: &[Span]) -> Volumes {
+    /// The volumes that boxes of a seat's cells reach, each opened where it
+    /// stands, with the chunks the boxes reach read from the store.
+    fn load(&mut self, room: &mut dyn Room, seat: Seat, spans: &[Span]) -> Volumes {
         let index = self.index(room);
         let mut volumes = Volumes::new(PLOT_BITS);
         for span in spans {
             let lo = [span.min[0] >> PLOT_BITS, span.min[1] >> PLOT_BITS];
             let hi = [span.max[0] >> PLOT_BITS, span.max[1] >> PLOT_BITS];
             for plot in (lo[1]..=hi[1]).flat_map(|y| (lo[0]..=hi[0]).map(move |x| [x, y])) {
-                if let Some(stood) = index.get(&(Seat::Sector(sector), plot)) {
+                if let Some(stood) = index.get(&(seat, plot)) {
                     volumes.open(plot, stood.stand.low, stood.stand.height);
                 }
             }
@@ -199,7 +200,7 @@ impl Cells {
             .flat_map(|&span| volumes.chunks_in(span))
             .collect();
         for chunk in chunks {
-            let kept = room.get(&chunk_key(sector, chunk));
+            let kept = room.get(&chunk_key(seat, chunk));
             if let Some(cells) = kept.and_then(|packed| unpack(&packed, CHUNK_CELLS)) {
                 volumes.restore(Volumes::chunk_span(chunk), &cells);
             }
@@ -212,13 +213,13 @@ impl Cells {
     fn save(
         &mut self,
         room: &mut dyn Room,
-        sector: Sector,
+        seat: Seat,
         volumes: &Volumes,
         changed: Span,
     ) -> Vec<([i32; 2], Stood)> {
         for chunk in volumes.chunks_in(changed) {
             let cells = volumes.cells(Volumes::chunk_span(chunk));
-            let key = chunk_key(sector, chunk);
+            let key = chunk_key(seat, chunk);
             match cells.iter().all(|cell| cell.is_air()) {
                 true => room.forget(&key),
                 false => room.keep(&key, pack(&cells)),
@@ -229,16 +230,13 @@ impl Cells {
         let index = self.index(room);
         let mut touched = Vec::new();
         for plot in (lo[1]..=hi[1]).flat_map(|y| (lo[0]..=hi[0]).map(move |x| [x, y])) {
-            if let Some(stood) = index.get_mut(&(Seat::Sector(sector), plot)) {
+            if let Some(stood) = index.get_mut(&(seat, plot)) {
                 stood.version += 1;
                 touched.push((plot, *stood));
             }
         }
         for (plot, stood) in &touched {
-            room.keep(
-                &volume_key(sector, *plot),
-                stood.wire(*plot).encode_to_vec(),
-            );
+            room.keep(&volume_key(seat, *plot), stood.wire(*plot).encode_to_vec());
         }
         touched
     }
@@ -247,26 +245,28 @@ impl Cells {
         let Ok(open) = wire::Open::decode(payload) else {
             return room.refuse("message");
         };
-        let sector = Seat::from_wire(open.seat.as_ref()).and_then(Seat::sector);
-        let (Some(sector), true) = (sector, open.u.is_finite() && open.v.is_finite()) else {
+        let seat = Seat::from_wire(open.seat.as_ref());
+        let (Some(seat), true) = (seat, open.u.is_finite() && open.v.is_finite()) else {
             return room.refuse("message");
         };
-        let seat = Seat::Sector(sector);
-        let point = SurfacePoint::new(sector, open.u, open.v);
+        let point = SurfacePoint::new(seat.sector(), open.u, open.v);
         let plot = seat::plot_of(point);
         if let Some(stood) = self.index(room).get(&(seat, plot)).copied() {
             // It stands already: the asker is told where, and nobody else.
             return tell_opened(room, seat, plot, stood, &[who.session]);
         }
-        let stand = match room.ground().map(|ground| seat::survey(ground, point)) {
+        let stand = match room
+            .ground()
+            .map(|ground| seat::survey(ground, seat, point))
+        {
             None => return room.refuse("ground"),
             Some(Err(why)) => return room.refuse(why.code()),
             Some(Ok(stand)) => stand,
         };
         let stood = Stood { stand, version: 0 };
-        room.keep(&volume_key(sector, plot), stood.wire(plot).encode_to_vec());
+        room.keep(&volume_key(seat, plot), stood.wire(plot).encode_to_vec());
         self.index(room).insert((seat, plot), stood);
-        let to = near(room, sector, &[(plot, stood)], TELL_M);
+        let to = near(room, seat, &[(plot, stood)], TELL_M);
         tell_opened(room, seat, plot, stood, &to);
     }
 
@@ -274,13 +274,13 @@ impl Cells {
         let Ok(change) = wire::Change::decode(payload) else {
             return room.refuse("message");
         };
-        let sector = Seat::from_wire(change.seat.as_ref()).and_then(Seat::sector);
+        let seat = Seat::from_wire(change.seat.as_ref());
         let gestures: Option<Vec<Gesture>> = change
             .gestures
             .iter()
             .map(seat::gesture_from_wire)
             .collect();
-        let (Some(sector), Some(gestures)) = (sector, gestures) else {
+        let (Some(seat), Some(gestures)) = (seat, gestures) else {
             return room.refuse("message");
         };
         let within = |gesture: &Gesture| {
@@ -290,9 +290,8 @@ impl Cells {
         if gestures.len() > GESTURES || !gestures.iter().all(within) {
             return room.refuse("reach");
         }
-        let seat = Seat::Sector(sector);
         let spans: Vec<Span> = gestures.iter().map(|gesture| gesture.span()).collect();
-        let mut volumes = self.load(room, sector, &spans);
+        let mut volumes = self.load(room, seat, &spans);
         let reach = spans
             .iter()
             .copied()
@@ -312,7 +311,7 @@ impl Cells {
         let Some(changed) = changed else {
             return;
         };
-        let touched = self.save(room, sector, &volumes, changed);
+        let touched = self.save(room, seat, &volumes, changed);
         let history = self.histories.entry(who.session).or_default();
         history.undone.clear();
         history.did(Kept::Change {
@@ -330,7 +329,7 @@ impl Cells {
                 .map(|(plot, stood)| stood.wire(*plot))
                 .collect(),
         };
-        let to = near(room, sector, &touched, TELL_M);
+        let to = near(room, seat, &touched, TELL_M);
         room.tell(wire::CHANGED, changed.encode_to_vec(), &to);
     }
 
@@ -352,13 +351,12 @@ impl Cells {
     /// Takes the volume over a plot out of the world, and tells whoever is
     /// near that it is gone. What takes that back, where a volume stood.
     fn shut(&mut self, seat: Seat, plot: [i32; 2], room: &mut dyn Room) -> Option<Kept> {
-        let sector = seat.sector()?;
         let stood = self.index(room).remove(&(seat, plot))?;
-        let chunks = room.scan(&chunks_key(sector, plot));
+        let chunks = room.scan(&chunks_key(seat, plot));
         for (key, _) in &chunks {
             room.forget(key);
         }
-        room.forget(&volume_key(sector, plot));
+        room.forget(&volume_key(seat, plot));
         let gone = wire::Held {
             seat: Some(seat.wire()),
             plot_x: plot[0],
@@ -369,7 +367,7 @@ impl Cells {
             volumes: Vec::new(),
             gone: vec![gone],
         };
-        let to = near(room, sector, &[(plot, stood)], TELL_M);
+        let to = near(room, seat, &[(plot, stood)], TELL_M);
         room.tell(wire::SEEN, seen.encode_to_vec(), &to);
         Some(Kept::Closed {
             seat,
@@ -389,9 +387,6 @@ impl Cells {
         chunks: &[(Vec<u8>, Vec<u8>)],
         room: &mut dyn Room,
     ) -> bool {
-        let Some(sector) = seat.sector() else {
-            return false;
-        };
         if self.index(room).contains_key(&(seat, plot)) {
             return false;
         }
@@ -400,13 +395,13 @@ impl Cells {
             version: stood.version + 1,
             ..stood
         };
-        room.keep(&volume_key(sector, plot), stood.wire(plot).encode_to_vec());
+        room.keep(&volume_key(seat, plot), stood.wire(plot).encode_to_vec());
         for (key, cells) in chunks {
             room.keep(key, cells.clone());
         }
         self.index(room).insert((seat, plot), stood);
-        let to = near(room, sector, &[(plot, stood)], TELL_M);
-        show(room, sector, plot, stood, &to);
+        let to = near(room, seat, &[(plot, stood)], TELL_M);
+        show(room, seat, plot, stood, &to);
         true
     }
 
@@ -462,10 +457,10 @@ impl Cells {
         };
         let (seat, span) = (*seat, *span);
         let count = span.cells().count();
-        let (Some(sector), Some(before)) = (seat.sector(), unpack(packed, count)) else {
+        let Some(before) = unpack(packed, count) else {
             return room.refuse("none");
         };
-        let mut volumes = self.load(room, sector, &[span]);
+        let mut volumes = self.load(room, seat, &[span]);
         let now = volumes.cells(span);
         let mut made = volumes.clone();
         made.restore(span, &before);
@@ -481,7 +476,7 @@ impl Cells {
             .map(|at| if now[at] == from[at] { to[at] } else { now[at] })
             .collect();
         let touched = match volumes.restore(span, &next) {
-            Some(changed) => self.save(room, sector, &volumes, changed),
+            Some(changed) => self.save(room, seat, &volumes, changed),
             None => Vec::new(),
         };
         let history = self.histories.entry(who.session).or_default();
@@ -507,7 +502,7 @@ impl Cells {
                 .map(|(plot, stood)| stood.wire(*plot))
                 .collect(),
         };
-        let to = near(room, sector, &touched, TELL_M);
+        let to = near(room, seat, &touched, TELL_M);
         room.tell(wire::RESTORED, restored.encode_to_vec(), &to);
     }
 
@@ -540,14 +535,13 @@ impl Cells {
         let from = who
             .stance
             .as_ref()
-            .and_then(|stance| measure.position(stance));
-        let mut lacking: Vec<(f64, Sector, [i32; 2], Stood)> = index
+            .and_then(|stance| place(&measure, stance));
+        let mut lacking: Vec<(f64, Seat, [i32; 2], Stood)> = index
             .iter()
             .filter_map(|(&(seat, plot), &stood)| {
-                let sector = seat.sector()?;
-                let away_m = seat::away_m(measure.sphere, sector, plot, stood.stand, from?);
+                let away_m = away_m(&measure, seat, plot, stood, from?)?;
                 let lacks = held.get(&(seat, plot)) != Some(&stood.version);
-                (away_m <= HOLD_M && lacks).then_some((away_m, sector, plot, stood))
+                (away_m <= HOLD_M && lacks).then_some((away_m, seat, plot, stood))
             })
             .collect();
         lacking.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -560,8 +554,8 @@ impl Cells {
             room.tell(wire::SEEN, seen.encode_to_vec(), &to);
         }
         let mut budget = LOOK_BYTES;
-        for (_, sector, plot, stood) in lacking {
-            budget = budget.saturating_sub(show(room, sector, plot, stood, &to));
+        for (_, seat, plot, stood) in lacking {
+            budget = budget.saturating_sub(show(room, seat, plot, stood, &to));
             if budget == 0 {
                 break;
             }
@@ -571,14 +565,14 @@ impl Cells {
 
 /// Shows a volume whole, in as many messages as its chunks take. How many
 /// bytes of chunks went.
-fn show(room: &mut dyn Room, sector: Sector, plot: [i32; 2], stood: Stood, to: &[u32]) -> usize {
+fn show(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to: &[u32]) -> usize {
     let mut volume = wire::Volume {
-        seat: Some(Seat::Sector(sector).wire()),
+        seat: Some(seat.wire()),
         stood: Some(stood.wire(plot)),
         chunks: Vec::new(),
     };
     let (mut bytes, mut sent, mut all) = (0, false, 0);
-    for (key, cells) in room.scan(&chunks_key(sector, plot)) {
+    for (key, cells) in room.scan(&chunks_key(seat, plot)) {
         let at = |from: usize| number(key.get(from..from + 4)?);
         let (Some(x), Some(y), Some(z)) = (at(10), at(14), at(18)) else {
             continue;
@@ -617,22 +611,41 @@ fn tell_opened(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to
     room.tell(wire::OPENED, opened.encode_to_vec(), to);
 }
 
-/// The sessions whose bodies are within reach of any of some volumes.
-fn near(room: &dyn Room, sector: Sector, volumes: &[([i32; 2], Stood)], reach_m: f64) -> Vec<u32> {
+/// Where a stance is: the body it is on, and metres from that body's centre.
+fn place(measure: &Measure, stance: &Stance) -> Option<(Body, [f64; 3])> {
+    Some((stance.body(), measure.position(stance)?))
+}
+
+/// How far a place is from a volume, metres. `None` from another body:
+/// nothing there is near.
+fn away_m(
+    measure: &Measure,
+    seat: Seat,
+    plot: [i32; 2],
+    stood: Stood,
+    (body, at): (Body, [f64; 3]),
+) -> Option<f64> {
+    let sphere = measure.body(seat.body());
+    (body == seat.body()).then(|| seat::away_m(sphere, seat.sector(), plot, stood.stand, at))
+}
+
+/// The sessions whose bodies are within reach of any of some volumes of a
+/// seat.
+fn near(room: &dyn Room, seat: Seat, volumes: &[([i32; 2], Stood)], reach_m: f64) -> Vec<u32> {
     let measure = room.measure();
-    let within = |at: [f64; 3]| {
+    let within = |from: (Body, [f64; 3])| {
         volumes.iter().any(|(plot, stood)| {
-            seat::away_m(measure.sphere, sector, *plot, stood.stand, at) <= reach_m
+            away_m(&measure, seat, *plot, *stood, from).is_some_and(|away_m| away_m <= reach_m)
         })
     };
     room.sessions()
         .iter()
         .filter(|who| {
-            let at = who
+            let from = who
                 .stance
                 .as_ref()
-                .and_then(|stance| measure.position(stance));
-            at.is_some_and(within)
+                .and_then(|stance| place(&measure, stance));
+            from.is_some_and(within)
         })
         .map(|who| who.session)
         .collect()

@@ -242,3 +242,67 @@ func TestAVolumeIsClosedAndStandsAgainWhenThatIsTakenBack(t *testing.T) {
 		t.Fatalf("a visitor closes nothing: %q", code)
 	}
 }
+
+// A column of the moon is the same share of a sector's side as it is of the
+// planet's: the moon's grid is a quarter of the side, and a stance there is
+// said on the planet's grid.
+const moonSide = 16384
+
+func moonSeat() *cells.Seat { return &cells.Seat{Seat: &cells.Seat_Moon{Moon: sector}} }
+
+// standsOnMoon puts a body on the moon, over the column the tests build at
+// there, `heightM` over the moon's datum.
+func (s *socket) standsOnMoon(heightM float32) {
+	s.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: &pb.Stance{
+		Body: pb.Body_BODY_MOON, Sector: sector, U: float32(atU), V: float32(atV), HeightM: heightM, FacingZ: -1,
+	}}})
+}
+
+func TestAVolumeOnTheMoonIsKeptApartAndShownToWhoIsThere(t *testing.T) {
+	dir := t.TempDir()
+	web := founded(t, dir, world.LevelAdmin)
+	a, _ := dial(t, web)
+	a.standsOnMoon(0)
+	// On the planet, at the column the same numbers name there.
+	below, _ := dial(t, web)
+	below.stands(0)
+
+	u, v := 0.41*moonSide, 0.37*moonSide
+	a.asks(1, "open", &cells.Open{Seat: moonSeat(), U: u, V: v})
+	var opened cells.Opened
+	a.told("opened", &opened)
+	if code := a.answered(1); code != "" {
+		t.Fatalf("a volume is opened on the moon: %q", code)
+	}
+	stood := opened.Stood
+	if opened.Seat.GetSeat().(*cells.Seat_Moon) == nil || stood.PlotX != int32(u)/64 || stood.PlotY != int32(v)/64 {
+		t.Fatalf("it stands over a plot of the moon's own grid: %v", &opened)
+	}
+	x, y, z := stood.PlotX*64+3, stood.PlotY*64+3, stood.Low+int32(stood.Height)-4
+	row := &cells.Change{Seat: moonSeat(), Gestures: []*cells.Gesture{{
+		Kind: cells.Kind_KIND_CREATE, Paint: 5, X0: x, Y0: y, Z0: z, X1: x + 9, Y1: y, Z1: z,
+	}}}
+	a.asks(2, "change", row)
+	var changed cells.Changed
+	a.told("changed", &changed)
+	if code := a.answered(2); code != "" {
+		t.Fatalf("the change lands on the moon: %q", code)
+	}
+	// Nobody on the planet hears of it, nor is shown it there.
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Wear{Wear: &pb.Wear{Avatar: "avatars/Ada.vrm"}}})
+	if m := below.hear(func(m *pb.ServerMessage) bool { return m.GetEnvelope() != nil || m.GetWearing() != nil }); m.GetEnvelope() != nil {
+		t.Fatalf("what is built on the moon is told on the moon: %v", m)
+	}
+
+	// Another process over the same folder holds it as a volume of the
+	// moon, and shows it to whoever arrives there.
+	again := founded(t, dir, world.LevelAnonymous)
+	b, _ := dial(t, again)
+	b.standsOnMoon(float32(stood.Low) / 2)
+	b.asks(1, "look", &cells.Look{})
+	var seen cells.Seen
+	b.told("seen", &seen)
+	if len(seen.Volumes) != 1 || len(seen.Volumes[0].Chunks) != 1 || seen.Volumes[0].Seat.GetSeat().(*cells.Seat_Moon) == nil {
+		t.Fatalf("what was built on the moon is kept, and seen by who arrives there: %v", &seen)
+	}
+}

@@ -152,7 +152,7 @@ not yet confirmed.
   web keeps the choice in the browser, since it belongs to the machine.
 - Building is a plugin (106, 109): `build.take` takes a tool or `null`, then
   `build.paint`, `.finish`, `.edge`, `.platform`, `.lay` with its base,
-  `.close`, `.undo`, `.redo`; it says `build.hand`, `.over`, `.refused`,
+  `.open`, `.close`, `.undo`, `.redo`; it says `build.hand`, `.over`, `.refused`,
   `.history`, and the core says `palette`. With a tool in hand the plugin has
   the pointer: it is free, the primary button is the tool's, the secondary
   one looks. Each shell binds the keys it asks for by name: B, 1 2 3 4 take a

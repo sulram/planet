@@ -1,5 +1,6 @@
-//! A stroke: one click and drag of a tool, from the cell it started on,
-//! across a layer of cells through it, to the cell the pointer is over. It
+//! A stroke: one click and drag of a tool, from the cell it started on, on
+//! what is built or on the ground of a volume, across a layer of cells
+//! through it, to the cell the pointer is over. It
 //! lands as one gesture, and its ghost shows exactly the cells it would
 //! change while it is drawn.
 
@@ -119,7 +120,11 @@ impl Build {
         }
         let (from, toward) = eye.sight();
         let sight = host.sight(from, toward);
-        self.aim = sight.aim();
+        // The ground of a volume is where a new cell stands, and nothing to
+        // take away or repaint.
+        self.aim = sight
+            .aim()
+            .filter(|aim| !aim.ground || mark == Mark::Create);
 
         let pressed = turn.using && !self.using;
         let released = !turn.using && self.using;

@@ -3,7 +3,7 @@
 
 use client::{Client, Eye, Level, Recipe};
 use glam::{DMat3, DQuat, DVec3};
-use topology::QuadSphere;
+use topology::{QuadSphere, Sector};
 use voxel::{Face, Quad, Span};
 
 use super::*;
@@ -23,7 +23,8 @@ fn world() -> (Client, SurfacePoint) {
 }
 
 fn ground(client: &mut Client, sector: Sector, u: f64, v: f64) -> f64 {
-    client.host(NAME).ground(SurfacePoint::new(sector, u, v))
+    let point = SurfacePoint::new(sector, u, v);
+    client.host(NAME).ground(sector.into(), point)
 }
 
 /// Asks for a platform with the feet `height_m` over the datum and lays it
@@ -37,9 +38,9 @@ fn lay_from(
     base: Base,
 ) -> Result<f64, Refusal> {
     let feet = Feet {
+        seat: point.sector.into(),
         point,
         height_m,
-        moon: false,
     };
     let host = &mut client.host(NAME);
     build.lay_at(feet, base, host)?;
@@ -64,7 +65,10 @@ fn lay_now(
 /// the square the address cuts, its top where the slab is found.
 fn platform_at(build: &Build, client: &Client, point: SurfacePoint) -> Platform {
     let (x, y) = (point.u.floor() as i32, point.v.floor() as i32);
-    let held = client.cells().bounds_over(point).expect("an open volume");
+    let held = client
+        .cells()
+        .bounds_over(point.sector.into(), point)
+        .expect("an open volume");
     let top = (held.min[2]..=held.max[2])
         .rev()
         .find(|&z| !client.cells().cell(point.sector, [x, y, z]).is_air())
@@ -161,7 +165,10 @@ fn stroke(build: &mut Build, client: &mut Client, sector: Sector, from: [i32; 3]
 /// Every cell over the slab that is not air, in the volume the tests open,
 /// counted from the first.
 fn laid(client: &Client, point: SurfacePoint, origin: [i32; 3]) -> Vec<[i32; 3]> {
-    let mut over = client.cells().bounds_over(point).expect("an open volume");
+    let mut over = client
+        .cells()
+        .bounds_over(point.sector.into(), point)
+        .expect("an open volume");
     over.min[2] = origin[2];
     over.cells()
         .filter(|&cell| !client.cells().cell(point.sector, cell).is_air())
@@ -210,14 +217,6 @@ fn a_platform_is_refused_on_the_edge_of_a_sector_and_with_no_word_of_a_world() {
     let inside = SurfacePoint::new(point.sector, 70.0, side - 70.0);
     let asked = lay_now(&mut build, &mut client, inside, Base::Deck);
     assert_ne!(asked.err(), Some(Refusal::Seam));
-    // On the moon there is no plot to stand a volume on.
-    let moon = Feet {
-        point,
-        height_m: 0.0,
-        moon: true,
-    };
-    let asked = build.lay_at(moon, Base::Deck, &mut client.host(NAME));
-    assert_eq!(asked, Err(Refusal::Moon));
 
     // A client no world has spoken to builds nothing (DECISIONS 104).
     let mut alone = Client::new(Recipe::new(1)).unwrap();
@@ -275,7 +274,7 @@ fn a_platform_is_a_slab_over_the_highest_ground_on_pillars_down_to_it() {
         slab.cells()
             .all(|at| client.cells().cell(point.sector, at).is_air())
     );
-    assert!(client.cells().covers(point));
+    assert!(client.cells().covers(point.sector.into(), point));
 }
 
 #[test]
@@ -341,7 +340,10 @@ fn a_body_on_the_platform_stands_on_its_slab() {
     let (mut client, point) = world();
     let mut build = Build::default();
     let top_m = lay_now(&mut build, &mut client, point, Base::Deck).unwrap();
-    let footing = client.cells().footing(point, top_m).unwrap();
+    let footing = client
+        .cells()
+        .footing(point.sector.into(), point, top_m)
+        .unwrap();
     assert_eq!(footing.floor_m, Some(top_m));
     // The ground is under it everywhere, so it is the slab that holds.
     let feet_m = ground(&mut client, point.sector, point.u, point.v) * BLOCK_M;
@@ -400,7 +402,10 @@ fn a_floating_platform_is_its_slab_alone() {
     let top = lay_from(&mut build, &mut client, point, feet_m, Base::Floating).unwrap();
     let platform = platform_at(&build, &client, point);
     assert_eq!(f64::from(platform.top) * BLOCK_M, top);
-    let held = client.cells().bounds_over(point).unwrap();
+    let held = client
+        .cells()
+        .bounds_over(point.sector.into(), point)
+        .unwrap();
     let slab = platform.slab();
     let solid = (held.min[2]..=held.max[2])
         .flat_map(|z| slab.cells().map(move |[x, y, _]| [x, y, z]))
@@ -415,8 +420,13 @@ fn a_platform_over_the_top_of_its_volume_is_refused() {
     let mut build = Build::default();
     // A volume holds a tower's height of cells over the ground of its plot,
     // and a slab is the cell under its top.
-    client.host(NAME).open(point).unwrap();
-    let top = client.cells().bounds_over(point).unwrap().max[2] + 1;
+    client.host(NAME).open(point.sector.into(), point).unwrap();
+    let top = client
+        .cells()
+        .bounds_over(point.sector.into(), point)
+        .unwrap()
+        .max[2]
+        + 1;
     let high = f64::from(top + 1) * BLOCK_M;
     let asked = lay_from(&mut build, &mut client, point, high, Base::Floating);
     assert_eq!(asked, Err(Refusal::High));
@@ -456,7 +466,10 @@ fn a_platform_is_read_over_turns_and_lifts_the_body_onto_it() {
 fn a_stroke_stands_over_two_neighbours() {
     let (mut client, mut build, point, origin) = opened();
     let beside = SurfacePoint::new(point.sector, point.u + 64.0, point.v);
-    client.host(NAME).open(beside).unwrap();
+    client
+        .host(NAME)
+        .open(beside.sector.into(), beside)
+        .unwrap();
     take(&mut build, &mut client, Some(Tool::Create));
     build.set_paint(4);
     // From the slab out over the plot beside it, where there is none.
@@ -797,4 +810,105 @@ fn escape_drops_a_stroke_half_drawn_and_so_does_a_shell_that_lets_go() {
     };
     build.turn(&let_go, &mut client.host(NAME));
     assert!(client.cells().cell(point.sector, over).is_air());
+}
+
+#[test]
+fn a_platform_is_laid_on_the_moon_as_on_the_planet() {
+    let (mut client, point) = world();
+    let mut build = Build::default();
+    // A column of the moon, on the moon's own grid.
+    let side = f64::from(client.moon().blocks().side());
+    let seat = Seat::Moon(point.sector);
+    let column = SurfacePoint::new(point.sector, side * 0.41, side * 0.37);
+    let ground = client.host(NAME).ground(seat, column);
+    let feet = Feet {
+        seat,
+        point: column,
+        height_m: ground * BLOCK_M,
+    };
+    let top = {
+        let host = &mut client.host(NAME);
+        build.lay_at(feet, Base::Deck, host).expect("dry land");
+        build.read_ground(host, usize::MAX).expect("a platform")
+    };
+    assert!(f64::from(top) >= ground);
+    assert!(client.cells().covers(seat, column));
+    // The planet holds nothing at the column the same numbers name there.
+    assert!(!client.cells().covers(Seat::Sector(point.sector), column));
+    let (x, y) = (column.u.floor() as i32, column.v.floor() as i32);
+    assert!(!client.cells().cell(seat, [x, y, top - 1]).is_air());
+    // A body stands on the slab, and a cell of it is a block of the moon:
+    // as wide as a block is, where the moon is.
+    let top_m = f64::from(top) * BLOCK_M;
+    let footing = client.cells().footing(seat, column, top_m).unwrap();
+    assert_eq!(footing.floor_m, Some(top_m));
+    let (a, b) = {
+        let host = client.host(NAME);
+        (
+            host.corner(seat, [x, y, top]),
+            host.corner(seat, [x + 1, y, top]),
+        )
+    };
+    let wide = a.distance(b);
+    assert!((0.3..0.7).contains(&wide), "a cell {wide} m wide");
+    let from_centre = a.length() - client.moon().radius_m();
+    assert!((from_centre - top_m).abs() < 1e-6, "{from_centre} {top_m}");
+    // What was laid is taken back as on the planet.
+    build.undo(&mut client.host(NAME));
+    assert!(client.cells().cell(seat, [x, y, top - 1]).is_air());
+}
+
+#[test]
+fn a_volume_opens_with_nothing_in_it_and_a_stroke_starts_on_its_ground() {
+    let (mut client, point) = world();
+    let mut build = Build::default();
+    let seat = Seat::Sector(point.sector);
+    // Asked for where the body stands, a volume opens and holds no cell.
+    let feet = client.host(NAME).feet();
+    build.command(OPEN, serde_json::json!({}), &mut client.host(NAME));
+    let held = client.cells().bounds_over(feet.seat, feet.point);
+    let held = held.expect("a volume under the body");
+    assert!(client.cells().cell(feet.seat, held.min).is_air());
+    assert_eq!(client.cells().history(), (false, false));
+
+    // The same where the tests build, with an eye over it looking down.
+    client.host(NAME).open(seat, point).unwrap();
+    let (x, y) = (point.u.floor() as i32, point.v.floor() as i32);
+    let under = ground(
+        &mut client,
+        point.sector,
+        f64::from(x) + 0.5,
+        f64::from(y) + 0.5,
+    );
+    let under = under.floor() as i32;
+    let sphere = client.sphere();
+    let target = top(sphere, point.sector, [x, y, under - 1]);
+    let aside = corner(sphere, point.sector, [x + 6, y, under]) - target;
+    let eye = eye_at(target + target.normalize() * 10.0 + aside, target);
+    // To take away and to repaint, the ground is nothing to aim at.
+    take(&mut build, &mut client, Some(Tool::Delete));
+    update(&mut build, &mut client, &eye, false, false);
+    assert_eq!(build.aim, None);
+    // To create, it is where the first cell stands: the one that holds the
+    // ground there.
+    take(&mut build, &mut client, Some(Tool::Create));
+    update(&mut build, &mut client, &eye, false, false);
+    let aim = build.aim.expect("the ground of the volume");
+    assert!(aim.ground);
+    let first = aim.hit.before();
+    assert_eq!(first, [x, y, under]);
+    assert!(
+        client.cells().ghost().is_some(),
+        "the cell it would make shows"
+    );
+    update(&mut build, &mut client, &eye, true, false);
+    update(&mut build, &mut client, &eye, false, false);
+    assert!(!client.cells().cell(seat, first).is_air());
+    // The next stroke starts on what was built, as any does.
+    update(&mut build, &mut client, &eye, false, false);
+    let aim = build.aim.expect("the cell");
+    assert_eq!((aim.ground, aim.hit.cell), (false, first));
+    // And the first is taken back like any other.
+    build.undo(&mut client.host(NAME));
+    assert!(client.cells().cell(seat, first).is_air());
 }

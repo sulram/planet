@@ -82,7 +82,9 @@ const GOLDEN_V1: [u64; 4] = [
     0x7d90_535e_723d_d9ee,
 ];
 
-/// FNV-1a over the moon of generator v2.
+/// FNV-1a over the moon of generator v2, printed at the moon's own size: its
+/// heights, in metres, as a body stands on them and as a volume there is
+/// seated by. What is built on the moon holds this still.
 #[test]
 fn v2_moon_is_frozen() {
     let generator = Generator::new(Recipe::new(1)).unwrap();
@@ -100,7 +102,7 @@ fn v2_moon_is_frozen() {
     assert_eq!(hash, GOLDEN_V2_MOON, "the moon of generator v2 changed");
 }
 
-const GOLDEN_V2_MOON: u64 = 0x4efc_b822_ba9b_f9a8;
+const GOLDEN_V2_MOON: u64 = 0x0d67_8678_45a8_1249;
 
 /// A crater the search stops seeing ends in a cliff. Along great circles in
 /// half metre steps the moon's ground never jumps: the steepest wall is a

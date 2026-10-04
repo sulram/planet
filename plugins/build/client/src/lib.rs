@@ -1,7 +1,8 @@
 //! The build plugin's client half (DECISIONS 106): how a hand arrives at
 //! gestures. A tool in hand, a stroke from a click and a drag, a platform
-//! where the body stands, the key that turns a stroke and the chord that
-//! takes one back. What it lays is a paint: a colour in hand, in a finish,
+//! where the body stands or a volume opened with nothing in it, the key
+//! that turns a stroke and the chord that takes one back. It builds on the
+//! planet and on the moon alike: wherever the body stands is a seat. What it lays is a paint: a colour in hand, in a finish,
 //! with an edge or none. While it builds it shows where cells are: the
 //! volume the body is in, and with the platform tool the slab one would
 //! lay. The cells are the core's: this half reads them and asks for
@@ -16,6 +17,7 @@
 //! {"type":"build.edge","edge":"black"}
 //! {"type":"build.platform","side":32}
 //! {"type":"build.lay","base":"deck"}
+//! {"type":"build.open"}
 //! {"type":"build.close"}
 //! {"type":"build.undo"}
 //! {"type":"build.redo"}
@@ -35,10 +37,10 @@
 mod stroke;
 
 use build_world::Platform;
-use client::{Aim, Feet, Guide, Host, KeyAsk, Plugin, Turn};
+use client::{Aim, Feet, Guide, Host, KeyAsk, Plugin, Seat, Turn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use topology::{BLOCK_M, Sector, SurfacePoint};
+use topology::{BLOCK_M, SurfacePoint};
 use voxel::Span;
 
 use stroke::Stroke;
@@ -48,9 +50,10 @@ use stroke::Stroke;
 pub use build_world::{NAME, PLATFORMS, VERSION};
 
 /// What a hand does while building. Three make a stroke in a volume: fill
-/// air with the paint, empty cells, or repaint what is solid, and one drag
-/// is one stroke, however many cells it covers. The fourth shows the slab a
-/// platform would lay where the body stands, until a base is asked for.
+/// air with the paint, from what is built or from the ground, empty cells,
+/// or repaint what is solid, and one drag is one stroke, however many cells
+/// it covers. The fourth shows the slab a platform would lay where the body
+/// stands, until a base is asked for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tool {
@@ -108,8 +111,6 @@ impl Base {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Refusal {
-    /// Volumes stand on the planet.
-    Moon,
     /// The ground here is under the sea.
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
@@ -139,8 +140,8 @@ impl From<client::Refusal> for Refusal {
 }
 
 /// `build.take`: build with a tool, or stop building with `null`. It builds
-/// nothing: a stroke starts on what is built, and a platform is the first of
-/// it.
+/// nothing: a stroke starts in a volume, on what is built or on its ground,
+/// and a platform or `build.open` opens one.
 pub const TAKE: &str = "take";
 /// `build.paint`: the colour the next stroke lays, an index into the world's
 /// palette.
@@ -156,6 +157,9 @@ pub const PLATFORM: &str = "platform";
 /// its plot where none stands: a slab as high as the higher of the highest
 /// ground under it and the feet, on a base. A deck when the base is left out.
 pub const LAY: &str = "lay";
+/// `build.open`: opens the volume of the plot the body is over, where none
+/// stands, with nothing built in it: room to build in from the ground up.
+pub const OPEN: &str = "open";
 /// `build.close`: closes the volume the body is over. What was built in it
 /// goes with it and its plot is nature again: one change, taken back as one.
 pub const CLOSE: &str = "close";
@@ -179,8 +183,8 @@ pub const OVER: &str = "over";
 /// its seat, across, along and up, and `null` when none is drawn: what a hand
 /// counts by. Whenever that changes.
 pub const STROKE: &str = "stroke";
-/// `build.refused`: a tool, a platform or the closing of a volume was asked
-/// for and not given.
+/// `build.refused`: a tool, a platform, or the opening or closing of a
+/// volume was asked for and not given.
 pub const REFUSED: &str = "refused";
 /// `build.history`: whether there is a change to take back and one to put
 /// back, whenever that changes.
@@ -277,7 +281,7 @@ const GROUND_ROWS_PER_TURN: usize = 13;
 /// height of each corner of each column, in blocks, row by row.
 #[derive(Clone)]
 struct Survey {
-    sector: Sector,
+    seat: Seat,
     /// The square, its top left unsaid.
     square: Platform,
     /// The cells the volume of its plot holds, or would hold once opened.
@@ -299,9 +303,9 @@ impl Survey {
         let square = Survey::square(feet, bits);
         let across = square.side as usize + 1;
         Survey {
-            sector: feet.point.sector,
+            seat: feet.seat,
             square,
-            room: host.room(feet.point).ok(),
+            room: host.room(feet.seat, feet.point).ok(),
             corners: Vec::with_capacity(across * across),
         }
     }
@@ -309,7 +313,7 @@ impl Survey {
     /// Whether it is of the square of `2^bits` columns a side that a body's
     /// feet are over.
     fn is_under(&self, feet: Feet, bits: u32) -> bool {
-        self.sector == feet.point.sector && self.square == Survey::square(feet, bits)
+        self.seat == feet.seat && self.square == Survey::square(feet, bits)
     }
 
     fn across(&self) -> usize {
@@ -329,7 +333,8 @@ impl Survey {
         for row in read..(read.saturating_add(rows)).min(across) {
             self.corners.extend((0..across).map(|dx| {
                 let (u, v) = (x0 + dx as i32, y0 + row as i32);
-                host.ground(SurfacePoint::new(self.sector, f64::from(u), f64::from(v)))
+                let point = SurfacePoint::new(self.seat.sector(), f64::from(u), f64::from(v));
+                host.ground(self.seat, point)
             }));
         }
         self.read()
@@ -382,7 +387,7 @@ struct Laying {
 pub struct Build {
     tool: Option<Tool>,
     /// The tool taken last, which starting to build again takes. A platform
-    /// the first time: a stroke starts on what is built.
+    /// the first time: a stroke starts in a volume, and it opens one.
     last_tool: Tool,
     /// The colour in hand, its finish and its edge: the paint a stroke lays.
     paint: u8,
@@ -543,7 +548,7 @@ impl Build {
     /// Whether a volume stands under the body.
     fn is_over(host: &Host<'_>) -> bool {
         let feet = host.feet();
-        !feet.moon && host.cells().covers(feet.point)
+        host.cells().covers(feet.seat, feet.point)
     }
 
     /// Says whether a volume stands under the body, when that changed.
@@ -570,16 +575,20 @@ impl Build {
             return Err(Refusal::Level);
         }
         let feet = host.feet();
-        if feet.moon {
-            return Err(Refusal::Moon);
-        }
         // What was half done in it goes with it.
         self.cancel();
         self.laying = None;
-        match host.close(feet.point)? {
+        match host.close(feet.seat, feet.point)? {
             true => Ok(()),
             false => Err(Refusal::Empty),
         }
+    }
+
+    /// Opens the volume of the plot the body is over, with nothing built in
+    /// it: room to build in, where a stroke starts on the ground.
+    fn open(&mut self, host: &mut Host<'_>) -> Result<(), Refusal> {
+        let feet = host.feet();
+        Ok(host.open(feet.seat, feet.point)?)
     }
 
     /// Shows where cells are while a tool is in hand: the volume the body is
@@ -592,16 +601,15 @@ impl Build {
             return;
         }
         let feet = host.feet();
-        if feet.moon {
-            self.survey = None;
-            return host.guide(&[]);
-        }
-        let seat = feet.point.sector.into();
-        let room = host.cells().bounds_over(feet.point).map(|span| Guide {
-            seat,
-            span,
-            paint: None,
-        });
+        let seat = feet.seat;
+        let room = host
+            .cells()
+            .bounds_over(seat, feet.point)
+            .map(|span| Guide {
+                seat,
+                span,
+                paint: None,
+            });
         let slab = match self.tool {
             Some(Tool::Platform) => self.slab(feet, host, rows),
             _ => {
@@ -637,7 +645,7 @@ impl Build {
             return None;
         }
         let slab = survey.platform(feet).slab();
-        let (cells, seat) = (host.cells(), survey.sector);
+        let (cells, seat) = (host.cells(), survey.seat);
         let revision = cells.revision();
         let lays = match self.lays {
             Some((span, at, lays)) if span == slab && at == revision => lays,
@@ -676,14 +684,11 @@ impl Build {
         if !host.may_change() {
             return Err(Refusal::Level);
         }
-        if feet.moon {
-            return Err(Refusal::Moon);
-        }
-        host.open(feet.point)?;
+        host.open(feet.seat, feet.point)?;
         // A slab is the cell under its top, and a volume ends where it ends.
         let ceiling = host
             .cells()
-            .bounds_over(feet.point)
+            .bounds_over(feet.seat, feet.point)
             .map_or(i32::MAX, |held| held.max[2] + 1);
         if level(feet) > ceiling {
             return Err(Refusal::High);
@@ -719,7 +724,7 @@ impl Build {
         } = self.laying.take()?;
         let platform = survey.platform(feet);
         let gestures = platform.gestures(base.kind(), |x, y| survey.foot(x, y), paint);
-        match host.apply(survey.sector, &gestures) {
+        match host.apply(survey.seat, &gestures) {
             Ok(_) => host.lift(f64::from(platform.top) * BLOCK_M),
             Err(refusal) => refuse(host, refusal.into()),
         }
@@ -780,6 +785,11 @@ impl Plugin for Build {
                 if let Some(Lay { base }) = read(body, host)
                     && let Err(reason) = self.lay(base, host)
                 {
+                    refuse(host, reason);
+                }
+            }
+            OPEN => {
+                if let Err(reason) = self.open(host) {
                     refuse(host, reason);
                 }
             }

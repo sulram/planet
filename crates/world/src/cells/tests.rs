@@ -3,8 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use protocol::Stance;
-use topology::BLOCK_M;
+use topology::{BLOCK_M, Sector};
 use worldgen::{Generator, Recipe};
 
 use super::*;
@@ -82,7 +81,7 @@ fn body(generator: &Generator, session: u32, point: SurfacePoint, level: Level) 
             sector: point.sector.index() as u32,
             u: point.u as f32,
             v: point.v as f32,
-            height_m: (seat::ground(generator, point) * BLOCK_M) as f32,
+            height_m: (seat::ground(generator, point.sector.into(), point) * BLOCK_M) as f32,
             ..Default::default()
         }),
     }
@@ -101,7 +100,7 @@ fn stage() -> (Stage, SurfacePoint) {
     let stage = Stage {
         measure: Measure {
             sphere: generator.sphere(),
-            moon_radius_m: worldgen::MOON_RADIUS_M,
+            moon: generator.moon(),
         },
         ground: Some(generator),
         here,
@@ -191,7 +190,8 @@ fn shown(cells: &mut Cells, stage: &mut Stage, session: u32, span: Span) -> Vec<
 /// of the ground there.
 fn boxed(stage: &Stage, point: SurfacePoint, from: [i32; 3], to: [i32; 3]) -> Span {
     let [x, y] = seat::plot_of(point).map(|n| n << PLOT_BITS);
-    let z = seat::ground(stage.ground.as_ref().unwrap(), point).ceil() as i32 + 4;
+    let ground = seat::ground(stage.ground.as_ref().unwrap(), point.sector.into(), point);
+    let z = ground.ceil() as i32 + 4;
     let at = |cell: [i32; 3]| [x + cell[0], y + cell[1], z + cell[2]];
     Span::between(at(from), at(to))
 }
@@ -208,7 +208,7 @@ fn a_volume_is_seated_by_the_ground_and_told_to_whoever_is_near() {
     assert_eq!((kind.as_str(), to.as_slice()), (wire::OPENED, &[1][..]));
     let opened = wire::Opened::decode(payload.as_slice()).unwrap();
     let stood = opened.stood.unwrap();
-    let stand = seat::survey(stage.ground.as_ref().unwrap(), point).unwrap();
+    let stand = seat::survey(stage.ground.as_ref().unwrap(), point.sector.into(), point).unwrap();
     assert_eq!(
         (stood.low, stood.height, stood.version),
         (stand.low, stand.height, 0)
@@ -496,4 +496,77 @@ fn the_cells_are_a_builders_to_change_and_anyones_to_look_at() {
         assert_eq!(level(kind), Some(Level::Builder), "{kind}");
     }
     assert_eq!(level(wire::LOOK), Some(Level::Anonymous));
+}
+
+#[test]
+fn a_volume_stands_on_the_moon_and_is_told_to_whoever_is_there() {
+    let (mut stage, point) = stage();
+    let mut cells = Cells::default();
+    let generator = Generator::new(Recipe::new(1)).unwrap();
+    // A column of the moon, on the moon's own grid, and the stance of a
+    // body standing on it: said on the planet's grid, as every stance is.
+    let seat = Seat::Moon(point.sector);
+    let side = f64::from(generator.moon().blocks().side());
+    let column = SurfacePoint::new(point.sector, side * 0.41, side * 0.37);
+    let direction = generator.moon().blocks().direction(column);
+    let said = generator.sphere().blocks().surface_point(direction);
+    let ground = seat::ground(&generator, seat, column);
+    let on_moon = |who: &mut Who| {
+        who.stance = Some(Stance {
+            body: Body::Moon.into(),
+            sector: said.sector.index() as u32,
+            u: said.u as f32,
+            v: said.v as f32,
+            height_m: (ground * BLOCK_M) as f32,
+            ..Default::default()
+        });
+    };
+    on_moon(&mut stage.here[0]);
+    // A visitor on the planet, at the column the same numbers name there.
+    stage.here[1].stance = Some(Stance {
+        sector: column.sector.index() as u32,
+        u: column.u as f32,
+        v: column.v as f32,
+        ..Default::default()
+    });
+    let open = wire::Open {
+        seat: Some(seat.wire()),
+        u: column.u,
+        v: column.v,
+    };
+    ask(&mut cells, &mut stage, 1, wire::OPEN, &open);
+    assert_eq!(stage.refused, None);
+    let stand = seat::survey(&generator, seat, column).unwrap();
+    let [x, y] = seat::plot_of(column).map(|n| n << PLOT_BITS);
+    let z = ground.ceil() as i32 + 2;
+    let span = Span::between([x + 3, y + 3, z], [x + 6, y + 4, z + 1]);
+    let made = wire::Change {
+        seat: Some(seat.wire()),
+        gestures: vec![seat::gesture_wire(Gesture::Create { span, paint: 5 })],
+    };
+    stage.told.clear();
+    ask(&mut cells, &mut stage, 1, wire::CHANGE, &made);
+    assert_eq!(stage.refused, None);
+    // Whoever is on the moon hears of it. Nobody on the planet does.
+    let [(kind, _, to)] = stage.told.as_slice() else {
+        panic!("one event: {:?}", stage.told.len());
+    };
+    assert_eq!((kind.as_str(), to.as_slice()), (wire::CHANGED, &[1][..]));
+    assert!(seen(&mut cells, &mut stage, 2, Vec::new()).is_empty());
+    // It is kept apart from what the planet holds at the same numbers, and
+    // shown whole to a body that comes near it on the moon.
+    assert!(stage.store.keys().all(|key| key[1] == seat.key()));
+    on_moon(&mut stage.here[1]);
+    let shown = seen(&mut cells, &mut stage, 2, Vec::new());
+    let volume = shown.iter().flat_map(|seen| &seen.volumes).next().unwrap();
+    assert_eq!(Seat::from_wire(volume.seat.as_ref()), Some(seat));
+    let stood = volume.stood.as_ref().unwrap();
+    assert_eq!((stood.low, stood.height), (stand.low, stand.height));
+    assert!(!volume.chunks.is_empty());
+    // A new instance reads it back as a volume of the moon.
+    let mut again = Cells::default();
+    assert_eq!(
+        seen(&mut again, &mut stage, 2, Vec::new()).len(),
+        shown.len()
+    );
 }

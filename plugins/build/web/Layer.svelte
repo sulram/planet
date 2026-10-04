@@ -46,6 +46,11 @@
 		seam.command('lay', { base });
 	}
 
+	function openVolume() {
+		refused = null;
+		seam.command('open');
+	}
+
 	function closeVolume() {
 		refused = null;
 		seam.command('close');
@@ -70,6 +75,7 @@
 		onedge={(next) => seam.command('edge', { edge: next })}
 		onplatform={(side) => seam.command('platform', { side })}
 		onlay={lay}
+		onopenvolume={openVolume}
 		onclosevolume={closeVolume}
 		onundo={() => seam.command('undo')}
 		onredo={() => seam.command('redo')}

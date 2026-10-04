@@ -30,8 +30,21 @@ pub use stamp::Stamp;
 /// The version new worlds are created with.
 pub const GENERATOR_VERSION: u32 = 3;
 
-/// Radius of the moon's datum sphere, metres.
-pub const MOON_RADIUS_M: f64 = moon::RADIUS_M;
+/// Blocks per sector side of the moon, as a power of two: a quarter of the
+/// largest planet across. The moon is a quad sphere like the planet, so a
+/// block of it is a block, and what is built there is cut by its own grid.
+pub const MOON_BITS: u32 = 14;
+
+/// Radius of the moon's datum sphere, metres: what its grid comes to, four
+/// sector sides to a great circle.
+pub const MOON_RADIUS_M: f64 =
+    (1u32 << MOON_BITS) as f64 * 4.0 / core::f64::consts::TAU * topology::BLOCK_M;
+
+/// The moon of every generator so far: its size, and the grid what is built
+/// on it is cut by.
+pub fn moon() -> QuadSphere {
+    QuadSphere::new(MOON_BITS).expect("the moon's size is a body's")
+}
 
 /// A unit vector from the planet centre.
 pub type Direction = [f64; 3];
@@ -228,15 +241,33 @@ impl Generator {
         self.sample_at(direction, 0.0)
     }
 
+    /// The moon this generator makes: its size, and the grid what is built
+    /// on it is cut by.
+    pub fn moon(&self) -> QuadSphere {
+        moon()
+    }
+
     /// The moon's ground under a unit direction from its centre, filtered
     /// like [`Generator::sample_at`]. Worlds older than v2 have a smooth moon.
+    ///
+    /// Its craters are written once, against the radius `moon` quotes, and
+    /// printed at the moon's own size, as the planet's ground is at a
+    /// world's.
     pub fn moon_sample_at(&self, direction: Direction, footprint_m: f64) -> Sample {
+        let scale = MOON_RADIUS_M / moon::RADIUS_M;
         match self.recipe.generator_version {
             1 => Sample {
                 height_m: 0.0,
                 material: Material::Regolith,
             },
-            _ => moon::sample(&self.recipe, &self.moon_basins, direction, footprint_m),
+            _ => {
+                let written = footprint_m / scale;
+                let sample = moon::sample(&self.recipe, &self.moon_basins, direction, written);
+                Sample {
+                    height_m: sample.height_m * scale,
+                    ..sample
+                }
+            }
         }
     }
 

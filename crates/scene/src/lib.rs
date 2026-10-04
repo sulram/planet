@@ -255,6 +255,14 @@ pub struct BoxPart {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct VolumeMeshId(pub u64);
 
+/// A volume mesh to draw, and where the centre of its body is this frame:
+/// its origin is counted from there, as a patch's is (see [`PatchDraw`]).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct VolumeDraw {
+    pub id: VolumeMeshId,
+    pub body_center: DVec3,
+}
+
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 #[repr(C)]
 pub struct VolumeVertex {
@@ -272,7 +280,8 @@ pub struct VolumeVertex {
     pub side: [u8; 4],
 }
 
-/// Cubes of the build layer around an `f64` origin in planet space. Every
+/// Cubes of the build layer around an `f64` origin, counted from the centre
+/// of the body they stand on. Every
 /// vertex is a corner the client already bent onto the body, so a renderer
 /// draws it as it is.
 #[derive(Clone, Debug)]
@@ -296,6 +305,9 @@ pub struct GuideVertex {
     /// The lines. `rgb`: sRGB. `a`: how much of one shows where cells meet
     /// in eights, and half as much between any two cells.
     pub ink: [u8; 4],
+    /// What runs along each side of a line, so it shows over a ground of
+    /// the line's own colour. `rgb`: sRGB. `a`: how much of it, none at 0.
+    pub rim: [u8; 4],
 }
 
 /// Sides of cells drawn see-through with a line between each cell and the
@@ -431,16 +443,16 @@ pub struct Frame {
     pub skinned: Vec<SkinnedInstance>,
     /// The cubes of every volume in reach. All were announced by a
     /// [`VolumeChange::Add`].
-    pub volumes: Vec<VolumeMeshId>,
+    pub volumes: Vec<VolumeDraw>,
     /// The cubes of glass in reach, drawn over what is solid and blended.
     /// All were announced by a [`VolumeChange::Add`].
-    pub glass: Vec<VolumeMeshId>,
+    pub glass: Vec<VolumeDraw>,
     /// The lights among the cells in reach. A view is lit by the nearest.
     pub lamps: Vec<Lamp>,
     /// The stroke a build tool would make: drawn see-through over the world,
     /// cast by nothing. Announced by a [`VolumeChange::Guide`].
-    pub ghost: Option<VolumeMeshId>,
+    pub ghost: Option<VolumeDraw>,
     /// The guides to draw over the world. All were announced by a
     /// [`VolumeChange::Guide`].
-    pub guides: Vec<VolumeMeshId>,
+    pub guides: Vec<VolumeDraw>,
 }

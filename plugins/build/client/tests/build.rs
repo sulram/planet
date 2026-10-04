@@ -74,7 +74,10 @@ fn laid(client: &mut Client) {
         client.update(1.0 / 60.0, &mut Input::default());
     }
     let feet = client.host("build").feet();
-    assert!(client.cells().covers(feet.point), "a platform is laid");
+    assert!(
+        client.cells().covers(feet.seat, feet.point),
+        "a platform is laid"
+    );
 }
 
 /// What building said since the last call, each event under its name
@@ -380,7 +383,10 @@ fn a_tool_in_hand_shows_where_cells_are() {
         panic!("one guide: {:?}", client.cells().guides());
     };
     assert_eq!(room.paint, None);
-    assert_eq!(Some(room.span), client.cells().bounds_over(feet.point));
+    assert_eq!(
+        Some(room.span),
+        client.cells().bounds_over(feet.seat, feet.point)
+    );
     let over = json!({"type": "build.over", "volume": true});
     assert!(said(&mut client).contains(&("over".to_owned(), over)));
 
@@ -418,7 +424,10 @@ fn a_volume_is_closed_with_all_built_in_it_and_stands_again() {
     client.command_json(TAKE_CREATE);
     live(&mut client);
     client.drain_events();
-    let held = client.cells().bounds_over(feet.point).expect("a volume");
+    let held = client
+        .cells()
+        .bounds_over(feet.seat, feet.point)
+        .expect("a volume");
     let slab = client.host("build").feet();
     let under = [
         slab.point.u as i32,
@@ -429,7 +438,7 @@ fn a_volume_is_closed_with_all_built_in_it_and_stands_again() {
 
     client.command_json(r#"{"type":"build.close"}"#);
     assert!(refusals(&mut client).is_empty());
-    assert!(!client.cells().covers(feet.point));
+    assert!(!client.cells().covers(feet.seat, feet.point));
     assert!(client.cells().cell(feet.point.sector, under).is_air());
     live(&mut client);
     let over = json!({"type": "build.over", "volume": false});
@@ -439,11 +448,14 @@ fn a_volume_is_closed_with_all_built_in_it_and_stands_again() {
     // It is a change like any other: taken back, the volume stands as it
     // was, and put back, it is gone again.
     client.command_json(r#"{"type":"build.undo"}"#);
-    assert_eq!(client.cells().bounds_over(feet.point), Some(held));
+    assert_eq!(
+        client.cells().bounds_over(feet.seat, feet.point),
+        Some(held)
+    );
     assert!(!client.cells().cell(feet.point.sector, under).is_air());
     assert!(!client.settled_frame().volumes.is_empty());
     client.command_json(r#"{"type":"build.redo"}"#);
-    assert!(!client.cells().covers(feet.point));
+    assert!(!client.cells().covers(feet.seat, feet.point));
     assert_eq!(client.cells().history(), (true, false));
 
     // A visitor closes nothing.
@@ -498,7 +510,7 @@ fn what_is_laid_is_a_colour_in_a_finish_with_an_edge() {
 
     // Repainted as a light, the same cells shine: a lamp where they are,
     // in their colour, for whatever is near.
-    let held = client.cells().bounds_over(feet.point).unwrap();
+    let held = client.cells().bounds_over(feet.seat, feet.point).unwrap();
     let repaint = voxel::Gesture::Paint {
         span: voxel::Span::between(
             [held.min[0], held.min[1], under[2]],
@@ -521,4 +533,38 @@ fn what_is_laid_is_a_colour_in_a_finish_with_an_edge() {
     let lamp = frame.lamps[0];
     assert!(lamp.color.x > lamp.color.z, "a red light: {lamp:?}");
     assert!(lamp.reach_m >= 8.0);
+}
+
+#[test]
+fn on_the_moon_a_volume_opens_and_a_drag_builds_from_its_ground() {
+    let mut client = rehearsed();
+    client.go_to("m4-D72EMRG").expect("a place on the moon");
+    client.update(1.0 / 60.0, &mut Input::default());
+    let feet = client.host("build").feet();
+    assert_eq!(feet.seat.body(), protocol::Body::Moon);
+    client.command_json(r#"{"type":"build.open"}"#);
+    assert!(client.cells().covers(feet.seat, feet.point));
+    // Looking straight down at the ground under the feet, from a little
+    // over it: the volume ends a few cells from here.
+    client.pose(6.0, -1.5, 0.0);
+    client.command_json(TAKE_CREATE);
+    let mut input = Input::default();
+    input.pointer = Some([0.5, 0.5]);
+    client.update(1.0 / 60.0, &mut input);
+    assert!(
+        client.cells().ghost().is_some(),
+        "the ground of the volume is under the pointer"
+    );
+    input.key(Key::Use, true);
+    client.update(1.0 / 60.0, &mut input);
+    input.pointer = Some([0.6, 0.5]);
+    client.update(1.0 / 60.0, &mut input);
+    input.key(Key::Use, false);
+    client.update(1.0 / 60.0, &mut input);
+    assert_eq!(client.cells().history(), (true, false), "a stroke landed");
+    // What it made is drawn around where the moon is now.
+    let frame = client.settled_frame();
+    assert!(!frame.volumes.is_empty());
+    let moon = frame.moon.position;
+    assert!(frame.volumes.iter().all(|cubes| cubes.body_center == moon));
 }

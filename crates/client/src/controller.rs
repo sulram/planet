@@ -7,11 +7,12 @@
 //! feels the same everywhere although blocks are not perfectly square.
 
 use glam::{DMat3, DQuat, DVec3};
+use protocol::Body;
 use scene::Camera;
-use topology::{QuadSphere, SurfacePoint};
+use topology::{Grid, QuadSphere, SurfacePoint};
 use worldgen::Generator;
 
-use crate::cells::Cells;
+use crate::cells::{Cells, Seat};
 use crate::collision::{self, BODY_M, Footing, STEP_M};
 use crate::seam::Mode;
 
@@ -315,6 +316,16 @@ impl Controller {
         self.facing = self.view;
     }
 
+    /// The body that holds the avatar, and where its feet are from the
+    /// centre of it.
+    pub fn held_by(&self) -> (Body, DVec3) {
+        let body = match self.site {
+            Site::Planet => Body::Planet,
+            Site::Moon { .. } => Body::Moon,
+        };
+        (body, self.radial() * (self.body().1 + self.height_m))
+    }
+
     /// Centre and datum radius of the body that holds the avatar.
     fn body(&self) -> (DVec3, f64) {
         match (self.site, self.moon) {
@@ -345,31 +356,40 @@ impl Controller {
         (self.mode == Mode::Walk || !self.passes).then_some(cells)
     }
 
-    /// What the body stands on, and what is over its head. Out in the open
-    /// the floor is the surface and there is no roof; inside a volume both
-    /// are its cells.
-    fn footing(&self, generator: &Generator, cells: Option<&Cells>) -> Footing {
+    /// The seat the body is over, and the column of it: a sector of the
+    /// body that holds it, on that body's own grid. What is built is seated
+    /// there.
+    pub fn over(&self, generator: &Generator) -> (Seat, SurfacePoint) {
         match self.site {
-            Site::Planet => self.footing_at(self.point, generator, cells),
-            // The moon is a height all the way down, and so is any world on a
-            // generator version frozen before caves.
+            Site::Planet => (Seat::Sector(self.point.sector), self.point),
             Site::Moon { direction } => {
-                Footing::solid(generator.moon_sample_at(direction.to_array(), 0.0).height_m)
+                let grid = generator.moon().blocks();
+                let point = grid.surface_point(direction.to_array());
+                (Seat::Moon(point.sector), point)
             }
         }
     }
 
-    /// What a body with its feet where they are would stand on at a point of
-    /// the planet: the ground, and the cells of any volume under or over it.
+    /// What the body stands on, and what is over its head. Out in the open
+    /// the floor is the surface and there is no roof; inside a volume both
+    /// are its cells.
+    fn footing(&self, generator: &Generator, cells: Option<&Cells>) -> Footing {
+        let (seat, point) = self.over(generator);
+        self.footing_at(seat, point, generator, cells)
+    }
+
+    /// What a body with its feet where they are would stand on at a column
+    /// of a seat: the ground, and the cells of any volume under or over it.
     fn footing_at(
         &self,
+        seat: Seat,
         point: SurfacePoint,
         generator: &Generator,
         cells: Option<&Cells>,
     ) -> Footing {
-        let direction = self.sphere.blocks().direction(point);
-        let ground = collision::footing(generator, direction, self.height_m);
-        match cells.and_then(|cells| cells.footing(point, self.height_m)) {
+        let direction = seat.sphere(generator).blocks().direction(point);
+        let ground = Footing::solid(seat::ground_m(generator, seat.body(), direction));
+        match cells.and_then(|cells| cells.footing(seat, point, self.height_m)) {
             Some(built) => ground.with(built),
             None => ground,
         }
@@ -701,15 +721,23 @@ impl Controller {
     }
 
     /// Moves by a world space displacement: in address space on the planet,
-    /// over a plain sphere on the moon.
+    /// over a plain sphere on the moon, where the cells of a volume in the
+    /// way stop it all the same.
     fn step(&mut self, delta: DVec3, generator: &Generator, built: &Cells) {
         match self.site {
             Site::Planet => self.step_on_planet(delta, generator, built),
             Site::Moon { direction } => {
                 let radius = self.body().1 + self.height_m;
                 let along = delta - direction * direction.dot(delta);
+                let asked = (direction * radius + along).normalize();
+                let held = self
+                    .cells(built)
+                    .filter(|cells| cells.stands_on(Body::Moon));
                 self.site = Site::Moon {
-                    direction: (direction * radius + along).normalize(),
+                    direction: match held {
+                        Some(cells) => self.past_cells(direction, asked, generator, cells),
+                        None => asked,
+                    },
                 };
                 self.height_m += direction.dot(delta);
             }
@@ -731,9 +759,9 @@ impl Controller {
             // cave, takes over.
             Mode::Fly if !self.underground(ground) => {
                 let shown_m = self.shown_ground_m(generator, self.radial()) + 0.5;
+                let (seat, point) = self.over(generator);
                 let built_m = cells
-                    .filter(|_| self.site == Site::Planet)
-                    .and_then(|cells| cells.footing(self.point, self.height_m))
+                    .and_then(|cells| cells.footing(seat, point, self.height_m))
                     .and_then(|footing| footing.floor_m);
                 Some(built_m.map_or(shown_m, |built_m| shown_m.max(built_m)))
             }
@@ -811,13 +839,18 @@ impl Controller {
         let (du, dv) = ((c * p - b * q) / det, (a * q - b * p) / det);
 
         let cells = self.cells(built);
+        let (grid, here) = (self.sphere.blocks(), self.point);
+        let seat = |point: SurfacePoint| Seat::Sector(point.sector);
         self.point = if self.stopped_by_rock(generator) {
-            self.walk_to(du, dv, |point| self.footing_at(point, generator, cells))
+            self.walk_to(grid, here, du, dv, |point| {
+                self.footing_at(seat(point), point, generator, cells)
+            })
         } else if let Some(cells) = cells.filter(|_| self.mode == Mode::Fly) {
             // Open ground holds a flyer up and never stops it; the cells of a
             // volume are walls to it all the same.
-            self.walk_to(du, dv, |point| {
-                cells.footing(point, self.height_m).unwrap_or(Footing::OPEN)
+            self.walk_to(grid, here, du, dv, |point| {
+                let built = cells.footing(seat(point), point, self.height_m);
+                built.unwrap_or(Footing::OPEN)
             })
         } else {
             self.sphere.blocks().wrapped(SurfacePoint::new(
@@ -836,31 +869,57 @@ impl Controller {
         !self.swimming && (self.mode == Mode::Walk || self.underground(self.ground_m(generator)))
     }
 
-    /// Where a step of `du, dv` in address space ends: where it asked, or
-    /// short of whatever stopped it.
+    /// Where a step over the moon ends, from one direction from its centre
+    /// toward another: where it asked, or short of the cells of a volume in
+    /// the way. The moon's ground stops nobody, and its cells are walked in
+    /// the address space of the moon's own grid, as the planet's are.
+    fn past_cells(&self, from: DVec3, asked: DVec3, generator: &Generator, cells: &Cells) -> DVec3 {
+        let grid = generator.moon().blocks();
+        let here = grid.surface_point(from.to_array());
+        let there = grid.surface_point(asked.to_array());
+        // Over a seam no volume stands.
+        if here.sector != there.sector {
+            return asked;
+        }
+        let (du, dv) = (there.u - here.u, there.v - here.v);
+        let point = self.walk_to(grid, here, du, dv, |point| {
+            let built = cells.footing(Seat::Moon(point.sector), point, self.height_m);
+            built.unwrap_or(Footing::OPEN)
+        });
+        match point == grid.wrapped(SurfacePoint::new(here.sector, here.u + du, here.v + dv)) {
+            true => asked,
+            false => DVec3::from(grid.direction(point)),
+        }
+    }
+
+    /// Where a step of `du, dv` from a column of a grid ends, in address
+    /// space: where it asked, or short of whatever stopped it.
     ///
     /// A rise of one block is taken in stride and more is a wall, so a cave
     /// wall stops a body exactly the way a cliff does and the only way past
     /// either is to jump or to fly. Blocked, the step is tried one address
     /// axis at a time, which is what slides a body along a wall instead of
     /// sticking it to one.
-    fn walk_to(&self, du: f64, dv: f64, footing: impl Fn(SurfacePoint) -> Footing) -> SurfacePoint {
-        let here = footing(self.point);
+    fn walk_to(
+        &self,
+        grid: Grid,
+        from: SurfacePoint,
+        du: f64,
+        dv: f64,
+        footing: impl Fn(SurfacePoint) -> Footing,
+    ) -> SurfacePoint {
+        let here = footing(from);
         for (du, dv) in [(du, dv), (du, 0.0), (0.0, dv)] {
             if du == 0.0 && dv == 0.0 {
                 continue;
             }
-            let point = self.sphere.blocks().wrapped(SurfacePoint::new(
-                self.point.sector,
-                self.point.u + du,
-                self.point.v + dv,
-            ));
+            let point = grid.wrapped(SurfacePoint::new(from.sector, from.u + du, from.v + dv));
             let there = footing(point);
             if collision::admits(here, there, self.height_m) {
                 return point;
             }
         }
-        self.point
+        from
     }
 
     /// Keeps the tangent vectors tangent to the frame: projected back on the

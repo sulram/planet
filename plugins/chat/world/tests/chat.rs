@@ -25,7 +25,7 @@ impl Room for Three {
     fn measure(&self) -> Measure {
         Measure {
             sphere: QuadSphere::new(16).unwrap(),
-            moon_radius_m: 8000.0,
+            moon: QuadSphere::new(14).unwrap(),
         }
     }
 

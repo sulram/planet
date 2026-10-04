@@ -9,7 +9,8 @@
 	// for another. What is always at hand sits in its head: take back, put
 	// back, close. Under the tools, each with the key that takes it, comes
 	// what the tool in hand works with: the platform's side, its bases and
-	// the volume to delete, or the material a stroke lays. The palette shows
+	// the volume under the body, to open with nothing in it or to delete, or
+	// the material a stroke lays. The palette shows
 	// every colour in the finish and with the edge picked, as it will be
 	// laid, and the foot says how many cells the stroke being drawn covers.
 	interface Props {
@@ -23,7 +24,7 @@
 		platform: number;
 		/** The paints a cell can take, as `#rrggbb`, in order. */
 		palette: string[];
-		/** Whether a volume stands under the body: one to delete. */
+		/** Whether a volume stands under the body: one to delete, or none and one to open. */
 		volume: boolean;
 		/** Cells the stroke being drawn covers across, along and up. */
 		stroke: [number, number, number] | null;
@@ -38,6 +39,8 @@
 		onplatform: (side: number) => void;
 		/** Lay a platform where the body stands, on a base. */
 		onlay: (base: Base) => void;
+		/** Open the volume of the plot the body is over, with nothing built in it. */
+		onopenvolume: () => void;
 		/** Delete the volume the body is in, with all built in it. */
 		onclosevolume: () => void;
 		onundo: () => void;
@@ -61,6 +64,7 @@
 		onedge,
 		onplatform,
 		onlay,
+		onopenvolume,
 		onclosevolume,
 		onundo,
 		onredo
@@ -135,9 +139,16 @@
 			</section>
 		{/if}
 		{#if tool === 'platform'}
-			<div class="row">
-				<Button variant="danger" type="button" disabled={!volume} onclick={onclosevolume}>{t('close')}</Button>
-			</div>
+			<section>
+				<h3>{t('volume')}</h3>
+				<div class="volume">
+					{#if volume}
+						<Button variant="danger" type="button" onclick={onclosevolume}>{t('close')}</Button>
+					{:else}
+						<Button variant="ghost" type="button" onclick={onopenvolume}>{t('open')}</Button>
+					{/if}
+				</div>
+			</section>
 		{/if}
 		{#if stroke}
 			<p class="foot count">
@@ -208,6 +219,10 @@
 	}
 	.lay :global(button) {
 		padding-inline: 0;
+	}
+	/* The volume under the body: one thing to do with it, as wide as the panel. */
+	.volume {
+		display: grid;
 	}
 	.palette {
 		display: grid;

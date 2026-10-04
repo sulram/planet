@@ -66,7 +66,6 @@ end to end.
   - [ ] Measure before choosing the window: bytes per op, and bytes per stored chunk version after zstd
 - [ ] A client chunk cache, so a volume seen before is not sent again (SQLite native, OPFS web)
 - [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
-- [ ] A volume on the moon: a platform asked for there is laid as on the planet (today it is refused)
 - [ ] First cut leftovers: the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
 - [ ] The light of a volume: flood fill sun baked at mesh time, so an interior is dark and a doorway a gradient; no leak where a volume meets the ground; a glow channel
 - [ ] A volume streamed by proximity, a silhouette from afar; one under the sea

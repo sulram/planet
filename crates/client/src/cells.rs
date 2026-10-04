@@ -1,5 +1,6 @@
-//! The cells of a world on the client: volumes seated on the planet, what
-//! changes them, and the meshes that draw them (DECISIONS 106).
+//! The cells of a world on the client: volumes seated on the planet and on
+//! the moon, what changes them, and the meshes that draw them (DECISIONS
+//! 106).
 //!
 //! A volume knows no sphere (`voxel`). Here it is seated, and the address
 //! cuts it (DECISIONS 77): a sector's columns are cut into plots of
@@ -7,8 +8,12 @@
 //! the address `(u, v, h)` of that sector. So a cube is exactly a block of
 //! the world, neighbours meet with nothing between them, and a body walks on
 //! them in address space the way it walks on the ground (CLAUDE.md, simulate
-//! flat, render spherical). Each corner of each side is bent onto the planet
+//! flat, render spherical). Each corner of each side is bent onto its body
 //! on its own, which is why the sides are never merged.
+//!
+//! A seat of the moon is counted on the moon's own grid, from the moon's
+//! centre: what is built there is meshed around that centre, and whoever
+//! draws it, aims at it or lights with it adds where the moon is now.
 //!
 //! The ground under a volume stays as nature made it (DECISIONS 78).
 //!
@@ -28,14 +33,16 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use glam::{DVec3, Vec3};
-use protocol::Message;
 use protocol::cells as wire;
-use scene::{GuideMesh, GuideVertex, Lamp, VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
+use protocol::{Body, Message};
+use scene::{
+    GuideMesh, GuideVertex, Lamp, VolumeChange, VolumeDraw, VolumeMesh, VolumeMeshId, VolumeVertex,
+};
 use seat::{DROP_M, PLOT_BITS, Stand, Unseated, plot_of};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
 use voxel::{
-    CHUNK, CHUNK_BITS, Cell, Edge, Finish, Gesture, Hit, Paint, Quad, Span, Volumes, crossing,
-    unpack,
+    CHUNK, CHUNK_BITS, Cell, Edge, Face, Finish, Gesture, Hit, Paint, Quad, Span, Volumes,
+    crossing, unpack,
 };
 use worldgen::{Generator, Source};
 
@@ -53,6 +60,9 @@ const REACH_M: f64 = 80.0;
 /// Metres between the points of a line of sight bent into a volume's cells:
 /// a block, straight enough to walk exactly between them.
 const SIGHT_STEP_M: f64 = BLOCK_M;
+/// Times the stretch of a line of sight that crosses the ground is halved
+/// to find where: to a sixteenth of a cell.
+const GROUND_HALVINGS: usize = 5;
 /// Half the width of a standing body in address space, in cells: how near a
 /// wall it comes.
 const BODY_HALF: f64 = 0.6;
@@ -71,10 +81,13 @@ const GUIDE_STEP: i32 = 8;
 /// that fill the box to its sides.
 const GUIDE_LIFT: f64 = 0.04;
 /// What a guide in no paint is drawn in: room to build in, barely there
-/// between its lines.
+/// between its lines. A pale line with a dark rim each side of it, so it
+/// shows over grass and over the pale ground of the moon, by day and by
+/// night.
 const ROOM_COLOR: [u8; 3] = [255, 255, 255];
 const ROOM_FILL: u8 = 3;
 const ROOM_INK: u8 = 56;
+const ROOM_RIM: [u8; 4] = [0, 0, 0, 64];
 /// How much shows of what a hand would make, of 255, between its lines and
 /// on them: plain to see, and the world still seen through it.
 const GHOST_FILL: u8 = 105;
@@ -150,33 +163,47 @@ pub struct Guide {
     pub paint: Option<u8>,
 }
 
-/// The volumes of one sector, seated: a cell is the address it has.
+/// The volumes of one seat: a cell is the address it has there. Every place
+/// it speaks of is counted from the centre of the body the seat is on.
 struct Seated {
-    sector: Sector,
+    seat: Seat,
+    /// The body the seat is on: the grid its cells are cut by, and the
+    /// radius that turns them into metres.
+    sphere: QuadSphere,
     volumes: Volumes,
-    /// A ball around each volume, in the world, by its plot: what a line of
-    /// sight asks before it is bent into cells. Then how far its plot
-    /// reaches from its middle, along the ground.
+    /// A ball around each volume, by its plot: what a line of sight asks
+    /// before it is bent into cells. Then how far its plot reaches from its
+    /// middle, along the ground.
     balls: BTreeMap<[i32; 2], (DVec3, f64, f64)>,
 }
 
 impl Seated {
-    /// Where a lattice point of the sector's cells is in the world.
-    fn corner(&self, sphere: QuadSphere, p: [i32; 3]) -> DVec3 {
-        let point = SurfacePoint::new(self.sector, f64::from(p[0]), f64::from(p[1]));
-        DVec3::from(sphere.position(point, f64::from(p[2]) * BLOCK_M))
+    /// Where a lattice point of the seat's cells is.
+    fn corner(&self, p: [i32; 3]) -> DVec3 {
+        self.at(p.map(f64::from))
     }
 
-    /// A point of the world in this sector's cells, when it is over it.
-    fn cells_of(&self, sphere: QuadSphere, p: DVec3) -> Option<[f64; 3]> {
-        let point = sphere.blocks().surface_point(p.to_array());
-        (point.sector == self.sector)
-            .then(|| [point.u, point.v, (p.length() - sphere.radius_m()) / BLOCK_M])
+    /// Where a point of the seat's cells is.
+    fn at(&self, p: [f64; 3]) -> DVec3 {
+        let point = SurfacePoint::new(self.seat.sector(), p[0], p[1]);
+        DVec3::from(self.sphere.position(point, p[2] * BLOCK_M))
+    }
+
+    /// A place in this seat's cells, when it is over its sector.
+    fn cells_of(&self, p: DVec3) -> Option<[f64; 3]> {
+        let point = self.sphere.blocks().surface_point(p.to_array());
+        (point.sector == self.seat.sector()).then(|| {
+            [
+                point.u,
+                point.v,
+                (p.length() - self.sphere.radius_m()) / BLOCK_M,
+            ]
+        })
     }
 
     /// Opens the volume of a plot, holding the blocks from `low` to `height`
     /// over it.
-    fn open(&mut self, sphere: QuadSphere, plot: [i32; 2], low: i32, height: u32) {
+    fn open(&mut self, plot: [i32; 2], low: i32, height: u32) {
         if !self.volumes.open(plot, low, height) {
             return;
         }
@@ -185,16 +212,17 @@ impl Seated {
         };
         let size = bounds.size().map(|n| n as i32);
         let half = [0, 1, 2].map(|i| bounds.min[i] + size[i] / 2);
-        let middle = self.corner(sphere, half);
-        let radius_m = self.corner(sphere, bounds.min).distance(middle) * 1.5;
+        let middle = self.corner(half);
+        let radius_m = self.corner(bounds.min).distance(middle) * 1.5;
         let level = [bounds.min[0], bounds.min[1], half[2]];
-        let across_m = self.corner(sphere, level).distance(middle) * 1.5;
+        let across_m = self.corner(level).distance(middle) * 1.5;
         self.balls.insert(plot, (middle, radius_m, across_m));
     }
 
     /// A line of sight from `from` along `toward` (unit), as a path in this
-    /// sector's cells: the stretch of it that could reach a volume.
-    fn sight(&self, sphere: QuadSphere, from: DVec3, toward: DVec3) -> Vec<[f64; 3]> {
+    /// seat's cells: the stretch of it that could reach a volume, and how
+    /// far along the line it ends.
+    fn sight(&self, from: DVec3, toward: DVec3) -> (f64, Vec<[f64; 3]>) {
         let stretch = self
             .balls
             .values()
@@ -206,16 +234,24 @@ impl Seated {
             })
             .reduce(|a, b| (a.0.min(b.0), a.1.max(b.1)));
         let Some((near, far)) = stretch else {
-            return Vec::new();
+            return (0.0, Vec::new());
         };
         let (near, far) = (near.max(0.0), far.min(REACH_M));
         let steps = ((far - near) / SIGHT_STEP_M).ceil().max(0.0) as usize;
-        (0..=steps)
-            .filter_map(|i| {
-                let t = (near + i as f64 * SIGHT_STEP_M).min(far);
-                self.cells_of(sphere, from + toward * t)
-            })
-            .collect()
+        let path = (0..=steps).filter_map(|i| {
+            let t = (near + i as f64 * SIGHT_STEP_M).min(far);
+            self.cells_of(from + toward * t)
+        });
+        (far, path.collect())
+    }
+
+    /// The cell that holds the ground under a place, when the place is over
+    /// this seat's sector and a volume holds that cell.
+    fn ground_cell(&self, generator: &Generator, p: DVec3) -> Option<[i32; 3]> {
+        let [u, v, _] = self.cells_of(p)?;
+        let point = SurfacePoint::new(self.seat.sector(), u, v);
+        let cell = [u, v, ground(generator, self.seat, point)].map(|at| at.floor() as i32);
+        self.volumes.holds(cell).then_some(cell)
     }
 
     /// The mesh of a chunk, named by the address of its lowest corner.
@@ -224,15 +260,20 @@ impl Seated {
         let across = |n: i32| u64::from(n as u32 >> CHUNK_BITS);
         // Heights run either side of the datum: 24 bits hold them all.
         let up = u64::from((h + (1 << 23)) as u32 & 0xff_ffff);
-        VolumeMeshId((self.sector.index() as u64) << 56 | across(u) << 40 | across(v) << 24 | up)
+        VolumeMeshId(u64::from(self.seat.key()) << 56 | across(u) << 40 | across(v) << 24 | up)
     }
 }
 
-/// What a line of sight meets: a side of a cell, in the cells of a seat.
+/// What a line of sight meets, in the cells of a seat: a side of a cell,
+/// or the ground of a volume, where the first cell of a build stands. On the
+/// ground the cell hit is the one under the cell that holds the ground
+/// there, its side up, so what is made before it stands in the ground.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Aim {
     pub seat: Seat,
     pub hit: Hit,
+    /// Whether it is the ground that was met, and no cell.
+    pub ground: bool,
 }
 
 /// A line of sight bent into the cells of every seat built on, and what it
@@ -344,19 +385,24 @@ impl Link {
 /// Every volume of a world, what is drawn of them and what was changed.
 #[derive(Default)]
 pub struct Cells {
-    /// The sectors a volume stands on, in the order the first one opened.
+    /// The seats a volume stands on, in the order the first one opened.
     sites: Vec<Seated>,
+    /// Where the centre of the moon is now, from the centre of the planet:
+    /// what a place of a seat of the moon is counted from.
+    moon: DVec3,
     /// What the ghost shows now: it is meshed again only when that changes.
     ghost: Option<(Seat, Gesture)>,
     /// The guides shown now, each under the id its place in the list gives.
     guides: Vec<Guide>,
     /// One more for every change to what the cells hold.
     revision: u64,
-    drawn: BTreeSet<VolumeMeshId>,
+    /// The meshes of cubes drawn, each with the seat it is of.
+    drawn: BTreeMap<VolumeMeshId, Seat>,
     /// The meshes of glass drawn, each beside the cubes of its chunk.
-    glazed: BTreeSet<VolumeMeshId>,
-    /// The light of each chunk that holds sides that shine, by its mesh.
-    lamps: BTreeMap<VolumeMeshId, Lamp>,
+    glazed: BTreeMap<VolumeMeshId, Seat>,
+    /// The light of each chunk that holds sides that shine, by its mesh,
+    /// from the centre of the body its seat is on.
+    lamps: BTreeMap<VolumeMeshId, (Seat, Lamp)>,
     /// Chunks owed a mesh since their cells changed, by site.
     stale: BTreeSet<(usize, [i32; 3])>,
     /// Whether a change of many gestures landed since the last update.
@@ -376,8 +422,20 @@ pub struct Cells {
 impl Cells {
     /// The volumes of a seat, when something is built on it.
     fn site(&self, seat: Seat) -> Option<usize> {
-        let sector = seat.sector()?;
-        self.sites.iter().position(|site| site.sector == sector)
+        self.sites.iter().position(|site| site.seat == seat)
+    }
+
+    /// Where the centre of a body is now.
+    fn centre(&self, body: Body) -> DVec3 {
+        match body {
+            Body::Moon => self.moon,
+            Body::Planet => DVec3::ZERO,
+        }
+    }
+
+    /// The moon is somewhere else: what is seated on it goes with it.
+    pub(crate) fn orbit(&mut self, moon: DVec3) {
+        self.moon = moon;
     }
 
     /// A world keeps the cells from here on: what was held is forgotten, and
@@ -412,17 +470,20 @@ impl Cells {
         self.revision
     }
 
-    /// Whether a volume stands on a column.
-    pub fn covers(&self, point: SurfacePoint) -> bool {
-        self.site(point.sector.into())
+    /// Whether a volume stands anywhere on a body.
+    pub fn stands_on(&self, body: Body) -> bool {
+        self.sites.iter().any(|site| site.seat.body() == body)
+    }
+
+    /// Whether a volume stands on a column of a seat.
+    pub fn covers(&self, seat: Seat, point: SurfacePoint) -> bool {
+        self.site(seat)
             .is_some_and(|site| self.sites[site].volumes.is_open(plot_of(point)))
     }
 
-    /// The cells the volume over a column holds.
-    pub fn bounds_over(&self, point: SurfacePoint) -> Option<Span> {
-        self.sites[self.site(point.sector.into())?]
-            .volumes
-            .bounds(plot_of(point))
+    /// The cells the volume over a column of a seat holds.
+    pub fn bounds_over(&self, seat: Seat, point: SurfacePoint) -> Option<Span> {
+        self.sites[self.site(seat)?].volumes.bounds(plot_of(point))
     }
 
     /// Whether a volume holds a cell of a seat, air or not: where a gesture
@@ -438,48 +499,59 @@ impl Cells {
             .map_or_else(Cell::default, |site| self.sites[site].volumes.get(at))
     }
 
-    /// Where a volume over the plot a column is on starts and ends, or why
-    /// none can stand there.
-    fn survey(&self, generator: &Generator, point: SurfacePoint) -> Result<Stand, Refusal> {
+    /// Where a volume over the plot a column of a seat is on starts and
+    /// ends, or why none can stand there.
+    fn survey(
+        &self,
+        generator: &Generator,
+        seat: Seat,
+        point: SurfacePoint,
+    ) -> Result<Stand, Refusal> {
         let field = matches!(generator.recipe().params.source, Source::Field(_));
         if self.link.is_some() && field {
             return Err(Refusal::Field);
         }
-        seat::survey(generator, point).map_err(|why| match why {
+        seat::survey(generator, seat, point).map_err(|why| match why {
             Unseated::Sea => Refusal::Sea,
             Unseated::Seam => Refusal::Seam,
         })
     }
 
-    /// The cells the volume of the plot a column is on holds, or would hold
-    /// once opened: the room there is to build in. Why none can stand there,
-    /// where none can.
-    pub fn room(&self, generator: &Generator, point: SurfacePoint) -> Result<Span, Refusal> {
-        if let Some(held) = self.bounds_over(point) {
+    /// The cells the volume of the plot a column of a seat is on holds, or
+    /// would hold once opened: the room there is to build in. Why none can
+    /// stand there, where none can.
+    pub fn room(
+        &self,
+        generator: &Generator,
+        seat: Seat,
+        point: SurfacePoint,
+    ) -> Result<Span, Refusal> {
+        if let Some(held) = self.bounds_over(seat, point) {
             return Ok(held);
         }
-        let stand = self.survey(generator, point)?;
+        let stand = self.survey(generator, seat, point)?;
         let plot = plot_of(point);
         let mut opened = Volumes::new(PLOT_BITS);
         opened.open(plot, stand.low, stand.height);
         opened.bounds(plot).ok_or(Refusal::Seam)
     }
 
-    /// Opens the volume of the plot a column is on, where none stands. The
-    /// ground stays as it is, and the volume holds the blocks from the lowest
-    /// of it to a height over the highest (`seat::survey`). In a world, the
-    /// world is asked for it, and seats it by the same rule.
+    /// Opens the volume of the plot a column of a seat is on, where none
+    /// stands. The ground stays as it is, and the volume holds the blocks
+    /// from the lowest of it to a height over the highest (`seat::survey`).
+    /// In a world, the world is asked for it, and seats it by the same rule.
     pub(crate) fn open(
         &mut self,
         generator: &Generator,
+        seat: Seat,
         point: SurfacePoint,
     ) -> Result<(), Refusal> {
-        let stand = self.survey(generator, point)?;
-        if self.covers(point) {
+        let stand = self.survey(generator, seat, point)?;
+        if self.covers(seat, point) {
             return Ok(());
         }
-        let (seat, plot) = (Seat::Sector(point.sector), plot_of(point));
-        self.stand(generator.sphere(), point.sector, plot, stand);
+        let plot = plot_of(point);
+        self.stand(generator, seat, plot, stand);
         if let Some(link) = &mut self.link {
             let open = wire::Open {
                 seat: Some(seat.wire()),
@@ -492,30 +564,32 @@ impl Cells {
         Ok(())
     }
 
-    /// Stands a volume over a plot of a sector. Returns the sector's site.
-    fn stand(&mut self, sphere: QuadSphere, sector: Sector, plot: [i32; 2], stand: Stand) -> usize {
-        let site = match self.site(sector.into()) {
+    /// Stands a volume over a plot of a seat. Returns the seat's site.
+    fn stand(&mut self, generator: &Generator, seat: Seat, plot: [i32; 2], stand: Stand) -> usize {
+        let site = match self.site(seat) {
             Some(site) => site,
             None => {
                 self.sites.push(Seated {
-                    sector,
+                    seat,
+                    sphere: seat.sphere(generator),
                     volumes: Volumes::new(PLOT_BITS),
                     balls: BTreeMap::new(),
                 });
                 self.sites.len() - 1
             }
         };
-        self.sites[site].open(sphere, plot, stand.low, stand.height);
+        self.sites[site].open(plot, stand.low, stand.height);
         self.revision += 1;
         site
     }
 
-    /// Closes the volume over a column: what was built in it goes with it,
-    /// and its plot is nature again. A change like any other, taken back as
-    /// one. False where no volume stands. In a world, the world is asked to.
-    pub(crate) fn close(&mut self, point: SurfacePoint) -> bool {
-        let (seat, plot) = (Seat::Sector(point.sector), plot_of(point));
-        let Some(span) = self.bounds_over(point) else {
+    /// Closes the volume over a column of a seat: what was built in it goes
+    /// with it, and its plot is nature again. A change like any other, taken
+    /// back as one. False where no volume stands. In a world, the world is
+    /// asked to.
+    pub(crate) fn close(&mut self, seat: Seat, point: SurfacePoint) -> bool {
+        let plot = plot_of(point);
+        let Some(span) = self.bounds_over(seat, point) else {
             return false;
         };
         match &mut self.link {
@@ -568,7 +642,9 @@ impl Cells {
         seated.volumes.close(plot);
         // The grass under it grows again, and what stood against it shows
         // the sides it hid.
-        if let Some((middle, _, across_m)) = seated.balls.remove(&plot) {
+        if let Some((middle, _, across_m)) = seated.balls.remove(&plot)
+            && seat.body() == Body::Planet
+        {
             self.touched
                 .push((middle.normalize(), across_m / middle.length()));
         }
@@ -588,10 +664,10 @@ impl Cells {
     /// Takes the picture of a chunk away: its cubes, its glass and its lamp.
     fn undraw(&mut self, id: VolumeMeshId) {
         let glass = VolumeMeshId(id.0 | GLASS);
-        if self.drawn.remove(&id) {
+        if self.drawn.remove(&id).is_some() {
             self.changes.push(VolumeChange::Remove(id));
         }
-        if self.glazed.remove(&glass) {
+        if self.glazed.remove(&glass).is_some() {
             self.changes.push(VolumeChange::Remove(glass));
         }
         self.lamps.remove(&id);
@@ -600,7 +676,7 @@ impl Cells {
     /// Forgets every volume: another world.
     pub(crate) fn clear(&mut self) {
         let drawn = core::mem::take(&mut self.drawn);
-        for id in drawn.into_iter().chain(core::mem::take(&mut self.glazed)) {
+        for (id, _) in drawn.into_iter().chain(core::mem::take(&mut self.glazed)) {
             self.changes.push(VolumeChange::Remove(id));
         }
         self.lamps.clear();
@@ -657,15 +733,13 @@ impl Cells {
                     span,
                     chunks,
                 } => {
-                    if let Some(sector) = seat.sector() {
-                        let stand = Stand {
-                            low: span.min[2],
-                            height: span.size()[2],
-                        };
-                        let site = self.stand(generator.sphere(), sector, *plot, stand);
-                        for (chunk, cells) in chunks {
-                            self.put(generator, site, Volumes::chunk_span(*chunk), cells);
-                        }
+                    let stand = Stand {
+                        low: span.min[2],
+                        height: span.size()[2],
+                    };
+                    let site = self.stand(generator, *seat, *plot, stand);
+                    for (chunk, cells) in chunks {
+                        self.put(generator, site, Volumes::chunk_span(*chunk), cells);
                     }
                 }
             }
@@ -703,9 +777,9 @@ impl Cells {
     /// One frame of the picture: meshes a few of the chunks owed one, the
     /// nearest the eye first. A change of many gestures is the work of the
     /// update it landed in, and its meshes start with the next.
-    pub(crate) fn update(&mut self, sphere: QuadSphere, eye: DVec3) {
+    pub(crate) fn update(&mut self, eye: DVec3) {
         if !core::mem::take(&mut self.landed) {
-            self.mesh_owed(sphere, eye, MESHES_PER_UPDATE);
+            self.mesh_owed(eye, MESHES_PER_UPDATE);
         }
     }
 
@@ -715,53 +789,113 @@ impl Cells {
     }
 
     /// Meshes every chunk owed one: for a picture that must show all of it.
-    pub(crate) fn settle(&mut self, sphere: QuadSphere, eye: DVec3) {
+    pub(crate) fn settle(&mut self, eye: DVec3) {
         self.landed = false;
-        self.mesh_owed(sphere, eye, usize::MAX);
+        self.mesh_owed(eye, usize::MAX);
     }
 
     /// A line of sight from a point of the world along a direction, unit,
-    /// and what it meets.
+    /// and what it meets: the nearest cell, or the ground of a volume when
+    /// that comes first. Ground no volume stands on hides what is behind it.
     pub fn sight(&self, generator: &Generator, from: DVec3, toward: DVec3) -> Sight {
-        let sphere = generator.sphere();
-        let paths: Vec<(Seat, Vec<[f64; 3]>)> = self
+        let sights: Vec<(f64, Vec<[f64; 3]>)> = self
             .sites
             .iter()
-            .map(|site| (site.sector.into(), site.sight(sphere, from, toward)))
+            .map(|site| site.sight(from - self.centre(site.seat.body()), toward))
             .collect();
-        let met = self
-            .sites
-            .iter()
-            .zip(&paths)
-            .filter_map(|(site, (seat, path))| {
-                let hit = site.volumes.trace(path)?;
-                let middle = site.corner(sphere, hit.cell);
-                let aim = Aim { seat: *seat, hit };
-                Some(((middle - from).dot(toward), aim))
-            })
-            .min_by(|a, b| a.0.total_cmp(&b.0));
-        let aim = met.and_then(|(away_m, aim)| {
-            // Up to the near side of the cell, which may itself stand in the
-            // ground.
-            let clear_m = away_m - BLOCK_M;
-            let steps = (clear_m / GROUND_STEP_M).floor().max(0.0) as usize;
-            let hidden = (1..=steps).any(|i| {
-                let at = from + toward * (i as f64 * GROUND_STEP_M);
-                let direction = at.normalize_or(DVec3::Y).to_array();
-                at.length() - sphere.radius_m() < generator.sample_at(direction, 0.0).height_m
-            });
-            (!hidden).then_some(aim)
+        let met = [Body::Planet, Body::Moon].into_iter().filter_map(|body| {
+            let on = |site: &&Seated| site.seat.body() == body;
+            let sites = self.sites.iter().zip(&sights).filter(|(site, _)| on(site));
+            // How far the line could still reach a volume of this body.
+            let far_m = sites
+                .clone()
+                .filter(|(_, (_, path))| !path.is_empty())
+                .map(|(_, (far_m, _))| *far_m)
+                .reduce(f64::max)?;
+            let from = from - self.centre(body);
+            let cell = sites
+                .filter_map(|(site, (_, path))| {
+                    let hit = site.volumes.trace(path)?;
+                    let aim = Aim {
+                        seat: site.seat,
+                        hit,
+                        ground: false,
+                    };
+                    Some(((site.corner(hit.cell) - from).dot(toward), aim))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            // Up to the near side of the cell, which may itself stand in
+            // the ground.
+            let clear_m = cell.map_or(far_m, |(away_m, _)| away_m - BLOCK_M);
+            match self.ground_met(generator, body, from, toward, clear_m) {
+                Some(ground) => ground,
+                None => cell,
+            }
         });
-        Sight { paths, aim }
+        let aim = met.min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, aim)| aim);
+        let seats = self.sites.iter().map(|site| site.seat);
+        Sight {
+            paths: seats
+                .zip(sights.into_iter().map(|(_, path)| path))
+                .collect(),
+            aim,
+        }
+    }
+
+    /// Where a line of sight goes into the ground of a body within
+    /// `clear_m` of where it starts, both said from the body's centre:
+    /// `None` when it does not. Where it does, how far along, and the
+    /// ground of a volume as what is aimed at; with no volume there, the
+    /// ground hides what is behind it, and nothing is aimed at.
+    fn ground_met(
+        &self,
+        generator: &Generator,
+        body: Body,
+        from: DVec3,
+        toward: DVec3,
+        clear_m: f64,
+    ) -> Option<Option<(f64, Aim)>> {
+        let radius_m = seat::sphere_of(generator, body).radius_m();
+        let under = |along_m: f64| {
+            let at = from + toward * along_m;
+            let direction = at.normalize_or(DVec3::Y).to_array();
+            at.length() - radius_m < seat::ground_m(generator, body, direction)
+        };
+        let steps = (clear_m / GROUND_STEP_M).floor().max(0.0) as usize;
+        let step = (1..=steps).find(|&i| under(i as f64 * GROUND_STEP_M))?;
+        let (mut over_m, mut under_m) = ((step - 1) as f64, step as f64);
+        for _ in 0..GROUND_HALVINGS {
+            let middle_m = (over_m + under_m) / 2.0;
+            match under(middle_m) {
+                true => under_m = middle_m,
+                false => over_m = middle_m,
+            }
+        }
+        let at = from + toward * under_m;
+        let sites = self.sites.iter().filter(|site| site.seat.body() == body);
+        let aim = sites.filter_map(|site| {
+            let cell = site.ground_cell(generator, at)?;
+            let hit = Hit {
+                cell: [cell[0], cell[1], cell[2] - 1],
+                face: Face::UP,
+            };
+            Some(Aim {
+                seat: site.seat,
+                hit,
+                ground: true,
+            })
+        });
+        Some(aim.map(|aim| (under_m, aim)).next())
     }
 
     /// Where a lattice point of a seat's cells is in the world.
-    pub fn corner(&self, sphere: QuadSphere, seat: impl Into<Seat>, p: [i32; 3]) -> DVec3 {
-        let Some(sector) = seat.into().sector() else {
-            return DVec3::ZERO;
-        };
-        let point = SurfacePoint::new(sector, f64::from(p[0]), f64::from(p[1]));
-        DVec3::from(sphere.position(point, f64::from(p[2]) * BLOCK_M))
+    pub fn corner(&self, generator: &Generator, seat: impl Into<Seat>, p: [i32; 3]) -> DVec3 {
+        let seat = seat.into();
+        let point = SurfacePoint::new(seat.sector(), f64::from(p[0]), f64::from(p[1]));
+        let from_centre = seat
+            .sphere(generator)
+            .position(point, f64::from(p[2]) * BLOCK_M);
+        self.centre(seat.body()) + DVec3::from(from_centre)
     }
 
     /// Applies gestures to the cells of a seat as one change, taken back as
@@ -841,7 +975,6 @@ impl Cells {
     /// side or a corner looks. Where the change comes within a tuft of the
     /// ground the grass under it is to grow again.
     fn redraw(&mut self, generator: &Generator, site: usize, changed: Span) {
-        let sphere = generator.sphere();
         self.revision += 1;
         // The ghost showed what the cells were: it is meshed again from what
         // they are now.
@@ -857,17 +990,21 @@ impl Cells {
             [low[0], high[1]],
             high[..2].try_into().expect("two of three"),
         ];
-        let highest = ends
-            .iter()
-            .map(|&[x, y]| [f64::from(x), f64::from(y)])
-            .chain([middle])
-            .map(|[u, v]| ground(generator, SurfacePoint::new(seated.sector, u, v)))
-            .fold(f64::MIN, f64::max);
-        if f64::from(low[2]) <= highest + TUFT_M / BLOCK_M {
-            let centre = seated.corner(sphere, [middle[0] as i32, middle[1] as i32, low[2]]);
-            let reach_m = seated.corner(sphere, low).distance(centre) + BLOCK_M;
-            self.touched
-                .push((centre.normalize(), reach_m / centre.length()));
+        // Grass grows on the planet alone.
+        if seated.seat.body() == Body::Planet {
+            let sector = seated.seat.sector();
+            let highest = ends
+                .iter()
+                .map(|&[x, y]| [f64::from(x), f64::from(y)])
+                .chain([middle])
+                .map(|[u, v]| ground(generator, seated.seat, SurfacePoint::new(sector, u, v)))
+                .fold(f64::MIN, f64::max);
+            if f64::from(low[2]) <= highest + TUFT_M / BLOCK_M {
+                let centre = seated.corner([middle[0] as i32, middle[1] as i32, low[2]]);
+                let reach_m = seated.corner(low).distance(centre) + BLOCK_M;
+                self.touched
+                    .push((centre.normalize(), reach_m / centre.length()));
+            }
         }
         for chunk in seated.volumes.chunks_in(changed.grown(1)) {
             self.stale.insert((site, chunk));
@@ -878,7 +1015,7 @@ impl Cells {
     /// first: its cubes, its glass apart from them, and the lamp its sides
     /// that shine come to. A chunk that holds nothing costs no mesh, and
     /// none of the budget.
-    fn mesh_owed(&mut self, sphere: QuadSphere, eye: DVec3, budget: usize) {
+    fn mesh_owed(&mut self, eye: DVec3, budget: usize) {
         if self.stale.is_empty() {
             return;
         }
@@ -887,7 +1024,9 @@ impl Cells {
             .stale
             .iter()
             .map(|&(site, chunk)| {
-                let middle = self.sites[site].corner(sphere, chunk.map(|n| n + half));
+                let seated = &self.sites[site];
+                let middle = seated.corner(chunk.map(|n| n + half));
+                let eye = eye - self.centre(seated.seat.body());
                 (middle.distance_squared(eye), (site, chunk))
             })
             .collect();
@@ -906,11 +1045,12 @@ impl Cells {
                 continue;
             }
             left -= 1;
-            let sector = self.sites[site].sector;
+            let (seat, sphere) = (self.sites[site].seat, self.sites[site].sphere);
+            let sector = seat.sector();
             let glass = |quad: &Quad| Paint::of(quad.paint).finish == Finish::Glass;
             let (panes, cubes): (Vec<Quad>, Vec<Quad>) = quads.into_iter().partition(glass);
             match lamp(sector, sphere, &cubes) {
-                Some(lamp) => self.lamps.insert(id, lamp),
+                Some(lamp) => self.lamps.insert(id, (seat, lamp)),
                 None => self.lamps.remove(&id),
             };
             let meshes = [
@@ -919,13 +1059,13 @@ impl Cells {
             ];
             for (id, quads, drawn) in meshes {
                 if quads.is_empty() {
-                    if drawn.remove(&id) {
+                    if drawn.remove(&id).is_some() {
                         self.changes.push(VolumeChange::Remove(id));
                     }
                     continue;
                 }
                 let mesh = mesh(sector, sphere, &quads, paint_look, 0.0);
-                drawn.insert(id);
+                drawn.insert(id, seat);
                 self.changes.push(VolumeChange::Add(id, mesh));
             }
         }
@@ -935,7 +1075,7 @@ impl Cells {
     /// change, see-through, with a line between each cell and the next, so a
     /// hand sees what it will do and counts it. It is meshed again only when
     /// what it shows is another gesture, or the cells under it changed.
-    pub(crate) fn preview(&mut self, sphere: QuadSphere, gesture: Option<(Seat, Gesture)>) {
+    pub(crate) fn preview(&mut self, gesture: Option<(Seat, Gesture)>) {
         let wanted = gesture.filter(|&(seat, _)| self.site(seat).is_some());
         if wanted == self.ghost {
             return;
@@ -952,8 +1092,10 @@ impl Cells {
             Gesture::Delete { .. } => DELETE_COLOR,
         };
         let (color, ink) = ghost_look(rgb);
+        let rim = [0; 4];
         let quads = seated.volumes.ghost(gesture);
-        let sides = mesh(seated.sector, sphere, &quads, paint_look, GHOST_LIFT_M);
+        let sector = seated.seat.sector();
+        let sides = mesh(sector, seated.sphere, &quads, paint_look, GHOST_LIFT_M);
         // Each corner says where it is on its side, counted from a corner of
         // the frame every plot has, as the lines of a guide are.
         let plot = (1 << PLOT_BITS) - 1;
@@ -969,6 +1111,7 @@ impl Cells {
             lattice,
             color,
             ink,
+            rim,
         });
         let mesh = GuideMesh {
             origin: sides.origin,
@@ -980,7 +1123,7 @@ impl Cells {
 
     /// Shows guides over the world, in place of those shown before: none,
     /// with none to show. A guide is meshed again only when it is another.
-    pub(crate) fn guide(&mut self, sphere: QuadSphere, wanted: &[Guide]) {
+    pub(crate) fn guide(&mut self, generator: &Generator, wanted: &[Guide]) {
         if wanted == self.guides {
             return;
         }
@@ -988,7 +1131,7 @@ impl Cells {
             let id = guide_id(slot);
             match (wanted.get(slot), self.guides.get(slot)) {
                 (Some(guide), shown) if shown != Some(guide) => {
-                    let mesh = guide_mesh(sphere, *guide);
+                    let mesh = guide_mesh(guide.seat.sphere(generator), *guide);
                     self.changes.push(VolumeChange::Guide(id, mesh));
                 }
                 (None, Some(_)) => self.changes.push(VolumeChange::Remove(id)),
@@ -998,14 +1141,14 @@ impl Cells {
         self.guides = wanted.to_vec();
     }
 
-    /// What holds up a body standing at a point with its feet at `feet_m`,
-    /// as far as the volumes go: `None` away from every volume.
+    /// What holds up a body standing at a column of a seat with its feet at
+    /// `feet_m`, as far as the volumes go: `None` away from every volume.
     ///
     /// A body is as wide as [`BODY_HALF`] each way, so it stands on the
     /// highest cell under any part of it, over whichever volumes it
     /// straddles, and stops short of a wall.
-    pub fn footing(&self, point: SurfacePoint, feet_m: f64) -> Option<Footing> {
-        let site = &self.sites[self.site(point.sector.into())?];
+    pub fn footing(&self, seat: Seat, point: SurfacePoint, feet_m: f64) -> Option<Footing> {
+        let site = &self.sites[self.site(seat)?];
         let reach = (feet_m + STEP_M) / BLOCK_M;
         let columns = |at: f64| (at - BODY_HALF).floor() as i32..=(at + BODY_HALF).floor() as i32;
         let metres = |cells: i32| f64::from(cells) * BLOCK_M;
@@ -1020,9 +1163,10 @@ impl Cells {
     }
 
     /// Whether a cell stands in the way of something rooted at a column of a
-    /// sector, `u` and `v` in blocks, between two heights in metres.
+    /// sector of the planet, `u` and `v` in blocks, between two heights in
+    /// metres.
     pub fn covered(&self, sector: Sector, column: [f64; 2], heights: [f64; 2]) -> bool {
-        let Some(site) = self.site(sector.into()) else {
+        let Some(site) = self.site(Seat::Sector(sector)) else {
             return false;
         };
         let [x, y] = column.map(|at| at.floor() as i32);
@@ -1041,24 +1185,39 @@ impl Cells {
         core::mem::take(&mut self.touched)
     }
 
+    /// A mesh of a seat's cells as it is drawn now: around where the centre
+    /// of the seat's body is.
+    fn draw(&self, id: VolumeMeshId, seat: Seat) -> VolumeDraw {
+        VolumeDraw {
+            id,
+            body_center: self.centre(seat.body()),
+        }
+    }
+
     /// Every mesh of cubes to draw.
-    pub fn drawn(&self) -> Vec<VolumeMeshId> {
-        self.drawn.iter().copied().collect()
+    pub fn drawn(&self) -> Vec<VolumeDraw> {
+        let drawn = self.drawn.iter();
+        drawn.map(|(&id, &seat)| self.draw(id, seat)).collect()
     }
 
     /// Every mesh of glass to draw, over the cubes.
-    pub fn glazed(&self) -> Vec<VolumeMeshId> {
-        self.glazed.iter().copied().collect()
+    pub fn glazed(&self) -> Vec<VolumeDraw> {
+        let glazed = self.glazed.iter();
+        glazed.map(|(&id, &seat)| self.draw(id, seat)).collect()
     }
 
-    /// The lights among the cells held.
+    /// The lights among the cells held, each where it is in the world now.
     pub fn lamps(&self) -> Vec<Lamp> {
-        self.lamps.values().copied().collect()
+        let lamps = self.lamps.values().map(|&(seat, lamp)| Lamp {
+            position: self.centre(seat.body()) + lamp.position,
+            ..lamp
+        });
+        lamps.collect()
     }
 
     /// The ghost of the gesture a hand would make, while there is one.
-    pub fn ghost(&self) -> Option<VolumeMeshId> {
-        self.ghost.map(|_| GHOST)
+    pub fn ghost(&self) -> Option<VolumeDraw> {
+        self.ghost.map(|(seat, _)| self.draw(GHOST, seat))
     }
 
     /// The guides shown now.
@@ -1067,8 +1226,11 @@ impl Cells {
     }
 
     /// The mesh of every guide to draw.
-    pub fn guides_drawn(&self) -> Vec<VolumeMeshId> {
-        (0..self.guides.len()).map(guide_id).collect()
+    pub fn guides_drawn(&self) -> Vec<VolumeDraw> {
+        let guides = self.guides.iter().enumerate();
+        guides
+            .map(|(slot, guide)| self.draw(guide_id(slot), guide.seat))
+            .collect()
     }
 }
 
@@ -1076,9 +1238,10 @@ impl Cells {
 impl Cells {
     /// One frame of keeping in step with the world: once in a while, lets go
     /// of the volumes the body left behind and asks the world what it holds
-    /// near the body that this client lacks. `body` is where the body is in
-    /// the world, while it is on the planet.
-    pub(crate) fn look(&mut self, sphere: QuadSphere, body: Option<DVec3>, dt: f64) {
+    /// near the body that this client lacks. `body` is the body of the world
+    /// this client's own stands on or flies by, and where it is from the
+    /// centre of it: what is seated on another body is far.
+    pub(crate) fn look(&mut self, body: (Body, DVec3), dt: f64) {
         let Some(link) = &mut self.link else {
             return;
         };
@@ -1087,27 +1250,27 @@ impl Cells {
             return;
         }
         link.since_look_s = 0.0;
-        if let Some(body) = body {
-            let far: Vec<(Seat, [i32; 2])> = self
-                .sites
-                .iter()
-                .flat_map(|site| {
-                    let left = site.volumes.plots().filter(move |&plot| {
-                        site.volumes.bounds(plot).is_some_and(|held| {
-                            let stand = Stand {
-                                low: held.min[2],
-                                height: held.size()[2],
-                            };
-                            let from = body.to_array();
-                            seat::away_m(sphere, site.sector, plot, stand, from) > DROP_M
-                        })
-                    });
-                    left.map(|plot| (Seat::Sector(site.sector), plot))
-                })
-                .collect();
-            for (seat, plot) in far {
-                self.remove(seat, plot);
-            }
+        let (on, from) = (body.0, body.1.to_array());
+        let far: Vec<(Seat, [i32; 2])> = self
+            .sites
+            .iter()
+            .flat_map(|site| {
+                let left = site.volumes.plots().filter(move |&plot| {
+                    site.volumes.bounds(plot).is_some_and(|held| {
+                        let stand = Stand {
+                            low: held.min[2],
+                            height: held.size()[2],
+                        };
+                        let sector = site.seat.sector();
+                        site.seat.body() != on
+                            || seat::away_m(site.sphere, sector, plot, stand, from) > DROP_M
+                    })
+                });
+                left.map(|plot| (site.seat, plot))
+            })
+            .collect();
+        for (seat, plot) in far {
+            self.remove(seat, plot);
         }
         let Some(link) = &mut self.link else {
             return;
@@ -1163,15 +1326,12 @@ impl Cells {
         let (Some(seat), Some(stood)) = (seat, &opened.stood) else {
             return;
         };
-        let Some(sector) = seat.sector() else {
-            return;
-        };
         let plot = [stood.plot_x, stood.plot_y];
         let stand = Stand {
             low: stood.low,
             height: stood.height,
         };
-        self.stand(generator.sphere(), sector, plot, stand);
+        self.stand(generator, seat, plot, stand);
         if let Some(link) = &mut self.link {
             link.versions.entry((seat, plot)).or_insert(stood.version);
         }
@@ -1223,13 +1383,9 @@ impl Cells {
 
     /// The world's answer to a look: volumes whole, and those that are gone.
     fn seen(&mut self, generator: &Generator, seen: wire::Seen) {
-        let sphere = generator.sphere();
         for volume in seen.volumes {
             let seat = Seat::from_wire(volume.seat.as_ref());
             let (Some(seat), Some(stood)) = (seat, volume.stood) else {
-                continue;
-            };
-            let Some(sector) = seat.sector() else {
                 continue;
             };
             let plot = [stood.plot_x, stood.plot_y];
@@ -1246,7 +1402,7 @@ impl Cells {
             if held != Some(&stood.version) {
                 self.remove(seat, plot);
             }
-            let site = self.stand(sphere, sector, plot, stand);
+            let site = self.stand(generator, seat, plot, stand);
             let Some(bounds) = self.sites[site].volumes.bounds(plot) else {
                 continue;
             };
@@ -1467,8 +1623,9 @@ fn guide_id(slot: usize) -> VolumeMeshId {
     VolumeMeshId(GUIDES - slot as u64)
 }
 
-/// The sides of a guide's box, bent onto the planet as the cells are and
-/// standing a little off it, each corner saying where it is on its side.
+/// The sides of a guide's box, bent onto the body its seat is on as the
+/// cells are and standing a little off it, each corner saying where it is on
+/// its side.
 fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
     let (low, high) = (guide.span.min, guide.span.max.map(|n| n + 1));
     let mut mesh = GuideMesh {
@@ -1476,14 +1633,15 @@ fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
         vertices: Vec::new(),
         indices: Vec::new(),
     };
-    let Some(sector) = guide.seat.sector() else {
-        return mesh;
-    };
-    let (color, ink) = match guide.paint {
-        Some(paint) => ghost_look(paint_rgb(paint)),
+    let sector = guide.seat.sector();
+    let (color, ink, rim) = match guide.paint {
+        Some(paint) => {
+            let (color, ink) = ghost_look(paint_rgb(paint));
+            (color, ink, [0; 4])
+        }
         None => {
             let [r, g, b] = ROOM_COLOR;
-            ([r, g, b, ROOM_FILL], [r, g, b, ROOM_INK])
+            ([r, g, b, ROOM_FILL], [r, g, b, ROOM_INK], ROOM_RIM)
         }
     };
     let at = |p: [f64; 3]| {
@@ -1531,6 +1689,7 @@ fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
                             ],
                             color,
                             ink,
+                            rim,
                         });
                     }
                     mesh.indices
@@ -1627,14 +1786,19 @@ impl Cells {
     /// cell thick, over the highest ground under it. Returns the first cell
     /// over the corner of the floor: tests speak in cells counted from there.
     pub(crate) fn floor(&mut self, generator: &Generator, point: SurfacePoint) -> [i32; 3] {
-        self.open(generator, point).expect("dry land");
+        self.open(generator, point.sector.into(), point)
+            .expect("dry land");
         let [x, y] = plot_of(point).map(|n| n << PLOT_BITS);
         let side = 1 << PLOT_BITS;
         let highest = (0..=side)
             .flat_map(|dy| (0..=side).map(move |dx| (dx, dy)))
             .map(|(dx, dy)| {
                 let (u, v) = (f64::from(x + dx), f64::from(y + dy));
-                ground(generator, SurfacePoint::new(point.sector, u, v))
+                ground(
+                    generator,
+                    point.sector.into(),
+                    SurfacePoint::new(point.sector, u, v),
+                )
             })
             .fold(f64::MIN, f64::max);
         let top = highest.ceil() as i32;
@@ -1694,10 +1858,10 @@ mod tests {
     }
 
     /// The middle of the top of a cell.
-    fn top(cells: &Cells, sphere: QuadSphere, cell: [i32; 3]) -> DVec3 {
+    fn top(cells: &Cells, cell: [i32; 3]) -> DVec3 {
         let site = &cells.sites[0];
-        let low = site.corner(sphere, [cell[0], cell[1], cell[2] + 1]);
-        let high = site.corner(sphere, [cell[0] + 1, cell[1] + 1, cell[2] + 1]);
+        let low = site.corner([cell[0], cell[1], cell[2] + 1]);
+        let high = site.corner([cell[0] + 1, cell[1] + 1, cell[2] + 1]);
         (low + high) / 2.0
     }
 
@@ -1721,12 +1885,14 @@ mod tests {
         let direction = generator.sphere().blocks().direction(point);
         let ground_m = generator.sample(direction).height_m;
         let mut cells = Cells::default();
-        cells.open(&generator, point).expect("dry land");
-        assert!(cells.covers(point));
-        assert!(!cells.covers(along(point, 1)));
+        cells
+            .open(&generator, point.sector.into(), point)
+            .expect("dry land");
+        assert!(cells.covers(point.sector.into(), point));
+        assert!(!cells.covers(point.sector.into(), along(point, 1)));
         // The address cuts it, wherever on the plot the body stood, and it
         // holds the ground of the plot and the air over it.
-        let held = cells.bounds_over(point).unwrap();
+        let held = cells.bounds_over(point.sector.into(), point).unwrap();
         assert_eq!(held.min[0] % 64, 0);
         assert_eq!(held.min[1] % 64, 0);
         assert_eq!(held.size()[0], 64);
@@ -1747,19 +1913,25 @@ mod tests {
         let mut cells = Cells::default();
         for (u, v) in [(10.0, point.v), (point.u, side - 10.0), (side - 1.0, 1.0)] {
             let edge = SurfacePoint::new(point.sector, u, v);
-            assert_eq!(cells.open(&generator, edge), Err(Refusal::Seam), "{u} {v}");
+            assert_eq!(
+                cells.open(&generator, edge.sector.into(), edge),
+                Err(Refusal::Seam),
+                "{u} {v}"
+            );
         }
         // One plot in, the edge is no reason: the sea may be.
         let inside = SurfacePoint::new(point.sector, 70.0, side - 70.0);
-        assert_ne!(cells.open(&generator, inside), Err(Refusal::Seam));
+        assert_ne!(
+            cells.open(&generator, inside.sector.into(), inside),
+            Err(Refusal::Seam)
+        );
     }
 
     #[test]
     fn a_change_of_many_chunks_is_drawn_over_updates_the_nearest_first() {
         let (generator, mut cells, origin) = opened();
-        let sphere = generator.sphere();
-        let sector = cells.sites[0].sector;
-        cells.settle(sphere, DVec3::ZERO);
+        let sector = cells.sites[0].seat.sector();
+        cells.settle(DVec3::ZERO);
         cells.drain_changes();
         // Two blocks the width of the plot, sixteen cells high.
         let blocks = [
@@ -1769,27 +1941,27 @@ mod tests {
         assert!(cells.apply(&generator, sector, &blocks));
         let owed = cells.stale.len();
         assert!(owed > MESHES_PER_UPDATE, "{owed}");
-        let eye = top(&cells, sphere, at(origin, [20, 20, 20]));
+        let eye = top(&cells, at(origin, [20, 20, 20]));
         let half = CHUNK as i32 / 2;
         let far = |cells: &Cells, (site, chunk): (usize, [i32; 3])| {
             cells.sites[site]
-                .corner(sphere, chunk.map(|n| n + half))
+                .corner(chunk.map(|n| n + half))
                 .distance(eye)
         };
         let mut nearest: Vec<(usize, [i32; 3])> = cells.stale.iter().copied().collect();
         nearest.sort_by(|&a, &b| far(&cells, a).total_cmp(&far(&cells, b)));
         // The update it landed in meshes nothing of it.
-        cells.update(sphere, eye);
+        cells.update(eye);
         assert!(cells.drain_changes().is_empty());
         assert_eq!(cells.stale.len(), owed);
         // The next meshes the nearest of what is owed, and no more.
-        cells.update(sphere, eye);
+        cells.update(eye);
         assert!(cells.drain_changes().len() <= MESHES_PER_UPDATE);
         let left: BTreeSet<_> = nearest[MESHES_PER_UPDATE..].iter().copied().collect();
         assert_eq!(cells.stale, left);
         let mut updates = 1;
         while !cells.settled() {
-            cells.update(sphere, eye);
+            cells.update(eye);
             updates += 1;
         }
         assert_eq!(updates, owed.div_ceil(MESHES_PER_UPDATE));
@@ -1800,7 +1972,9 @@ mod tests {
     fn a_gesture_stands_over_two_neighbours_and_is_taken_back_as_one() {
         let (generator, mut cells, origin) = opened();
         let (_, point) = world();
-        cells.open(&generator, along(point, 1)).unwrap();
+        cells
+            .open(&generator, point.sector.into(), along(point, 1))
+            .unwrap();
         // From the floor out over the plot beside it, where there is none.
         let row = create(at(origin, [60, 20, 0]), at(origin, [67, 20, 0]), 4);
         assert!(cells.apply(&generator, point.sector, &[row]));
@@ -1817,7 +1991,7 @@ mod tests {
     #[test]
     fn a_gesture_stops_where_no_volume_stands() {
         let (generator, mut cells, origin) = opened();
-        let sector = cells.sites[0].sector;
+        let sector = cells.sites[0].seat.sector();
         let row = create(at(origin, [60, 20, 0]), at(origin, [67, 20, 0]), 0);
         assert!(cells.apply(&generator, sector, &[row]));
         let held: Vec<[i32; 3]> = (60..64).map(|x| [x, 20, 0]).collect();
@@ -1834,7 +2008,9 @@ mod tests {
     fn a_body_stands_astride_two_volumes() {
         let (generator, mut cells, origin) = opened();
         let (_, point) = world();
-        cells.open(&generator, along(point, 1)).unwrap();
+        cells
+            .open(&generator, point.sector.into(), along(point, 1))
+            .unwrap();
         // One cube at the edge of the second volume, level with the floor of
         // the first, and a body half on it, its middle over the first.
         let cube = at(origin, [64, 20, -1]);
@@ -1842,7 +2018,11 @@ mod tests {
         let floor_m = f64::from(origin[2]) * BLOCK_M;
         let beside = |du: f64| {
             let (u, v) = (f64::from(cube[0]) + du, f64::from(cube[1]) + 0.5);
-            cells.footing(SurfacePoint::new(point.sector, u, v), floor_m)
+            cells.footing(
+                point.sector.into(),
+                SurfacePoint::new(point.sector, u, v),
+                floor_m,
+            )
         };
         assert_eq!(beside(-0.3).unwrap().floor_m, Some(floor_m));
         // Its middle over the cube, nothing else of it on anything built.
@@ -1851,85 +2031,99 @@ mod tests {
         assert_eq!(beside(2.0).unwrap().floor_m, None);
         // And off every volume there is no footing to speak of.
         let off = SurfacePoint::new(point.sector, f64::from(origin[0]) - 5.0, point.v);
-        assert_eq!(cells.footing(off, floor_m), None);
+        assert_eq!(cells.footing(off.sector.into(), off, floor_m), None);
     }
 
     #[test]
     fn a_body_stands_on_what_is_laid() {
         let (generator, mut cells, origin) = opened();
-        let sphere = generator.sphere();
-        let sector = cells.sites[0].sector;
+        let sector = cells.sites[0].seat.sector();
         let row = create(at(origin, [10, 20, 0]), at(origin, [14, 20, 0]), 4);
         cells.apply(&generator, sector, &[row]);
         // One gesture is drawn in the update it landed in.
-        cells.update(sphere, top(&cells, sphere, at(origin, [12, 20, 8])));
+        cells.update(top(&cells, at(origin, [12, 20, 8])));
         assert!(!cells.drawn.is_empty());
         let on = SurfacePoint::new(
             sector,
             f64::from(origin[0]) + 12.5,
             f64::from(origin[1]) + 20.5,
         );
-        let footing = cells.footing(on, f64::from(origin[2]) * BLOCK_M).unwrap();
+        let footing = cells
+            .footing(on.sector.into(), on, f64::from(origin[2]) * BLOCK_M)
+            .unwrap();
         assert_eq!(footing.floor_m, Some(f64::from(origin[2] + 1) * BLOCK_M));
     }
 
     #[test]
-    fn a_cell_the_ground_hides_is_not_under_the_pointer() {
+    fn the_ground_of_a_volume_is_aimed_at_and_hides_the_cell_under_it() {
         let (generator, mut cells, origin) = opened();
-        let sphere = generator.sphere();
         let (_, point) = world();
-        // A cube sunk two metres into the ground, under an eye over it.
+        // A cube sunk two metres into the ground, under an eye over it: the
+        // eye meets the ground of the volume, where a cell would stand in
+        // it, and never the cube.
         let (x, y) = (origin[0] + 70, origin[1] + 20);
         let column = SurfacePoint::new(point.sector, f64::from(x), f64::from(y));
-        let under = ground(&generator, column).floor() as i32;
+        let under = ground(&generator, column.sector.into(), column).floor() as i32;
         let sunk = [x, y, under - 4];
-        cells.open(&generator, along(point, 1)).unwrap();
+        cells
+            .open(&generator, point.sector.into(), along(point, 1))
+            .unwrap();
         cells.apply(&generator, point.sector, &[create(sunk, sunk, 0)]);
-        let over = top(&cells, sphere, [x, y, under + 20]);
-        let down = (top(&cells, sphere, sunk) - over).normalize();
+        let over = top(&cells, [x, y, under + 20]);
+        let down = (top(&cells, sunk) - over).normalize();
+        let aim = cells
+            .sight(&generator, over, down)
+            .aim()
+            .expect("the ground");
+        assert!(aim.ground);
+        assert_eq!(aim.hit.before(), [x, y, under]);
+        assert!(cells.cell(aim.seat, aim.hit.before()).is_air());
+        // Where no volume stands the ground is nothing to aim at, and hides
+        // what is behind it all the same.
+        let seat = Seat::Sector(point.sector);
+        cells.close(seat, along(point, 1));
         assert_eq!(cells.sight(&generator, over, down).aim(), None);
         // The floor beside it is in plain sight.
         let seen = at(origin, [30, 20, -1]);
-        let floor = top(&cells, sphere, seen);
+        let floor = top(&cells, seen);
         let over = floor + floor.normalize() * 5.0;
         let sight = cells.sight(&generator, over, -floor.normalize());
         let aim = sight.aim().expect("the floor");
         assert_eq!((aim.seat, aim.hit.cell), (point.sector.into(), seen));
+        assert!(!aim.ground);
         // The address says where a corner of a cell is, as its sides are drawn.
-        let corner = cells.corner(sphere, aim.seat, seen);
-        assert_eq!(corner, cells.sites[0].corner(sphere, seen));
+        let corner = cells.corner(&generator, aim.seat, seen);
+        assert_eq!(corner, cells.sites[0].corner(seen));
     }
 
     #[test]
     fn the_ghost_shows_a_gesture_and_goes() {
-        let (generator, mut cells, origin) = opened();
-        let sphere = generator.sphere();
-        let sector = cells.sites[0].sector;
+        let (_, mut cells, origin) = opened();
+        let sector = cells.sites[0].seat.sector();
         let cube = at(origin, [3, 3, 0]);
-        cells.preview(sphere, Some((sector.into(), create(cube, cube, 0))));
-        assert_eq!(cells.ghost(), Some(GHOST));
-        cells.preview(sphere, None);
+        cells.preview(Some((sector.into(), create(cube, cube, 0))));
+        assert_eq!(cells.ghost().map(|draw| draw.id), Some(GHOST));
+        cells.preview(None);
         assert_eq!(cells.ghost(), None);
         // Over a sector nothing is built on there is nothing to show.
         let other = Sector::new(1).unwrap();
-        cells.preview(sphere, Some((other.into(), create(cube, cube, 0))));
+        cells.preview(Some((other.into(), create(cube, cube, 0))));
         assert_eq!(cells.ghost(), None);
     }
 
     #[test]
     fn the_ghost_is_meshed_again_after_a_change_lands() {
         let (generator, mut cells, origin) = opened();
-        let sphere = generator.sphere();
-        let sector = cells.sites[0].sector;
+        let sector = cells.sites[0].seat.sector();
         let cube = at(origin, [3, 3, 0]);
         cells.apply(&generator, sector, &[create(cube, cube, 0)]);
         let delete = Gesture::Delete {
             span: Span::cell(cube),
         };
-        cells.preview(sphere, Some((sector.into(), delete)));
+        cells.preview(Some((sector.into(), delete)));
         cells.drain_changes();
         cells.apply(&generator, sector, &[delete]);
-        cells.preview(sphere, Some((sector.into(), delete)));
+        cells.preview(Some((sector.into(), delete)));
         // Whatever the last frame shows over the hole, it is not the cube.
         let ghost = cells
             .drain_changes()
@@ -1946,7 +2140,7 @@ mod tests {
     #[test]
     fn a_change_is_taken_back_and_put_back() {
         let (generator, mut cells, origin) = opened();
-        let sector = cells.sites[0].sector;
+        let sector = cells.sites[0].seat.sector();
         let row = create(at(origin, [5, 5, 0]), at(origin, [7, 5, 0]), 0);
         cells.apply(&generator, sector, &[row]);
         let middle = at(origin, [6, 5, 0]);
@@ -1972,29 +2166,35 @@ mod tests {
     }
 
     #[test]
-    fn a_chunk_has_a_mesh_of_its_own_in_every_volume_and_sector() {
-        let seated = |sector: u8| Seated {
-            sector: Sector::new(sector).unwrap(),
+    fn a_chunk_has_a_mesh_of_its_own_in_every_volume_and_seat() {
+        let sphere = QuadSphere::new(16).unwrap();
+        let seated = |seat: fn(Sector) -> Seat, sector: u8| Seated {
+            seat: seat(Sector::new(sector).unwrap()),
+            sphere,
             volumes: Volumes::new(PLOT_BITS),
             balls: BTreeMap::new(),
         };
         let chunks = [[64, 128, 32], [80, 128, 32], [64, 144, 32], [64, 128, -32]];
         let mut ids = BTreeSet::new();
-        for sector in [0, 5] {
-            for chunk in chunks {
-                ids.insert(seated(sector).mesh_id(chunk));
+        for seat in [Seat::Sector, Seat::Moon] {
+            for sector in [0, 5] {
+                for chunk in chunks {
+                    ids.insert(seated(seat, sector).mesh_id(chunk));
+                }
             }
         }
-        assert_eq!(ids.len(), 8);
+        assert_eq!(ids.len(), 16);
         assert!(!ids.contains(&GHOST));
+        // The glass of a chunk is drawn beside its cubes, under an id of
+        // its own.
+        assert!(ids.iter().all(|id| id.0 & GLASS == 0));
     }
 
     #[test]
     fn sides_share_their_corners_across_cells() {
-        let (generator, cells, origin) = opened();
-        let sphere = generator.sphere();
+        let (_, cells, origin) = opened();
         let site = &cells.sites[0];
-        let a = site.corner(sphere, at(origin, [3, 4, 2]));
+        let a = site.corner(at(origin, [3, 4, 2]));
         let quads = [
             Quad {
                 cell: at(origin, [2, 3, 1]),
@@ -2009,7 +2209,7 @@ mod tests {
                 open: [3; 4],
             },
         ];
-        let mesh = mesh(site.sector, sphere, &quads, paint_look, 0.0);
+        let mesh = mesh(site.seat.sector(), site.sphere, &quads, paint_look, 0.0);
         let shared: Vec<DVec3> = mesh
             .vertices
             .iter()

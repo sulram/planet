@@ -6,6 +6,7 @@
 //! A rule here is written once and run on both sides: the client predicts
 //! with it, and the server decides with it, in its module.
 
+use protocol::Body;
 use protocol::cells as wire;
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
 use voxel::{Gesture, Span};
@@ -40,13 +41,15 @@ pub const DROP_M: f64 = 320.0;
 pub const TELL_M: f64 = 384.0;
 
 /// What cells are seated on: the frame their addresses are counted in. A
-/// sector of the planet today. A body that moves, a ship with a room aboard,
-/// is the next kind (DECISIONS 109), so every word of the cells says where
-/// as a seat and never as a bare address.
+/// sector of the planet, or a sector of the moon, which moves: its cells
+/// are counted on the moon's own grid, from the moon's centre, and ride its
+/// orbit. A ship with a room aboard is the next kind (DECISIONS 109), so
+/// every word of the cells says where as a seat and never as a bare address.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[non_exhaustive]
 pub enum Seat {
     Sector(Sector),
+    Moon(Sector),
 }
 
 impl From<Sector> for Seat {
@@ -55,28 +58,90 @@ impl From<Sector> for Seat {
     }
 }
 
+/// What is added to a sector's number to name a seat of the moon in a key.
+const MOON_KEY: u8 = 16;
+
 impl Seat {
-    /// The sector it is, when it is one.
-    pub fn sector(self) -> Option<Sector> {
-        let Seat::Sector(sector) = self;
-        Some(sector)
+    /// The seat a sector of a body is.
+    pub fn on(body: Body, sector: Sector) -> Seat {
+        match body {
+            Body::Moon => Seat::Moon(sector),
+            _ => Seat::Sector(sector),
+        }
+    }
+
+    /// The sector of its body it is.
+    pub fn sector(self) -> Sector {
+        let (Seat::Sector(sector) | Seat::Moon(sector)) = self;
+        sector
+    }
+
+    /// The body it is a sector of.
+    pub fn body(self) -> Body {
+        match self {
+            Seat::Sector(_) => Body::Planet,
+            Seat::Moon(_) => Body::Moon,
+        }
+    }
+
+    /// The body it is on, as its cells are counted: the grid they are cut
+    /// by, and the radius that turns them into metres from its centre.
+    pub fn sphere(self, generator: &Generator) -> QuadSphere {
+        sphere_of(generator, self.body())
+    }
+
+    /// The byte that names it in a key of a store.
+    pub fn key(self) -> u8 {
+        match self {
+            Seat::Sector(sector) => sector.index() as u8,
+            Seat::Moon(sector) => MOON_KEY + sector.index() as u8,
+        }
+    }
+
+    /// The seat a byte of a key names.
+    pub fn from_key(key: u8) -> Option<Seat> {
+        match key.checked_sub(MOON_KEY) {
+            Some(sector) => Sector::new(sector).map(Seat::Moon),
+            None => Sector::new(key).map(Seat::Sector),
+        }
     }
 
     pub fn wire(self) -> wire::Seat {
-        let Seat::Sector(sector) = self;
-        wire::Seat {
-            seat: Some(wire::seat::Seat::Sector(sector.index() as u32)),
-        }
+        let index = self.sector().index() as u32;
+        let seat = match self {
+            Seat::Sector(_) => wire::seat::Seat::Sector(index),
+            Seat::Moon(_) => wire::seat::Seat::Moon(index),
+        };
+        wire::Seat { seat: Some(seat) }
     }
 
     /// The seat a message names, when it names one this version knows.
     pub fn from_wire(seat: Option<&wire::Seat>) -> Option<Seat> {
+        let sector = |index: u32| Sector::new(u8::try_from(index).ok()?);
         match seat?.seat? {
-            wire::seat::Seat::Sector(index) => {
-                Sector::new(u8::try_from(index).ok()?).map(Seat::Sector)
-            }
+            wire::seat::Seat::Sector(index) => sector(index).map(Seat::Sector),
+            wire::seat::Seat::Moon(index) => sector(index).map(Seat::Moon),
         }
     }
+}
+
+/// A body as cells are counted on it: the grid they are cut by, and the
+/// radius that turns them into metres from its centre.
+pub fn sphere_of(generator: &Generator, body: Body) -> QuadSphere {
+    match body {
+        Body::Moon => generator.moon(),
+        Body::Planet => generator.sphere(),
+    }
+}
+
+/// How high the ground of a body stands along a direction from its centre,
+/// metres over its datum, in full detail.
+pub fn ground_m(generator: &Generator, body: Body, direction: [f64; 3]) -> f64 {
+    let sample = match body {
+        Body::Moon => generator.moon_sample_at(direction, 0.0),
+        Body::Planet => generator.sample_at(direction, 0.0),
+    };
+    sample.height_m
 }
 
 /// Why no volume is seated on a plot.
@@ -110,11 +175,11 @@ pub fn middle(sector: Sector, plot: [i32; 2]) -> SurfacePoint {
     SurfacePoint::new(sector, u, v)
 }
 
-/// How high the ground stands at a column, in blocks: the ground in full
-/// detail, as a body stands on it.
-pub fn ground(generator: &Generator, point: SurfacePoint) -> f64 {
-    let direction = generator.sphere().blocks().direction(point);
-    generator.sample_at(direction, 0.0).height_m / BLOCK_M
+/// How high the ground of a seat stands at a column of it, in blocks: the
+/// ground in full detail, as a body stands on it.
+pub fn ground(generator: &Generator, seat: Seat, point: SurfacePoint) -> f64 {
+    let direction = seat.sphere(generator).blocks().direction(point);
+    ground_m(generator, seat.body(), direction) / BLOCK_M
 }
 
 /// Where the volume of a plot starts and ends: the lowest cell it holds and
@@ -125,12 +190,13 @@ pub struct Stand {
     pub height: u32,
 }
 
-/// Where a volume over the plot a column is on starts and ends. The ground
-/// stays as it is, and the volume holds the blocks from the lowest of it to
-/// [`HEIGHT`] over the highest. A plot on the edge of its sector stays
-/// nature, and so does one whose column is under the sea.
-pub fn survey(generator: &Generator, point: SurfacePoint) -> Result<Stand, Unseated> {
-    let sphere = generator.sphere();
+/// Where a volume over the plot a column of a seat is on starts and ends.
+/// The ground stays as it is, and the volume holds the blocks from the
+/// lowest of it to [`HEIGHT`] over the highest. A plot on the edge of its
+/// sector stays nature, and so does one of the planet whose column is under
+/// the sea.
+pub fn survey(generator: &Generator, seat: Seat, point: SurfacePoint) -> Result<Stand, Unseated> {
+    let sphere = seat.sphere(generator);
     let plot = plot_of(point);
     // The corners of a sector are nature, and a build does not fold over a
     // seam: a plot on the edge of its sector stays as it is.
@@ -141,7 +207,7 @@ pub fn survey(generator: &Generator, point: SurfacePoint) -> Result<Stand, Unsea
     if !inside {
         return Err(Unseated::Seam);
     }
-    if ground(generator, point) < 0.0 {
+    if seat.body() == Body::Planet && ground(generator, seat, point) < 0.0 {
         return Err(Unseated::Sea);
     }
     let low = plot.map(|n| n << PLOT_BITS);
@@ -149,7 +215,7 @@ pub fn survey(generator: &Generator, point: SurfacePoint) -> Result<Stand, Unsea
     let heights = (0..=side).step_by(SURVEY as usize).flat_map(|dv| {
         (0..=side).step_by(SURVEY as usize).map(move |du| {
             let (u, v) = (f64::from(low[0] + du), f64::from(low[1] + dv));
-            ground(generator, SurfacePoint::new(point.sector, u, v))
+            ground(generator, seat, SurfacePoint::new(point.sector, u, v))
         })
     });
     let (lowest, highest) = heights.fold((f64::MAX, f64::MIN), |(lo, hi), blocks| {
@@ -163,9 +229,10 @@ pub fn survey(generator: &Generator, point: SurfacePoint) -> Result<Stand, Unsea
     })
 }
 
-/// How far a place of the world is from the volume over a plot, metres:
-/// from the line up the middle of it, foot to top. A body beside a tower is
-/// near it, however tall it stands.
+/// How far a place is from the volume over a plot of a sector of a body,
+/// metres: from the line up the middle of it, foot to top. A body beside a
+/// tower is near it, however tall it stands. The place is said from the
+/// centre of the body the volume is on, and `sphere` is that body.
 pub fn away_m(
     sphere: QuadSphere,
     sector: Sector,
@@ -238,8 +305,13 @@ mod tests {
             assert_eq!(gesture_from_wire(&gesture_wire(gesture)), Some(gesture));
         }
         assert_eq!(gesture_from_wire(&wire::Gesture::default()), None);
-        let seat = Seat::Sector(Sector::new(4).unwrap());
-        assert_eq!(Seat::from_wire(Some(&seat.wire())), Some(seat));
+        let sector = Sector::new(4).unwrap();
+        for seat in [Seat::Sector(sector), Seat::Moon(sector)] {
+            assert_eq!(Seat::from_wire(Some(&seat.wire())), Some(seat));
+            assert_eq!(Seat::from_key(seat.key()), Some(seat));
+            assert_eq!(Seat::on(seat.body(), sector), seat);
+        }
+        assert_eq!(Seat::from_key(6), None);
         assert_eq!(Seat::from_wire(None), None);
         let far = wire::Seat {
             seat: Some(wire::seat::Seat::Sector(99)),
@@ -253,17 +325,42 @@ mod tests {
         let side = f64::from(generator.sphere().blocks().side());
         let sector = Sector::new(4).unwrap();
         let point = SurfacePoint::new(sector, side * 0.41, side * 0.37);
-        let stand = survey(&generator, point).expect("dry land");
-        let feet = ground(&generator, point) as i32;
+        let seat = Seat::Sector(sector);
+        let stand = survey(&generator, seat, point).expect("dry land");
+        let feet = ground(&generator, seat, point) as i32;
         assert!(stand.low < feet);
         assert!(stand.low + stand.height as i32 >= feet + HEIGHT);
         // The same plot, wherever on it the body stands.
         let corner = SurfacePoint::new(sector, point.u + 20.0, point.v - 20.0);
-        if plot_of(corner) == plot_of(point) && ground(&generator, corner) >= 0.0 {
-            assert_eq!(survey(&generator, corner), Ok(stand));
+        if plot_of(corner) == plot_of(point) && ground(&generator, seat, corner) >= 0.0 {
+            assert_eq!(survey(&generator, seat, corner), Ok(stand));
         }
         assert_eq!(plot_of(middle(sector, plot_of(point))), plot_of(point));
         let edge = SurfacePoint::new(sector, 10.0, point.v);
-        assert_eq!(survey(&generator, edge), Err(Unseated::Seam));
+        assert_eq!(survey(&generator, seat, edge), Err(Unseated::Seam));
+    }
+
+    #[test]
+    fn a_volume_stands_on_the_moon_by_the_moon_s_own_ground_and_grid() {
+        let generator = Generator::new(Recipe::new(1)).unwrap();
+        let moon = generator.moon();
+        let side = f64::from(moon.blocks().side());
+        let seat = Seat::Moon(Sector::new(2).unwrap());
+        assert_eq!(seat.sphere(&generator), moon);
+        // A crater's floor is under the datum, and no sea fills it.
+        let low = (0..64).map(|i| {
+            let at = side * (0.2 + 0.01 * f64::from(i));
+            SurfacePoint::new(seat.sector(), at, side - at)
+        });
+        let low = low
+            .min_by(|a, b| ground(&generator, seat, *a).total_cmp(&ground(&generator, seat, *b)))
+            .unwrap();
+        let feet = ground(&generator, seat, low);
+        let stand = survey(&generator, seat, low).expect("the moon is all dry");
+        assert!(f64::from(stand.low) < feet);
+        assert!(f64::from(stand.low) + f64::from(stand.height) >= feet + f64::from(HEIGHT));
+        // The edge of a sector of the moon is where its own grid ends.
+        let edge = SurfacePoint::new(seat.sector(), side - 10.0, low.v);
+        assert_eq!(survey(&generator, seat, edge), Err(Unseated::Seam));
     }
 }

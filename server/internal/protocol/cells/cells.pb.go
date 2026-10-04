@@ -84,12 +84,14 @@ func (Kind) EnumDescriptor() ([]byte, []int) {
 }
 
 // What cells are seated on: the frame their addresses are counted in. A
-// sector of the planet today, and a union so a body that moves is the next.
+// sector of the planet, or a sector of the moon, counted on the moon's own
+// grid. A union, so a ship with a room aboard is the next.
 type Seat struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Seat:
 	//
 	//	*Seat_Sector
+	//	*Seat_Moon
 	Seat          isSeat_Seat `protobuf_oneof:"seat"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -141,6 +143,15 @@ func (x *Seat) GetSector() uint32 {
 	return 0
 }
 
+func (x *Seat) GetMoon() uint32 {
+	if x != nil {
+		if x, ok := x.Seat.(*Seat_Moon); ok {
+			return x.Moon
+		}
+	}
+	return 0
+}
+
 type isSeat_Seat interface {
 	isSeat_Seat()
 }
@@ -149,7 +160,13 @@ type Seat_Sector struct {
 	Sector uint32 `protobuf:"varint,1,opt,name=sector,proto3,oneof"`
 }
 
+type Seat_Moon struct {
+	Moon uint32 `protobuf:"varint,2,opt,name=moon,proto3,oneof"`
+}
+
 func (*Seat_Sector) isSeat_Seat() {}
+
+func (*Seat_Moon) isSeat_Seat() {}
 
 // One gesture: a kind over a box of cells, both corners in it.
 type Gesture struct {
@@ -1134,9 +1151,10 @@ var File_planet_cells_v1_cells_proto protoreflect.FileDescriptor
 
 const file_planet_cells_v1_cells_proto_rawDesc = "" +
 	"\n" +
-	"\x1bplanet/cells/v1/cells.proto\x12\x0fplanet.cells.v1\"(\n" +
+	"\x1bplanet/cells/v1/cells.proto\x12\x0fplanet.cells.v1\">\n" +
 	"\x04Seat\x12\x18\n" +
-	"\x06sector\x18\x01 \x01(\rH\x00R\x06sectorB\x06\n" +
+	"\x06sector\x18\x01 \x01(\rH\x00R\x06sector\x12\x14\n" +
+	"\x04moon\x18\x02 \x01(\rH\x00R\x04moonB\x06\n" +
 	"\x04seat\"\xaa\x01\n" +
 	"\aGesture\x12)\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x15.planet.cells.v1.KindR\x04kind\x12\x0e\n" +
@@ -1280,6 +1298,7 @@ func file_planet_cells_v1_cells_proto_init() {
 	}
 	file_planet_cells_v1_cells_proto_msgTypes[0].OneofWrappers = []any{
 		(*Seat_Sector)(nil),
+		(*Seat_Moon)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

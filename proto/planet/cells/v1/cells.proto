@@ -11,10 +11,12 @@ package planet.cells.v1;
 option go_package = "github.com/sulram/planet/server/internal/protocol/cells;cells";
 
 // What cells are seated on: the frame their addresses are counted in. A
-// sector of the planet today, and a union so a body that moves is the next.
+// sector of the planet, or a sector of the moon, counted on the moon's own
+// grid. A union, so a ship with a room aboard is the next.
 message Seat {
   oneof seat {
     uint32 sector = 1;
+    uint32 moon = 2;
   }
 }
 

@@ -95,8 +95,8 @@ compositor. What the world *is* lives in WORLD.md.
 - Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world.
 - Bodies: the planet and the moon share one terrain quadtree (`Body`). Patches
   are built around their body's centre; the renderer adds where the body is
-  this frame. The moon orbits on rails, 160 km out, 8 km radius, craters from
-  generator v2, no sea. Craters are searched in a cell grid per sample; the
+  this frame. The moon orbits on rails, twenty of its radii out, 5.2 km of
+  radius (`2^14` blocks a sector side), craters from generator v2, no sea. Craters are searched in a cell grid per sample; the
   few basins are listed once per `Generator`.
 - Sunlight at a point is what neither sphere shadows: night and eclipses.
 - The compositor (`render::compose`): the world is drawn once into an HDR

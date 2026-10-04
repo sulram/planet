@@ -1,6 +1,6 @@
 /**
  * Building's own part of the seam: the commands `build.take`, `build.paint`,
- * `build.finish`, `build.edge`, `build.platform`, `build.lay`, `build.close`,
+ * `build.finish`, `build.edge`, `build.platform`, `build.lay`, `build.open`, `build.close`,
  * `build.undo`, `build.redo` and `build.state`, and the events `build.hand`,
  * `build.over`, `build.stroke`, `build.refused` and `build.history`, as the
  * plugin's crate writes them. Pure: no WASM, no DOM.
@@ -26,8 +26,8 @@ export type Base = 'deck' | 'solid' | 'floating';
 export const bases = ['deck', 'solid', 'floating'] as const satisfies readonly Base[];
 
 /** Why a tool was not handed over, no platform laid or no volume deleted: where the body stands, or who it is. */
-export type Refusal = 'moon' | 'sea' | 'seam' | 'high' | 'level' | 'field' | 'empty';
-const refusals = ['moon', 'sea', 'seam', 'high', 'level', 'field', 'empty'] as const satisfies readonly Refusal[];
+export type Refusal = 'sea' | 'seam' | 'high' | 'level' | 'field' | 'empty';
+const refusals = ['sea', 'seam', 'high', 'level', 'field', 'empty'] as const satisfies readonly Refusal[];
 
 /** `build.hand`: the tool in hand, null when not building, the colour it lays, in which finish and with which edge, and the side of the next platform. */
 export interface Hand {

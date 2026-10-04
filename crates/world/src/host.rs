@@ -330,7 +330,7 @@ mod tests {
         let measure: MeasureOf = |_| {
             Some(Measure {
                 sphere: QuadSphere::new(16)?,
-                moon_radius_m: 8000.0,
+                moon: QuadSphere::new(14)?,
             })
         };
         Host::new(Vec::new(), vec![echo], measure, |_| None)
