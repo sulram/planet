@@ -32,9 +32,12 @@ confirmed. What of it is built: BRIEF.md.
 - The Go binary is static, and the engine and the page are the same on every
   architecture: the three builds run on the building machine and only the
   last stage differs.
-- What publishes a version, and whether the image carries the baked fields or
-  finds them outside it, waits on where fields are hosted (OPEN.md). Built on
-  a machine that baked them, the image has them.
+- The release workflow publishes it: when `dev` or `main` releases a version,
+  the same run builds the image for amd64 and arm64 and pushes it under the
+  version's number.
+- The founding screen offers the grounds a version carries. An image built in
+  CI carries the generated one; built on a machine that baked a field, it
+  carries that field too, until fields have a home of their own (OPEN.md).
 
 ## What mundos sets
 

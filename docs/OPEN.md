@@ -18,7 +18,7 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **Where fields are hosted.** 25 MB each, gitignored, baked by `bun run field` from a public source. Until they have a home the image is built on the machine that baked them, and CI cannot publish a version with Earth in it. A release asset, a bucket, or the bake run in CI | an image published by CI; a second field | DEPLOY.md · DECISIONS 44 |
+| **Where fields are hosted.** 25 MB each, gitignored, baked by `bun run field` from a public source. A field is immutable and a recipe names it by content id, so it can live outside the image: a public folder on a CDN with an index, read by the founding screen and fetched by the browser. Until fields have that home, an image built in CI carries the generated ground alone | Earth in a published version; a second field | DEPLOY.md · DECISIONS 44, 72 |
 | **What a planet says about itself.** mundos's catalog and door show a title, a description and an image that a world's builders set inside it. A planet has nowhere to set them yet, and answers with its name alone | a planet in the catalog with a face | mundos `docs/BRIEFING.md` § Domain |
 
 ## Blocks plugins
