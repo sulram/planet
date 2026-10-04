@@ -116,7 +116,7 @@ fn press(client: &mut Client, code: &str, chord: Chord) {
 }
 
 const TAKE_CREATE: &str = r#"{"type":"build.take","tool":"create"}"#;
-const TAKE_PLATFORM: &str = r#"{"type":"build.take","tool":"platform"}"#;
+const TAKE_VOLUME: &str = r#"{"type":"build.take","tool":"volume"}"#;
 const LAY: &str = r#"{"type":"build.lay"}"#;
 
 #[test]
@@ -352,9 +352,9 @@ fn a_tool_in_hand_shows_where_cells_are() {
     live(&mut client);
     assert!(client.cells().guides().is_empty());
 
-    // The platform tool shows the slab one would lay, in the colour in
+    // The volume tool shows the slab one would lay, in the colour in
     // hand, as wide as the side picked. Its pointer makes no stroke.
-    client.command_json(TAKE_PLATFORM);
+    client.command_json(TAKE_VOLUME);
     live(&mut client);
     assert!(client.pointing());
     assert_eq!(client.cells().ghost(), None);
@@ -391,7 +391,7 @@ fn a_tool_in_hand_shows_where_cells_are() {
     assert!(said(&mut client).contains(&("over".to_owned(), over)));
 
     // A hole in the slab is a cell a platform would make: the slab shows,
-    // with the platform tool and with no other.
+    // with the volume tool and with no other.
     let hole = voxel::Gesture::Delete {
         span: voxel::Span::cell(shown.min),
     };
@@ -471,13 +471,13 @@ fn a_volume_is_closed_with_all_built_in_it_and_stands_again() {
 fn what_is_laid_is_a_colour_in_a_finish_with_an_edge() {
     let mut client = rehearsed();
     let feet = client.host("build").feet();
-    // Building starts with the platform tool: a stroke starts on what is
+    // Building starts with the volume tool: a stroke starts on what is
     // built. The fourth key takes it too.
     press(&mut client, "KeyB", Chord::default());
-    assert_eq!(said(&mut client).last().unwrap().1["tool"], "platform");
+    assert_eq!(said(&mut client).last().unwrap().1["tool"], "volume");
     press(&mut client, "Digit1", Chord::default());
     press(&mut client, "Digit4", Chord::default());
-    assert_eq!(said(&mut client).last().unwrap().1["tool"], "platform");
+    assert_eq!(said(&mut client).last().unwrap().1["tool"], "volume");
 
     // A platform of glass with a white edge, in the colour in hand.
     client.command_json(r#"{"type":"build.paint","paint":11}"#);

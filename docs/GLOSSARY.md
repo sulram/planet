@@ -74,7 +74,7 @@ this file in the same change.
 | Plot | One square of the grid volumes are cut by: 64 by 64 columns of a sector, named by their address less six bits. A volume stands over it. |
 | Platform | What a build stands on: a slab of cells one thick, 8 to 64 a side as picked, cut by the address, its top the higher of the highest ground under it and the feet of who asks, on a base. |
 | Base | What carries a platform down to the ground, picked as it is laid: a deck, pillars at the corners of every bay and open under the slab; solid, every column filled; floating, nothing. |
-| Tool | Create, delete, paint or platform, in hand while building. |
+| Tool | Create, delete, paint or volume, in hand while building. The volume tool opens and deletes a volume and lays its platform. |
 | Stroke | One click and drag of a tool, from what is built or from the ground of a volume: a slab on the side it started on, or with Alt a wall standing up from it. Lands as one gesture. |
 | Ghost | The see-through preview of exactly the cells a stroke would change. |
 | Brush | A tool that shapes cells inside a volume: dig, add, smooth, flatten. |

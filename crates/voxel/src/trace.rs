@@ -37,6 +37,21 @@ impl Volume {
 /// starts in.
 pub(crate) fn trace(cells: &impl Cells, path: &[[f64; 3]]) -> Option<Hit> {
     let mut in_air = path.first().is_some_and(|&p| !cells.solid(cell_of(p)));
+    walk(path, |_, cell| {
+        let solid = cells.solid(cell);
+        let met = solid && in_air;
+        in_air |= !solid;
+        met
+    })
+}
+
+/// Walks a path cell by cell and stops at the first step `ends` says ends
+/// it, from one cell into the next: the cell stepped into, and the side it
+/// was entered through.
+pub(crate) fn walk(
+    path: &[[f64; 3]],
+    mut ends: impl FnMut([i32; 3], [i32; 3]) -> bool,
+) -> Option<Hit> {
     for piece in path.windows(2) {
         let (from, to) = (piece[0], piece[1]);
         let mut cell = cell_of(from);
@@ -68,16 +83,15 @@ pub(crate) fn trace(cells: &impl Cells, path: &[[f64; 3]]) -> Option<Hit> {
             if next[axis] > 1.0 {
                 break;
             }
+            let from = cell;
             cell[axis] += step[axis];
             next[axis] += apart[axis];
-            let solid = cells.solid(cell);
-            if solid && in_air {
+            if ends(from, cell) {
                 return Some(Hit {
                     cell,
                     face: Face::new(axis, step[axis] < 0),
                 });
             }
-            in_air |= !solid;
         }
     }
     None

@@ -6,9 +6,9 @@
  * plugin's crate writes them. Pure: no WASM, no DOM.
  */
 
-/** What a hand does while building: three make a stroke, one drag each, and the fourth shows the platform that would be laid. */
-export type Tool = 'create' | 'delete' | 'paint' | 'platform';
-export const tools = ['create', 'delete', 'paint', 'platform'] as const satisfies readonly Tool[];
+/** What a hand does while building: three make a stroke, one drag each, and the fourth works with the volume where the body stands. */
+export type Tool = 'create' | 'delete' | 'paint' | 'volume';
+export const tools = ['create', 'delete', 'paint', 'volume'] as const satisfies readonly Tool[];
 
 /** How what is laid takes the light: lit, see-through, or shining and lighting what is near. */
 export type Finish = 'matte' | 'glass' | 'light';

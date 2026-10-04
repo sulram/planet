@@ -4,7 +4,7 @@
 //! lands as one gesture, and its ghost shows exactly the cells it would
 //! change while it is drawn.
 
-use client::{Aim, Cells, Eye, Host, Seat, Turn};
+use client::{Aim, Cells, Eye, Host, Met, Seat, Turn};
 use glam::DVec3;
 use voxel::{Gesture, Hit, Span};
 
@@ -19,14 +19,14 @@ pub(crate) enum Mark {
 }
 
 impl Tool {
-    /// What a stroke of the tool does. None for the platform tool, which
+    /// What a stroke of the tool does. None for the volume tool, which
     /// makes no stroke.
     pub(crate) fn mark(self) -> Option<Mark> {
         match self {
             Tool::Create => Some(Mark::Create),
             Tool::Delete => Some(Mark::Delete),
             Tool::Paint => Some(Mark::Paint),
-            Tool::Platform => None,
+            Tool::Volume => None,
         }
     }
 }
@@ -105,8 +105,8 @@ impl Build {
         let turning = turn.held(key::TURN);
         let turned = turning && !self.turning;
         self.turning = turning;
-        // A platform is asked for, never drawn: with its tool in hand the
-        // pointer makes no stroke.
+        // A volume and a platform are asked for, never drawn: with the volume
+        // tool in hand the pointer makes no stroke.
         let Some(mark) = self.tool.and_then(Tool::mark) else {
             self.using = turn.using;
             self.aim = None;
@@ -120,11 +120,11 @@ impl Build {
         }
         let (from, toward) = eye.sight();
         let sight = host.sight(from, toward);
-        // The ground of a volume is where a new cell stands, and nothing to
-        // take away or repaint.
+        // The ground and the sides of a volume are where a new cell stands,
+        // and nothing to take away or repaint.
         self.aim = sight
             .aim()
-            .filter(|aim| !aim.ground || mark == Mark::Create);
+            .filter(|aim| aim.met == Met::Cell || mark == Mark::Create);
 
         let pressed = turn.using && !self.using;
         let released = !turn.using && self.using;

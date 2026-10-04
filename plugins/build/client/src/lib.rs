@@ -4,7 +4,7 @@
 //! that turns a stroke and the chord that takes one back. It builds on the
 //! planet and on the moon alike: wherever the body stands is a seat. What it lays is a paint: a colour in hand, in a finish,
 //! with an edge or none. While it builds it shows where cells are: the
-//! volume the body is in, and with the platform tool the slab one would
+//! volume the body is in, and with the volume tool the slab one would
 //! lay. The cells are the core's: this half reads them and asks for
 //! gestures through its host, and holds none.
 //!
@@ -50,17 +50,18 @@ use stroke::Stroke;
 pub use build_world::{NAME, PLATFORMS, VERSION};
 
 /// What a hand does while building. Three make a stroke in a volume: fill
-/// air with the paint, from what is built or from the ground, empty cells,
-/// or repaint what is solid, and one drag is one stroke, however many cells
-/// it covers. The fourth shows the slab a platform would lay where the body
-/// stands, until a base is asked for.
+/// air with the paint, from what is built, its ground or its sides, empty
+/// cells, or repaint what is solid, and one drag is one stroke, however many
+/// cells it covers. The fourth works with the volume where the body stands:
+/// it opens it, closes it, or shows the slab a platform would lay there
+/// until a base is asked for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tool {
     Create,
     Delete,
     Paint,
-    Platform,
+    Volume,
 }
 
 /// How what is laid takes the light: lit by what shines on it, see-through,
@@ -259,7 +260,7 @@ mod key {
     pub const CREATE: &str = "create";
     pub const DELETE: &str = "delete";
     pub const PAINT: &str = "paint";
-    pub const PLATFORM: &str = "platform";
+    pub const VOLUME: &str = "volume";
     /// Each time it goes down, the stroke turns to the next of the three
     /// layers through its start: on its side, then standing one way, then
     /// the other.
@@ -386,8 +387,8 @@ struct Laying {
 /// The tool in hand and what it is drawing.
 pub struct Build {
     tool: Option<Tool>,
-    /// The tool taken last, which starting to build again takes. A platform
-    /// the first time: a stroke starts in a volume, and it opens one.
+    /// The tool taken last, which starting to build again takes. The volume
+    /// tool the first time: a stroke starts in a volume, and it opens one.
     last_tool: Tool,
     /// The colour in hand, its finish and its edge: the paint a stroke lays.
     paint: u8,
@@ -406,7 +407,7 @@ pub struct Build {
     /// The platform asked for whose ground is still being read.
     laying: Option<Laying>,
     /// The ground under the square the body is over, read while the
-    /// platform tool is in hand: what the slab of the next one is shown by.
+    /// volume tool is in hand: what the slab of the next one is shown by.
     survey: Option<Survey>,
     /// Whether laying a slab would make a cell, as last worked out: the
     /// slab, and the count of the cells' changes it was read at.
@@ -424,7 +425,7 @@ impl Default for Build {
     fn default() -> Self {
         Build {
             tool: None,
-            last_tool: Tool::Platform,
+            last_tool: Tool::Volume,
             paint: 0,
             finish: Finish::Matte,
             edge: Edge::None,
@@ -592,7 +593,7 @@ impl Build {
     }
 
     /// Shows where cells are while a tool is in hand: the volume the body is
-    /// in, as room to build in, and with the platform tool the slab one
+    /// in, as room to build in, and with the volume tool the slab one
     /// would lay where the body stands, in the colour in hand, wherever
     /// laying it would make a cell. The ground under the slab is read `rows`
     /// rows a turn, and the slab shows once all of it is.
@@ -611,7 +612,7 @@ impl Build {
                 paint: None,
             });
         let slab = match self.tool {
-            Some(Tool::Platform) => self.slab(feet, host, rows),
+            Some(Tool::Volume) => self.slab(feet, host, rows),
             _ => {
                 self.survey = None;
                 None
@@ -818,7 +819,7 @@ impl Plugin for Build {
             KeyAsk::pressed(key::CREATE, "Digit1"),
             KeyAsk::pressed(key::DELETE, "Digit2"),
             KeyAsk::pressed(key::PAINT, "Digit3"),
-            KeyAsk::pressed(key::PLATFORM, "Digit4"),
+            KeyAsk::pressed(key::VOLUME, "Digit4"),
             KeyAsk::pressed(key::CANCEL, "Escape"),
             KeyAsk::held(key::TURN, "AltLeft"),
             KeyAsk::held(key::TURN, "AltRight"),
@@ -840,7 +841,7 @@ impl Plugin for Build {
             key::CREATE => self.take(Some(Tool::Create), host),
             key::DELETE => self.take(Some(Tool::Delete), host),
             key::PAINT => self.take(Some(Tool::Paint), host),
-            key::PLATFORM => self.take(Some(Tool::Platform), host),
+            key::VOLUME => self.take(Some(Tool::Volume), host),
             // A stroke half drawn goes first, then the tool itself.
             key::CANCEL => {
                 if !self.cancel() && self.tool.is_some() {

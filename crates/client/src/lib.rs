@@ -30,7 +30,7 @@ use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
-pub use cells::{Aim, Cells, Guide, PALETTE, Refusal, Seat, Sight};
+pub use cells::{Aim, Cells, Guide, Met, PALETTE, Refusal, Seat, Sight};
 pub use controller::{Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};

@@ -1,7 +1,7 @@
 //! The tool and the platform over a client's cells: the plugin held in hand
 //! and given its turns one by one, with an eye placed where a test wants it.
 
-use client::{Client, Eye, Level, Recipe};
+use client::{Client, Eye, Level, Met, Recipe};
 use glam::{DMat3, DQuat, DVec3};
 use topology::{QuadSphere, Sector};
 use voxel::{Face, Quad, Span};
@@ -894,7 +894,7 @@ fn a_volume_opens_with_nothing_in_it_and_a_stroke_starts_on_its_ground() {
     take(&mut build, &mut client, Some(Tool::Create));
     update(&mut build, &mut client, &eye, false, false);
     let aim = build.aim.expect("the ground of the volume");
-    assert!(aim.ground);
+    assert_eq!(aim.met, Met::Ground);
     let first = aim.hit.before();
     assert_eq!(first, [x, y, under]);
     assert!(
@@ -907,8 +907,51 @@ fn a_volume_opens_with_nothing_in_it_and_a_stroke_starts_on_its_ground() {
     // The next stroke starts on what was built, as any does.
     update(&mut build, &mut client, &eye, false, false);
     let aim = build.aim.expect("the cell");
-    assert_eq!((aim.ground, aim.hit.cell), (false, first));
+    assert_eq!((aim.met, aim.hit.cell), (Met::Cell, first));
     // And the first is taken back like any other.
     build.undo(&mut client.host(NAME));
     assert!(client.cells().cell(seat, first).is_air());
+}
+
+#[test]
+fn a_stroke_starts_on_a_side_of_the_volume_it_is_drawn_in() {
+    let (mut client, point) = world();
+    let mut build = Build::default();
+    let seat = Seat::Sector(point.sector);
+    client.host(NAME).open(seat, point).unwrap();
+    let room = client.cells().bounds_over(seat, point).unwrap();
+    // From the middle of the plot, over the highest of its ground, looking
+    // level at the side where it ends along `u`.
+    // A volume holds 1024 cells over the highest ground of its plot.
+    let highest = room.max[2] + 1 - 1024;
+    let (x, y, z) = (room.max[0], (room.min[1] + room.max[1]) / 2, highest + 6);
+    let middle = |host: &Host<'_>, [a, b, c]: [i32; 3], d: [i32; 3]| {
+        (host.corner(seat, [a, b, c]) + host.corner(seat, d)) / 2.0
+    };
+    let eye = {
+        let host = client.host(NAME);
+        let from = middle(
+            &host,
+            [room.min[0] + 32, y, z],
+            [room.min[0] + 33, y + 1, z + 1],
+        );
+        eye_at(from, middle(&host, [x + 1, y, z], [x + 1, y + 1, z + 1]))
+    };
+    // To take away, a side is nothing to aim at.
+    take(&mut build, &mut client, Some(Tool::Delete));
+    update(&mut build, &mut client, &eye, false, false);
+    assert_eq!(build.aim, None);
+    // To create, it is where the first cell stands, against it.
+    take(&mut build, &mut client, Some(Tool::Create));
+    update(&mut build, &mut client, &eye, false, false);
+    let aim = build.aim.expect("the side of the volume");
+    assert_eq!(aim.met, Met::Side);
+    assert_eq!(aim.hit.before(), [x, y, z]);
+    update(&mut build, &mut client, &eye, true, false);
+    update(&mut build, &mut client, &eye, false, false);
+    assert!(!client.cells().cell(seat, [x, y, z]).is_air());
+    // What stands nearer than the side is met first.
+    update(&mut build, &mut client, &eye, false, false);
+    let aim = build.aim.expect("the cell");
+    assert_eq!((aim.met, aim.hit.cell), (Met::Cell, [x, y, z]));
 }

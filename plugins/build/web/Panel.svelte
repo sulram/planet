@@ -8,11 +8,12 @@
 	// while a tool is in hand. It shows what its layer says is picked and asks
 	// for another. What is always at hand sits in its head: take back, put
 	// back, close. Under the tools, each with the key that takes it, comes
-	// what the tool in hand works with: the platform's side, its bases and
-	// the volume under the body, to open with nothing in it or to delete, or
-	// the material a stroke lays. The palette shows
-	// every colour in the finish and with the edge picked, as it will be
-	// laid, and the foot says how many cells the stroke being drawn covers.
+	// what the tool in hand works with. The volume tool: the size of the
+	// platform, the volume under the body, to open with nothing in it or to
+	// delete, and the bases a platform is laid on. Then the material a stroke
+	// or a platform lays: the palette shows every colour in the finish and
+	// with the edge picked, as it will be laid. The foot says how many cells
+	// the stroke being drawn covers.
 	interface Props {
 		/** The tool in hand, null when not building. */
 		tool: Tool | null;
@@ -77,8 +78,8 @@
 	const platformOptions = platforms.map((side) => ({ value: String(side), label: String(side) }));
 
 	// Building again takes the tool put down last, as B does in the engine:
-	// the platform tool the first time.
-	let last = $state<Tool>('platform');
+	// the volume tool the first time.
+	let last = $state<Tool>('volume');
 	$effect(() => {
 		if (tool) last = tool;
 	});
@@ -96,13 +97,23 @@
 		<div class="tools">
 			<Segmented options={toolOptions} value={tool} label={t('tool')} onselect={(value) => onbuild(value)} />
 		</div>
-		{#if tool === 'platform'}
+		{#if tool === 'volume'}
+			<section>
+				<h3>{t('size')}</h3>
+				<Segmented options={platformOptions} value={String(platform)} label={t('size')} onselect={(value) => onplatform(Number(value))} />
+			</section>
+			<section>
+				<h3>{t('volume')}</h3>
+				<div class="volume">
+					{#if volume}
+						<Button variant="danger" type="button" onclick={onclosevolume}>{t('close')}</Button>
+					{:else}
+						<Button variant="ghost" type="button" onclick={onopenvolume}>{t('open')}</Button>
+					{/if}
+				</div>
+			</section>
 			<section>
 				<h3>{t('platform')}</h3>
-				<div class="row">
-					<span>{t('platform.side')}</span>
-					<Segmented options={platformOptions} value={String(platform)} label={t('platform.side')} onselect={(value) => onplatform(Number(value))} />
-				</div>
 				<div class="lay" role="group" aria-label={t('platform.lay')}>
 					{#each bases as base (base)}
 						<Button variant="ghost" type="button" onclick={() => onlay(base)}>{t(`lay.${base}`)}</Button>
@@ -138,25 +149,13 @@
 				</div>
 			</section>
 		{/if}
-		{#if tool === 'platform'}
-			<section>
-				<h3>{t('volume')}</h3>
-				<div class="volume">
-					{#if volume}
-						<Button variant="danger" type="button" onclick={onclosevolume}>{t('close')}</Button>
-					{:else}
-						<Button variant="ghost" type="button" onclick={onopenvolume}>{t('open')}</Button>
-					{/if}
-				</div>
-			</section>
-		{/if}
 		{#if stroke}
 			<p class="foot count">
 				{t('stroke.size', { x: stroke[0], y: stroke[1], z: stroke[2] })}
 				<span>{t('stroke.cells', { n: stroke[0] * stroke[1] * stroke[2] })}</span>
 			</p>
 		{:else}
-			<p class="foot">{t(tool === 'platform' ? 'help.platform' : 'help.stroke')}</p>
+			<p class="foot">{t(tool === 'volume' ? 'help.volume' : 'help.stroke')}</p>
 		{/if}
 	</Panel>
 {:else}

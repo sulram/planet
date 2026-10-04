@@ -6,7 +6,7 @@ describe('building at the seam', () => {
 		const look = { finish: 'glass', edge: 'white' };
 		expect(parseHand({ type: 'build.hand', tool: 'paint', paint: 4, platform: 16, ...look })).toEqual({ tool: 'paint', paint: 4, platform: 16, ...look });
 		expect(parseHand({ tool: null, paint: 0, platform: 8, ...look })).toEqual({ tool: null, paint: 0, platform: 8, ...look });
-		expect(parseHand({ tool: 'platform', paint: 0, platform: 8, ...look })?.tool).toBe('platform');
+		expect(parseHand({ tool: 'volume', paint: 0, platform: 8, ...look })?.tool).toBe('volume');
 	});
 
 	test('refuses what is no hand', () => {

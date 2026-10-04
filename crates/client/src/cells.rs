@@ -245,6 +245,14 @@ impl Seated {
         (far, path.collect())
     }
 
+    /// Where the middle of the side a line came in through is.
+    fn side(&self, hit: Hit) -> DVec3 {
+        let axis = hit.face.axis;
+        let mut middle = hit.cell.map(|n| f64::from(n) + 0.5);
+        middle[axis] = f64::from(hit.cell[axis] + i32::from(hit.face.positive));
+        self.at(middle)
+    }
+
     /// The cell that holds the ground under a place, when the place is over
     /// this seat's sector and a volume holds that cell.
     fn ground_cell(&self, generator: &Generator, p: DVec3) -> Option<[i32; 3]> {
@@ -264,16 +272,29 @@ impl Seated {
     }
 }
 
-/// What a line of sight meets, in the cells of a seat: a side of a cell,
-/// or the ground of a volume, where the first cell of a build stands. On the
-/// ground the cell hit is the one under the cell that holds the ground
-/// there, its side up, so what is made before it stands in the ground.
+/// What a line of sight meets, in the cells of a seat, and a side of a cell
+/// there: one that is built, or the edge of the room there is to build in,
+/// where the first cell of a build stands against it.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Aim {
     pub seat: Seat,
+    /// The cell met, and the side the line came in through. On an edge of
+    /// the room the cell is the one past it, so the cell before the side is
+    /// the one a build starts in.
     pub hit: Hit,
-    /// Whether it is the ground that was met, and no cell.
-    pub ground: bool,
+    pub met: Met,
+}
+
+/// What a line of sight meets in the cells.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Met {
+    /// A cell that is built.
+    Cell,
+    /// The ground of a volume: the cell before the side met holds it.
+    Ground,
+    /// A side of the room there is to build in, seen from inside it: where
+    /// the line leaves every volume of its seat.
+    Side,
 }
 
 /// A line of sight bent into the cells of every seat built on, and what it
@@ -813,23 +834,28 @@ impl Cells {
                 .map(|(_, (far_m, _))| *far_m)
                 .reduce(f64::max)?;
             let from = from - self.centre(body);
-            let cell = sites
+            // A cell built, and else where the line leaves the room there is
+            // to build in, whichever comes first, over every seat.
+            let met = sites
                 .filter_map(|(site, (_, path))| {
-                    let hit = site.volumes.trace(path)?;
+                    let (hit, met) = match site.volumes.trace(path) {
+                        Some(hit) => (hit, Met::Cell),
+                        None => (site.volumes.leaves(path)?, Met::Side),
+                    };
                     let aim = Aim {
                         seat: site.seat,
                         hit,
-                        ground: false,
+                        met,
                     };
-                    Some(((site.corner(hit.cell) - from).dot(toward), aim))
+                    Some(((site.side(hit) - from).dot(toward), aim))
                 })
                 .min_by(|a, b| a.0.total_cmp(&b.0));
-            // Up to the near side of the cell, which may itself stand in
-            // the ground.
-            let clear_m = cell.map_or(far_m, |(away_m, _)| away_m - BLOCK_M);
+            // The ground comes first where it is nearer than the side met,
+            // which may itself stand in the ground.
+            let clear_m = met.map_or(far_m, |(away_m, _)| away_m - BLOCK_M / 2.0);
             match self.ground_met(generator, body, from, toward, clear_m) {
                 Some(ground) => ground,
-                None => cell,
+                None => met,
             }
         });
         let aim = met.min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, aim)| aim);
@@ -863,7 +889,10 @@ impl Cells {
         };
         let steps = (clear_m / GROUND_STEP_M).floor().max(0.0) as usize;
         let step = (1..=steps).find(|&i| under(i as f64 * GROUND_STEP_M))?;
-        let (mut over_m, mut under_m) = ((step - 1) as f64, step as f64);
+        let (mut over_m, mut under_m) = (
+            (step - 1) as f64 * GROUND_STEP_M,
+            step as f64 * GROUND_STEP_M,
+        );
         for _ in 0..GROUND_HALVINGS {
             let middle_m = (over_m + under_m) / 2.0;
             match under(middle_m) {
@@ -882,7 +911,7 @@ impl Cells {
             Some(Aim {
                 seat: site.seat,
                 hit,
-                ground: true,
+                met: Met::Ground,
             })
         });
         Some(aim.map(|aim| (under_m, aim)).next())
@@ -2075,7 +2104,7 @@ mod tests {
             .sight(&generator, over, down)
             .aim()
             .expect("the ground");
-        assert!(aim.ground);
+        assert_eq!(aim.met, Met::Ground);
         assert_eq!(aim.hit.before(), [x, y, under]);
         assert!(cells.cell(aim.seat, aim.hit.before()).is_air());
         // Where no volume stands the ground is nothing to aim at, and hides
@@ -2090,7 +2119,7 @@ mod tests {
         let sight = cells.sight(&generator, over, -floor.normalize());
         let aim = sight.aim().expect("the floor");
         assert_eq!((aim.seat, aim.hit.cell), (point.sector.into(), seen));
-        assert!(!aim.ground);
+        assert_eq!(aim.met, Met::Cell);
         // The address says where a corner of a cell is, as its sides are drawn.
         let corner = cells.corner(&generator, aim.seat, seen);
         assert_eq!(corner, cells.sites[0].corner(seen));
