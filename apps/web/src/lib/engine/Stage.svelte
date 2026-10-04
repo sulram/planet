@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Badge, Button, Checkbox, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Button, Checkbox, Icon, Input, LangSwitch, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
@@ -258,6 +258,7 @@
 		{#snippet aside()}
 			<span class="corner">
 				{#if onsignin}<Button variant="ghost" onclick={onsignin}>{t('door.signIn')}</Button>{/if}
+				<LangSwitch />
 				<ThemeToggle />
 			</span>
 		{/snippet}

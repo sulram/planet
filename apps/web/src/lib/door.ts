@@ -32,14 +32,23 @@ export function arrival(): Arrival | null {
 	return { identity: decodeURIComponent(word[1]), address: `/${before}` };
 }
 
+/** The cookie that keeps the language the door said last. */
+const SAID = 'lang_door';
+
 /**
- * The language mundos says the person reads, on the way back from the door:
- * a code mundos and this page share, or null. It rides the query, where a
- * world that does not read it loses nothing, and needs no signature: it is a
- * preference, never who someone is.
+ * The language mundos says the person reads, on the way back from the door,
+ * when it is a new one: a code mundos and this page share. Said again as it
+ * was, it is null, and a language picked here since stands; picked anew in
+ * mundos, it wins. It rides the query, where a world that does not read it
+ * loses nothing, and needs no signature: it is a preference, never who
+ * someone is.
  */
-export function language(): string | null {
-	return new URLSearchParams(location.search).get('lang');
+export function newLanguage(): string | null {
+	const said = new URLSearchParams(location.search).get('lang');
+	if (!said) return null;
+	const before = new RegExp(`(?:^|; )${SAID}=([^;]+)`).exec(document.cookie)?.[1];
+	document.cookie = `${SAID}=${encodeURIComponent(said)}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+	return said === before ? null : said;
 }
 
 /**

@@ -25,8 +25,8 @@ not yet confirmed.
 - Who is who is mundos's: accounts live there, and the world checks a
   signature and keeps a level.
 - Every load passes through mundos's door: a page with no `#identity=` goes to
-  `<mundos>/enter?host=<host>`, back with a token or `guest`, and `?lang=` the
-  language read there, kept as the page's. The pose is kept across the hop.
+  `<mundos>/enter?host=<host>`, back with a token or `guest`, and `?lang=`: the
+  newest pick, there or here, is the page's. The pose is kept across the hop.
 - The token is a JWT signed with Ed25519 (`EdDSA`): `iss` `mundos`, `aud` the
   world's name, `sub` the account's id, `name`, `level`, `exp` a minute on,
   read with 30 s of leeway. The server checks it with `MUNDOS_PUBLIC_KEY`.
