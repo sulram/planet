@@ -29,11 +29,13 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    opens the socket, and `Welcome` says the level the client offers its tools
    by. The page is static files the Go server sends. Accounts, the backoffice,
    PocketBase and planet's own deploy are out of the tree.
-3. [ ] **The image**: the Dockerfile, the `image` script, the `HEALTHCHECK`,
-   `planet copy`.
-4. [ ] **mundos learns the type**, in its own repository. What is Hyperfy's
-   there becomes one adapter for each type: the image's repository, the shape
-   of a version, the container's spec, the copy into a next generation.
+3. [ ] **The image**. Done: the `Dockerfile`, its `HEALTHCHECK`, and
+   `planet copy`. Left: what publishes a version, which waits on where fields
+   are hosted (OPEN.md).
+4. [x] **mundos learns the type**, in its own repository (branch
+   `feat/planet-type` there). What was Hyperfy's became one adapter for each
+   type: the image's repository, the shape of a version, the container's
+   spec, the copy into a next generation.
 5. [ ] **Walk it.** On a local mundos: create a planet, found it as an admin,
    enter as anonymous and as a builder, upgrade it into a next generation and
    promote it. Then on the box.

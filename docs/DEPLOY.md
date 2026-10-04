@@ -25,26 +25,29 @@ confirmed. What of it is built: BRIEF.md.
   branch or a hash. The repository and its package are public, so the box
   holds no registry key, as with the Hyperfy fork.
 - In it: the Go binary, the web front end's files, the engine's WASM, and the
-  default asset set with the baked fields. One process runs (90).
-- An `image` script builds it on this machine, for amd64 and arm64, with the
-  fields baked here, and pushes it (p). The fields are too large for the
-  repository, so the image is built where they are (OPEN.md).
+  default asset set. One process runs (90), as a user of its own and never
+  root. The `Dockerfile` at the root builds it, with BuildKit.
+- The image sets its own variables: `HOST=0.0.0.0`, `PORT=3000`,
+  `WORLD_DIR=/world` and `WEB_DIR`, where the page's files are.
 - The Go binary has no CGO, and the engine and the page are the same on every
-  architecture: only the last stage of the build differs.
+  architecture: the three builds run on the building machine and only the
+  last stage differs.
+- What publishes a version, and whether the image carries the baked fields or
+  finds them outside it, waits on where fields are hosted (OPEN.md). Built on
+  a machine that baked them, the image has them.
 
 ## What mundos sets
 
 | Variable | What |
 |---|---|
-| `PORT` | where the server listens inside the container |
+| `PORT` | where the server listens inside the container: 3000, as the image says |
 | `MUNDOS_PUBLIC_KEY` | the Ed25519 public key that checks tokens: PEM, its newlines escaped |
 | `PUBLIC_MUNDOS_URL` | mundos's origin, where the door is |
 | `PUBLIC_MUNDOS_WORLD` | the world's name, the token's audience |
-| `ASSETS_S3_URI`, `ASSETS_BASE_URL` | the generation's bucket folder, and the address browsers read it at |
 
 - The names are the ones the Hyperfy fork reads, so mundos says the same thing
-  to every instance type. The bucket's two are absent on a machine without
-  one, and the world then keeps its files in its folder (89).
+  to every instance type. The bucket's two, `ASSETS_S3_URI` and
+  `ASSETS_BASE_URL`, join them when a world has files to keep (89).
 - The port is published on `127.0.0.1` alone. mundos's Caddy is the one thing
   that reaches it, with the world's address and its certificate, and it
   carries the socket with no extra setting.
@@ -52,8 +55,8 @@ confirmed. What of it is built: BRIEF.md.
 ## The world folder
 
 - A Docker volume, named by mundos after the generation's id and mounted at
-  `/world` (p). In it: the recipe and what the admin set, and each plugin's
-  SQLite file (89).
+  `/world`, which the image gives to the user the server runs as. In it:
+  `world.json`, the recipe, and each plugin's SQLite file (89).
 - It is the whole world. Nothing of a world lives in the image, and deleting a
   generation deletes its folder and its bucket folder.
 
@@ -67,9 +70,11 @@ confirmed. What of it is built: BRIEF.md.
 
 - Never in place. mundos makes the world's next generation on the chosen
   version and fills its folder before it first starts, by running the
-  source's own image: `planet copy /from /to` copies the folder, each SQLite
-  file through its online backup while the source keeps running (p). Then
-  mundos copies the bucket folder, on the bucket's side.
+  source's own image: `planet copy /from /world`, the source read-only at
+  `/from` and the new volume where a world's own sits. Every file goes as it
+  is while the source keeps running; a plugin's SQLite file goes through its
+  online backup, when the first one exists. Then mundos copies the bucket
+  folder, on the bucket's side.
 - The new version moves each plugin's store forward when it starts, on the
   copy. The old generation is untouched and is the way back.
 - Never onto an older version: a store moved forward is not promised to open
