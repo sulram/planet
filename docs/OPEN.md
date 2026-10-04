@@ -9,7 +9,7 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 | Question | Unblocks | Context |
 |---|---|---|
 | **The name.** `planet` is a codename | crate, repo, image and domain names | README |
-| **Confirm the proposed entries** 03 (raw wgpu), 05 (numbers), 06, 09, 19, 20 | code that depends on them | DECISIONS |
+| **Confirm the proposed entries** 03 (raw wgpu), 05 (numbers), 06, 19, 20 | code that depends on them | DECISIONS |
 | **Which of entries 51 to 55 survive 58.** They came out of the voxel pyramid 58 retired: the frame budget counting chunks (51), the far field as the same grid coarsened (52), nothing coming down before its replacement is up (53), one level per piece of ground (54), coarse ground not casting (55). Some are still cited by ROADMAP; the rest get their titles struck | a reading pass over the decisions | DECISIONS 58 |
 | **A fourth shadow cascade.** Three step tenfold (40 m, 400 m, 4 km): a texel is 7.8 cm near the eye and 78 cm from 35 m on, wider than a cube. Tried and put back: four at 16, 100, 630 and 4000 m, three constants in `render::shadow`. The shadow of an avatar gets its legs and meets its feet; a texel is 3.1 cm near the eye and 20 cm out to 100 m, and 1.2 m from there to 630 m against 78 cm with three. It costs one more pass of casters. The one reading of that cost, 0.2 ms a frame on the development machine, is taken beside a browser running the world and is no measure: measure alone first, and the numbers go in the commit | shadows of builds seen from further than 35 m; the contact shadow of an avatar | ROADMAP wishes · DECISIONS 34, 83 |
 
@@ -17,14 +17,13 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **Where fields are hosted.** 25 MB each, gitignored, baked by `bun run field` from a public source. A field is immutable and a recipe names it by content id, so it can live outside the image: a public folder on a CDN with an index, read by the founding screen and fetched by the browser. Until fields have that home, an image built in CI carries the generated ground alone | Earth in a published version; a second field | DEPLOY.md · DECISIONS 44, 72 |
+| **Where fields are hosted.** 25 MB each, gitignored, baked by `bun run field` from a public source. A field is immutable and a recipe names it by content id, so it can live outside the image: a public folder on a CDN with an index, read by the founding screen and fetched by the browser. Until fields have that home, an image built in CI carries the generated ground alone. The server holds a world's field too once it runs building's rules (97), and what that weighs is unmeasured | Earth in a published version; a second field | DEPLOY.md · DECISIONS 44, 72, 97 |
 | **What a planet says about itself.** mundos's catalog and door show a title, a description and an image that a world's builders set inside it. A planet has nowhere to set them yet, and answers with its name alone | a planet in the catalog with a face | mundos `docs/BRIEFING.md` § Domain |
 
 ## Blocks plugins
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **What a plugin's rules cost, run by the server.** Marlus chose the plugin's Rust compiled to WASM and run by the Go server through wazero, over a Go package that writes every rule twice; it is what 09 proposes for the generator. Before the entry is logged and code stands on it, the numbers: a stroke applied and the ground read under a platform, in wazero, and what a world of a field weighs with the server holding the field too | the first plugin that checks an op: building | DECISIONS 09, 88, 93 |
 | **A plugin's panel outside Svelte.** On the web it is a Svelte component. On a desktop or a headset it is written again for that front end, or a plugin says its panel as data (buttons, a palette, a slider) and each front end draws it. Said as data, it is also what an agent reads to know what it may ask | the second screen; the first agent | DECISIONS 88, 94 · ROADMAP § Other screens |
 | **A world with a plugin the client lacks.** Refuse to enter, or enter and leave that layer undrawn. Moot on the web, where a world serves its own client | an installed client | DECISIONS 91 |
 | **A plugin that needs a shader of its own.** A plugin hands the picture plain data and never touches wgpu. Volumes already have a pipeline of their own in `render`: it stays in the core as a shape any plugin may hand over, or the rule gets an exception | extracting building | DECISIONS 88 · RENDER.md § Volumes |

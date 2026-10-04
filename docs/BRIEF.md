@@ -68,7 +68,6 @@ plugin work, on Marlus's word.
 
 ## Open questions
 
-These are settled in OPEN.md, their one home: what a plugin's rules cost run
-by the server as WASM, how a plugin's panel exists outside Svelte, what a
-client does in a world with a plugin it lacks, whose the palette is, and where
-fields are hosted.
+These are settled in OPEN.md, their one home: how a plugin's panel exists
+outside Svelte, what a client does in a world with a plugin it lacks, whose
+the palette is, and where fields are hosted.

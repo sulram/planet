@@ -70,6 +70,7 @@ this file in the same change.
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |
 | Op | One permission-checked request to an owner to change what it holds. The only way world state changes. |
+| Rule | What an op does to what a plugin owns: one piece of Rust, compiled into the client and run by the server as WASM. |
 | Op log | Append-only record of ops: who, when, address, before, after. |
 | Rollback | A volume restored to how it stood at an earlier moment, whoever built in it since. Undo is a person taking back their own strokes. |
 | World actor | The single goroutine that owns the world's state and writes. Started by the hub on the first session, gone after the last. |

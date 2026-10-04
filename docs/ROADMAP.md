@@ -20,7 +20,7 @@ end to end.
   - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
   - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (45); this side needs its own answer
 - [ ] Golden hashes also run on WASM in CI (wasmtime)
-- [ ] Generator as WASM inside Go (wazero), when the server has to read the ground (09)
+- [ ] Generator as WASM inside Go (wazero), when the server has to read the ground (09, 97)
 - [ ] Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
 - [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
 
@@ -66,6 +66,7 @@ end to end.
 - [ ] Extracted: a turn in the frame, solids for the footing, the picture through `scene` (BRIEF.md)
 - [ ] A stroke as an op on the socket: the host asks the permission hook with who, what and where, the plugin applies its rule, keeps it and an event tells everyone in the world (76, 93)
 - [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
+- [ ] The rules as a module the server runs (97): a leaf crate that exports them, embedded in the Go binary, with a bench of its own in wazero
 - [ ] Kept by volume (95): copy on first write, chunk versions, the plugin's store in the world folder (89)
 - [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote

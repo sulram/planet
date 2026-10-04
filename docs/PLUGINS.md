@@ -57,8 +57,8 @@ built, and in what order, is in BRIEF.md.
 4. The owner keeps the result and logs the op.
 5. An event tells every session.
 
-- The rule is written once: the client predicts with it and the server
-  decides with it. How the server runs it: OPEN.md.
+- The rule is written once, in Rust: the client predicts with it, and the
+  server decides with it, run as a WASM module through wazero (97).
 - A constraint lives in the rule. One held by a panel alone is one an agent
   and a macro walk past.
 

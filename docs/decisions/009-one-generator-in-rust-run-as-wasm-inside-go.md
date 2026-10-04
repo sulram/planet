@@ -1,4 +1,4 @@
-# 09. One generator, in Rust, run as WASM inside Go (proposed)
+# 09. One generator, in Rust, run as WASM inside Go (decided)
 
 Logged 2026-09-20.
 

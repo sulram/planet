@@ -69,6 +69,8 @@ not yet confirmed.
   routes, the files when there is no bucket, and the web front end as static
   files. `cmd/planet` is the entry, `internal/world` the core, `internal/api`
   the routes, and a plugin's server half is a package of its own.
+- A plugin's rules are its Rust, run as a WASM module through wazero, the
+  generator with them (97). Go carries, checks who, keeps and relays.
 - Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
   source (66). `Hello` says the protocol version; any other is refused.
   `Welcome` carries the session, its level and the recipe, so a client checks
