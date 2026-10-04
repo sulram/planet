@@ -38,11 +38,17 @@ func chat(t *testing.T, m *Module) world.Plugin {
 
 func TestTheModuleSaysWhatItCarries(t *testing.T) {
 	plugins := loaded(t).Plugins()
-	if len(plugins) != 1 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On {
-		t.Fatalf("this version carries chat, on: %v", plugins)
+	if len(plugins) != 2 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On {
+		t.Fatalf("this version carries chat, on, and building after it: %v", plugins)
 	}
 	if ops := plugins[0].Plugin.Ops(); len(ops) != 1 || ops[0] != (world.Op{Kind: "say", Level: world.LevelAnonymous}) {
 		t.Fatalf("chat offers one op, to every level: %v", ops)
+	}
+	// Building is a hand's, and a hand is in the client: its world half
+	// offers the world no op, and the gesture is the core's.
+	build := plugins[1].Plugin
+	if build.Name() != "build" || build.Version() != 1 || !plugins[1].On || len(build.Ops()) != 0 {
+		t.Fatalf("building is on and offers no op: %s %d %v", build.Name(), build.Version(), build.Ops())
 	}
 }
 

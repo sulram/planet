@@ -7,8 +7,7 @@
 //!
 //! Volumes stand side by side on a fixed grid of plots ([`Volumes`]) and are
 //! read as one, so what is too big for one volume stands over two
-//! neighbours. What a build stands on is built too: a [`Platform`], a slab
-//! on a base down to the ground.
+//! neighbours.
 //!
 //! What lives here is what every front end and the server will agree on: what
 //! a gesture does to the cells ([`Gesture`]), which cell a line of sight meets
@@ -18,13 +17,11 @@
 
 mod faces;
 mod gesture;
-mod platform;
 mod trace;
 mod volumes;
 
 pub use faces::Quad;
 pub use gesture::Gesture;
-pub use platform::{Base, Platform};
 pub use trace::{Hit, crossing};
 pub use volumes::Volumes;
 

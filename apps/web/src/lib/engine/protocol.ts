@@ -10,20 +10,6 @@ export const modes = ['walk', 'fly'] as const satisfies readonly Mode[];
 /** The most a name carries. The server cuts longer ones. */
 export const NAME_CHARS = 24;
 
-/** What a stroke in a volume does. One drag is one stroke. */
-export type Tool = 'create' | 'delete' | 'paint';
-export const tools = ['create', 'delete', 'paint'] as const satisfies readonly Tool[];
-
-/** The sides a platform can have, in cells. The engine takes the nearest. */
-export const platforms = [8, 16, 32, 64] as const;
-
-/** What carries a platform down to the ground: a deck's pillars under an open slab, every column filled, or nothing, a slab that floats. */
-export type Base = 'deck' | 'solid' | 'floating';
-export const bases = ['deck', 'solid', 'floating'] as const satisfies readonly Base[];
-
-/** Why the engine refused to build: where the body stands, or who it is. */
-export type BuildRefusal = 'moon' | 'sea' | 'seam' | 'high' | 'level';
-
 /** What a session may do, as mundos says it and the world repeats it. A builder and an admin build. */
 export type Level = 'anonymous' | 'signed_in' | 'builder' | 'admin';
 
@@ -63,18 +49,7 @@ export type Command =
 	 */
 	| { type: 'go_to'; place: string }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
-	| { type: 'set_name'; name: string }
-	/** Build with a tool, or stop with null. It builds nothing: a platform is what a stroke starts on. */
-	| { type: 'set_tool'; tool: Tool | null }
-	/** The side of the platform laid next, in cells. */
-	| { type: 'set_platform'; side: number }
-	/** Lay a platform where the body stands: a slab as high as the higher of the ground under it and the feet, on a base, a deck when left out. */
-	| { type: 'lay_platform'; base?: Base }
-	/** The paint the next stroke lays: an index into the palette. */
-	| { type: 'set_paint'; paint: number }
-	/** Take back the last stroke that landed, or put back the last one taken back. */
-	| { type: 'undo' }
-	| { type: 'redo' };
+	| { type: 'set_name'; name: string };
 
 /**
  * A plugin's command: its `type` is the plugin's name and the command's,
@@ -126,14 +101,8 @@ export type EngineEvent =
 	/** Nothing is left to build for this view: the world is drawn whole. Again after a leap or a new recipe. */
 	| { type: 'settled' }
 	| { type: 'mode_changed'; mode: Mode }
-	/** The tool in hand, null when not building, the paint it lays, and the side of the next platform. Once at the start too. */
-	| { type: 'tool_changed'; tool: Tool | null; paint: number; platform: number }
-	/** The paints a cell can take, as `#rrggbb`, in order. Once, at the start. */
+	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. Once, at the start. */
 	| { type: 'palette'; colors: string[] }
-	/** A platform was asked for where no volume can be opened. */
-	| { type: 'build_refused'; reason: BuildRefusal }
-	/** Whether there is a stroke to take back and one to put back, whenever that changes. */
-	| { type: 'history'; undo: boolean; redo: boolean }
 	| { type: 'avatar_changed'; path: string }
 	| { type: 'effects_changed'; effects: Effects }
 	| {
@@ -166,10 +135,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'peers',
 	'statement',
 	'anchors',
-	'tool_changed',
-	'palette',
-	'build_refused',
-	'history'
+	'palette'
 ]);
 
 /** Whether an event is a plugin's: its `type` has the plugin's name and a dot before the event's. */

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -160,12 +161,12 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 	if status, _ := call(t, "POST", web.URL+"/api/world", recipe); status != http.StatusOK {
 		t.Fatalf("the world is founded: %d", status)
 	}
-	if _, about := call(t, "GET", web.URL+"/api/world", nil); len(spoken(about)) != 1 || spoken(about)[0] != "chat" {
+	if _, about := call(t, "GET", web.URL+"/api/world", nil); !slices.Equal(spoken(about), []string{"chat", "build"}) {
 		t.Fatalf("a world says which plugins it speaks: %v", about)
 	}
 
 	a, welcome := dial(t, web)
-	if len(welcome.Plugins) != 1 || welcome.Plugins[0].Name != "chat" || welcome.Plugins[0].Version != 1 {
+	if len(welcome.Plugins) != 2 || welcome.Plugins[0].Name != "chat" || welcome.Plugins[0].Version != 1 {
 		t.Fatalf("and says it again in its welcome: %v", welcome.Plugins)
 	}
 	a.say(line("hi"))
@@ -182,16 +183,16 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 		t.Fatalf("on or off is said: %d %v", status, answer)
 	}
 	status, about := call(t, "POST", web.URL+"/api/plugins", map[string]any{"name": "chat", "on": false})
-	if status != http.StatusOK || len(spoken(about)) != 0 {
+	if status != http.StatusOK || slices.Contains(spoken(about), "chat") {
 		t.Fatalf("an admin switches chat off: %d %v", status, about)
 	}
-	if on := a.hear(func(m *pb.ServerMessage) bool { return m.GetPlugins() != nil }).GetPlugins(); len(on.Plugins) != 0 {
-		t.Fatalf("whoever is here is told: %v", on)
+	if on := a.hear(func(m *pb.ServerMessage) bool { return m.GetPlugins() != nil }).GetPlugins(); len(on.Plugins) != 1 || on.Plugins[0].Name != "build" {
+		t.Fatalf("whoever is here is told, and what else was on stays on: %v", on)
 	}
 	// Off, a line is dropped: the next thing heard from a plugin is none.
 	a.say(line("anyone?"))
 	b, late := dial(t, web)
-	if len(late.Plugins) != 0 {
+	if len(late.Plugins) != 1 || late.Plugins[0].Name != "build" {
 		t.Fatalf("and whoever arrives after hears it off: %v", late.Plugins)
 	}
 	b.say(&pb.ClientMessage{Message: &pb.ClientMessage_Wear{Wear: &pb.Wear{Avatar: "avatars/Ada.vrm"}}})
@@ -202,10 +203,10 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 	// The choice is the world's own: it is in the folder, and a new process
 	// over the same folder reads it.
 	again := instance(t, dir, world.LevelAdmin)
-	if _, about := call(t, "GET", again.URL+"/api/world", nil); len(spoken(about)) != 0 {
+	if _, about := call(t, "GET", again.URL+"/api/world", nil); slices.Contains(spoken(about), "chat") {
 		t.Fatalf("the folder keeps the admin's word: %v", about)
 	}
-	if status, about := call(t, "POST", again.URL+"/api/plugins", map[string]any{"name": "chat", "on": true}); status != http.StatusOK || len(spoken(about)) != 1 {
+	if status, about := call(t, "POST", again.URL+"/api/plugins", map[string]any{"name": "chat", "on": true}); status != http.StatusOK || !slices.Contains(spoken(about), "chat") {
 		t.Fatalf("and it is switched back: %d %v", status, about)
 	}
 }
@@ -216,7 +217,7 @@ func TestOnlyAnAdminSwitchesAPlugin(t *testing.T) {
 	if status != http.StatusForbidden || answer["error"] != "level" {
 		t.Fatalf("a builder switches nothing: %d %v", status, answer)
 	}
-	if _, about := call(t, "GET", web.URL+"/api/world", nil); len(spoken(about)) != 1 {
+	if _, about := call(t, "GET", web.URL+"/api/world", nil); !slices.Contains(spoken(about), "chat") {
 		t.Fatalf("and chat stays as the config says: %v", about)
 	}
 }

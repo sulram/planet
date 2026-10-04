@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 
 use client::collision;
-use client::{Client, Event, Input, Key, Recipe};
+use client::{Client, Event, Input, Key, Level, Recipe};
 use topology::{Sector, SurfacePoint};
 use wasm_bindgen::prelude::wasm_bindgen;
 use worldgen::{Field, Generator, Source};
@@ -203,6 +203,11 @@ const STEEP_AT: [f64; 2] = [0.312, 0.372];
 #[wasm_bindgen]
 pub fn lay_start() {
     let mut client = Client::new(Recipe::new(1)).expect("the current generator version");
+    // A measure has no world to say building is on: it stands in for one.
+    for plugin in plugins_client::all() {
+        client.plug(plugin);
+    }
+    client.rehearse(Level::Admin);
     {
         let side = f64::from(client.sphere().blocks().side());
         client.teleport(SurfacePoint::new(
@@ -211,7 +216,7 @@ pub fn lay_start() {
             STEEP_AT[1] * side,
         ));
     }
-    client.command_json(r#"{"type":"set_platform","side":64}"#);
+    client.command_json(r#"{"type":"build.platform","side":64}"#);
     client.settled_frame();
     client.drain_events();
     client.drain_terrain_changes();
@@ -226,7 +231,7 @@ pub fn lay_platform() {
     LAY.with(|lay| {
         let mut lay = lay.borrow_mut();
         let client = lay.as_mut().expect("lay_start comes first");
-        client.command_json(r#"{"type":"lay_platform","base":"solid"}"#);
+        client.command_json(r#"{"type":"build.lay","base":"solid"}"#);
     });
 }
 

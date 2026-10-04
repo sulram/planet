@@ -1,12 +1,11 @@
 <script lang="ts">
 	import { Alert, Button, Panel, Segmented } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { bases, platforms, tools, type Base, type BuildRefusal, type Tool } from './index';
+	import { bases, platforms, tools, type Base, type Refusal, type Tool } from './protocol';
 
 	// Building: a button in the bottom right corner, and the panel it opens
-	// while a tool is in hand. A front-end only: it shows the tool, the paint
-	// and the platform the engine says are picked and asks for others; where a
-	// volume opens, what a platform is and what a stroke does are the engine's.
+	// while a tool is in hand. It shows the tool, the paint and the platform
+	// its layer says are picked, and asks for others.
 	interface Props {
 		/** The tool in hand, null when not building. */
 		tool: Tool | null;
@@ -17,8 +16,8 @@
 		/** The paints a cell can take, as `#rrggbb`, in order. */
 		palette: string[];
 		/** Why the last platform asked for could not be laid, until the next one. */
-		refused: BuildRefusal | null;
-		/** Whether there is a stroke to take back, and one to put back. */
+		refused: Refusal | null;
+		/** Whether there is a change to take back, and one to put back. */
 		history: { undo: boolean; redo: boolean };
 		onbuild: (tool: Tool | null) => void;
 		onpaint: (paint: number) => void;

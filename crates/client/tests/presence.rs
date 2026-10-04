@@ -1,10 +1,7 @@
 //! Two people see each other: the client's side of the link, driven by hand
 //! made server frames, the way a shell drives it with a socket.
 
-use client::{
-    Base, BuildRefusal, Client, Command, Event, Input, Level, Outbound, PeerInfo, Recipe,
-    SessionStatus, Tool,
-};
+use client::{Client, Command, Event, Input, Level, Outbound, PeerInfo, Recipe, SessionStatus};
 use protocol::{Message, client_message, server_message};
 
 fn server(message: server_message::Message) -> Vec<u8> {
@@ -313,46 +310,4 @@ fn a_name_rides_in_hello_and_a_peer_renamed_is_listed_anew() {
         client.drain_events().last(),
         Some(Event::Peers { peers }) if peers.len() == 1 && peers[0].name == "Grace"
     ));
-}
-
-#[test]
-fn the_world_says_who_builds() {
-    let refused = Event::BuildRefused {
-        reason: BuildRefusal::Level,
-    };
-    let create = || Command::SetTool {
-        tool: Some(Tool::Create),
-    };
-
-    // With no world to ask, the offline preview builds freely.
-    let mut client = Client::new(Recipe::new(1)).unwrap();
-    client.command(create());
-    assert!(client.building());
-
-    // A world that welcomes a visitor puts the tool down, and refuses the next.
-    client.link_opened();
-    client.receive(&welcome(&client, 7, vec![]));
-    assert!(!client.building());
-    client.drain_events();
-    client.command(create());
-    assert!(!client.building());
-    assert!(client.drain_events().contains(&refused));
-    client.command(Command::LayPlatform { base: Base::Deck });
-    assert!(client.drain_events().contains(&refused));
-
-    // Its word stands through a dropped link: offline is no way to a tool.
-    client.link_closed();
-    client.command(create());
-    assert!(!client.building());
-
-    // A builder's welcome hands the tools back.
-    client.link_opened();
-    client.receive(&welcome_as(&client, 8, vec![], protocol::Level::Builder));
-    assert!(client.drain_events().contains(&Event::Session {
-        status: SessionStatus::Online,
-        session: Some(8),
-        level: Some(Level::Builder),
-    }));
-    client.command(create());
-    assert!(client.building());
 }

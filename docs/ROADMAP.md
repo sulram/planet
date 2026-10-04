@@ -56,7 +56,6 @@ end to end.
 
 ### The cells (58, 75 to 86, 106)
 
-- [ ] Cut as a system (108): the volumes, their picture and the footing on them stay in `client`, and its words are what building speaks: aim, preview, apply, take back (BRIEF.md)
 - [ ] An op is answered: it landed, or the code of why it was refused, matched to the op it answers (93, 98)
 - [ ] A gesture as an op of the core on the socket: the host asks the permission hook with who, what and where, the core applies it, keeps it and an event tells everyone in the world (76, 93)
 - [ ] Applied in the module (97): `voxel` on the server as in the client
@@ -82,6 +81,7 @@ end to end.
 ### Bodies (108)
 
 - [ ] A body that is no avatar: a vehicle, a ship, a thing carried. A session rides a body, and more than one answers to it (99). The first one cuts the system
+- [ ] Cells on a body that moves, a room aboard a ship: the second member of a seat (109)
 - [ ] Physics for every body, on the ground and on cells alike
 
 ## Plugins: native
@@ -102,9 +102,8 @@ end to end.
 
 ### Building (106)
 
-- [ ] Extracted to `plugins/build`: its tools, the stroke, the kinds of platform, the modifiers, its keys asked for by name and its panel (BRIEF.md)
 - [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
-- [ ] First cut leftovers: a key that lays a platform; the undo chord and the last tool said once in the plugin rather than in each shell
+- [ ] A key that lays a platform
 - [ ] Brushes inside a volume: dig, add, smooth, flatten
 - [ ] A second way of building, a proof of concept beside this one (BRIEF.md)
 

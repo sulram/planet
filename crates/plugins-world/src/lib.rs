@@ -9,8 +9,14 @@ use world::Installed;
 
 /// Every world half of the version, ready to host.
 pub fn all() -> Vec<Installed> {
-    vec![Installed {
-        plugin: chat_world::plugin(),
-        on: true,
-    }]
+    vec![
+        Installed {
+            plugin: chat_world::plugin(),
+            on: true,
+        },
+        Installed {
+            plugin: build_world::plugin(),
+            on: true,
+        },
+    ]
 }

@@ -24,6 +24,12 @@ pub fn run(shot: Shot) -> Result<(), String> {
         None => Client::new(shot.recipe),
     }
     .map_err(|e| e.to_string())?;
+    // A picture has no world to say what is on in it: it stands in for one,
+    // so what a plugin builds can be looked at.
+    for plugin in plugins_client::all() {
+        client.plug(plugin);
+    }
+    client.rehearse(client::Level::Admin);
     client.set_aspect(width as f32 / height as f32);
     client.set_clock(shot.clock_s);
     if let Some(effects) = &shot.effects {
@@ -67,8 +73,12 @@ pub fn run(shot: Shot) -> Result<(), String> {
         }
     }
     for event in client.drain_events() {
-        if let client::Event::BuildRefused { reason } = event {
-            log::warn!("no volume here: {reason:?}");
+        match event {
+            client::Event::Rejected { message } => log::warn!("{message}"),
+            client::Event::Plugin(event) if event["type"] == "build.refused" => {
+                log::warn!("no volume here: {}", event["reason"]);
+            }
+            _ => {}
         }
     }
     input.key(client::Key::Forward, true);

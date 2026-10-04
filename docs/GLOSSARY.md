@@ -70,6 +70,7 @@ this file in the same change.
 | Build layer | Cubic voxels inside a volume, each air or a paint. The only part of a world with an inside. |
 | Paint | What a solid cell is: an index into the palette a volume is shown with. |
 | Gesture | Create, delete or paint over a box of cells, with one paint: what a volume applies. What an op carries. |
+| Seat | What cells are seated on, the frame their addresses are counted in: a sector of the planet today. Every word of the cells says where as a seat. |
 | Plot | One square of the grid volumes are cut by: 64 by 64 columns of a sector, named by their address less six bits. A volume stands over it. |
 | Platform | What a build stands on: a slab of cells one thick, 8 to 64 a side as picked, cut by the address, its top the higher of the highest ground under it and the feet of who asks, on a base. |
 | Base | What carries a platform down to the ground, picked as it is laid: a deck, pillars at the corners of every bay and open under the slab; solid, every column filled; floating, nothing. |

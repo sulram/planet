@@ -49,7 +49,7 @@ pub struct Shot {
 
 /// One thing a hand does before a shot is taken.
 pub enum Step {
-    /// A command as the seam takes it: `{"type":"set_tool","tool":"create"}`.
+    /// A command as the seam takes it: `{"type":"build.take","tool":"create"}`.
     Command(String),
     /// Press the pointer's button at one point of the view and let go at
     /// another, fractions from the top left: a stroke of the tool in hand.

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use client::{Client, Event, Field, Input, Key};
+use client::{Chord, Client, Event, Field, Input, Key};
 
 use crate::assets;
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
@@ -139,6 +139,10 @@ impl Stage {
         client.set_aspect(self.config.width as f32 / self.config.height as f32);
         assets::serve(client);
         let frame = client.update(dt, input);
+        // A tool aims with a free pointer: taking one lets a captured one go.
+        if client.pointing() && self.looking {
+            self.set_looking(false);
+        }
         self.renderer.apply(client.drain_terrain_changes());
         self.renderer.apply_volumes(client.drain_volume_changes());
         self.renderer.apply_skinned(client.drain_skinned_changes());
@@ -158,9 +162,6 @@ impl Stage {
                     ));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
-                // A tool aims with a free pointer: taking one lets it go.
-                Event::ToolChanged { tool: Some(_), .. } => self.set_looking(false),
-                Event::BuildRefused { reason } => log::info!("no volume here: {reason:?}"),
                 // The desktop has no socket yet (ROADMAP, Other screens): the link stays
                 // offline and nobody else is ever here.
                 Event::RecipeChanged { .. }
@@ -172,9 +173,7 @@ impl Stage {
                 | Event::Statement { .. }
                 | Event::Plugin(_)
                 | Event::Anchors { .. }
-                | Event::ToolChanged { .. }
                 | Event::Palette { .. }
-                | Event::History { .. }
                 | Event::Settled => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }
@@ -272,12 +271,12 @@ impl ApplicationHandler for App {
                 self.input.release_all();
                 stage.set_looking(false);
             }
-            // Building, the left button is the tool's and the right one looks
-            // while it is held. Otherwise a click captures the pointer, and
-            // the camera has it until Escape.
+            // While a plugin has the pointer, the left button is its tool's
+            // and the right one looks while it is held. Otherwise a click
+            // captures the pointer, and the camera has it until Escape.
             WindowEvent::MouseInput { state, button, .. } => {
                 let down = state == ElementState::Pressed;
-                match (self.client.building(), button) {
+                match (self.client.pointing(), button) {
                     (true, MouseButton::Left) => self.input.key(Key::Use, down),
                     (true, MouseButton::Right) => stage.set_looking(down),
                     (false, MouseButton::Left) if down => stage.set_looking(true),
@@ -304,24 +303,22 @@ impl ApplicationHandler for App {
                 };
                 let down = event.state == ElementState::Pressed;
                 // Command on a Mac, Control elsewhere.
-                let command = self.modifiers.super_key() || self.modifiers.control_key();
-                let undo = match code {
-                    KeyCode::KeyZ if command && self.modifiers.shift_key() => Some(Key::Redo),
-                    KeyCode::KeyZ if command => Some(Key::Undo),
-                    KeyCode::KeyY if command => Some(Key::Redo),
-                    _ => None,
+                let chord = Chord {
+                    command: self.modifiers.super_key() || self.modifiers.control_key(),
+                    shift: self.modifiers.shift_key(),
                 };
-                if let Some(key) = undo {
+                // A plugin asks for a key by the name the web gives it, and
+                // winit names its key codes the same: `KeyB`, `AltLeft`.
+                let name = format!("{code:?}");
+                if !down {
+                    self.input.hold(&name, false);
+                }
+                if code == KeyCode::Escape && down && stage.looking {
+                    // A captured pointer goes back first.
+                    stage.set_looking(false);
+                } else if self.client.asks(&name, chord) {
                     if down && !event.repeat {
-                        self.input.key(key, true);
-                    }
-                } else if code == KeyCode::Escape && down {
-                    // A captured pointer goes back first; building, Escape
-                    // drops the stroke, then the tool.
-                    if stage.looking {
-                        stage.set_looking(false);
-                    } else {
-                        self.input.key(Key::Cancel, true);
+                        self.input.code(&name, chord, true);
                     }
                 } else if let Some(key) = binding(code) {
                     // One shot keys must not fire again while held.
@@ -347,7 +344,8 @@ impl ApplicationHandler for App {
     }
 }
 
-/// Key bindings. `shell-web` mirrors this table with DOM key codes.
+/// The core's key bindings. `shell-web` mirrors this table with DOM key
+/// codes. A plugin's keys are asked for by name and reach it by that name.
 fn binding(code: KeyCode) -> Option<Key> {
     Some(match code {
         KeyCode::KeyW | KeyCode::ArrowUp => Key::Forward,
@@ -360,11 +358,6 @@ fn binding(code: KeyCode) -> Option<Key> {
         KeyCode::KeyF => Key::ToggleMode,
         KeyCode::KeyR => Key::NewSeed,
         KeyCode::KeyV => Key::NextAvatar,
-        KeyCode::KeyB => Key::Build,
-        KeyCode::Digit1 => Key::Create,
-        KeyCode::Digit2 => Key::Delete,
-        KeyCode::Digit3 => Key::Paint,
-        KeyCode::AltLeft | KeyCode::AltRight => Key::Turn,
         _ => return None,
     })
 }

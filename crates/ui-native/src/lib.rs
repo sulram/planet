@@ -5,7 +5,7 @@
 
 mod paint;
 
-use client::{Base, Command, Effects, Event, PLATFORMS, ToneMap, Tool};
+use client::{Command, Effects, Event, ToneMap};
 use winit::window::Window;
 
 pub struct Panel {
@@ -17,34 +17,6 @@ pub struct Panel {
     /// What the client last said is in force: the panel edits a copy of it.
     effects: Effects,
     fps: f32,
-    building: Building,
-}
-
-/// The tool in hand and the paints on offer, as the client last said.
-#[derive(Clone, Debug)]
-struct Building {
-    tool: Option<Tool>,
-    /// The tool put down last, which building again takes.
-    last: Tool,
-    paint: u8,
-    /// The side of the platform laid next, in cells.
-    platform: u32,
-    palette: Vec<egui::Color32>,
-    /// Whether there is a stroke to take back, and one to put back.
-    history: (bool, bool),
-}
-
-impl Default for Building {
-    fn default() -> Self {
-        Building {
-            tool: None,
-            last: Tool::Create,
-            paint: 0,
-            platform: PLATFORMS[0],
-            palette: Vec::new(),
-            history: (false, false),
-        }
-    }
 }
 
 impl Panel {
@@ -76,7 +48,6 @@ impl Panel {
             open: false,
             effects: Effects::default(),
             fps: 0.0,
-            building: Building::default(),
         }
     }
 
@@ -105,20 +76,6 @@ impl Panel {
         match event {
             Event::EffectsChanged { effects } => self.effects = *effects,
             Event::Stats { fps, .. } => self.fps = *fps,
-            Event::ToolChanged {
-                tool,
-                paint,
-                platform,
-            } => {
-                self.building.tool = *tool;
-                self.building.last = tool.unwrap_or(self.building.last);
-                self.building.paint = *paint;
-                self.building.platform = *platform;
-            }
-            Event::History { undo, redo } => self.building.history = (*undo, *redo),
-            Event::Palette { colors } => {
-                self.building.palette = colors.iter().filter_map(|hex| color(hex)).collect();
-            }
             _ => {}
         }
     }
@@ -140,10 +97,8 @@ impl Panel {
         };
         let mut effects = self.effects;
         let (mut open, fps) = (self.open, self.fps);
-        let mut asked = None;
         let output = self.context.run_ui(raw, |root| {
             layout(root, &mut open, &mut effects, fps);
-            asked = build_layout(root, &self.building);
         });
         self.open = open;
         if let Some(input) = &mut self.input {
@@ -159,7 +114,7 @@ impl Panel {
             &output.textures_delta,
         );
 
-        let mut commands: Vec<Command> = asked.into_iter().collect();
+        let mut commands = Vec::new();
         if effects != self.effects {
             // Shown at once; the client's answer, clamped, replaces it next frame.
             self.effects = effects;
@@ -278,107 +233,6 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
                 *effects = Effects::default();
             }
         });
-}
-
-/// A button in the bottom right corner that starts building, and while a
-/// tool is in hand the tools and the paints instead. What was asked for.
-fn build_layout(root: &mut egui::Ui, building: &Building) -> Option<Command> {
-    let context = root.ctx().clone();
-    let mut asked = None;
-    let Some(tool) = building.tool else {
-        egui::Area::new(egui::Id::new("build button"))
-            .anchor(egui::Align2::RIGHT_BOTTOM, [-12.0, -12.0])
-            .show(&context, |ui| {
-                if ui.button("Build").clicked() {
-                    asked = Some(Command::SetTool {
-                        tool: Some(building.last),
-                    });
-                }
-            });
-        return asked;
-    };
-    egui::Window::new("Build")
-        .anchor(egui::Align2::RIGHT_BOTTOM, [-12.0, -12.0])
-        .title_bar(false)
-        .resizable(false)
-        .default_width(260.0)
-        .show(&context, |ui| {
-            ui.horizontal(|ui| {
-                for (each, name) in [
-                    (Tool::Create, "Create"),
-                    (Tool::Delete, "Delete"),
-                    (Tool::Paint, "Paint"),
-                ] {
-                    if ui.selectable_label(tool == each, name).clicked() {
-                        asked = Some(Command::SetTool { tool: Some(each) });
-                    }
-                }
-                if ui.button("Close").clicked() {
-                    asked = Some(Command::SetTool { tool: None });
-                }
-            });
-            ui.horizontal(|ui| {
-                let (undo, redo) = building.history;
-                if ui.add_enabled(undo, egui::Button::new("Undo")).clicked() {
-                    asked = Some(Command::Undo);
-                }
-                if ui.add_enabled(redo, egui::Button::new("Redo")).clicked() {
-                    asked = Some(Command::Redo);
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.label("Platform");
-                for side in PLATFORMS {
-                    let chosen = building.platform == side;
-                    if ui.selectable_label(chosen, side.to_string()).clicked() {
-                        asked = Some(Command::SetPlatform { side });
-                    }
-                }
-            });
-            ui.horizontal(|ui| {
-                for (label, base) in [
-                    ("Deck", Base::Deck),
-                    ("Solid", Base::Solid),
-                    ("Floating", Base::Floating),
-                ] {
-                    if ui.button(label).clicked() {
-                        asked = Some(Command::LayPlatform { base });
-                    }
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for (index, &fill) in building.palette.iter().enumerate() {
-                    let chosen = index == usize::from(building.paint);
-                    let swatch = egui::Button::new("")
-                        .fill(fill)
-                        .min_size(egui::vec2(22.0, 22.0))
-                        .stroke(egui::Stroke::new(
-                            if chosen { 2.0 } else { 1.0 },
-                            if chosen {
-                                ui.visuals().strong_text_color()
-                            } else {
-                                ui.visuals().weak_text_color()
-                            },
-                        ));
-                    if ui.add(swatch).clicked() {
-                        asked = Some(Command::SetPaint { paint: index as u8 });
-                    }
-                }
-            });
-            ui.label(
-                "Lay a platform where you stand, then click and drag on it. \
-                 A stroke lies on the side you start on and follows what you \
-                 point at. Alt turns it. Hold the right button to look around.",
-            );
-        });
-    asked
-}
-
-/// `#rrggbb` as a colour.
-fn color(hex: &str) -> Option<egui::Color32> {
-    let digits = hex.strip_prefix('#')?;
-    let byte = |at: usize| u8::from_str_radix(digits.get(at..at + 2)?, 16).ok();
-    Some(egui::Color32::from_rgb(byte(0)?, byte(2)?, byte(4)?))
 }
 
 fn tone_map_name(tone_map: ToneMap) -> &'static str {

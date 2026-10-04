@@ -3,13 +3,12 @@
 	import { page } from '$app/state';
 	import { Badge, Button, Checkbox, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { builds, type Link } from '$lib/instance';
+	import type { Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
 	import { plugins, type Seam } from '$lib/plugins';
 	import type { Recipe } from '$lib/world';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
-	import Build from './Build.svelte';
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
 	import Nametags from './Nametags.svelte';
@@ -19,7 +18,6 @@
 		modes,
 		NAME_CHARS,
 		type Anchor,
-		type BuildRefusal,
 		type Effects,
 		type EngineEvent,
 		type Level,
@@ -27,8 +25,7 @@
 		type PeerInfo,
 		type PluginEvent,
 		type PluginOn,
-		type SessionStatus,
-		type Tool
+		type SessionStatus
 	} from './index';
 	import { who } from './who';
 
@@ -117,18 +114,8 @@
 	let peers = $state<PeerInfo[]>([]);
 	let anchors = $state.raw<Anchor[]>([]);
 
-	// Building: what the engine says is in hand, and why it last found no room.
-	let tool = $state<Tool | null>(null);
-	let paint = $state(0);
-	let platform = $state(16);
+	/** The paints a cell can take: the world's palette, which a plugin's layer shows. */
 	let palette = $state.raw<string[]>([]);
-	let refused = $state<BuildRefusal | null>(null);
-	let history = $state({ undo: false, redo: false });
-
-	function build(next: Tool | null) {
-		refused = null;
-		view?.command({ type: 'set_tool', tool: next });
-	}
 
 	// Plugins (docs/PLUGINS.md): the world says which are on, and each one
 	// this version carries at that version gets a layer over the world and the
@@ -242,12 +229,6 @@
 		else if (event.type === 'statement') spoken = event.plugins;
 		else if (event.type === 'anchors') anchors = event.anchors;
 		else if (event.type === 'palette') palette = event.colors;
-		else if (event.type === 'tool_changed') {
-			tool = event.tool;
-			paint = event.paint;
-			platform = event.platform;
-		} else if (event.type === 'build_refused') refused = event.reason;
-		else if (event.type === 'history') history = { undo: event.undo, redo: event.redo };
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
 			effects = event.effects;
@@ -268,30 +249,11 @@
 	{/if}
 	{#each mounted as plugin (plugin.name)}
 		{#if plugin.Layer}
-			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {peers} {anchors} />
+			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {palette} {peers} {anchors} />
 		{/if}
 	{/each}
 	<Settings {effects} {defaults} onchange={choose} />
-	{#if builds(level)}
-		<Build
-			{tool}
-			{paint}
-			{platform}
-			{palette}
-			{refused}
-			{history}
-			onbuild={build}
-			onpaint={(next) => view?.command({ type: 'set_paint', paint: next })}
-			onplatform={(side) => view?.command({ type: 'set_platform', side })}
-			onlay={(base) => {
-				refused = null;
-				view?.command({ type: 'lay_platform', base });
-			}}
-			onundo={() => view?.command({ type: 'undo' })}
-			onredo={() => view?.command({ type: 'redo' })}
-		/>
-	{/if}
-	<Help />
+	<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} />
 	<Panel {title}>
 		{#snippet aside()}
 			<span class="corner">

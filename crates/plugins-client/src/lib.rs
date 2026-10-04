@@ -6,5 +6,5 @@
 
 /// Every plugin of the version, ready to plug in.
 pub fn all() -> Vec<Box<dyn client::Plugin>> {
-    vec![chat_client::plugin()]
+    vec![chat_client::plugin(), build_client::plugin()]
 }

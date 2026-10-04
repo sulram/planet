@@ -2,7 +2,7 @@
 //!
 //! Svelte panels and the native UI send [`Command`]s and render [`Event`]s.
 //! Both travel as JSON tagged by `type`, so the same seam serves a WASM
-//! boundary, a native panel and tests. Tool logic never leaks past this file.
+//! boundary, a native panel and tests.
 //!
 //! A plugin's commands and events ride the same seam under its name: a
 //! `type` with a dot in it, `chat.say`, is a plugin's, and the host hands it
@@ -18,47 +18,6 @@ use worldgen::Recipe;
 pub enum Mode {
     Walk,
     Fly,
-}
-
-/// What a stroke in a volume does: fill air with the paint, empty cells, or
-/// repaint what is solid. One drag is one stroke, however many cells it covers.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Tool {
-    Create,
-    Delete,
-    Paint,
-}
-
-/// What carries the slab of a platform down to the ground: a deck's pillars
-/// at the corners of every bay, a solid block of every column filled, or
-/// nothing, a slab that floats where it is laid.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Base {
-    #[default]
-    Deck,
-    Solid,
-    Floating,
-}
-
-/// Why no platform could be laid where the body stands. A front end says it
-/// in its own words.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BuildRefusal {
-    /// Volumes stand on the planet.
-    Moon,
-    /// The ground here is under the sea.
-    Sea,
-    /// The plot is on the edge of a sector: a volume stays inside one.
-    Seam,
-    /// The feet are over the top of the volume: it holds what is built from
-    /// its lowest ground to a height over its highest, and no further.
-    High,
-    /// Building is a builder's and an admin's, and the world named this
-    /// session a lower level.
-    Level,
 }
 
 /// What a session may do, as the world said it in its welcome. The order is
@@ -125,32 +84,6 @@ pub enum Command {
     SetName {
         name: String,
     },
-    /// Build with a tool, or stop building with `null`. It builds nothing:
-    /// a stroke starts on what is built, and a platform is the first of it.
-    SetTool {
-        tool: Option<Tool>,
-    },
-    /// The side of the platform laid next, in cells: the size on offer
-    /// nearest to it, 8, 16, 32 or 64.
-    SetPlatform {
-        side: u32,
-    },
-    /// Lays a platform where the body stands, opening the volume of its
-    /// plot where none stands: a slab as high as the higher of the highest
-    /// ground under it and the feet, on a base down to the ground. A deck
-    /// when the base is left out.
-    LayPlatform {
-        #[serde(default)]
-        base: Base,
-    },
-    /// The paint the next stroke lays: an index into [`Event::Palette`].
-    SetPaint {
-        paint: u8,
-    },
-    /// Takes back the last stroke that landed.
-    Undo,
-    /// Puts back the last stroke taken back.
-    Redo,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]
@@ -225,28 +158,10 @@ pub enum Event {
     /// screen is the world at the detail it is meant to have. Sent each time
     /// that becomes true again, after a new recipe, a leap or a walk.
     Settled,
-    /// The tool in hand, `None` when not building, the paint it lays, and
-    /// the side of the platform laid next, in cells. Sent once at the start
-    /// too.
-    ToolChanged {
-        tool: Option<Tool>,
-        paint: u8,
-        platform: u32,
-    },
     /// The paints a cell can take, in order, as `#rrggbb`. Sent once, first
     /// after [`Event::Ready`].
     Palette {
         colors: Vec<String>,
-    },
-    /// A platform was asked for where no volume can be opened.
-    BuildRefused {
-        reason: BuildRefusal,
-    },
-    /// Whether there is a stroke to take back and one to put back, whenever
-    /// that changes.
-    History {
-        undo: bool,
-        redo: bool,
     },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {
@@ -361,50 +276,5 @@ mod tests {
     fn a_plugins_event_goes_out_as_the_plugin_wrote_it() {
         let event = Event::Plugin(serde_json::json!({"type": "chat.said", "text": "hi"}));
         assert_eq!(event.to_json(), r#"{"text":"hi","type":"chat.said"}"#);
-    }
-
-    #[test]
-    fn a_tool_or_none() {
-        assert_eq!(
-            Command::from_json(r#"{"type":"set_tool","tool":"paint"}"#).unwrap(),
-            Command::SetTool {
-                tool: Some(Tool::Paint)
-            }
-        );
-        assert_eq!(
-            Command::from_json(r#"{"type":"set_tool","tool":null}"#).unwrap(),
-            Command::SetTool { tool: None }
-        );
-        assert_eq!(
-            Event::ToolChanged {
-                tool: Some(Tool::Create),
-                paint: 3,
-                platform: 16
-            }
-            .to_json(),
-            r#"{"type":"tool_changed","tool":"create","paint":3,"platform":16}"#
-        );
-    }
-
-    #[test]
-    fn a_platform_is_picked_and_laid() {
-        assert_eq!(
-            Command::from_json(r#"{"type":"set_platform","side":32}"#).unwrap(),
-            Command::SetPlatform { side: 32 }
-        );
-        assert_eq!(
-            Command::from_json(r#"{"type":"lay_platform"}"#).unwrap(),
-            Command::LayPlatform { base: Base::Deck }
-        );
-        assert_eq!(
-            Command::from_json(r#"{"type":"lay_platform","base":"floating"}"#).unwrap(),
-            Command::LayPlatform {
-                base: Base::Floating
-            }
-        );
-        assert_eq!(
-            Command::from_json(r#"{"type":"lay_platform","base":"solid"}"#).unwrap(),
-            Command::LayPlatform { base: Base::Solid }
-        );
     }
 }

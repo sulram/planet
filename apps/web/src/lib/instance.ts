@@ -96,5 +96,5 @@ export function socket(key: string): string {
 	return url.href;
 }
 
-/** Whether a level builds. Null is the offline preview, with no world to ask. */
-export const builds = (level: Level | null) => level === null || level === 'builder' || level === 'admin';
+/** Whether a level builds: a builder's and an admin's. With no world to say a level, nothing is built. */
+export const builds = (level: Level | null) => level === 'builder' || level === 'admin';

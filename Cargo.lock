@@ -206,6 +206,7 @@ name = "bench"
 version = "0.0.0"
 dependencies = [
  "client",
+ "plugins-client",
  "topology",
  "wasm-bindgen",
  "worldgen",
@@ -269,6 +270,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
  "objc2 0.6.4",
+]
+
+[[package]]
+name = "build-client"
+version = "0.0.0"
+dependencies = [
+ "build-world",
+ "client",
+ "glam",
+ "protocol",
+ "scene",
+ "serde",
+ "serde_json",
+ "topology",
+ "voxel",
+ "worldgen",
+]
+
+[[package]]
+name = "build-world"
+version = "0.0.0"
+dependencies = [
+ "voxel",
+ "world",
 ]
 
 [[package]]
@@ -1890,6 +1915,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "plugins-client"
 version = "0.0.0"
 dependencies = [
+ "build-client",
  "chat-client",
  "client",
 ]
@@ -1898,6 +1924,7 @@ dependencies = [
 name = "plugins-world"
 version = "0.0.0"
 dependencies = [
+ "build-world",
  "chat-world",
  "world",
 ]

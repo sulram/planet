@@ -26,7 +26,7 @@ compositor. What the world *is* lives in WORLD.md.
 
 - Every side of a solid cell that faces air is one quad, never merged, and its
   corners are bent onto the body through the addresses they are
-  (`client::build`): neighbours share corners exactly, and a volume curves
+  (`client::cells`): neighbours share corners exactly, and a volume curves
   with a small world (75). A chunk works out its column corners once.
 - A chunk whose cells changed is owed a mesh; eight are meshed an update, the
   nearest first, each drawn as it was until then (86).
@@ -71,7 +71,7 @@ compositor. What the world *is* lives in WORLD.md.
   depth, `Space` leaps, `C` or looking down while moving dives, idle drifts up.
 - What holds a body up is a **footing** (`client::collision`): the top of the
   solid at or under its feet, and the bottom of the solid over its head. The
-  ground out in the open; over a volume, its cells too (`client::build`),
+  ground out in the open; over a volume, its cells too (`client::cells`),
   where a body is 1.2 cells wide and stands on the highest cell under any of
   it. No mesh: a footing costs 2 us, and a step asks for four (47).
 - A rise of one block is taken in stride and two is a wall, to be jumped or

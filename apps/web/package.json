@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@fontsource-variable/jetbrains-mono": "^5.3.0",
+		"@planet/plugin-build": "workspace:*",
 		"@planet/plugin-chat": "workspace:*"
 	},
 	"devDependencies": {

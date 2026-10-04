@@ -1,8 +1,8 @@
 /**
  * Typed wrapper over the command/event seam of the engine: the Rust client
  * compiled to WASM by `bun run wasm` into `./pkg` (gitignored, may be absent).
- * The web UI is only a front-end: it sends commands and renders events. Tool
- * logic lives in Rust.
+ * The web UI is only a front-end: it sends commands and renders events. What
+ * a command does lives in Rust.
  */
 import { parseEvent, type Command, type EngineEvent, type PluginCommand, type PluginEvent } from './protocol';
 

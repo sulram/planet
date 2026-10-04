@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { Button, Panel } from '$lib/ds';
 	import { t } from '$lib/i18n';
+	import type { Hint } from '$lib/plugins/plugin';
 
 	// The keys, behind a button in the bottom left corner: read once, then
-	// out of the way of the world.
+	// out of the way of the world. The core's own, and between them the keys
+	// of each plugin that is on in this world.
+	let { plugins = [] }: { plugins?: readonly Hint[] } = $props();
 	let open = $state(false);
 
 	const hints = $derived([
@@ -14,12 +17,7 @@
 		{ keys: 'Shift', does: t('engine.hint.sprint') },
 		{ keys: 'F', does: t('engine.hint.mode') },
 		{ keys: 'V', does: t('engine.hint.avatar') },
-		{ keys: 'B', does: t('engine.hint.build') },
-		{ keys: '1 2 3', does: t('engine.hint.tools') },
-		{ keys: t('engine.hint.lookBuilding.keys'), does: t('engine.hint.lookBuilding') },
-		{ keys: t('engine.hint.upright.keys'), does: t('engine.hint.upright') },
-		{ keys: t('engine.hint.undo.keys'), does: t('engine.hint.undo') },
-		{ keys: 'Enter', does: t('engine.hint.chat') },
+		...plugins.map((hint) => ({ keys: typeof hint.keys === 'string' ? hint.keys : t(hint.keys.message), does: t(hint.does) })),
 		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },
 		{ keys: 'Esc', does: t('engine.hint.release') }
 	]);
@@ -31,7 +29,7 @@
 			<button class="close" type="button" onclick={() => (open = false)}>{t('common.close')}</button>
 		{/snippet}
 		<ul class="hints">
-			{#each hints as hint (hint.keys)}
+			{#each hints as hint (hint.does)}
 				<li><kbd>{hint.keys}</kbd> {hint.does}</li>
 			{/each}
 		</ul>

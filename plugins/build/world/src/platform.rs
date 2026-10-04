@@ -9,7 +9,7 @@
 //! A platform is cut by the frame, as a plot is: those of one size tile it,
 //! and two side by side meet edge to edge with their pillars paired.
 
-use crate::{Gesture, Span};
+use voxel::{Gesture, Span};
 
 /// What carries a slab down to the ground.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -109,7 +109,7 @@ impl Platform {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Volumes;
+    use voxel::Volumes;
 
     fn built(platform: Platform, ground: impl Fn(i32, i32) -> i32) -> Volumes {
         built_on(Base::Deck, platform, ground)

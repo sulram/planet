@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use client::{Client, Input, Key, Outbound};
+use client::{Chord, Client, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, PointerEvent, WheelEvent};
@@ -283,7 +283,7 @@ impl State {
         self.client.set_aspect(width as f32 / height as f32);
         let frame = self.client.update(dt, &mut self.input);
         // A tool aims with a free pointer: taking one lets a captured one go.
-        if self.client.building() && locked(&self.canvas) {
+        if self.client.pointing() && locked(&self.canvas) {
             if let Some(document) = web_sys::window().and_then(|w| w.document()) {
                 document.exit_pointer_lock();
             }
@@ -447,45 +447,49 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
         let state = state.clone();
         move |event: web_sys::Event| {
             let event: KeyboardEvent = event.unchecked_into();
-            // Command on a Mac, Control elsewhere; the page has nothing of
-            // its own to take back here.
-            let command = event.meta_key() || event.ctrl_key();
-            let undo = match event.code().as_str() {
-                "KeyZ" if command && event.shift_key() => Some(Key::Redo),
-                "KeyZ" if command => Some(Key::Undo),
-                "KeyY" if command => Some(Key::Redo),
-                _ => None,
+            let code = event.code();
+            // Command on a Mac, Control elsewhere.
+            let chord = Chord {
+                command: event.meta_key() || event.ctrl_key(),
+                shift: event.shift_key(),
             };
-            if let Some(key) = undo {
+            let mut state = state.borrow_mut();
+            if !down {
+                state.input.hold(&code, false);
+            }
+            if state.client.asks(&code, chord) {
+                // A key a plugin asked for is the plugin's, and the page has
+                // nothing of its own to do with it here.
                 event.prevent_default();
                 if down && !event.repeat() {
-                    state.borrow_mut().input.key(key, true);
+                    state.input.code(&code, chord, true);
                 }
-            } else if let Some(key) = binding(&event.code()) {
+            } else if let Some(key) = binding(&code) {
                 event.prevent_default();
                 // One shot keys must not fire again while held.
                 if !(down && event.repeat()) {
-                    state.borrow_mut().input.key(key, down);
+                    state.input.key(key, down);
                 }
             }
         }
     };
-    // Building, the primary button is the tool's and the secondary one looks
-    // while it is held, so the pointer stays free to aim. Otherwise a press
-    // captures the pointer, and the camera has it until Escape.
+    // While a plugin has the pointer, the primary button is its tool's and
+    // the secondary one looks while it is held, so the pointer stays free to
+    // aim. Otherwise a press captures the pointer, and the camera has it
+    // until Escape.
     let press = {
         let (state, canvas) = (state.clone(), canvas.clone());
         move |event: web_sys::Event| {
             let event: PointerEvent = event.unchecked_into();
             let _ = canvas.focus();
             let mut state = state.borrow_mut();
-            if state.client.building() {
+            if state.client.pointing() {
                 event.prevent_default();
                 let _ = canvas.set_pointer_capture(event.pointer_id());
                 state.input.pointer = Some(fraction(&canvas, &event));
                 // The pointer says what is held with it, whoever had the
                 // keys when it went down.
-                state.input.key(Key::Turn, event.alt_key());
+                hold_alt(&mut state.input, event.alt_key());
                 match event.button() {
                     PRIMARY => state.input.key(Key::Use, true),
                     SECONDARY => state.looking = true,
@@ -517,11 +521,11 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             if !locked(&canvas) {
                 state.input.pointer = Some(fraction(&canvas, &event));
             }
-            // Building, the keys are the tool's while the pointer is over
-            // the world: a button of the panel that was clicked last keeps
-            // them otherwise, and a key meant for the stroke is lost.
-            if state.client.building() {
-                state.input.key(Key::Turn, event.alt_key());
+            // With a tool in hand, the keys are the tool's while the pointer
+            // is over the world: a button of the panel that was clicked last
+            // keeps them otherwise, and a key meant for the stroke is lost.
+            if state.client.pointing() {
+                hold_alt(&mut state.input, event.alt_key());
                 if !typing() {
                     let _ = canvas.focus();
                 }
@@ -532,11 +536,12 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             }
         }
     };
-    // The secondary button looks while building; the page keeps its menu.
+    // The secondary button looks while a tool is in hand; the page keeps
+    // its menu.
     let menu = {
         let state = state.clone();
         move |event: web_sys::Event| {
-            if state.borrow().client.building() {
+            if state.borrow().client.pointing() {
                 event.prevent_default();
             }
         }
@@ -570,7 +575,18 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
     ]
 }
 
-/// Key bindings. Mirrors `shell-desktop`, with DOM `KeyboardEvent.code` names.
+/// Keeps Alt in step with what a pointer event says of it. A plugin asks for
+/// either Alt by the name the web gives it.
+fn hold_alt(input: &mut Input, down: bool) {
+    input.hold("AltLeft", down);
+    if !down {
+        input.hold("AltRight", false);
+    }
+}
+
+/// The core's key bindings. Mirrors `shell-desktop`, with DOM
+/// `KeyboardEvent.code` names. A plugin's keys are asked for by name
+/// ([`client::Client::asks`]) and reach it by the same names.
 fn binding(code: &str) -> Option<Key> {
     Some(match code {
         "KeyW" | "ArrowUp" => Key::Forward,
@@ -583,14 +599,6 @@ fn binding(code: &str) -> Option<Key> {
         "KeyF" => Key::ToggleMode,
         "KeyR" => Key::NewSeed,
         "KeyV" => Key::NextAvatar,
-        "KeyB" => Key::Build,
-        "Digit1" => Key::Create,
-        "Digit2" => Key::Delete,
-        "Digit3" => Key::Paint,
-        "AltLeft" | "AltRight" => Key::Turn,
-        // The browser takes Escape to let a captured pointer go; building,
-        // the pointer is free and Escape is the tool's.
-        "Escape" => Key::Cancel,
         _ => return None,
     })
 }

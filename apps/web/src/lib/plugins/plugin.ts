@@ -4,7 +4,7 @@
  * plugin's own name (docs/PLUGINS.md).
  */
 import type { Component } from 'svelte';
-import type { Anchor, Command, PeerInfo } from '$lib/engine';
+import type { Anchor, Command, Level, PeerInfo } from '$lib/engine';
 import type { MessageKey } from '$lib/i18n';
 
 /** The seam, as one plugin reaches it. */
@@ -31,9 +31,20 @@ export interface LayerProps {
 	online: boolean;
 	/** This client's own session, while online. */
 	me: number | null;
+	/** What the world said this person may do. */
+	level: Level | null;
+	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. */
+	palette: string[];
 	peers: PeerInfo[];
 	/** Where every head in view is on the screen, each frame. */
 	anchors: Anchor[];
+}
+
+/** A key of a plugin, as the help panel lists it while the plugin is on. */
+export interface Hint {
+	/** What is pressed: said as it is, `B`, or by a message where words name it. */
+	keys: string | { message: MessageKey };
+	does: MessageKey;
 }
 
 /** A plugin as the web front end holds it. */
@@ -46,4 +57,6 @@ export interface WebPlugin {
 	label: MessageKey;
 	/** What it draws over the world. A plugin with nothing to show has none. */
 	Layer?: Component<LayerProps>;
+	/** The keys it asks for, for the help panel. */
+	hints?: readonly Hint[];
 }

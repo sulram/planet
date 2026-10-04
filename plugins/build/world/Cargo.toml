@@ -1,0 +1,14 @@
+[package]
+name = "build-world"
+description = "The build plugin's world half: its name, its version, and its kinds of construction as the gestures they come to."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+world.workspace = true
+voxel.workspace = true
+
+[lints]
+workspace = true

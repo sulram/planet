@@ -8,7 +8,7 @@
 
 mod assets;
 mod box_figure;
-mod build;
+mod cells;
 pub mod collision;
 mod controller;
 mod figure;
@@ -30,21 +30,16 @@ use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
-pub use build::PALETTE;
-pub use build::PLATFORMS;
-use build::{Build, Eye};
+pub use cells::{Aim, Cells, PALETTE, Refusal, Seat, Sight};
 pub use controller::{Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
-pub use input::{Input, Key};
+pub use input::{Chord, Input, Key, KeyAsk};
 use peers::Peers;
 pub use place::Pose;
-use plugin::Plugins;
-pub use plugin::{Host, Plugin};
+pub use plugin::{Eye, Feet, Host, Plugin, Turn};
+use plugin::{Lent, Plugins};
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{
-    Anchor, Base, BuildRefusal, Command, Event, Level, Mode, PeerInfo, PluginOn, SessionStatus,
-    Tool,
-};
+pub use seam::{Anchor, Command, Event, Level, Mode, PeerInfo, PluginOn, SessionStatus};
 pub use session::Outbound;
 use session::Session;
 use terrain::{Body, Cover, Terrain};
@@ -66,14 +61,14 @@ pub struct Client {
     controller: Controller,
     terrain: Terrain,
     moon_terrain: Terrain,
-    /// Volumes, and the tool that builds in them.
-    build: Build,
+    /// The cells of the world: its volumes, and what is drawn of them.
+    cells: Cells,
     /// What the last world to welcome this client said it may do. `None`
-    /// until one has: the offline preview builds freely.
+    /// until one has: with no world, nothing is changed (DECISIONS 104).
     level: Option<Level>,
-    /// Whether there was a stroke to take back and one to put back, as last
-    /// said: [`Event::History`] goes out when that changes.
-    history: (bool, bool),
+    /// The plugin that has the pointer, while one does: the pointer stays
+    /// free to aim and its button is that plugin's.
+    pointer: Option<&'static str>,
     /// The player's own body.
     figure: Figure,
     /// The clips every figure shares.
@@ -133,9 +128,9 @@ impl Client {
             controller,
             terrain: Terrain::new(Body::new(terrain::Kind::Planet, sphere)),
             moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
-            build: Build::default(),
+            cells: Cells::default(),
             level: None,
-            history: (false, false),
+            pointer: None,
             figure: Figure::default(),
             clips: Clips::new(),
             wardrobe: Wardrobe::default(),
@@ -183,7 +178,6 @@ impl Client {
             session: None,
             level: None,
         });
-        client.tool_changed();
         Ok(client)
     }
 
@@ -387,101 +381,57 @@ impl Client {
                 self.session.rename(&name);
                 self.wanted_name = name;
             }
-            Command::SetTool { tool } => self.take_tool(tool),
-            Command::SetPaint { paint } => {
-                self.build.set_paint(paint);
-                self.tool_changed();
-            }
-            Command::SetPlatform { side } => {
-                self.build.set_platform(side);
-                self.tool_changed();
-            }
-            Command::LayPlatform { base } => {
-                self.lay_platform(base);
-            }
-            Command::Undo => {
-                self.build.undo(&self.generator);
-                self.history_changed();
-            }
-            Command::Redo => {
-                self.build.redo(&self.generator);
-                self.history_changed();
-            }
         }
     }
 
-    /// Says whether there is a stroke to take back or to put back, when that
-    /// changed.
-    fn history_changed(&mut self) {
-        let history = self.build.history();
-        if history != self.history {
-            self.history = history;
-            let (undo, redo) = history;
-            self.events.push(Event::History { undo, redo });
-        }
+    /// Whether a plugin has the pointer, a tool in hand: a shell hands the
+    /// pointer's button over as [`Key::Use`] then, and keeps the pointer free
+    /// to aim with.
+    pub fn pointing(&self) -> bool {
+        self.pointer.is_some()
     }
 
-    /// Whether a tool is in hand: a shell hands the pointer's button to the
-    /// tool then, and keeps the pointer free to aim with.
-    pub fn building(&self) -> bool {
-        self.build.tool().is_some()
+    /// Whether a plugin that is on in this world asks for a key of the
+    /// keyboard, by the name the web gives it, with what is held with it. A
+    /// shell hands such a key to [`Input::code`] and keeps it from whatever
+    /// else would take it.
+    pub fn asks(&self, code: &str, chord: Chord) -> bool {
+        self.plugins.asks(code, chord)
     }
 
-    /// Whether this client may build. A world says so in its welcome; before
-    /// one has spoken this is the offline preview, which builds freely. A
-    /// server checks the same level when a stroke is an op.
-    fn may_build(&self) -> bool {
-        self.level.is_none_or(|level| level >= Level::Builder)
+    /// The cells of the world, to read.
+    pub fn cells(&self) -> &Cells {
+        &self.cells
     }
 
-    /// Takes a tool, or puts it down with `None`. It builds nothing: what a
-    /// stroke starts on is laid by asking for a platform.
-    fn take_tool(&mut self, tool: Option<Tool>) {
-        if tool.is_some() && !self.may_build() {
-            self.events.push(Event::BuildRefused {
-                reason: BuildRefusal::Level,
-            });
-            return;
-        }
-        self.build.take(tool);
-        self.tool_changed();
-    }
-
-    /// Asks for a platform where the body stands, laid over the next few
-    /// updates. False where none can be laid, which is said.
-    fn lay_platform(&mut self, base: Base) -> bool {
-        let asked = if !self.may_build() {
-            Err(BuildRefusal::Level)
-        } else if self.controller.on_moon() {
-            Err(BuildRefusal::Moon)
-        } else {
-            self.build.lay_platform(
-                &self.generator,
-                self.controller.point(),
-                self.controller.height_m(),
-                base,
-            )
+    /// The plugins, and what of the core their host lends them for a call.
+    fn lend(&mut self) -> (&mut Plugins, Lent<'_>) {
+        let lent = Lent {
+            session: &mut self.session,
+            events: &mut self.events,
+            generator: &self.generator,
+            cells: &mut self.cells,
+            controller: &mut self.controller,
+            level: self.level,
+            pointer: &mut self.pointer,
         };
-        if let Err(reason) = asked {
-            self.events.push(Event::BuildRefused { reason });
-        }
-        asked.is_ok()
+        (&mut self.plugins, lent)
     }
 
-    /// Lifts the body onto a platform laid since the last update, when it
-    /// stands lower: the slab stands over the ground the body stood on.
-    fn stand_on_laid(&mut self) {
-        if let Some(top_m) = self.build.take_laid() {
-            self.controller.lift_onto(top_m);
-        }
+    /// A host for a plugin held outside this client: what a plugin's own
+    /// tests stand on.
+    pub fn host(&mut self, plugin: &'static str) -> Host<'_> {
+        self.lend().1.host(plugin)
     }
 
-    fn tool_changed(&mut self) {
-        self.events.push(Event::ToolChanged {
-            tool: self.build.tool(),
-            paint: self.build.paint(),
-            platform: self.build.platform(),
-        });
+    /// Stands in for a world's word where there is no world to say it: this
+    /// session has `level`, and every plugin plugged in is on at the version
+    /// it holds. For a headless picture, a bench and a test. A person's
+    /// client hears both from a world alone (DECISIONS 104).
+    pub fn rehearse(&mut self, level: Level) {
+        self.level = Some(level);
+        let plugins = self.plugins.rehearse();
+        self.events.push(Event::Statement { plugins });
     }
 
     /// Commands arriving as JSON over the seam. Bad JSON becomes a
@@ -526,15 +476,8 @@ impl Client {
     /// `body` the rest of its JSON. Refused when no plugin of that name is on
     /// in this world.
     pub fn plugin_command(&mut self, plugin: &str, kind: &str, body: serde_json::Value) {
-        let taken = self.plugins.command(
-            plugin,
-            kind,
-            body,
-            &mut self.session,
-            &mut self.events,
-            &self.generator,
-        );
-        if !taken {
+        let (plugins, lent) = self.lend();
+        if !plugins.command(plugin, kind, body, lent) {
             self.events.push(Event::Rejected {
                 message: format!("`{plugin}.{kind}`: no plugin `{plugin}` is on in this world"),
             });
@@ -544,7 +487,8 @@ impl Client {
     /// Takes the world's statement of which plugins are on, and says it to
     /// the front end.
     fn spoken(&mut self, spoken: &[protocol::Plugin]) {
-        let (plugins, apart) = self.plugins.speak(spoken);
+        let (plugins, lent) = self.lend();
+        let (plugins, apart) = plugins.speak(spoken, lent);
         for message in apart {
             self.events.push(Event::Rejected { message });
         }
@@ -756,10 +700,6 @@ impl Client {
                 }
                 self.session.welcomed(welcome.session);
                 self.level = Some(Level::from_wire(welcome.level));
-                // A tool taken before the world spoke is put down by its word.
-                if !self.may_build() && self.build.tool().is_some() {
-                    self.take_tool(None);
-                }
                 for peer in &welcome.peers {
                     self.peers.add(peer, &self.generator);
                 }
@@ -802,12 +742,10 @@ impl Client {
                 self.peers.renamed(renamed.session, &renamed.name);
                 self.peers_changed();
             }
-            Some(Message::Envelope(envelope)) => self.plugins.receive(
-                &envelope,
-                &mut self.session,
-                &mut self.events,
-                &self.generator,
-            ),
+            Some(Message::Envelope(envelope)) => {
+                let (plugins, lent) = self.lend();
+                plugins.receive(&envelope, lent);
+            }
             Some(Message::Plugins(plugins)) => self.spoken(&plugins.plugins),
             Some(Message::Refused(refused)) => {
                 self.events.push(Event::Rejected {
@@ -854,7 +792,8 @@ impl Client {
             session: None,
             level: self.level,
         });
-        let plugins = self.plugins.hush();
+        let (plugins, lent) = self.lend();
+        let plugins = plugins.hush(lent);
         self.events.push(Event::Statement { plugins });
         self.events.push(Event::Peers { peers: Vec::new() });
     }
@@ -898,7 +837,7 @@ impl Client {
 
     /// Volume mesh uploads and removals since the last call, in order.
     pub fn drain_volume_changes(&mut self) -> Vec<VolumeChange> {
-        self.build.drain_changes()
+        self.cells.drain_changes()
     }
 
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
@@ -909,12 +848,10 @@ impl Client {
 
     /// Advances the simulation by `dt` seconds and returns the frame to draw.
     pub fn update(&mut self, dt: f64, input: &mut Input) -> Frame {
-        let (pressed, look, zoom, interrupted) = input.take_frame();
-        if interrupted {
-            self.build.cancel();
-        }
+        let taken = input.take_frame();
+        let (look, zoom) = (taken.look, taken.zoom);
         self.entropy = self.entropy.wrapping_add(dt.to_bits()).rotate_left(7);
-        for key in pressed {
+        for key in taken.pressed {
             match key {
                 Key::ToggleMode => self.set_mode(match self.controller.mode {
                     Mode::Walk => Mode::Fly,
@@ -930,27 +867,12 @@ impl Client {
                     self.command(Command::SetRecipe { recipe });
                 }
                 Key::NextAvatar => self.next_avatar(),
-                Key::Build => {
-                    let tool = match self.build.tool() {
-                        Some(_) => None,
-                        None => Some(self.build.last_tool()),
-                    };
-                    self.take_tool(tool);
-                }
-                Key::Create => self.take_tool(Some(Tool::Create)),
-                Key::Delete => self.take_tool(Some(Tool::Delete)),
-                Key::Paint => self.take_tool(Some(Tool::Paint)),
-                // A stroke half drawn goes first, then the tool itself.
-                Key::Cancel => {
-                    if !self.build.cancel() && self.build.tool().is_some() {
-                        self.take_tool(None);
-                    }
-                }
-                Key::Undo => self.command(Command::Undo),
-                Key::Redo => self.command(Command::Redo),
                 _ => {}
             }
         }
+        // A plugin hears the keys it asked for by name.
+        let (plugins, lent) = self.lend();
+        plugins.keys(&taken.codes, lent);
 
         // Long frames (a stalled tab) must not tunnel the avatar anywhere.
         let dt = dt.clamp(0.0, 0.1);
@@ -978,7 +900,7 @@ impl Client {
         let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
         self.controller.set_drawn_footprint(footprint_m);
         self.controller
-            .update(dt, wish, &self.generator, &self.build);
+            .update(dt, wish, &self.generator, &self.cells);
         let motion = Motion::of(&self.controller);
         self.figure.update(dt, &motion, &self.clips);
         self.peers.update(dt, moon, &self.clips);
@@ -1002,18 +924,17 @@ impl Client {
             // A captured pointer aims through the middle of the view.
             pointer: input.pointer.unwrap_or([0.5, 0.5]).map(f64::from),
         };
-        self.build.update(
-            &self.generator,
-            &eye,
-            input.held(Key::Use),
-            input.held(Key::Turn),
-        );
-        self.stand_on_laid();
-        self.history_changed();
+        // Each plugin's turn, then the cells drawn as the turns left them.
+        let (plugins, lent) = self.lend();
+        plugins.turn(&eye, input, taken.interrupted, lent);
+        self.cells.update(self.generator.sphere(), eye.position);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
-        let settled = self.terrain.settled() && self.moon_terrain.settled() && self.build.settled();
+        let settled = self.terrain.settled()
+            && self.moon_terrain.settled()
+            && self.cells.settled()
+            && !self.plugins.busy();
         if settled && !self.settled {
             self.events.push(Event::Settled);
         }
@@ -1080,8 +1001,9 @@ impl Client {
     /// patch is built: for headless renders only.
     pub fn settled_frame(&mut self) -> Frame {
         let eye = self.controller.camera(&self.generator).position;
-        self.build.settle(&self.generator, eye);
-        self.stand_on_laid();
+        let (plugins, lent) = self.lend();
+        plugins.settle(lent);
+        self.cells.settle(self.generator.sphere(), eye);
         let camera = self.controller.camera(&self.generator);
         let patches = self.stream(&camera, Terrain::settle);
         self.frame(camera, patches)
@@ -1111,10 +1033,10 @@ impl Client {
             ..*camera
         };
         // Grass grows again where what is built over it changed.
-        for (middle, angle) in self.build.drain_touched() {
+        for (middle, angle) in self.cells.drain_touched() {
             self.terrain.regrow(middle, angle);
         }
-        let build = &self.build;
+        let build = &self.cells;
         let on_planet = select(
             &mut self.terrain,
             &self.generator,
@@ -1187,8 +1109,8 @@ impl Client {
             },
             boxes,
             skinned,
-            volumes: self.build.drawn(),
-            ghost: self.build.ghost(),
+            volumes: self.cells.drawn(),
+            ghost: self.cells.ghost(),
         }
     }
 
@@ -1217,13 +1139,11 @@ impl Client {
             && self.controller.sphere() == generator.sphere()
             && standable(&generator, held);
         self.generator = generator;
-        // Volumes and their platforms stood on the old ground.
-        self.build.clear();
-        self.history_changed();
-        if self.build.tool().is_some() {
-            self.build.take(None);
-            self.tool_changed();
-        }
+        // What a plugin had in hand was for the old ground, and so were the
+        // volumes that stood on it.
+        let (plugins, lent) = self.lend();
+        plugins.rest(lent);
+        self.cells.clear();
         if keep {
             // A flyer keeps its altitude, which `stand_at` lifts if the new
             // ground rose through it; a walker lands on whatever is there now.

@@ -150,14 +150,14 @@ not yet confirmed.
   answered with `effects_changed`, carried in every `Frame`. The renderer holds
   no setting of its own. Both UIs put a button in the top right corner; the
   web keeps the choice in the browser, since it belongs to the machine.
-- Building (76, 78, 79, 85): `set_tool` takes a tool or `null`, then
-  `set_paint`, `set_platform`, `lay_platform` with its base, `undo`, `redo`;
-  the engine says `tool_changed`, `palette`, `build_refused`, `history`. Both
-  UIs put Build in the bottom right corner. Building, the pointer is free and
-  `Input` carries where it is and whether Alt is held with it: the primary
-  button is the tool's, the secondary one looks. 1 2 3 take a tool, Alt turns
-  a stroke, Escape drops the stroke and then the tool, Cmd or Ctrl Z takes a
-  stroke back and with Shift puts it back.
+- Building is a plugin (106, 109): `build.take` takes a tool or `null`, then
+  `build.paint`, `build.platform`, `build.lay` with its base, `build.undo`,
+  `build.redo`; it says `build.hand`, `build.refused`, `build.history`, and
+  the core says `palette`. With a tool in hand the plugin has the pointer: it
+  is free, the primary button is the tool's, the secondary one looks. Its
+  keys are asked for by name and each shell binds them: B, 1 2 3 take a tool,
+  Alt turns a stroke, Escape drops the stroke and then the tool, Cmd or Ctrl
+  Z takes a change back and with Shift puts it back.
 - Desktop: `ui-native`, where all of egui lives. egui and egui-winit from
   crates, the painter ours (`egui-wgpu` pins an older wgpu). The shell hands it
   window events first while the pointer is free; `shot --panel` paints it over

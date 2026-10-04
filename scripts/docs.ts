@@ -127,6 +127,8 @@ const ALLOWED: Record<string, string[]> = {
 	// another plugin's (DECISIONS 93). A world half's names no `client`.
 	'chat-world': ['world', 'protocol'],
 	'chat-client': ['client', 'protocol', 'chat-world'],
+	'build-world': ['world', 'voxel'],
+	'build-client': ['client', 'topology', 'voxel', 'build-world'],
 };
 // A crate is a folder with a manifest: the core's under crates/, and a
 // plugin's two under plugins/<name>/, `<name>-client` and `<name>-world`

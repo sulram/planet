@@ -1,0 +1,58 @@
+<script lang="ts">
+	import { builds } from '$lib/instance';
+	import type { LayerProps } from '$lib/plugins/plugin';
+	import Panel from './Panel.svelte';
+	import { parseHand, parseHistory, parseRefused, type Base, type Refusal, type Tool } from './protocol';
+
+	// Building over the world: what the plugin says is in hand, why it last
+	// refused, and what there is to take back. A front end only: it shows
+	// those and asks for others, and what a tool, a stroke and a platform do
+	// is the plugin's crate's.
+	let { seam, level, palette }: LayerProps = $props();
+
+	let tool = $state<Tool | null>(null);
+	let paint = $state(0);
+	let platform = $state(16);
+	let refused = $state<Refusal | null>(null);
+	let history = $state({ undo: false, redo: false });
+
+	$effect(() => {
+		const stop = seam.listen((kind, event) => {
+			if (kind === 'hand') {
+				const hand = parseHand(event);
+				if (hand) ({ tool, paint, platform } = hand);
+			} else if (kind === 'refused') refused = parseRefused(event);
+			else if (kind === 'history') history = parseHistory(event) ?? history;
+		});
+		// What is in hand was said before this layer listened: ask for it.
+		seam.command('state');
+		return stop;
+	});
+
+	function take(next: Tool | null) {
+		refused = null;
+		seam.command('take', { tool: next });
+	}
+
+	function lay(base: Base) {
+		refused = null;
+		seam.command('lay', { base });
+	}
+</script>
+
+{#if builds(level)}
+	<Panel
+		{tool}
+		{paint}
+		{platform}
+		{palette}
+		{refused}
+		{history}
+		onbuild={take}
+		onpaint={(next) => seam.command('paint', { paint: next })}
+		onplatform={(side) => seam.command('platform', { side })}
+		onlay={lay}
+		onundo={() => seam.command('undo')}
+		onredo={() => seam.command('redo')}
+	/>
+{/if}

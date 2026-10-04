@@ -1,8 +1,8 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106
-and 108; how much of it is built, and in what order, is in BRIEF.md.
+shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
+108 and 109; how much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
@@ -22,7 +22,8 @@ and 108; how much of it is built, and in what order, is in BRIEF.md.
 - Ours, compiled in: a config at the root lists them and the build bundles
   them, so a version is the core plus the plugins chosen for it.
 - Native plugins: chat, building, land, avatars, made in that order (96).
-  Chat, building and avatars are extracted from where they stand today.
+  Chat and building stand as plugins; avatars are extracted from where they
+  stand today.
 - Which plugins are on is the world's own (91). The config says whether each
   starts on; the admin switches any of them at the founding and after, in the
   world folder. A plugin switched off keeps its store untouched.
@@ -140,16 +141,16 @@ A plugin is one folder, `plugins/<name>/` (100):
 
 ## What the host offers
 
-- Cut as each plugin asks for it, by extracting what exists (88). Chat cut
-  these (98); building cuts a turn in each frame, its keys asked for by name,
-  and the words of the cells: aim, preview, apply, take back (106).
+- Cut as each plugin asks for it, by extracting what exists (88): the
+  envelope, the statement and the switch by chat (98); the turn, the keys,
+  the pointer and the words of the cells by building (109).
 - **The envelope**: `Envelope { plugin, kind, payload }`, up for an op and
   down for an event. A message for a plugin that is off, or that nobody
   carries, is let pass.
 - **Ops said as data**: a plugin lists its ops, each with the least level
   that may ask it. The host checks the level before the plugin sees the op.
-  The answer to an op, landed or refused, is cut by building: until it is,
-  an op that stops at the host is dropped unheard.
+  The answer to an op, landed or refused, is cut by the gesture on the
+  socket: until it is, an op that stops at the host is dropped unheard.
 - **The statement**: the plugins that are on, each with its version, at
   `GET /api/world`, in `Welcome` and in `Plugins` when the admin switches
   one. A client mounts a plugin when the world says its name at the version
@@ -160,13 +161,29 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **On the server**, services that carry no feature (99), a `world::Room`:
   the moment, who is here, the body's measure, an event told to the sessions
   the plugin picks. Whether a session may is asked before the plugin sees the
-  op. A store joins them with building. How near two sessions stand is the
-  world half's own sum, with the room's measure.
+  op. A store joins them with the cells kept. How near two sessions stand is
+  the world half's own sum, with the room's measure.
 - **On the client**, a host: `send` an op up, `emit` an event over the seam,
   read a stance as a place.
+- **A turn**: each frame, after the body moved and before the picture, with
+  the eye, the pointer and those of the plugin's keys that are held. A plugin
+  says when it owes work (`busy`), does it at once for a picture (`settle`),
+  and puts down what it has in hand when its world switches it off (`rest`).
+- **Keys by name**: a plugin lists its keys as data, each a name, a key of a
+  keyboard as the web names it, a chord, and held or heard once. A shell
+  hands over the keys the client says are asked for.
+- **The pointer**: one plugin has it at a time. With it the pointer is free
+  to aim and its button is the plugin's.
+- **The cells' words**: read freely, `holds`, `cell`, `corner`, `sight` from
+  a point along a direction, `history`; asked as ops, `open`, `apply`
+  (gestures as one change), `preview`, `take_back`, `put_back`. Where cells
+  stand is a `Seat`, a sector today, never a bare address.
+- **The body's words**: where its feet are, a floor to be lifted onto and,
+  for the plugin with the pointer, flight through cells.
 - **On the web**, a layer over the world, mounted while the plugin is on, and
   a `Seam` under its own name: commands out, its events in, the pointer let
-  go and taken back.
+  go and taken back. The core's readings come as props, the level and the
+  palette among them, and a plugin's keys are listed in the help by it.
 - A hook is written when a plugin asks: who may do what and where, which
   avatars are offered.
 
