@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -154,7 +153,7 @@ func stance(u float32) *pb.Stance {
 }
 
 func TestTwoPeopleSeeEachOther(t *testing.T) {
-	hub := NewHub(founded(recipe(t)))
+	hub := NewHub(founded(recipe(t)), nil, nil)
 
 	a := connect(t, hub, hello())
 	welcome := a.hear().GetWelcome()
@@ -242,7 +241,7 @@ func TestAKeyNamesAPerson(t *testing.T) {
 		t.Fatal("a key past its life names nobody")
 	}
 
-	hub := NewHub(founded(recipe(t)))
+	hub := NewHub(founded(recipe(t)), nil, nil)
 	a := connectAs(t, hub, who, hello())
 	if welcome := a.hear().GetWelcome(); welcome == nil || welcome.Level != pb.Level_LEVEL_BUILDER {
 		t.Fatalf("a person is welcome, and told their level: %v", welcome)
@@ -276,7 +275,7 @@ func TestTheWireCountsLevelsAsTheCoreDoes(t *testing.T) {
 }
 
 func TestWhatIsRefused(t *testing.T) {
-	hub := NewHub(founded(recipe(t)))
+	hub := NewHub(founded(recipe(t)), nil, nil)
 
 	old := connect(t, hub, &pb.Hello{Protocol: Protocol + 1})
 	if old.hear().GetRefused() == nil {
@@ -290,7 +289,7 @@ func TestWhatIsRefused(t *testing.T) {
 		t.Fatal("nothing refused leaves an actor behind")
 	}
 
-	empty := NewHub(unfounded{})
+	empty := NewHub(unfounded{}, nil, nil)
 	early := connect(t, empty, hello())
 	if refused := early.hear().GetRefused(); refused == nil || refused.Reason != ErrUnfounded.Error() {
 		t.Fatalf("a world with no recipe yet is refused: %v", refused)
@@ -302,7 +301,7 @@ func TestWhatIsRefused(t *testing.T) {
 }
 
 func TestANameIsGivenAndChanged(t *testing.T) {
-	hub := NewHub(founded(recipe(t)))
+	hub := NewHub(founded(recipe(t)), nil, nil)
 	a := connect(t, hub, &pb.Hello{Protocol: Protocol, Name: "  Zed   the  " + strings.Repeat("z", NameChars)})
 	a.hear()
 	b := connect(t, hub, hello())
@@ -336,68 +335,114 @@ func TestANameIsGivenAndChanged(t *testing.T) {
 	c.leave()
 }
 
-func TestALineReachesItsScope(t *testing.T) {
-	hub := NewHub(founded(recipe(t)))
-	a := connect(t, hub, hello())
-	me := a.hear().GetWelcome().Session
-	b := connect(t, hub, hello())
-	b.hear()
+// echo is a plugin that says back what it is asked, to everyone near the
+// asker, and counts who left.
+type echo struct {
+	gone []uint32
+}
+
+func (e *echo) Name() string    { return "echo" }
+func (e *echo) Version() uint32 { return 7 }
+func (e *echo) Ops() []Op {
+	return []Op{{Kind: "shout", Level: LevelAnonymous}, {Kind: "decree", Level: LevelBuilder}}
+}
+func (e *echo) Do(room Room, who Who, kind string, payload []byte) {
+	room.Tell(kind+"ed", payload, func(other Who) bool { return room.Near(who, other, 64) })
+}
+func (e *echo) Gone(session uint32) { e.gone = append(e.gone, session) }
+
+func ask(plugin, kind, text string) *pb.ClientMessage {
+	return &pb.ClientMessage{Message: &pb.ClientMessage_Envelope{Envelope: &pb.Envelope{
+		Plugin: plugin, Kind: kind, Payload: []byte(text),
+	}}}
+}
+
+// envelope waits for the next thing a plugin says to this client.
+func (c *client) envelope() string {
+	c.t.Helper()
+	e := c.hearUntil(func(m *pb.ServerMessage) bool { return m.GetEnvelope() != nil }).GetEnvelope()
+	return e.Plugin + "." + e.Kind + ":" + string(e.Payload)
+}
+
+func TestAnOpPassesTheHostOnItsWayToItsPlugin(t *testing.T) {
+	plugin := &echo{}
+	hub := NewHub(founded(recipe(t)), []Installed{{Plugin: plugin, On: true}}, nil)
+	visitor := connect(t, hub, hello())
+	welcome := visitor.hear().GetWelcome()
+	if len(welcome.Plugins) != 1 || welcome.Plugins[0].Name != "echo" || welcome.Plugins[0].Version != 7 {
+		t.Fatalf("the welcome says which plugins are on: %v", welcome.Plugins)
+	}
+	builder := connectAs(t, hub, Identity{UserID: "acc1", Name: "Ada", Level: LevelBuilder}, hello())
+	builder.hear()
 	far := connect(t, hub, hello())
 	far.hear()
-	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(100)}})
-	b.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(110)}})
+
+	// An op of a plugin nobody carries, a kind the plugin never offered and
+	// one over the asker's level stop at the host: the first thing heard is
+	// the op that passed, under the plugin's name.
+	visitor.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(100)}})
+	visitor.say(ask("nobody", "shout", "lost"))
+	visitor.say(ask("echo", "whisper", "unknown"))
+	visitor.say(ask("echo", "decree", "over my level"))
+	visitor.say(ask("echo", "shout", "hi"))
+	if heard := visitor.envelope(); heard != "echo.shouted:hi" {
+		t.Fatalf("what passed the host: %v", heard)
+	}
+	// A level that may, and a neighbour hears it: the host says who is near.
+	builder.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(110)}})
+	builder.say(ask("echo", "decree", "so be it"))
+	if heard := visitor.envelope(); heard != "echo.decreeed:so be it" {
+		t.Fatalf("a builder's op, heard next door: %v", heard)
+	}
+	// Both were said before the far one speaks, and neither reached it.
 	far.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(1100)}})
-	// The stances have to land before a line is measured against them: the
-	// neighbour waits to hear both its own and the speaker's.
-	landed := map[uint32]bool{}
-	b.hearUntil(func(m *pb.ServerMessage) bool {
-		for _, moved := range m.GetStances().GetMoved() {
-			landed[moved.Session] = true
-		}
-		return len(landed) >= 2
-	})
-
-	said := func(c *client) *pb.Said {
-		return c.hearUntil(func(m *pb.ServerMessage) bool { return m.GetSaid() != nil }).GetSaid()
-	}
-	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_NEAR, Text: "  hi  ", Here: true}}})
-	for _, c := range []*client{a, b} {
-		line := said(c)
-		if line.Session != me || line.Text != "hi" || line.Scope != pb.Scope_SCOPE_NEAR {
-			t.Fatalf("a near line reaches the speaker and a neighbour, trimmed: %v", line)
-		}
-		if line.Stance == nil || line.Stance.U != 100 {
-			t.Fatalf("with the speaker's place, as the actor saw it: %v", line)
-		}
-	}
-	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: "all"}}})
-	if line := said(far); line.Text != "all" || line.Stance != nil {
-		t.Fatalf("the far one hears only the world line, and no place unasked: %v", line)
+	far.say(ask("echo", "shout", "anyone?"))
+	if heard := far.envelope(); heard != "echo.shouted:anyone?" {
+		t.Fatalf("the far one hears itself alone: %v", heard)
 	}
 
-	long := strings.Repeat("x", LineChars+1)
-	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: long}}})
-	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD}}})
-	// Characters, not bytes: a full line of accents is still a line.
-	accented := strings.Repeat("ç", LineChars)
-	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: accented}}})
-	for i := range lineBurst + 2 {
-		a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Say{Say: &pb.Say{Scope: pb.Scope_SCOPE_WORLD, Text: strconv.Itoa(i)}}})
+	builder.leave()
+	left := visitor.hearUntil(func(m *pb.ServerMessage) bool { return m.GetLeft() != nil }).GetLeft()
+	// The plugin is called by the actor alone, and the Left it sent came after.
+	if !slices.Equal(plugin.gone, []uint32{left.Session}) {
+		t.Fatalf("a plugin is told who left: %v", plugin.gone)
 	}
+	visitor.leave()
+	far.leave()
+}
+
+func TestAPluginIsOnOrOffForAWorld(t *testing.T) {
+	plugin := &echo{}
+	// The config says on, and the world's own choice says off.
+	hub := NewHub(founded(recipe(t)), []Installed{{Plugin: plugin, On: true}}, map[string]bool{"echo": false})
+	if !hub.Carries("echo") || hub.Carries("nobody") || len(hub.Speaks()) != 0 {
+		t.Fatalf("the version carries it and the world has it off: %v", hub.Speaks())
+	}
+	a := connect(t, hub, hello())
+	if on := a.hear().GetWelcome().Plugins; len(on) != 0 {
+		t.Fatalf("a plugin that is off is not in the welcome: %v", on)
+	}
+	b := connect(t, hub, hello())
+	b.hear()
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(100)}})
+	a.say(ask("echo", "shout", "into the void"))
+	// The other one hears the Wear, so the op before it was handled: dropped.
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Wear{Wear: &pb.Wear{Avatar: "avatars/Ada.vrm"}}})
-	var heard []string
-	far.hearUntil(func(m *pb.ServerMessage) bool {
-		if line := m.GetSaid(); line != nil {
-			heard = append(heard, line.Text)
-		}
-		return m.GetWearing() != nil
-	})
-	// Two lines were already said in this window: three more fit.
-	if want := []string{accented, "0", "1"}; !slices.Equal(heard, want) {
-		t.Fatalf("too long, empty and past the rate are dropped: %v", heard)
+	b.hearUntil(func(m *pb.ServerMessage) bool { return m.GetWearing() != nil })
+
+	hub.Switch("echo", true)
+	said := a.hearUntil(func(m *pb.ServerMessage) bool { return m.GetPlugins() != nil || m.GetEnvelope() != nil }).GetPlugins()
+	if said == nil || len(said.Plugins) != 1 || said.Plugins[0].Name != "echo" {
+		t.Fatalf("off, an op is dropped, and everyone here is told what is on now: %v", said)
+	}
+	a.say(ask("echo", "shout", "hi"))
+	if heard := a.envelope(); heard != "echo.shouted:hi" {
+		t.Fatalf("on, an op lands: %v", heard)
+	}
+	if got := hub.Speaks(); len(got) != 1 || got[0] != (Spoken{Name: "echo", Version: 7}) {
+		t.Fatalf("the statement follows the switch: %v", got)
 	}
 
 	a.leave()
 	b.leave()
-	far.leave()
 }

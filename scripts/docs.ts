@@ -119,6 +119,8 @@ const ALLOWED: Record<string, string[]> = {
 	render: ['scene'],
 	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'protocol'],
 	'ui-native': ['client', 'scene'],
+	// A plugin's row names crates of the core, never a plugin's (DECISIONS 93).
+	chat: ['client', 'protocol'],
 };
 const ours = readdirSync(`${ROOT}/crates`).filter((d) => existsSync(`${ROOT}/crates/${d}/Cargo.toml`));
 for (const [crate, allowed] of Object.entries(ALLOWED)) {

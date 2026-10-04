@@ -1,0 +1,40 @@
+// The chat plugin's wire: what rides the core's envelope under the name
+// `chat` (DECISIONS 69, 93). `say` goes up as a Say, `said` comes down as a
+// Said. `bun run proto` generates Rust into crates/chat and Go into
+// server/internal/chat/wire.
+syntax = "proto3";
+
+package planet.chat.v1;
+
+import "planet/v1/world.proto";
+
+option go_package = "github.com/sulram/planet/server/internal/chat/wire;wire";
+
+// Who hears a line.
+enum Scope {
+  // Everyone within `NearBlocks` of the speaker, on the same body.
+  SCOPE_NEAR = 0;
+  // Everyone in the world, on every body.
+  SCOPE_WORLD = 1;
+}
+
+// A line of chat. Relayed to everyone in scope, the speaker included, and
+// never stored. Dropped, and nobody told, past the plugin's length and rate
+// limits: a UI holds the same limits so a person never meets them.
+message Say {
+  Scope scope = 1;
+  // At most 500 characters. May be empty when `here` is set.
+  string text = 2;
+  // Share where you stand: the server fills Said.stance from the stance it
+  // holds, so a client cannot claim to stand where it does not.
+  bool here = 3;
+}
+
+// A line someone said, the receiver's own included.
+message Said {
+  uint32 session = 1;
+  Scope scope = 2;
+  string text = 3;
+  // Where the speaker stood, when they shared it. Absent otherwise.
+  planet.v1.Stance stance = 4;
+}

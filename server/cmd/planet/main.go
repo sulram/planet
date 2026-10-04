@@ -19,6 +19,7 @@ import (
 	"github.com/sulram/planet/server/internal/api"
 	"github.com/sulram/planet/server/internal/folder"
 	"github.com/sulram/planet/server/internal/mundos"
+	"github.com/sulram/planet/server/internal/plugins"
 	"github.com/sulram/planet/server/internal/world"
 )
 
@@ -65,7 +66,7 @@ func serve() error {
 
 	server := &http.Server{
 		Addr:              net.JoinHostPort(envOr("HOST", "127.0.0.1"), envOr("PORT", "8090")),
-		Handler:           api.New(cfg, kept).Handler(),
+		Handler:           api.New(cfg, kept, plugins.All()).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	// mundos stops a world with SIGTERM: stop listening, let the requests in

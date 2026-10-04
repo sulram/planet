@@ -4,7 +4,17 @@
 	import { t } from '$lib/i18n';
 	import { fieldId, type Recipe } from '$lib/world';
 	import type { Link } from '$lib/instance';
-	import { loadEngine, type Command, type Effects, type Engine, type EngineEvent, type Mode } from './index';
+	import {
+		isPluginEvent,
+		loadEngine,
+		type Command,
+		type Effects,
+		type Engine,
+		type EngineEvent,
+		type Mode,
+		type PluginCommand,
+		type PluginEvent
+	} from './index';
 
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
 	// runs its own frame loop, input listeners and resize tracking; this
@@ -39,7 +49,7 @@
 		 * whenever the link drops.
 		 */
 		link?: Link;
-		onevent?: (event: EngineEvent) => void;
+		onevent?: (event: EngineEvent | PluginEvent) => void;
 	}
 
 	let { recipe, fieldPath, mode, avatar, name = '', effects, stand, link, onevent }: Props = $props();
@@ -48,7 +58,7 @@
 	 * A command with no prop of its own: a line said, a place gone to. Dropped
 	 * while the engine is not running, as every command is until it runs.
 	 */
-	export function command(command: Command) {
+	export function command(command: Command | PluginCommand) {
 		engine?.command(command);
 	}
 
@@ -138,7 +148,9 @@
 		here.connect(link.url);
 	}
 
-	function receive(event: EngineEvent) {
+	function receive(event: EngineEvent | PluginEvent) {
+		// A plugin's event is its panel's to read: the view passes it on.
+		if (isPluginEvent(event)) return onevent?.(event);
 		if (event.type === 'recipe_changed') {
 			engineRecipe = JSON.stringify(event.recipe);
 			// Whether the engine now stands in the world the page wanted. The

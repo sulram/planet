@@ -28,6 +28,9 @@ pub fn run(
         None => Client::new(recipe),
     }
     .map_err(|e| e.to_string())?;
+    for plugin in plugins::all() {
+        client.plug(plugin);
+    }
     if let Some(place) = &at {
         client.go_to(place).map_err(|e| format!("--at {e}"))?;
     }
@@ -166,7 +169,8 @@ impl Stage {
                 | Event::EffectsChanged { .. }
                 | Event::Session { .. }
                 | Event::Peers { .. }
-                | Event::Said { .. }
+                | Event::Statement { .. }
+                | Event::Plugin(_)
                 | Event::Anchors { .. }
                 | Event::ToolChanged { .. }
                 | Event::Palette { .. }

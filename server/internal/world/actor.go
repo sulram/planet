@@ -18,17 +18,6 @@ const TickRate = 15
 // often, so a client can tell a quiet room from a dead link.
 const heartbeat = 2 * time.Second
 
-// A line is at most this many characters, counted as a person counts them
-// (code points, never bytes), and a session says at most lineBurst lines in
-// lineWindow. Past either the line is dropped and nobody is told: a UI holds
-// the same limits, so a person never meets them, and only a client that
-// ignores them does. The wire's worst case is four bytes a character.
-const (
-	LineChars  = 500
-	lineBurst  = 5
-	lineWindow = 5 * time.Second
-)
-
 // NameChars is the most a name carries. A UI holds the same limit.
 const NameChars = 24
 
@@ -51,12 +40,15 @@ const (
 	joinKind inboundKind = iota
 	leaveKind
 	messageKind
+	// The admin switched a plugin: `on` says which are on now.
+	switchKind
 )
 
 type inbound struct {
 	kind    inboundKind
 	session *session
 	message *pb.ClientMessage
+	on      map[string]bool
 }
 
 // actor is the world actor: the one goroutine that owns an active world's
@@ -68,20 +60,26 @@ type actor struct {
 	inbox  chan inbound
 	// Joins counted by the hub and not yet heard here. Guarded by hub.mu.
 	pending int
+	// Closed when the actor stops, so nobody waits on its inbox.
+	stopped chan struct{}
 
 	sessions map[uint32]*session
 	next     uint32
+	// Every plugin the version carries, on or off, in the config's order.
+	plugins []*plugged
 	// Stances changed since the last tick, by session.
 	dirty    map[uint32]*pb.Stance
 	lastSent time.Time
 }
 
-func newActor(hub *Hub, recipe Recipe) *actor {
+func newActor(hub *Hub, recipe Recipe, plugins []*plugged) *actor {
 	return &actor{
 		hub:      hub,
 		recipe:   recipe,
 		inbox:    make(chan inbound, 256),
+		stopped:  make(chan struct{}),
 		sessions: map[uint32]*session{},
+		plugins:  plugins,
 		dirty:    map[uint32]*pb.Stance{},
 	}
 }
@@ -89,6 +87,7 @@ func newActor(hub *Hub, recipe Recipe) *actor {
 func (a *actor) run() {
 	tick := time.NewTicker(time.Second / TickRate)
 	defer tick.Stop()
+	defer close(a.stopped)
 	for {
 		select {
 		case in := <-a.inbox:
@@ -99,6 +98,8 @@ func (a *actor) run() {
 				a.leave(in.session)
 			case messageKind:
 				a.handle(in.session, in.message)
+			case switchKind:
+				a.turn(in.on)
 			}
 			if len(a.sessions) == 0 && a.hub.retire(a) {
 				return
@@ -124,6 +125,7 @@ func (a *actor) join(s *session) {
 		Recipe:  a.recipe.Wire(),
 		Peers:   peers,
 		Level:   s.identity.Level.wire(),
+		Plugins: wirePlugins(spoken(a.plugins)),
 	}}})
 	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Joined{Joined: &pb.Joined{Peer: s.peer()}}}, s)
 }
@@ -134,6 +136,9 @@ func (a *actor) leave(s *session) {
 	}
 	delete(a.sessions, s.id)
 	delete(a.dirty, s.id)
+	for _, p := range a.plugins {
+		p.plugin.Gone(s.id)
+	}
 	s.end()
 	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Left{Left: &pb.Left{Session: s.id}}}, nil)
 }
@@ -152,8 +157,8 @@ func (a *actor) handle(s *session, message *pb.ClientMessage) {
 			Session: s.id,
 			Avatar:  s.avatar,
 		}}}, s)
-	case *pb.ClientMessage_Say:
-		a.say(s, m.Say, time.Now())
+	case *pb.ClientMessage_Envelope:
+		a.do(s, m.Envelope)
 	case *pb.ClientMessage_Rename:
 		// An account is called what mundos signed: only a visitor takes a name here.
 		if !s.identity.Visitor() {
@@ -167,30 +172,15 @@ func (a *actor) handle(s *session, message *pb.ClientMessage) {
 	}
 }
 
-// say relays a line to everyone in its scope, the speaker included, so what
-// a client shows is what the world heard. The speaker's place rides along
-// when asked for, from the stance the actor holds and never from the
-// client's word. A line is never stored (DECISIONS 69).
-func (a *actor) say(s *session, say *pb.Say, now time.Time) {
-	text := strings.TrimSpace(say.Text)
-	if !utf8.ValidString(text) || utf8.RuneCountInString(text) > LineChars || (text == "" && !say.Here) {
-		return
+// turn takes the admin's word on which plugins are on, and says the world's
+// statement again to everyone here.
+func (a *actor) turn(on map[string]bool) {
+	for _, p := range a.plugins {
+		p.on = on[p.plugin.Name()]
 	}
-	if !s.mayspeak(now) {
-		return
-	}
-	said := &pb.Said{Session: s.id, Scope: say.Scope, Text: text}
-	if say.Here {
-		said.Stance = s.stance
-	}
-	message := &pb.ServerMessage{Message: &pb.ServerMessage_Said{Said: said}}
-	if say.Scope == pb.Scope_SCOPE_WORLD {
-		a.broadcast(message, nil)
-		return
-	}
-	a.relay(message, func(other *session) bool {
-		return other == s || near(s.stance, other.stance)
-	})
+	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Plugins{Plugins: &pb.Plugins{
+		Plugins: wirePlugins(spoken(a.plugins)),
+	}}}, nil)
 }
 
 // flush relays what moved since the last tick to everyone, in one frame

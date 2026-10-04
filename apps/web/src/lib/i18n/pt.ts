@@ -118,6 +118,8 @@ export const pt: Messages = {
 	'engine.session.offline': 'Desconectado',
 	'engine.session.connecting': 'Conectando',
 	'engine.session.online': 'Conectado',
+	'engine.plugins': 'Plugins',
+	'engine.plugin.chat': 'Chat',
 	'engine.chat': 'Conversa',
 	'engine.chat.near': 'Perto',
 	'engine.chat.world': 'Mundo',

@@ -7,11 +7,6 @@ import type { Recipe } from '$lib/world';
 export type Mode = 'walk' | 'fly';
 export const modes = ['walk', 'fly'] as const satisfies readonly Mode[];
 
-/** Who hears a line: within reach on the same body, or the whole world. Never another world. */
-export type Scope = 'near' | 'world';
-export const scopes = ['near', 'world'] as const satisfies readonly Scope[];
-/** The most a line carries, in characters (code points). The server drops longer ones unheard. */
-export const LINE_CHARS = 500;
 /** The most a name carries. The server cuts longer ones. */
 export const NAME_CHARS = 24;
 
@@ -63,12 +58,10 @@ export type Command =
 	| { type: 'set_effects'; effects: Partial<Effects> }
 	/**
 	 * Stand at a place code, `4-K7M42Q`: how a shared address opens where it
-	 * says, and how a place shared in chat is reached. A short code names a
+	 * says, and how a place someone shared is reached. A short code names a
 	 * box and you land in the middle of it.
 	 */
 	| { type: 'go_to'; place: string }
-	/** Say a line. With `here`, where you stand rides along and comes back as a place. */
-	| { type: 'say'; scope: Scope; text: string; here?: boolean }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
 	| { type: 'set_name'; name: string }
 	/** Build with a tool, or stop with null. It builds nothing: a platform is what a stroke starts on. */
@@ -82,6 +75,22 @@ export type Command =
 	/** Take back the last stroke that landed, or put back the last one taken back. */
 	| { type: 'undo' }
 	| { type: 'redo' };
+
+/**
+ * A plugin's command: its `type` is the plugin's name and the command's,
+ * `chat.say`. The engine hands it to that plugin, and refuses it when the
+ * plugin is off in this world.
+ */
+export type PluginCommand = { type: `${string}.${string}`; [field: string]: unknown };
+
+/** A plugin's event, as the plugin wrote it: `chat.said`. */
+export type PluginEvent = { type: `${string}.${string}`; [field: string]: unknown };
+
+/** A plugin that is on in this world, as the world's statement says it. */
+export interface PluginOn {
+	name: string;
+	version: number;
+}
 
 export type SessionStatus = 'offline' | 'connecting' | 'online';
 
@@ -107,12 +116,8 @@ export type EngineEvent =
 	| { type: 'session'; status: SessionStatus; session: number | null; level: Level | null }
 	/** Who else is here, whenever that changes. Empty when offline. */
 	| { type: 'peers'; peers: PeerInfo[] }
-	/**
-	 * A line someone said, your own included: what the world heard is what is
-	 * shown. `place` is where the speaker stood when they shared it, ready for
-	 * `go_to`, or null.
-	 */
-	| { type: 'said'; session: number; scope: Scope; text: string; place: string | null }
+	/** The plugins that are on in this world, whenever that changes. Empty when offline. */
+	| { type: 'statement'; plugins: PluginOn[] }
 	/** Every head in view, yours included, every frame while there is one and once empty after. */
 	| { type: 'anchors'; anchors: Anchor[] }
 	| { type: 'recipe_changed'; recipe: Recipe }
@@ -159,7 +164,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'stats',
 	'session',
 	'peers',
-	'said',
+	'statement',
 	'anchors',
 	'tool_changed',
 	'palette',
@@ -167,12 +172,18 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'history'
 ]);
 
-/** Parses one event. Unknown types and malformed payloads yield null. */
-export function parseEvent(json: string): EngineEvent | null {
+/** Whether an event is a plugin's: its `type` has the plugin's name and a dot before the event's. */
+export function isPluginEvent(event: EngineEvent | PluginEvent): event is PluginEvent {
+	return event.type.includes('.');
+}
+
+/** Parses one event, the core's or a plugin's. Unknown types and malformed payloads yield null. */
+export function parseEvent(json: string): EngineEvent | PluginEvent | null {
 	try {
 		const value: unknown = JSON.parse(json);
 		if (typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string') {
 			if (EVENT_TYPES.has(value.type)) return value as EngineEvent;
+			if (/^[a-z_]+\.[a-z_]+$/.test(value.type)) return value as PluginEvent;
 		}
 	} catch {
 		// not JSON: ignored like any unknown event

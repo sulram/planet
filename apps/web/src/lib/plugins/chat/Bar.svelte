@@ -1,25 +1,7 @@
-<script module lang="ts">
-	import type { Scope } from './index';
-
-	/** One line as the panel shows it: who said it, with the name they had then. */
-	export interface Line {
-		id: number;
-		session: number;
-		who: string;
-		own: boolean;
-		scope: Scope;
-		text: string;
-		/** Where they stood when they shared it, as `go_to` takes it. */
-		place: string | null;
-		/** When it was heard, `Date.now()`. */
-		at: number;
-	}
-</script>
-
 <script lang="ts">
 	import { Icon, Input } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { LINE_CHARS } from './index';
+	import { LINE_CHARS, type Line, type Scope } from './protocol';
 
 	// A bar at the foot of the world. Closed, it shows what was just said and
 	// fades it; Enter opens it, takes the pointer out of the world and puts

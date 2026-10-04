@@ -47,8 +47,10 @@ type Server struct {
 	now    func() time.Time
 }
 
-func New(cfg Config, f *folder.Folder) *Server {
-	return &Server{cfg: cfg, folder: f, hub: world.NewHub(f), keys: world.NewKeys(), now: time.Now}
+// New is an instance over a world folder and the plugins its version
+// carries.
+func New(cfg Config, f *folder.Folder, installed []world.Installed) *Server {
+	return &Server{cfg: cfg, folder: f, hub: world.NewHub(f, installed, f.Switches()), keys: world.NewKeys(), now: time.Now}
 }
 
 // Handler is every route of the instance. A path under /api that is no route
@@ -58,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/world", s.describe)
 	mux.HandleFunc("POST /api/world", s.found)
+	mux.HandleFunc("POST /api/plugins", s.plugin)
 	mux.HandleFunc("POST /api/enter", s.enter)
 	mux.HandleFunc("GET /api/me", s.me)
 	mux.HandleFunc("GET /api/socket", s.socket)
@@ -80,9 +83,11 @@ type description struct {
 	Founded bool   `json:"founded"`
 	// Null while the world is unfounded.
 	Recipe *recipe `json:"recipe"`
-	// What it speaks: the wire's version and the engine's.
-	Protocol int    `json:"protocol"`
-	Version  string `json:"version"`
+	// What it speaks: the wire's version, the engine's, and each plugin that
+	// is on with its own (DECISIONS 91).
+	Protocol int            `json:"protocol"`
+	Version  string         `json:"version"`
+	Plugins  []world.Spoken `json:"plugins"`
 	// mundos's door, which every load passes through. Empty for a world that
 	// runs alone.
 	Door string `json:"door"`
@@ -96,7 +101,7 @@ type recipe struct {
 }
 
 func (s *Server) describe(w http.ResponseWriter, r *http.Request) {
-	about := description{Name: s.cfg.Name, Protocol: world.Protocol, Version: s.cfg.Version}
+	about := description{Name: s.cfg.Name, Protocol: world.Protocol, Version: s.cfg.Version, Plugins: s.hub.Speaks()}
 	if s.cfg.MundosURL != "" {
 		about.Door = s.cfg.MundosURL + "/enter"
 	}
@@ -215,6 +220,43 @@ func (s *Server) found(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("the world is founded by %q: seed %s, generator %d", identity.UserID, founded.Seed, founded.GeneratorVersion)
+	s.describe(w, r)
+}
+
+// plugin turns one of the version's plugins on or off for this world, keeps
+// the choice in the world folder and tells whoever is here. An admin's alone.
+func (s *Server) plugin(w http.ResponseWriter, r *http.Request) {
+	identity, known := s.who(bearer(r))
+	if !known {
+		fail(w, http.StatusUnauthorized, "key")
+		return
+	}
+	if identity.Level != world.LevelAdmin {
+		fail(w, http.StatusForbidden, "level")
+		return
+	}
+	var asked struct {
+		Name string `json:"name"`
+		On   *bool  `json:"on"`
+	}
+	if !read(w, r, &asked) {
+		return
+	}
+	if asked.On == nil {
+		fail(w, http.StatusBadRequest, "body")
+		return
+	}
+	if !s.hub.Carries(asked.Name) {
+		fail(w, http.StatusNotFound, "plugin")
+		return
+	}
+	if err := s.folder.Switch(asked.Name, *asked.On); err != nil {
+		log.Printf("plugin: %v", err)
+		fail(w, http.StatusInternalServerError, "unwritable")
+		return
+	}
+	s.hub.Switch(asked.Name, *asked.On)
+	log.Printf("the plugin %q is on=%t, by %q", asked.Name, *asked.On, identity.UserID)
 	s.describe(w, r)
 }
 

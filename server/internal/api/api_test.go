@@ -27,7 +27,7 @@ func instance(t *testing.T, cfg Config) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := New(cfg, kept)
+	server := New(cfg, kept, nil)
 	server.now = func() time.Time { return now }
 	web := httptest.NewServer(server.Handler())
 	t.Cleanup(web.Close)

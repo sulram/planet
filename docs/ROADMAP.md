@@ -30,7 +30,7 @@ end to end.
 - [ ] **A list of generators, not a pair.** `Source` already names one; the founding screen offers the ones this version has, and a new one is a module beside `plates` and `field` without the body of v3 knowing
 - [ ] **More fields than Earth.** The Moon and Mars from the same bake, a region of Earth at a kinder scale. Same code path, a different file
 - [ ] **Climate and soil as choices.** `material` today is one function: latitude, height, and a noise for moisture. A world should be able to be arid, frozen, tropical or drowned and say so at its founding
-- [ ] **Which plugins are on** (91)
+- [ ] **Which plugins are on**, offered at the founding (91): the panel switches them once the world stands
 - Each of these is in the address, previewed before it is kept, and frozen with the world, the plugins excepted
 
 ### The picture
@@ -58,12 +58,12 @@ end to end.
 
 ### Chat (69)
 
-- [ ] Extracted as the first plugin, cutting the host (BRIEF.md)
-- [ ] A mute, over the permission hook
+- [ ] A mute: an answer over the permission hook, which answers by level alone (98)
 
 ### Building (58, 75 to 86)
 
 - [ ] Extracted: a turn in the frame, solids for the footing, the picture through `scene` (BRIEF.md)
+- [ ] An op is answered: it landed, or the code of why it was refused, matched to the op it answers (93, 98)
 - [ ] A stroke as an op on the socket: the host asks the permission hook with who, what and where, the plugin applies its rule, keeps it and an event tells everyone in the world (76, 93)
 - [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
 - [ ] The rules as a module the server runs (97): a leaf crate that exports them, embedded in the Go binary, with a bench of its own in wazero

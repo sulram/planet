@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseEvent, type Effects } from './protocol';
+import { isPluginEvent, parseEvent, type Effects } from './protocol';
 
 describe('parseEvent', () => {
 	test('parses the known events', () => {
@@ -31,12 +31,9 @@ describe('parseEvent', () => {
 			type: 'peers',
 			peers: [{ session: 2, name: 'Ada', visitor: false }]
 		});
-		expect(parseEvent('{"type":"said","session":2,"scope":"near","text":"hi","place":"4-K7M42Q"}')).toEqual({
-			type: 'said',
-			session: 2,
-			scope: 'near',
-			text: 'hi',
-			place: '4-K7M42Q'
+		expect(parseEvent('{"type":"statement","plugins":[{"name":"chat","version":1}]}')).toEqual({
+			type: 'statement',
+			plugins: [{ name: 'chat', version: 1 }]
 		});
 		expect(parseEvent('{"type":"anchors","anchors":[{"session":2,"x":0.5,"y":0.4,"distance_m":3}]}')).toEqual({
 			type: 'anchors',
@@ -47,6 +44,16 @@ describe('parseEvent', () => {
 		expect(parseEvent('{"type":"palette","colors":["#f2f0eb"]}')).toEqual({ type: 'palette', colors: ['#f2f0eb'] });
 		expect(parseEvent('{"type":"build_refused","reason":"sea"}')).toEqual({ type: 'build_refused', reason: 'sea' });
 		expect(parseEvent('{"type":"history","undo":true,"redo":false}')).toEqual({ type: 'history', undo: true, redo: false });
+	});
+
+	test('passes a plugin event on as the plugin wrote it', () => {
+		const said = parseEvent('{"type":"chat.said","session":2,"scope":"near","text":"hi","place":"4-K7M42Q"}');
+		expect(said).toEqual({ type: 'chat.said', session: 2, scope: 'near', text: 'hi', place: '4-K7M42Q' });
+		expect(said && isPluginEvent(said)).toBe(true);
+		const ready = parseEvent('{"type":"ready","generator_version":1}');
+		expect(ready && isPluginEvent(ready)).toBe(false);
+		expect(parseEvent('{"type":"Chat.Said"}')).toBeNull();
+		expect(parseEvent('{"type":"chat."}')).toBeNull();
 	});
 
 	test('ignores unknown types and malformed payloads', () => {

@@ -1,21 +1,19 @@
 <script lang="ts">
 	import { t } from '$lib/i18n';
-	import type { Line } from './Chat.svelte';
-	import type { Anchor, PeerInfo } from './index';
-	import { who } from './who';
+	import type { Anchor } from '$lib/engine';
+	import type { Line } from './protocol';
 
-	// Labels hung over heads: a nametag for everyone else, and what anyone
-	// just said in a balloon, yours included. The engine says where each head
-	// is on the screen every frame; this only draws there.
+	// What anyone just said, in a balloon over their head, yours included.
+	// The engine says where each head is on the screen every frame; this only
+	// draws there, above the nametag the core hangs on everyone else.
 	interface Props {
 		anchors: Anchor[];
-		peers: PeerInfo[];
 		/** This client's own session, while online. */
 		me: number | null;
 		lines: Line[];
 	}
 
-	let { anchors, peers, me, lines }: Props = $props();
+	let { anchors, me, lines }: Props = $props();
 
 	/** How long a balloon stays up. The fade is the last fifth of it. */
 	const BALLOON_MS = 8000;
@@ -35,29 +33,24 @@
 		for (const line of lines) if (now - line.at < BALLOON_MS) latest.set(line.session, line);
 		return latest;
 	});
-
-	function name(session: number): string {
-		const peer = peers.find((p) => p.session === session);
-		return peer ? who(peer) : '';
-	}
 </script>
 
 <div class="balloons" aria-hidden="true">
 	{#each anchors as anchor (anchor.session)}
 		{@const line = saying.get(anchor.session)}
-		{@const own = anchor.session === me}
-		{#if anchor.distance_m < FAR_M && (line || !own)}
-			<div class="head" style:left="{anchor.x * 100}%" style:top="{anchor.y * 100}%" style:--near={Math.min(1, 12 / anchor.distance_m)}>
-				{#if line}
-					{#key line.id}
-						<div class="balloon" style:animation-duration="{BALLOON_MS}ms">
-							{#if line.text}{line.text}{:else}{t('engine.chat.here')}{/if}
-						</div>
-					{/key}
-				{/if}
-				{#if !own}
-					<div class="name">{name(anchor.session)}</div>
-				{/if}
+		{#if line && anchor.distance_m < FAR_M}
+			<div
+				class="head"
+				class:named={anchor.session !== me}
+				style:left="{anchor.x * 100}%"
+				style:top="{anchor.y * 100}%"
+				style:--near={Math.min(1, 12 / anchor.distance_m)}
+			>
+				{#key line.id}
+					<div class="balloon" style:animation-duration="{BALLOON_MS}ms">
+						{#if line.text}{line.text}{:else}{t('engine.chat.here')}{/if}
+					</div>
+				{/key}
 			</div>
 		{/if}
 	{/each}
@@ -72,23 +65,14 @@
 	}
 	.head {
 		position: absolute;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--sp-3);
 		/* Floats a little over the anchor, so it never touches the head, and
 		   shrinks with distance, never below half. */
 		transform: translate(-50%, calc(-100% - var(--sp-6))) scale(clamp(0.5, var(--near), 1));
 		transform-origin: bottom center;
 	}
-	.name {
-		color: var(--on-world);
-		font-weight: var(--fw-bold);
-		text-shadow:
-			0 0 var(--sp-1) var(--on-world-shadow),
-			0 0 var(--sp-1) var(--on-world-shadow),
-			0 var(--bw) var(--sp-1) var(--on-world-shadow);
-		white-space: nowrap;
+	/* Over a head that wears a nametag, the balloon clears the name's line. */
+	.head.named {
+		padding-bottom: calc(1lh + var(--sp-3));
 	}
 	.balloon {
 		position: relative;

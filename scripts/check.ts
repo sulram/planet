@@ -11,9 +11,11 @@ await $`go vet ./...`.cwd(`${ROOT}/server`);
 await $`go test ./...`.cwd(`${ROOT}/server`);
 await $`bun run --cwd apps/web check`;
 await $`bun test ./apps/web/src`;
-// The wire types in the tree are the schema's: a stale generation is a
-// schema change nobody built.
+// The wire types in the tree are the schemas': a stale generation is a
+// schema change nobody built. The same holds for the registries of plugins
+// and the config they come from.
 await $`bun scripts/proto.ts`;
-await $`git diff --exit-code -- crates/protocol/src/gen server/internal/protocol`;
+await $`bun scripts/plugins.ts`;
+await $`git diff --exit-code -- crates/protocol/src/gen server/internal/protocol crates/*/src/gen server/internal/*/wire crates/plugins server/internal/plugins/plugins.go apps/web/src/lib/plugins/index.ts`;
 await $`bun scripts/docs.ts`;
 console.log('all checks pass');

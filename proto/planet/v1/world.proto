@@ -78,24 +78,16 @@ message Rename {
   string name = 1;
 }
 
-// Who hears a line.
-enum Scope {
-  // Everyone within `NearBlocks` of the speaker, on the same body.
-  SCOPE_NEAR = 0;
-  // Everyone in the world, on every body.
-  SCOPE_WORLD = 1;
-}
-
-// A line of chat. Relayed to everyone in scope, the speaker included, and
-// never stored. Dropped, and nobody told, past the actor's length and rate
-// limits: a UI holds the same limits so a person never meets them.
-message Say {
-  Scope scope = 1;
-  // At most 500 characters. May be empty when `here` is set.
-  string text = 2;
-  // Share where you stand: the server fills Said.stance from the stance it
-  // holds, so a client cannot claim to stand where it does not.
-  bool here = 3;
+// A plugin's message, carried by the core and never read by it. The core
+// routes it by the plugin's name and checks who may ask for `kind`; the
+// payload is the plugin's own, encoded by its own schema under
+// `proto/planet/<plugin>/` (DECISIONS 91, 93, 98).
+message Envelope {
+  // The plugin's name, as the world's statement says it.
+  string plugin = 1;
+  // Up, the op asked for. Down, the event said. A name within the plugin.
+  string kind = 2;
+  bytes payload = 3;
 }
 
 message ClientMessage {
@@ -103,9 +95,10 @@ message ClientMessage {
     Hello hello = 1;
     Stance stance = 2;
     Wear wear = 3;
-    Say say = 4;
     Rename rename = 5;
+    Envelope envelope = 6;
   }
+  reserved 4;
 }
 
 // Seed + params + generator version, as the world folder holds it. The
@@ -139,6 +132,14 @@ enum Level {
   LEVEL_ADMIN = 3;
 }
 
+// A plugin that is on in this world, as the world's statement says it.
+message Plugin {
+  string name = 1;
+  // The version of its wire and of its seam. A client that holds another
+  // leaves the plugin off.
+  uint32 version = 2;
+}
+
 // The answer to Hello: who you are here, what world this is, who is here.
 message Welcome {
   uint32 session = 1;
@@ -146,6 +147,13 @@ message Welcome {
   repeated Peer peers = 3;
   // What this session may do, for its life. A client offers its tools by it.
   Level level = 4;
+  // The plugins that are on. A client mounts what it holds of them.
+  repeated Plugin plugins = 5;
+}
+
+// The plugins that are on, said again whenever the admin switches one.
+message Plugins {
+  repeated Plugin plugins = 1;
 }
 
 message Joined {
@@ -178,15 +186,6 @@ message Stances {
   repeated Moved moved = 1;
 }
 
-// A line someone said, the receiver's own included.
-message Said {
-  uint32 session = 1;
-  Scope scope = 2;
-  string text = 3;
-  // Where the speaker stood, when they shared it. Absent otherwise.
-  Stance stance = 4;
-}
-
 // Sent instead of Welcome, then the socket closes.
 message Refused {
   string reason = 1;
@@ -200,7 +199,9 @@ message ServerMessage {
     Stances stances = 4;
     Wearing wearing = 5;
     Refused refused = 6;
-    Said said = 7;
     Renamed renamed = 8;
+    Envelope envelope = 9;
+    Plugins plugins = 10;
   }
+  reserved 7;
 }

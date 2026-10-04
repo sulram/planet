@@ -60,8 +60,12 @@ impl Engine {
         let renderer = Renderer::new(&gpu, config.format);
 
         // A placeholder world until the UI sends the recipe it wants.
-        let client =
+        let mut client =
             Client::new(client::Recipe::new(1)).map_err(|e| JsError::new(&e.to_string()))?;
+        // What this version carries, off until a world says which are on.
+        for plugin in plugins::all() {
+            client.plug(plugin);
+        }
         let state = Rc::new(RefCell::new(State {
             canvas: canvas.clone(),
             surface,

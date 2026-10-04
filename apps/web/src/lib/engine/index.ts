@@ -4,13 +4,13 @@
  * The web UI is only a front-end: it sends commands and renders events. Tool
  * logic lives in Rust.
  */
-import { parseEvent, type Command, type EngineEvent } from './protocol';
+import { parseEvent, type Command, type EngineEvent, type PluginCommand, type PluginEvent } from './protocol';
 
 export * from './protocol';
 
 /** A running engine bound to one canvas. `free()` stops its loop and listeners. */
 export interface Engine {
-	command(command: Command): void;
+	command(command: Command | PluginCommand): void;
 	/** The ground a recipe names. Sent before the recipe that names it. */
 	set_field(bytes: Uint8Array): void;
 	/** Opens the link to a world server at a socket URL, the key included. */
@@ -22,7 +22,7 @@ export interface Engine {
 /** A loaded engine module, ready to bind to a canvas. */
 export interface EngineModule {
 	/** Rejects when the browser cannot give the engine a GPU surface. */
-	create(canvas: HTMLCanvasElement, onevent: (event: EngineEvent) => void): Promise<Engine>;
+	create(canvas: HTMLCanvasElement, onevent: (event: EngineEvent | PluginEvent) => void): Promise<Engine>;
 }
 
 /** The shape `wasm-bindgen --target web` emits for `shell-web`. */

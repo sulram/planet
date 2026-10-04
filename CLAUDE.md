@@ -88,19 +88,19 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   - `scene`: the plain data a client hands a renderer. No GPU, no generator.
   - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
   - `voxel`: a volume's cells, gestures, sight, faces and footing. No sphere.
-  - `render`: all of wgpu lives here.
-  - `client`: controller, streaming, tools, media manager. No window, no DOM.
-  - `ui-native`: the desktop settings panel. All of egui lives here.
+  - `render`: all of wgpu lives here. `ui-native`: the desktop panel, all of egui.
+  - `client`: controller, streaming, tools, the host of plugins. No window, no DOM.
+  - `plugins`: the version's plugins, generated from `plugins.json` by
+    `bun run plugins`. Each plugin's client half is a crate of its own: `chat`.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
   - `bench`: what a frame costs in WASM, timed by `scripts/bench.ts`.
 - `server/`: Go. The world server: one binary is an instance. Rules: `server/CLAUDE.md`.
-- `apps/web/`: Svelte + Bun. The web front end; hosts the WASM client.
-  Rules: `apps/web/CLAUDE.md`.
-- `proto/`: the schema, single source for Rust and Go; `bun run proto` regenerates both, committed.
+- `apps/web/`: Svelte + Bun, the web front end; hosts the WASM client. Rules: `apps/web/CLAUDE.md`.
+- `proto/`: the schemas, the core's and each plugin's, single source for Rust and Go; `bun run proto`.
 - `assets/`: a version's default set and its `manifest.json`.
   `assets/fields/`: baked fields from `bun run field`, gitignored.
 - `scripts/`: every repeated command. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | proto | docs | check | build`.
+  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | proto | plugins | docs | check | build`.
 
 ## Invariants (expensive to get wrong)
 

@@ -20,6 +20,7 @@ client = { path = "crates/client" }
 render = { path = "crates/render" }
 protocol = { path = "crates/protocol" }
 voxel = { path = "crates/voxel" }
+plugins = { path = "crates/plugins" }
 ui-native = { path = "crates/ui-native" }
 
 # Pins shared with vybe (CLAUDE.md, Toolchain pins).

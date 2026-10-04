@@ -3,6 +3,10 @@
 //! Svelte panels and the native UI send [`Command`]s and render [`Event`]s.
 //! Both travel as JSON tagged by `type`, so the same seam serves a WASM
 //! boundary, a native panel and tests. Tool logic never leaks past this file.
+//!
+//! A plugin's commands and events ride the same seam under its name: a
+//! `type` with a dot in it, `chat.say`, is a plugin's, and the host hands it
+//! over (`crate::plugin`).
 
 use scene::Effects;
 use serde::{Deserialize, Serialize};
@@ -14,31 +18,6 @@ use worldgen::Recipe;
 pub enum Mode {
     Walk,
     Fly,
-}
-
-/// Who hears a line: everyone within `NearBlocks` of the speaker on the same
-/// body, or everyone in the world, on every body. Never another world.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Scope {
-    Near,
-    World,
-}
-
-impl Scope {
-    pub(crate) fn wire(self) -> protocol::Scope {
-        match self {
-            Scope::Near => protocol::Scope::Near,
-            Scope::World => protocol::Scope::World,
-        }
-    }
-
-    pub(crate) fn from_wire(scope: protocol::Scope) -> Scope {
-        match scope {
-            protocol::Scope::Near => Scope::Near,
-            protocol::Scope::World => Scope::World,
-        }
-    }
 }
 
 /// What a stroke in a volume does: fill air with the paint, empty cells, or
@@ -129,9 +108,9 @@ pub enum Command {
     /// precision names a box, and the middle of it is where you land.
     ///
     /// Arrival and travel both: how a shared address opens where it says,
-    /// how `--at` aims a headless render, and how a place someone shared in
-    /// chat is reached at a click. Walking, flying and, later, portals are
-    /// the other ways about a world.
+    /// how `--at` aims a headless render, and how a place someone shared is
+    /// reached at a click. Walking, flying and, later, portals are the other
+    /// ways about a world.
     GoTo {
         place: String,
     },
@@ -140,15 +119,6 @@ pub enum Command {
     /// keeps the account in step itself. Empty is a name too.
     SetName {
         name: String,
-    },
-    /// Say a line to whoever is in scope. With `here`, where you stand rides
-    /// along, filled in by the server from the stance it holds, and comes
-    /// back in [`Event::Said`] as a place. Nothing goes out while offline.
-    Say {
-        scope: Scope,
-        text: String,
-        #[serde(default)]
-        here: bool,
     },
     /// Build with a tool, or stop building with `null`. It builds nothing:
     /// a stroke starts on what is built, and a platform is the first of it.
@@ -239,14 +209,11 @@ pub enum Event {
     Anchors {
         anchors: Vec<Anchor>,
     },
-    /// A line someone said, this client's own included: what the world
-    /// heard is what a UI shows. `place` is where the speaker stood when they
-    /// shared it, as `GoTo` takes it; `None` when they did not.
-    Said {
-        session: u32,
-        scope: Scope,
-        text: String,
-        place: Option<String>,
+    /// The plugins that are on in the world this client is in, whenever
+    /// that changes: what a front end mounts. Empty when offline, where no
+    /// world has spoken.
+    Statement {
+        plugins: Vec<PluginOn>,
     },
     /// The streamer has nothing left to build for this view: what is on
     /// screen is the world at the detail it is meant to have. Sent each time
@@ -279,6 +246,10 @@ pub enum Event {
     Rejected {
         message: String,
     },
+    /// An event of a plugin, as the plugin wrote it: an object whose `type`
+    /// is the plugin's name and the event's, `chat.said`.
+    #[serde(untagged)]
+    Plugin(serde_json::Value),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
@@ -297,6 +268,13 @@ pub struct PeerInfo {
     pub session: u32,
     pub name: String,
     pub visitor: bool,
+}
+
+/// A plugin that is on in this world, as the world's statement says it.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct PluginOn {
+    pub name: String,
+    pub version: u32,
 }
 
 /// A head on the screen: fractions of the viewport from the top left, so
@@ -362,15 +340,21 @@ mod tests {
             r#"{"type":"mode_changed","mode":"walk"}"#
         );
         assert_eq!(
-            Event::Said {
-                session: 3,
-                scope: Scope::Near,
-                text: "hi".into(),
-                place: None
+            Event::Statement {
+                plugins: vec![PluginOn {
+                    name: "chat".into(),
+                    version: 1
+                }]
             }
             .to_json(),
-            r#"{"type":"said","session":3,"scope":"near","text":"hi","place":null}"#
+            r#"{"type":"statement","plugins":[{"name":"chat","version":1}]}"#
         );
+    }
+
+    #[test]
+    fn a_plugins_event_goes_out_as_the_plugin_wrote_it() {
+        let event = Event::Plugin(serde_json::json!({"type": "chat.said", "text": "hi"}));
+        assert_eq!(event.to_json(), r#"{"text":"hi","type":"chat.said"}"#);
     }
 
     #[test]
@@ -411,18 +395,6 @@ mod tests {
         assert_eq!(
             Command::from_json(r#"{"type":"lay_platform","base":"solid"}"#).unwrap(),
             Command::LayPlatform { base: Base::Solid }
-        );
-    }
-
-    #[test]
-    fn a_line_needs_no_here() {
-        assert_eq!(
-            Command::from_json(r#"{"type":"say","scope":"world","text":"hi"}"#).unwrap(),
-            Command::Say {
-                scope: Scope::World,
-                text: "hi".into(),
-                here: false
-            }
         );
     }
 }

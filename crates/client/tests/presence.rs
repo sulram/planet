@@ -2,7 +2,7 @@
 //! made server frames, the way a shell drives it with a socket.
 
 use client::{
-    Base, BuildRefusal, Client, Command, Event, Input, Level, Outbound, PeerInfo, Recipe, Scope,
+    Base, BuildRefusal, Client, Command, Event, Input, Level, Outbound, PeerInfo, Recipe,
     SessionStatus, Tool,
 };
 use protocol::{Message, client_message, server_message};
@@ -61,6 +61,7 @@ fn welcome_as(
         recipe: Some(recipe_of(client)),
         peers,
         level: level.into(),
+        plugins: vec![],
     }))
 }
 
@@ -221,6 +222,7 @@ fn another_recipe_is_another_world() {
             recipe: Some(recipe),
             peers: vec![],
             level: protocol::Level::Admin.into(),
+            plugins: vec![],
         },
     )));
     assert!(client.drain_outbound().contains(&Outbound::Close));
@@ -239,90 +241,6 @@ fn silence_ends_the_link() {
     client.receive(&welcome(&client, 1, vec![]));
     run(&mut client, 11.0);
     assert!(client.drain_outbound().contains(&Outbound::Close));
-}
-
-#[test]
-fn a_line_goes_out_online_and_comes_back_with_a_place() {
-    let mut client = Client::new(Recipe::new(1)).unwrap();
-    client.command(Command::Say {
-        scope: Scope::World,
-        text: "anyone?".into(),
-        here: false,
-    });
-    assert!(
-        sent(&mut client).is_empty(),
-        "a line said offline goes nowhere"
-    );
-
-    client.link_opened();
-    client.receive(&welcome(&client, 1, vec![peer(2, "Ada")]));
-    sent(&mut client);
-    client.command(Command::Say {
-        scope: Scope::Near,
-        text: "hi".into(),
-        here: true,
-    });
-    let out = sent(&mut client);
-    assert!(
-        matches!(&out[..], [client_message::Message::Say(say)]
-            if say.scope() == protocol::Scope::Near && say.text == "hi" && say.here),
-        "{out:?}"
-    );
-
-    let said = |stance: Option<protocol::Stance>| {
-        server(server_message::Message::Said(protocol::Said {
-            session: 2,
-            scope: protocol::Scope::Near.into(),
-            text: "here".into(),
-            stance,
-        }))
-    };
-    client.drain_events();
-    client.receive(&said(None));
-    assert_eq!(
-        client.drain_events(),
-        vec![Event::Said {
-            session: 2,
-            scope: Scope::Near,
-            text: "here".into(),
-            place: None
-        }]
-    );
-
-    // A place shared on the ground has no height; one shared in the air keeps
-    // it. Either is a place `GoTo` accepts.
-    client.receive(&said(Some(stance(30_000.0))));
-    let Some(Event::Said {
-        place: Some(ground),
-        ..
-    }) = client.drain_events().pop()
-    else {
-        panic!("a stance becomes a place");
-    };
-    assert!(!ground.contains('@'), "{ground}");
-    client.receive(&said(Some(protocol::Stance {
-        gait: protocol::Gait::Fly.into(),
-        height_m: 40.0,
-        ..stance(30_000.0)
-    })));
-    let Some(Event::Said {
-        place: Some(aloft), ..
-    }) = client.drain_events().pop()
-    else {
-        panic!("a stance becomes a place");
-    };
-    assert!(
-        aloft.starts_with(&ground) && aloft.ends_with("@80"),
-        "{aloft}"
-    );
-    client.command(Command::GoTo { place: aloft });
-    assert!(
-        !client
-            .drain_events()
-            .iter()
-            .any(|e| matches!(e, Event::Rejected { .. })),
-        "a shared place is a place to go"
-    );
 }
 
 #[test]

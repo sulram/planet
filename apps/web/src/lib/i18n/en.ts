@@ -118,6 +118,8 @@ export const en = {
 	'engine.session.offline': 'Offline',
 	'engine.session.connecting': 'Connecting',
 	'engine.session.online': 'Online',
+	'engine.plugins': 'Plugins',
+	'engine.plugin.chat': 'Chat',
 	'engine.chat': 'Chat',
 	'engine.chat.near': 'Near',
 	'engine.chat.world': 'World',

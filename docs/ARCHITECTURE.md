@@ -73,8 +73,9 @@ not yet confirmed.
   generator with them (97). Go carries, checks who, keeps and relays.
 - Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
   source (66). `Hello` says the protocol version; any other is refused.
-  `Welcome` carries the session, its level and the recipe, so a client checks
-  it stands in the world the server holds.
+  `Welcome` carries the session, its level, the recipe, so a client checks it
+  stands in the world the server holds, and the plugins that are on. A
+  plugin's message rides an `Envelope`: its name, a kind and its own payload.
 - The hub holds the world's actor: started on the first session, gone after
   the last. The actor keeps every session's last stance and relays what
   changed at 15 Hz, in one frame encoded once, with a heartbeat every two
@@ -82,18 +83,21 @@ not yet confirmed.
   take its frames is dropped; the actor never waits for a client.
 - Routes: `GET /api/world` says what the world is, `POST /api/enter` trades
   the door's token for a key, `GET /api/me` says whether a key stands,
-  `POST /api/world` is the founding, `GET /api/socket` the world socket. A
-  route that changes the world takes the key and checks its level. An error
-  is a code, never a sentence.
-- Chat (69): `Say` up, `Said` down, relayed by the actor to everyone in scope,
-  the speaker included, never stored. `near` reaches `NearBlocks` on the same
-  body, measured with the client's own projection mirrored in `near.go`;
-  `world` reaches every body. A line said with `here` comes back with the
-  speaker's stance as the actor holds it. Limits live in the actor:
-  `LineChars`, five lines in five seconds.
-- The world folder (89): `world.json`, the recipe the founding froze, and one
-  SQLite file for each plugin that keeps things, moved forward by that plugin
-  when it starts. Permission decides, the plugin's op log records.
+  `POST /api/world` is the founding, `POST /api/plugins` switches a plugin,
+  `GET /api/socket` is the world socket. A route that changes the world takes
+  the key and checks its level. An error is a code, never a sentence.
+- The actor is the host of plugins on the server (PLUGINS.md): it finds the
+  plugin an envelope names, checks the level its op asks and hands it over.
+- Chat (69) is a plugin, `internal/chat`: `say` up, `said` down, relayed to
+  everyone in scope, the speaker included, never stored. `near` reaches
+  `NearBlocks` on the same body, measured by the core with the client's own
+  projection mirrored in `near.go`; `world` reaches every body. A line said
+  with `here` comes back with the speaker's stance as the actor holds it.
+  Its limits are its own: `LineChars`, five lines in five seconds.
+- The world folder (89): `world.json`, the recipe the founding froze;
+  `plugins.json`, the plugins its admin switched; and one SQLite file for
+  each plugin that keeps things, moved forward by that plugin when it starts.
+  Permission decides, the plugin's op log records.
 
 ## Files
 
@@ -159,11 +163,13 @@ not yet confirmed.
   socket (`Engine.connect(url)`), hands every frame to `Client::receive` and
   sends what `drain_outbound` queues. The client says hello, keeps the peers,
   sends its own stance when it changed and as a heartbeat, and reports
-  `session`, `peers`, `said` and `anchors` over the seam, and `settled` when
-  the streamer has nothing left to build for the view. `anchors` is where
-  every head in view is on the screen, each frame, so nametags and balloons
-  are a front end's DOM and never a render feature. The desktop shell has no
-  socket yet (ROADMAP § Other screens).
+  `session`, `peers`, `statement` and `anchors` over the seam, and `settled`
+  when the streamer has nothing left to build for the view. `anchors` is
+  where every head in view is on the screen, each frame, so nametags and
+  balloons are a front end's DOM and never a render feature. A shell plugs
+  in the version's plugins (`plugins::all`), and a command or an event whose
+  `type` has a dot is a plugin's: `chat.say`. The desktop shell has no socket
+  yet (ROADMAP § Other screens).
 - A peer is drawn a tick and a half behind its newest stance, between the
   last two heard, in world space: a walk across a seam never interpolates
   through the seam. Every body, the player's included, is one `Figure` over

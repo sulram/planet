@@ -64,24 +64,24 @@ pub struct Rename {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
-/// A line of chat. Relayed to everyone in scope, the speaker included, and
-/// never stored. Dropped, and nobody told, past the actor's length and rate
-/// limits: a UI holds the same limits so a person never meets them.
+/// A plugin's message, carried by the core and never read by it. The core
+/// routes it by the plugin's name and checks who may ask for `kind`; the
+/// payload is the plugin's own, encoded by its own schema under
+/// `proto/planet/<plugin>/` (DECISIONS 91, 93, 98).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct Say {
-    #[prost(enumeration="Scope", tag="1")]
-    pub scope: i32,
-    /// At most 500 characters. May be empty when `here` is set.
+pub struct Envelope {
+    /// The plugin's name, as the world's statement says it.
+    #[prost(string, tag="1")]
+    pub plugin: ::prost::alloc::string::String,
+    /// Up, the op asked for. Down, the event said. A name within the plugin.
     #[prost(string, tag="2")]
-    pub text: ::prost::alloc::string::String,
-    /// Share where you stand: the server fills Said.stance from the stance it
-    /// holds, so a client cannot claim to stand where it does not.
-    #[prost(bool, tag="3")]
-    pub here: bool,
+    pub kind: ::prost::alloc::string::String,
+    #[prost(bytes="vec", tag="3")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientMessage {
-    #[prost(oneof="client_message::Message", tags="1, 2, 3, 4, 5")]
+    #[prost(oneof="client_message::Message", tags="1, 2, 3, 5, 6")]
     pub message: ::core::option::Option<client_message::Message>,
 }
 /// Nested message and enum types in `ClientMessage`.
@@ -94,10 +94,10 @@ pub mod client_message {
         Stance(super::Stance),
         #[prost(message, tag="3")]
         Wear(super::Wear),
-        #[prost(message, tag="4")]
-        Say(super::Say),
         #[prost(message, tag="5")]
         Rename(super::Rename),
+        #[prost(message, tag="6")]
+        Envelope(super::Envelope),
     }
 }
 /// Seed + params + generator version, as the world folder holds it. The
@@ -130,6 +130,16 @@ pub struct Peer {
     #[prost(message, optional, tag="5")]
     pub stance: ::core::option::Option<Stance>,
 }
+/// A plugin that is on in this world, as the world's statement says it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Plugin {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
+    /// The version of its wire and of its seam. A client that holds another
+    /// leaves the plugin off.
+    #[prost(uint32, tag="2")]
+    pub version: u32,
+}
 /// The answer to Hello: who you are here, what world this is, who is here.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Welcome {
@@ -142,6 +152,15 @@ pub struct Welcome {
     /// What this session may do, for its life. A client offers its tools by it.
     #[prost(enumeration="Level", tag="4")]
     pub level: i32,
+    /// The plugins that are on. A client mounts what it holds of them.
+    #[prost(message, repeated, tag="5")]
+    pub plugins: ::prost::alloc::vec::Vec<Plugin>,
+}
+/// The plugins that are on, said again whenever the admin switches one.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Plugins {
+    #[prost(message, repeated, tag="1")]
+    pub plugins: ::prost::alloc::vec::Vec<Plugin>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Joined {
@@ -182,19 +201,6 @@ pub struct Stances {
     #[prost(message, repeated, tag="1")]
     pub moved: ::prost::alloc::vec::Vec<Moved>,
 }
-/// A line someone said, the receiver's own included.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Said {
-    #[prost(uint32, tag="1")]
-    pub session: u32,
-    #[prost(enumeration="Scope", tag="2")]
-    pub scope: i32,
-    #[prost(string, tag="3")]
-    pub text: ::prost::alloc::string::String,
-    /// Where the speaker stood, when they shared it. Absent otherwise.
-    #[prost(message, optional, tag="4")]
-    pub stance: ::core::option::Option<Stance>,
-}
 /// Sent instead of Welcome, then the socket closes.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Refused {
@@ -203,7 +209,7 @@ pub struct Refused {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerMessage {
-    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 7, 8")]
+    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 8, 9, 10")]
     pub message: ::core::option::Option<server_message::Message>,
 }
 /// Nested message and enum types in `ServerMessage`.
@@ -222,10 +228,12 @@ pub mod server_message {
         Wearing(super::Wearing),
         #[prost(message, tag="6")]
         Refused(super::Refused),
-        #[prost(message, tag="7")]
-        Said(super::Said),
         #[prost(message, tag="8")]
         Renamed(super::Renamed),
+        #[prost(message, tag="9")]
+        Envelope(super::Envelope),
+        #[prost(message, tag="10")]
+        Plugins(super::Plugins),
     }
 }
 /// The body a stance is measured from. Every body is parametrised on the
@@ -295,35 +303,6 @@ impl Gait {
             "GAIT_FALL" => Some(Self::Fall),
             "GAIT_FLY" => Some(Self::Fly),
             "GAIT_SWIM" => Some(Self::Swim),
-            _ => None,
-        }
-    }
-}
-/// Who hears a line.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum Scope {
-    /// Everyone within `NearBlocks` of the speaker, on the same body.
-    Near = 0,
-    /// Everyone in the world, on every body.
-    World = 1,
-}
-impl Scope {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Near => "SCOPE_NEAR",
-            Self::World => "SCOPE_WORLD",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "SCOPE_NEAR" => Some(Self::Near),
-            "SCOPE_WORLD" => Some(Self::World),
             _ => None,
         }
     }

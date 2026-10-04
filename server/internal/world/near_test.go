@@ -70,8 +70,10 @@ func TestApartIsBlocks(t *testing.T) {
 		t.Fatal("nowhere is not near")
 	}
 	// The warp stretches a block a little away from the centre, so the edge
-	// of near is asked about with a margin.
-	if !near(centre, at(pb.Body_BODY_PLANET, 2, 32768+NearBlocks-4, 32768, 0)) || near(centre, at(pb.Body_BODY_PLANET, 2, 32768+NearBlocks+4, 32768, 0)) {
-		t.Fatal("near ends at NearBlocks")
+	// of a reach is asked about with a margin. A room measures it for a plugin.
+	const reach = 64
+	near := func(to *pb.Stance) bool { return room{}.Near(Who{Stance: centre}, Who{Stance: to}, reach) }
+	if !near(at(pb.Body_BODY_PLANET, 2, 32768+reach-4, 32768, 0)) || near(at(pb.Body_BODY_PLANET, 2, 32768+reach+4, 32768, 0)) {
+		t.Fatal("near ends at the reach asked about")
 	}
 }

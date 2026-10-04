@@ -8,7 +8,7 @@
 	import Stage from '$lib/engine/Stage.svelte';
 	import { servedField } from '$lib/fields';
 	import { t } from '$lib/i18n';
-	import { about, enter, found, Refused, socket, stands, type About, type Entered, type Link } from '$lib/instance';
+	import { about, enter, found, Refused, socket, stands, switchPlugin, type About, type Entered, type Link } from '$lib/instance';
 	import { kept } from '$lib/kept';
 	import { fieldId, type Recipe } from '$lib/world';
 
@@ -41,6 +41,20 @@
 		};
 	});
 	const signIn = $derived(world?.door && me?.level === 'anonymous' ? () => pass(world!.door) : undefined);
+	// Which plugins are on is the admin's to say (DECISIONS 91). The world
+	// tells everyone here over the socket, so nothing is kept from the answer.
+	const switchIt = $derived(
+		me?.level === 'admin'
+			? async (name: string, on: boolean) => {
+					try {
+						await switchPlugin(name, on, me?.key ?? '');
+					} catch (err) {
+						// A key past its life: through the door for a new one.
+						if (err instanceof Refused && err.code === 'key' && world?.door) pass(world.door);
+					}
+				}
+			: undefined
+	);
 
 	onMount(() => {
 		arrive();
@@ -110,6 +124,7 @@
 		level={me.level}
 		account={me.key !== ''}
 		onsignin={signIn}
+		onswitch={switchIt}
 	/>
 {:else if face === 'founding'}
 	<Found {avatar} error={refused} {founding} onfound={foundWith} />

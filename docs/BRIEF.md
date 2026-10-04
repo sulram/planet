@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91 and 93 to 96. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 98. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -41,9 +41,9 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    admin. Left to walk: entering as anonymous and as a builder, then an
    upgrade into a next generation and its promotion, which wait for plugin
    work worth shipping.
-6. [ ] **The host of plugins, cut by chat**: the wire's envelope, the registry
-   and its config, a panel's place. Chat is the first plugin, and a world
-   runs with it on or off.
+6. [x] **The host of plugins, cut by chat** (98): the wire's envelope, the
+   registry and its config, a panel's place. Chat is the first plugin, and a
+   world runs with it on or off.
 7. [ ] **Building as a plugin, and kept**: the turn in a frame, the solids and
    the picture through `scene`; then a stroke as an op on the socket, the
    permission hook, the store by volume and the rule the server runs (93, 95).

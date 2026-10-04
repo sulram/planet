@@ -26,7 +26,10 @@ this file in the same change.
 | Reading | A question anyone asks an owner about what it holds: the cells in a box, who is near. |
 | Event | What an owner says happened, to whoever listens. |
 | Host (code) | The part of the core that plugins register with: the registry, the hooks, the stores, the wire's envelope. Distinct from mundos, which hosts worlds. |
-| Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. |
+| Envelope | How a plugin's message rides the wire: the plugin's name, a kind, and a payload the core never reads. |
+| Kind | The name of an op or of an event within its plugin: `say`, `said`. With the plugin's name before it, a command or an event over the seam: `chat.say`. |
+| Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. Said at `GET /api/world`, in the welcome, and again when the admin switches a plugin. |
+| Layer | What a plugin draws over the world in the web front end, mounted while the plugin is on. |
 | Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands and renders events; the rules are the core's. |
 | World | One recipe and one world folder. An instance is exactly one. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |

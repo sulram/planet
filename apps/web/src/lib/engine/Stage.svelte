@@ -1,20 +1,21 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Badge, Button, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Button, Checkbox, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import { builds, type Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
+	import { plugins, type Seam } from '$lib/plugins';
 	import type { Recipe } from '$lib/world';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
-	import Balloons from './Balloons.svelte';
 	import Build from './Build.svelte';
-	import Chat, { type Line } from './Chat.svelte';
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
+	import Nametags from './Nametags.svelte';
 	import Settings from './Settings.svelte';
 	import {
+		isPluginEvent,
 		modes,
 		NAME_CHARS,
 		type Anchor,
@@ -24,7 +25,8 @@
 		type Level,
 		type Mode,
 		type PeerInfo,
-		type Scope,
+		type PluginEvent,
+		type PluginOn,
 		type SessionStatus,
 		type Tool
 	} from './index';
@@ -61,13 +63,16 @@
 		account?: boolean;
 		/** Goes to mundos's door to sign in. Present for a visitor of a hosted world. */
 		onsignin?: () => void;
+		/** Turns a plugin on or off for this world. Present for its admin. */
+		onswitch?: (name: string, on: boolean) => Promise<void>;
 		/** Called once the engine reports which generator version it runs. */
 		onready?: (generatorVersion: number) => void;
 		/** The page's own top of the panel, when it has one. */
 		children?: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, name = '', link, level = null, account = false, onsignin, onready, children }: Props = $props();
+	let { title, recipe, fieldPath, avatar, name = '', link, level = null, account = false, onsignin, onswitch, onready, children }: Props =
+		$props();
 
 	// A visitor's name, edited where it is shown. The engine hears it at once,
 	// so the world does too, and this browser keeps it for the next visit.
@@ -125,34 +130,52 @@
 		view?.command({ type: 'set_tool', tool: next });
 	}
 
-	// Lines are what was heard while here, never stored: the panel keeps the
-	// last hundred and a line keeps the name its speaker had when it was said.
-	const LINES_KEPT = 100;
-	let lines = $state<Line[]>([]);
-	let lineCount = 0;
+	// Plugins (docs/PLUGINS.md): the world says which are on, and each one
+	// this version carries at that version gets a layer over the world and the
+	// seam under its own name.
+	let spoken = $state.raw<PluginOn[]>([]);
+	const mounted = $derived(plugins.filter((plugin) => spoken.some((on) => on.name === plugin.name && on.version === plugin.version)));
 
-	function heard(event: Extract<EngineEvent, { type: 'said' }>) {
-		const own = event.session === me;
-		const peer = peers.find((p) => p.session === event.session);
-		const line: Line = {
-			id: ++lineCount,
-			session: event.session,
-			who: own ? t('engine.here.you') : who(peer ?? { session: event.session, name: '', visitor: false }),
-			own,
-			scope: event.scope,
-			text: event.text,
-			place: event.place,
-			at: Date.now()
-		};
-		lines = [...lines.slice(1 - LINES_KEPT), line];
+	type Hear = (kind: string, event: Record<string, unknown>) => void;
+	const hearing = new Map<string, Set<Hear>>();
+	const seams = new Map<string, Seam>();
+
+	function seamOf(plugin: string): Seam {
+		let seam = seams.get(plugin);
+		if (!seam) {
+			seam = {
+				command: (kind, body = {}) => view?.command({ ...body, type: `${plugin}.${kind}` }),
+				core: (command) => view?.command(command),
+				listen(hear) {
+					const heard = hearing.get(plugin) ?? new Set<Hear>();
+					hearing.set(plugin, heard.add(hear));
+					return () => heard.delete(hear);
+				},
+				release: () => view?.release(),
+				take: () => view?.take()
+			};
+			seams.set(plugin, seam);
+		}
+		return seam;
 	}
 
-	function say(scope: Scope, text: string, here: boolean) {
-		view?.command({ type: 'say', scope, text, here });
+	function heard(event: PluginEvent) {
+		const dot = event.type.indexOf('.');
+		const kind = event.type.slice(dot + 1);
+		for (const hear of hearing.get(event.type.slice(0, dot)) ?? []) hear(kind, event);
 	}
 
-	function go(place: string) {
-		view?.command({ type: 'go_to', place });
+	// Switching a plugin is the admin's, and the world answers with its
+	// statement: the box follows what the world says, never the click.
+	let switching = $state<string | null>(null);
+
+	async function turn(plugin: string, on: boolean) {
+		switching = plugin;
+		try {
+			await onswitch?.(plugin, on);
+		} finally {
+			switching = null;
+		}
 	}
 
 	// The address bar is where you are. What this page writes there as you
@@ -207,7 +230,8 @@
 
 	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`engine.mode.${value}`) })));
 
-	function receive(event: EngineEvent) {
+	function receive(event: EngineEvent | PluginEvent) {
+		if (isPluginEvent(event)) return heard(event);
 		if (event.type === 'ready') onready?.(event.generator_version);
 		else if (event.type === 'mode_changed') mode = event.mode;
 		else if (event.type === 'stats') stats = event;
@@ -215,7 +239,7 @@
 			session = event.status;
 			me = event.session;
 		} else if (event.type === 'peers') peers = event.peers;
-		else if (event.type === 'said') heard(event);
+		else if (event.type === 'statement') spoken = event.plugins;
 		else if (event.type === 'anchors') anchors = event.anchors;
 		else if (event.type === 'palette') palette = event.colors;
 		else if (event.type === 'tool_changed') {
@@ -240,9 +264,13 @@
 <div class="stage">
 	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} name={myName} {link} stand={arrival} effects={wanted} onevent={receive} />
 	{#if link}
-		<Balloons {anchors} {peers} {me} {lines} />
-		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />
+		<Nametags {anchors} {peers} {me} />
 	{/if}
+	{#each mounted as plugin (plugin.name)}
+		{#if plugin.Layer}
+			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {peers} {anchors} />
+		{/if}
+	{/each}
 	<Settings {effects} {defaults} onchange={choose} />
 	{#if builds(level)}
 		<Build
@@ -308,6 +336,22 @@
 						<li>{who(peer)}</li>
 					{/each}
 				</ul>
+			</section>
+		{/if}
+		{#if onswitch && link}
+			<section class="here">
+				<header>
+					<h3>{t('engine.plugins')}</h3>
+				</header>
+				{#each plugins as plugin (plugin.name)}
+					<Checkbox
+						checked={spoken.some((on) => on.name === plugin.name)}
+						disabled={session !== 'online' || switching !== null}
+						onchange={(on) => turn(plugin.name, on)}
+					>
+						{t(plugin.label)}
+					</Checkbox>
+				{/each}
 			</section>
 		{/if}
 		<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={(value) => (mode = value)} />

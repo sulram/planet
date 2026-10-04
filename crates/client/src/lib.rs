@@ -16,6 +16,7 @@ mod grass;
 mod input;
 mod peers;
 mod place;
+mod plugin;
 mod seam;
 mod session;
 mod terrain;
@@ -37,9 +38,12 @@ use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Input, Key};
 use peers::Peers;
 pub use place::Pose;
+use plugin::Plugins;
+pub use plugin::{Host, Plugin};
 pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{
-    Anchor, Base, BuildRefusal, Command, Event, Level, Mode, PeerInfo, Scope, SessionStatus, Tool,
+    Anchor, Base, BuildRefusal, Command, Event, Level, Mode, PeerInfo, PluginOn, SessionStatus,
+    Tool,
 };
 pub use session::Outbound;
 use session::Session;
@@ -78,6 +82,8 @@ pub struct Client {
     wardrobe: Wardrobe,
     session: Session,
     peers: Peers,
+    /// What a shell plugged in, and which of it the world has on.
+    plugins: Plugins,
     requests: Requests,
     manifest: Option<Manifest>,
     /// A random avatar was asked for before the manifest arrived.
@@ -135,6 +141,7 @@ impl Client {
             wardrobe: Wardrobe::default(),
             session: Session::default(),
             peers: Peers::default(),
+            plugins: Plugins::default(),
             requests: Requests::default(),
             manifest: None,
             wants_random_avatar: false,
@@ -376,7 +383,6 @@ impl Client {
                     self.events.push(Event::Rejected { message });
                 }
             }
-            Command::Say { scope, text, here } => self.session.say_line(scope.wire(), text, here),
             Command::SetName { name } => {
                 self.session.rename(&name);
                 self.wanted_name = name;
@@ -475,14 +481,70 @@ impl Client {
     }
 
     /// Commands arriving as JSON over the seam. Bad JSON becomes a
-    /// [`Event::Rejected`], never a panic: the other side is a UI.
+    /// [`Event::Rejected`], never a panic: the other side is a UI. A `type`
+    /// with a dot in it is a plugin's, `chat.say`, and goes to that plugin.
     pub fn command_json(&mut self, json: &str) {
-        match Command::from_json(json) {
+        let mut body = match serde_json::from_str::<serde_json::Value>(json) {
+            Ok(body) => body,
+            Err(error) => {
+                return self.events.push(Event::Rejected {
+                    message: error.to_string(),
+                });
+            }
+        };
+        let named = body
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|name| name.split_once('.'))
+            .map(|(plugin, kind)| (plugin.to_owned(), kind.to_owned()));
+        if let Some((plugin, kind)) = named {
+            if let Some(fields) = body.as_object_mut() {
+                fields.remove("type");
+            }
+            return self.plugin_command(&plugin, &kind, body);
+        }
+        match serde_json::from_value::<Command>(body) {
             Ok(command) => self.command(command),
             Err(error) => self.events.push(Event::Rejected {
                 message: error.to_string(),
             }),
         }
+    }
+
+    /// Plugs in a plugin's client half. A shell does it once, before the
+    /// link opens, for each plugin its version carries. It stays off until a
+    /// world says it is on.
+    pub fn plug(&mut self, plugin: Box<dyn Plugin>) {
+        self.plugins.plug(plugin);
+    }
+
+    /// A command for a plugin: `kind` is its name without the plugin's, and
+    /// `body` the rest of its JSON. Refused when no plugin of that name is on
+    /// in this world.
+    pub fn plugin_command(&mut self, plugin: &str, kind: &str, body: serde_json::Value) {
+        let taken = self.plugins.command(
+            plugin,
+            kind,
+            body,
+            &mut self.session,
+            &mut self.events,
+            &self.generator,
+        );
+        if !taken {
+            self.events.push(Event::Rejected {
+                message: format!("`{plugin}.{kind}`: no plugin `{plugin}` is on in this world"),
+            });
+        }
+    }
+
+    /// Takes the world's statement of which plugins are on, and says it to
+    /// the front end.
+    fn spoken(&mut self, spoken: &[protocol::Plugin]) {
+        let (plugins, apart) = self.plugins.speak(spoken);
+        for message in apart {
+            self.events.push(Event::Rejected { message });
+        }
+        self.events.push(Event::Statement { plugins });
     }
 
     pub fn drain_events(&mut self) -> Vec<Event> {
@@ -702,6 +764,7 @@ impl Client {
                     session: Some(welcome.session),
                     level: self.level,
                 });
+                self.spoken(&welcome.plugins);
                 self.peers_changed();
             }
             Some(Message::Joined(joined)) => {
@@ -735,20 +798,13 @@ impl Client {
                 self.peers.renamed(renamed.session, &renamed.name);
                 self.peers_changed();
             }
-            Some(Message::Said(said)) => {
-                let grid = self.generator.sphere().blocks();
-                let place = said
-                    .stance
-                    .as_ref()
-                    .and_then(|stance| place::Pose::of_stance(grid, stance))
-                    .map(|pose| pose.place(grid));
-                self.events.push(Event::Said {
-                    session: said.session,
-                    scope: Scope::from_wire(said.scope()),
-                    text: said.text,
-                    place,
-                });
-            }
+            Some(Message::Envelope(envelope)) => self.plugins.receive(
+                &envelope,
+                &mut self.session,
+                &mut self.events,
+                &self.generator,
+            ),
+            Some(Message::Plugins(plugins)) => self.spoken(&plugins.plugins),
             Some(Message::Refused(refused)) => {
                 self.events.push(Event::Rejected {
                     message: format!("refused by the server: {}", refused.reason),
@@ -794,6 +850,8 @@ impl Client {
             session: None,
             level: self.level,
         });
+        let plugins = self.plugins.hush();
+        self.events.push(Event::Statement { plugins });
         self.events.push(Event::Peers { peers: Vec::new() });
     }
 

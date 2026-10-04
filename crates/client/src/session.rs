@@ -137,14 +137,14 @@ impl Session {
         }
     }
 
-    /// A line for whoever is in scope. Nothing while offline: a line said to
-    /// nobody is not queued for later.
-    pub fn say_line(&mut self, scope: protocol::Scope, text: String, here: bool) {
+    /// One message of a plugin, in the core's envelope. Nothing while
+    /// offline: what is asked of nobody is not queued for later.
+    pub fn envelope(&mut self, plugin: &str, kind: &str, payload: Vec<u8>) {
         if self.online() {
-            self.say(client_message::Message::Say(protocol::Say {
-                scope: scope.into(),
-                text,
-                here,
+            self.say(client_message::Message::Envelope(protocol::Envelope {
+                plugin: plugin.to_owned(),
+                kind: kind.to_owned(),
+                payload,
             }));
         }
     }

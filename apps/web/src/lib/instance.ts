@@ -15,6 +15,8 @@ export interface About {
 	recipe: Recipe | null;
 	protocol: number;
 	version: string;
+	/** The plugins that are on, each with the version of its seam. */
+	plugins: { name: string; version: number }[];
 	/** mundos's door, which every load passes through. Empty for a world that runs alone. */
 	door: string;
 }
@@ -72,6 +74,10 @@ export const enter = (identity: string) =>
 /** Freezes the recipe of an unfounded world. An admin's alone. */
 export const found = (recipe: Recipe, key: string) =>
 	ask<About>('/api/world', { method: 'POST', headers: bearer(key), body: JSON.stringify(recipe) });
+
+/** Turns one of the version's plugins on or off for this world. An admin's alone. */
+export const switchPlugin = (name: string, on: boolean, key: string) =>
+	ask<About>('/api/plugins', { method: 'POST', headers: bearer(key), body: JSON.stringify({ name, on }) });
 
 /** Whether a key still stands. Only the server's own word ends a key: silence keeps it. */
 export async function stands(key: string): Promise<boolean> {

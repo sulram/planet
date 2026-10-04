@@ -17,7 +17,7 @@ import (
 
 // Protocol is the wire version this server speaks. Hello says the client's;
 // any other number is refused. Kept equal to `protocol::PROTOCOL` in Rust.
-const Protocol = 3
+const Protocol = 4
 
 // A client says Hello within this long of connecting, and then something at
 // least every few seconds; a silent link is a dead one.
@@ -41,14 +41,28 @@ type Catalog interface {
 // Hub holds the world's actor: started on the first join and retired after
 // the last leave.
 type Hub struct {
-	catalog Catalog
+	catalog   Catalog
+	installed []Installed
 
 	mu    sync.Mutex
 	actor *actor
+	// Which plugins are on, by name: what the config says, then what the
+	// world's admin set over it.
+	on map[string]bool
 }
 
-func NewHub(catalog Catalog) *Hub {
-	return &Hub{catalog: catalog}
+// NewHub holds a world and the plugins its version carries, each on as the
+// config says until `set` says otherwise: the world's own choice, by name
+// (DECISIONS 91).
+func NewHub(catalog Catalog, installed []Installed, set map[string]bool) *Hub {
+	on := map[string]bool{}
+	for _, in := range installed {
+		on[in.Plugin.Name()] = in.On
+		if chosen, said := set[in.Plugin.Name()]; said {
+			on[in.Plugin.Name()] = chosen
+		}
+	}
+	return &Hub{catalog: catalog, installed: installed, on: on}
 }
 
 // Join runs one connection as a session of the world and returns when it
@@ -122,7 +136,7 @@ func (h *Hub) actorFor(ctx context.Context) (*actor, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.actor == nil {
-		h.actor = newActor(h, recipe)
+		h.actor = newActor(h, recipe, plug(h.installed, h.on))
 		go h.actor.run()
 	}
 	h.actor.pending++
@@ -155,4 +169,48 @@ func (h *Hub) Active() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.actor != nil
+}
+
+// Carries is whether this version has a plugin of that name, on or off.
+func (h *Hub) Carries(name string) bool {
+	for _, in := range h.installed {
+		if in.Plugin.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Speaks is the plugins that are on, as the world's statement lists them.
+func (h *Hub) Speaks() []Spoken {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	on := make([]Spoken, 0, len(h.installed))
+	for _, in := range h.installed {
+		if h.on[in.Plugin.Name()] {
+			on = append(on, Spoken{Name: in.Plugin.Name(), Version: in.Plugin.Version()})
+		}
+	}
+	return on
+}
+
+// Switch turns a plugin on or off for this world, and tells whoever is in
+// it. Keeping the choice is the caller's: the hub holds it for the process.
+func (h *Hub) Switch(name string, on bool) {
+	h.mu.Lock()
+	h.on[name] = on
+	now := make(map[string]bool, len(h.on))
+	for name, on := range h.on {
+		now[name] = on
+	}
+	a := h.actor
+	h.mu.Unlock()
+	if a != nil {
+		// An actor that stopped reads no inbox and has nobody to tell: the
+		// next one starts from what the hub holds.
+		select {
+		case a.inbox <- inbound{kind: switchKind, on: now}:
+		case <-a.stopped:
+		}
+	}
 }

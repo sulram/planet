@@ -6,11 +6,6 @@ import (
 	pb "github.com/sulram/planet/server/internal/protocol"
 )
 
-// NearBlocks is how far a line said near reaches: the distance between two
-// stances on the same body, in blocks, along the datum and up. One constant
-// for every world until a world asks for its own (DECISIONS 69).
-const NearBlocks = 64.0
-
 // The body's measures, as `topology` and `worldgen` hold them. Mirrored here
 // and pinned by near_test.go to values the Rust side prints, so the two
 // cannot drift unnoticed.
@@ -84,10 +79,4 @@ func apart(a, b *pb.Stance) (float64, bool) {
 	along := angle * radiusBlocks(a.Body)
 	up := (float64(a.HeightM) - float64(b.HeightM)) / blockM
 	return math.Hypot(along, up), true
-}
-
-// near is whether a line said at `a` reaches `b`.
-func near(a, b *pb.Stance) bool {
-	blocks, same := apart(a, b)
-	return same && blocks <= NearBlocks
 }
