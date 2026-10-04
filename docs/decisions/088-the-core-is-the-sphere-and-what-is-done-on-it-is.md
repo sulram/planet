@@ -43,10 +43,10 @@ those seams need to be real.
 **Hooks arrive with whoever asks.** Who may do what, and where, is a hook
 whose default is the level; land with landlords (14) is a plugin over it.
 Which avatars are offered is a hook; a wallet's avatars are a plugin over it.
-A hook nobody asks for is not written.
+A hook is written when a plugin asks for it.
 
 **The renderer stays whole.** A plugin hands the picture plain data through
-`scene`, as the client does, and never touches wgpu.
+`scene`, as the client does; wgpu stays the renderer's.
 
 **Rejected:** plugins loaded at run time, since a WASM module in a browser
 links nothing after it is built and nobody outside writes one yet; a script

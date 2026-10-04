@@ -119,10 +119,10 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - **Copy on first write**: the first edit stores the whole chunk. The op log is
   append-only and records every edit, admins included.
 - **Every edit is a permission-checked op.** Destruction is an edit.
-- **Who is who is mundos's.** The world checks a signature, keeps a level for
-  the session's life, and stores no account, e-mail or password.
-- **A plugin imports the core, never the reverse**, and never touches wgpu.
-  The core runs with every plugin off.
+- **Who is who is mundos's.** Accounts live there; the world checks a
+  signature and keeps a level for the session's life.
+- **A plugin imports the core** and draws through `scene`. The core runs
+  alone, with every plugin off.
 - **An agent is a client without a renderer.** Same protocol, same levels.
 - **A heavy file is named by the hash of its content.** Records name it so.
 - **UI is a front-end.** Svelte and the native UI sit over one command/event
@@ -146,9 +146,9 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 
 - Accounts, sign in, roles, a backoffice, a list of worlds, billing, a deploy
   to a box: they are mundos's (DECISIONS 87).
-- Into the core, what could be a plugin. A hook no plugin asks for.
+- Into the core, what a plugin can do. A hook waits for the plugin that asks.
 - Bevy or any engine. Digging below the build band, multi-shell logic, flat
-  or torus world types. Structural collapse physics. Our own transcoding.
+  or torus world types, structural collapse physics, our own transcoding.
 - A feature nothing pulls. Add the wish to ROADMAP instead.
 
 ## How it grows

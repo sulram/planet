@@ -14,8 +14,8 @@
 
 	// The one page of a world. It asks the world what it is, passes through
 	// mundos's door when there is one, and then shows one of three faces: the
-	// world, the founding of a world that has no planet yet, to its admin, or
-	// word that it is not made yet, to anyone else (DECISIONS 87).
+	// world, the founding of a world that awaits its planet, to its admin, or
+	// word that it is on its way, to everyone else (DECISIONS 87).
 	type Face = 'entering' | 'unreachable' | 'unfounded' | 'founding' | 'world';
 
 	let face = $state<Face>('entering');
@@ -33,8 +33,8 @@
 		const door = world?.door ?? '';
 		return {
 			url: socket(key),
-			// A key the server no longer holds opens no socket: through the door
-			// for another. Where there is no door, no key was ever needed.
+			// The socket opens for a key the server holds. Past its life the
+			// page goes through the door for a new one.
 			again: async () => {
 				if (key && door && !(await stands(key))) pass(door);
 			}

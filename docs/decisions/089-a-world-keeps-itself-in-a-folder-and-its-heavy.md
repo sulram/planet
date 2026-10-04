@@ -1,18 +1,18 @@
-# 89. A world keeps itself in a folder and its heavy files in a bucket, and PocketBase leaves (decided)
+# 89. A world keeps itself in a folder, and its heavy files in a bucket (decided)
 
 Logged 2026-10-04.
 
-With accounts, roles and the admin panel gone to mundos (87), the server keeps
-a world in its own folder: the recipe and what its admin set, and one SQLite
-file for each plugin that keeps things. Heavy files, an image, a video, a GLB,
-are named by the hash of their content and live in the bucket folder mundos
-hands the generation, as the Hyperfy fork keeps its own. PocketBase leaves the
-server.
+The server keeps a world in its own folder: the recipe and what its admin
+set, and one SQLite file for each plugin that keeps things. Heavy files, an
+image, a video, a GLB, are named by the hash of their content and live in the
+bucket folder mundos hands the generation, as the Hyperfy fork keeps its own.
+The server stands on the standard library, the socket and protobuf, with
+SQLite direct when the first plugin keeps things.
 
 **Removes:** 10, 27.
 
-**Why PocketBase leaves.** 10 gave it accounts, worlds, volumes, roles and
-records, and the panel to edit them. Accounts and roles are mundos's, an
+**Why a folder is enough.** 10 gave PocketBase accounts, worlds, volumes,
+roles and records, and the panel to edit them. Accounts and roles are mundos's, an
 instance is one world, and nobody may sign in to a panel in a world that
 stores no password. What is left is one row, the recipe. A framework pinned
 before its 1.0, with a Go toolchain of its own (27), is a lot to carry for a

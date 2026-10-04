@@ -1,8 +1,8 @@
 import { resolveLocale } from '$lib/i18n/config';
 import type { LayoutLoad } from './$types';
 
-// The page is only files (DECISIONS 90): nothing renders on a server, and
-// every route is built once as a shell the browser fills.
+// The page is files (DECISIONS 90): every route is built once as a shell the
+// browser fills.
 export const ssr = false;
 export const prerender = true;
 

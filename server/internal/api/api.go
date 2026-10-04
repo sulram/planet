@@ -25,11 +25,11 @@ type Config struct {
 	Name string
 	// MundosURL is mundos's origin, where the door is.
 	MundosURL string
-	// PublicKey checks mundos's tokens. Nil where there is no mundos: then
-	// nobody arrives signed, and every session has DevLevel.
+	// PublicKey checks mundos's tokens. Nil for a world that runs alone, where
+	// every session has DevLevel.
 	PublicKey ed25519.PublicKey
-	// DevLevel is every session's level where there is no mundos, and
-	// anonymous where there is one.
+	// DevLevel is every session's level in a world that runs alone. Under
+	// mundos it is anonymous: mundos says the level.
 	DevLevel world.Level
 	// WebDir holds the front end's files. Empty in development, where Vite
 	// serves them and proxies the routes here.
@@ -83,8 +83,8 @@ type description struct {
 	// What it speaks: the wire's version and the engine's.
 	Protocol int    `json:"protocol"`
 	Version  string `json:"version"`
-	// mundos's door, which every load passes through. Empty where there is
-	// no mundos.
+	// mundos's door, which every load passes through. Empty for a world that
+	// runs alone.
 	Door string `json:"door"`
 }
 
@@ -118,7 +118,7 @@ type entered struct {
 	// The account's name, as mundos signed it. Empty for a visitor.
 	Name string `json:"name"`
 	// What the page shows on the socket and on a founding. Empty for a
-	// visitor, who needs none.
+	// visitor, who enters as a guest.
 	Key string `json:"key"`
 }
 
@@ -168,8 +168,9 @@ func bearer(r *http.Request) string {
 	return key
 }
 
-// who is the identity a key stands for. No key is a visitor, at the level
-// every session has where there is no mundos. False for a key nobody holds.
+// who is the identity a key stands for. A request with an empty key is a
+// visitor's, at the level every session has in a world that runs alone. Only a
+// key this server gave is true.
 func (s *Server) who(key string) (world.Identity, bool) {
 	if key == "" {
 		return world.Identity{Level: s.cfg.DevLevel}, true

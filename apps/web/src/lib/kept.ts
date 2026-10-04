@@ -1,7 +1,7 @@
 /**
  * What this browser keeps of a person's choices: the avatar worn, a visitor's
- * name. Nothing a world needs: a browser that keeps nothing loses only the
- * choice.
+ * name. A convenience: a browser that keeps them spares the person choosing
+ * again.
  */
 const PREFIX = 'planet.';
 
@@ -9,7 +9,7 @@ export function kept(name: string): string | null {
 	try {
 		return localStorage.getItem(PREFIX + name);
 	} catch {
-		// storage blocked: the same as nothing kept
+		// storage blocked: the person chooses again
 		return null;
 	}
 }

@@ -20,7 +20,8 @@ import (
 // ErrFounded is what a second founding hears: a recipe is written once.
 var ErrFounded = errors.New("the world is already founded")
 
-// fileName is the one file of the core. Its absence is an unfounded world.
+// fileName is the one file of the core. A folder waiting for it is an
+// unfounded world.
 const fileName = "world.json"
 
 // Folder is one world's folder. It is the world core's Catalog.
@@ -71,7 +72,7 @@ func Open(dir string) (*Folder, error) {
 	return f, nil
 }
 
-// Recipe is the world's recipe, or world.ErrUnfounded while it has none.
+// Recipe is the world's recipe, or world.ErrUnfounded while it awaits one.
 func (f *Folder) Recipe(context.Context) (world.Recipe, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

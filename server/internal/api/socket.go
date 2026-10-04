@@ -11,7 +11,7 @@ import (
 )
 
 // socket turns the request into a session of the world and runs it to the
-// end. The key in the query names who it is; no key is a visitor.
+// end. The key in the query names who it is; the bare route is a visitor's.
 func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 	identity, known := s.who(r.URL.Query().Get("key"))
 	if !known {

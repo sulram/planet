@@ -8,22 +8,22 @@ not yet confirmed.
 
 - An instance is one world (87): one container from a published version, one
   world folder that outlives it, one bucket folder, one port. mundos
-  (`~/Dev/mundos`) creates, stops, addresses, lists and upgrades it; planet
-  holds none of that. How it is hosted: DEPLOY.md.
-- A world is born unfounded: no recipe. The first admin to enter previews a
-  planet offline, turns its knobs and founds the world from what is on the
-  screen; the recipe is frozen from then on. Until then anyone else is told
-  the world is not made yet.
+  (`~/Dev/mundos`) creates, stops, addresses, lists and upgrades it. How it
+  is hosted: DEPLOY.md.
+- A world is born unfounded: its recipe is yet to be chosen. The first admin
+  to enter previews a planet offline, turns its knobs and founds the world
+  from what is on the screen; the recipe is frozen from then on. Until then
+  everyone else is told the world is on its way.
 - A world answers for itself at `GET /api/world`: what it says about itself,
   for mundos's catalog and door, and what it speaks (91): the engine's
   version, the wire's, and the plugins that are on.
-- An update is never in place: mundos copies the folder and the bucket folder
-  into the next generation on the new version, and a promotion moves the
-  address.
+- An update is a copy: mundos copies the folder and the bucket folder into
+  the next generation on the new version, and a promotion moves the address.
 
 ## Identity and levels
 
-- Who is who is mundos's. The world stores no account, e-mail or password.
+- Who is who is mundos's: accounts live there, and the world checks a
+  signature and keeps a level.
 - Every load passes through mundos's door: a page with no `#identity=` in its
   address goes to `<mundos>/enter?host=<host>` and comes back with a token, or
   with `guest`. The pose in the address bar is kept across the hop.
@@ -34,22 +34,22 @@ not yet confirmed.
   kept in the page's memory, shown on the socket's URL and on a founding, held
   by the server in memory for half a day. The level holds for the life of the
   page; a role changed in mundos holds on the next load.
-- A link that drops opens again with the same key. A key the server no longer
-  holds, after a restart or at the end of its life, sends the page through
-  the door.
+- A link that drops opens again with the same key. A key stands while the
+  server remembers it; past a restart or its half day, the page goes through
+  the door for a new one.
 
 | Level | Who | May |
 |---|---|---|
 | `admin` | a superadmin of mundos, or an admin of this world | found the world, choose its plugins, build |
 | `builder` | a builder of this world | build |
 | `signed_in` | an account with no role here | walk, under the account's name |
-| `anonymous` | no account | walk, under a name of their own choosing |
+| `anonymous` | a guest | walk, under a name of their own choosing |
 
 - `Welcome` says the session's level, and the client offers its tools by it.
   A stroke that is an op is checked by the actor against the same level,
   through the permission hook.
-- With no `MUNDOS_PUBLIC_KEY` there is no door: every session is
-  `PLANET_DEV_LEVEL`, `anonymous` unless set. `bun run dev` sets `admin`.
+- Alone, where `MUNDOS_PUBLIC_KEY` is unset, every session has
+  `PLANET_DEV_LEVEL`: `anonymous` by default, `admin` under `bun run dev`.
 
 ## The core and its plugins
 
@@ -70,7 +70,7 @@ not yet confirmed.
 - A hook is where the core keeps a rule a plugin may change, written when a
   plugin asks: who may do what and where (the default is the level), which
   avatars are offered.
-- A plugin imports the core, never the reverse, and never touches wgpu.
+- A plugin imports the core, and draws through `scene` as the client does.
 - Which plugins are on is the world's own (91). The config says whether each
   starts on; the admin switches any of them at the founding and after, in the
   world folder. A plugin switched off keeps its store untouched.
@@ -111,8 +111,8 @@ not yet confirmed.
   and never changes (89). A record names it `asset://<hash>.<ext>`.
 - A session that may build sends it to the world server, which names it and
   writes it to the bucket folder mundos named for this generation. Browsers
-  read it from the address in front of the bucket. With no bucket the world
-  folder holds the files and the server serves them. On start a world deletes
+  read it from the address in front of the bucket. Alone, the world folder
+  holds the files and the server serves them. On start a world deletes
   from its bucket folder what no record names.
 - The default asset set (avatars, clips, fields) is part of a version, served
   from the image; `assets/manifest.json` says what is in it.
@@ -137,8 +137,8 @@ not yet confirmed.
 - One command/event seam between the core and any UI: a front end sends
   commands and renders events, and tool logic stays in Rust so every client
   shares it. JSON tagged by `type`: `client::Command`, `client::Event`.
-- A front end is only a front end (90). The web one is static files with
-  no server half, so what any front end may do is the seam and the world's
+- A front end sends commands and renders events (90). The web one is static
+  files, so what any front end does goes through the seam and the world's
   routes. Language, theme, avatar and a visitor's name are the browser's.
 - Web: the page asks the world what it is, hands the engine the recipe and
   the socket's URL with its key, and shows the founding screen to an admin of

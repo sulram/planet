@@ -13,8 +13,8 @@ import (
 const forGood = "public, max-age=31536000, immutable"
 
 // files serves the front end: the page built into plain files, and the asset
-// set beside it. With no folder it serves nothing: in development Vite holds
-// the page and proxies the routes here.
+// set beside it. In development the folder is unset: Vite holds the page and
+// proxies the routes here.
 func files(dir string) http.Handler {
 	if dir == "" {
 		return http.NotFoundHandler()

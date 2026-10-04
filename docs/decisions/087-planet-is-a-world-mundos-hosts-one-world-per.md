@@ -2,11 +2,11 @@
 
 Logged 2026-10-04.
 
-planet stops being a platform. mundos, the studio's host of worlds
-(`~/Dev/mundos`), creates, addresses, versions and upgrades instances and says
-who each person is; an instance of planet is one world and nothing else. The
-world is born with no recipe and its first admin founds it. Anyone enters,
-without an account too; admins and builders build.
+planet is one world per instance, hosted by mundos. mundos, the studio's host
+of worlds (`~/Dev/mundos`), creates, addresses, versions and upgrades
+instances and says who each person is. A world is born unfounded and its
+first admin founds it. Anyone enters, as a guest too; admins and builders
+build.
 
 **Removes:** 11, 13, 22, 24, 46, 70.
 
@@ -31,23 +31,23 @@ the server checks it against the public key and answers with a key, which the
 page keeps in memory and shows on the socket and on a founding. So the level
 holds for the life of the page, a link that drops comes back with no reload,
 and a reload passes through mundos again. The levels are mundos's: `admin`,
-`builder`, `signed_in`, `anonymous`. The world stores no account, no e-mail
-and no password, and holds the keys in memory alone; a role changed in mundos
-holds on the next load. This replaces the ticket of 66: what crosses comes
+`builder`, `signed_in`, `anonymous`. Accounts live in mundos, and the world
+holds its keys in memory alone; a role changed in mundos holds on the next
+load. This replaces the ticket of 66: what crosses comes
 from outside, signed.
 
 **Founding.** mundos creates a world by name and version alone: a planet is
-chosen by looking at it, and mundos holds no world logic. So a new world has
-no seed and no source. The first admin to enter sees the offline preview with
-its knobs, Earth or generated, and founds the world from what is on the
-screen; the recipe is frozen from then on. Until then anyone else is told the
-world is not made yet.
+chosen by looking at it, and world logic stays in the world. So a new world
+waits for its seed and its source. The first admin to enter sees the offline
+preview with its knobs, Earth or generated, and founds the world from what is
+on the screen; the recipe is frozen from then on. Until then everyone else is
+told the world is on its way.
 
 **Who builds.** An admin and a builder, anywhere. Building is in the client
 alone today (76), so the server says the level in `Welcome` and the client
 offers the tools by it; when a stroke is an op, the actor checks the same
 level. Land, with volumes that say where each person may build (14), is a
-plugin wish and not a premise.
+plugin wish.
 
 **Rejected:** accounts in planet beside mundos's, two answers to who someone
 is and an e-mail in every world; many worlds in one instance, since mundos

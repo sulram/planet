@@ -8,14 +8,14 @@ import type { Recipe } from '$lib/world';
 
 /** What a world says it is. */
 export interface About {
-	/** The world's name in mundos. Empty where there is no mundos. */
+	/** The world's name in mundos. Empty for a world that runs alone. */
 	name: string;
 	founded: boolean;
 	/** Null while the world is unfounded. */
 	recipe: Recipe | null;
 	protocol: number;
 	version: string;
-	/** mundos's door, which every load passes through. Empty where there is no mundos. */
+	/** mundos's door, which every load passes through. Empty for a world that runs alone. */
 	door: string;
 }
 
@@ -24,7 +24,7 @@ export interface Entered {
 	level: Level;
 	/** The account's name, as mundos signed it. Empty for a visitor. */
 	name: string;
-	/** Shown on the socket and on a founding. Empty for a visitor, who needs none. */
+	/** Shown on the socket and on a founding. Empty for a visitor, who enters as a guest. */
 	key: string;
 }
 
@@ -33,13 +33,13 @@ export interface Link {
 	/** The socket's address, the key in it. */
 	url: string;
 	/**
-	 * Asked before the link is opened again after a drop. The page leaves
-	 * through the door here when its key no longer stands.
+	 * Asked before the link is opened again after a drop. The page checks its
+	 * key here, and goes through the door for a new one when the old expired.
 	 */
 	again?: () => Promise<void>;
 }
 
-/** A route's refusal: the server's code, or `unreachable` when it did not answer. */
+/** A route's refusal: the server's code, or `unreachable` for a server that stayed silent. */
 export class Refused extends Error {
 	constructor(readonly code: string) {
 		super(code);
@@ -73,7 +73,7 @@ export const enter = (identity: string) =>
 export const found = (recipe: Recipe, key: string) =>
 	ask<About>('/api/world', { method: 'POST', headers: bearer(key), body: JSON.stringify(recipe) });
 
-/** Whether a key still stands. A server that does not answer is no verdict. */
+/** Whether a key still stands. Only the server's own word ends a key: silence keeps it. */
 export async function stands(key: string): Promise<boolean> {
 	try {
 		return (await fetch('/api/me', { headers: bearer(key) })).status !== 401;
@@ -82,7 +82,7 @@ export async function stands(key: string): Promise<boolean> {
 	}
 }
 
-/** The world socket's address, for this key. No key is a visitor. */
+/** The world socket's address, for this key. The bare address is a visitor's. */
 export function socket(key: string): string {
 	const url = new URL('/api/socket', location.href);
 	url.protocol = url.protocol.replace('http', 'ws');

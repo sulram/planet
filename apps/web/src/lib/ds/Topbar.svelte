@@ -3,9 +3,9 @@
 	import ThemeToggle from './ThemeToggle.svelte';
 	import { t } from '$lib/i18n';
 
-	// The bar of what is off the planet: an error, a world not made yet. The
-	// world itself is the whole page and carries no bar. Who a person is and
-	// where they sign in belong to mundos, so nothing of an account is here.
+	// The bar of what is off the planet: an error, a world on its way. The
+	// world itself is the whole page. Who a person is and where they sign in
+	// belong to mundos; this bar holds the language and the theme.
 </script>
 
 <header class="topbar">

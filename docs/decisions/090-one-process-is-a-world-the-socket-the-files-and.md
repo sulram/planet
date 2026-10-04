@@ -3,9 +3,9 @@
 Logged 2026-10-04.
 
 The Go binary is the whole instance. It serves the world socket, the world's
-routes, the heavy files when there is no bucket, and the web front end as
-static files, built by SvelteKit's static adapter. Nothing of Node or Bun runs
-in a world.
+routes, the heavy files of a world that runs alone, and the web front end as
+static files, built by SvelteKit's static adapter. An image is the binary and
+files.
 
 **Removes:** 23.
 

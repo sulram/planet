@@ -11,7 +11,7 @@ this file in the same change.
 | Version | A published image of planet: the core plus the plugins chosen for it, named by its git tag. |
 | World folder | Where a world keeps itself: the recipe, what its admin set, and one SQLite file for each plugin that keeps things. |
 | Bucket folder | Where a generation's heavy files live in mundos's bucket: a prefix of its own, copied on an update and deleted with the generation. |
-| Unfounded | A world with no recipe yet: what mundos creates. |
+| Unfounded | A world as mundos creates it: a door, waiting for its recipe. |
 | Founding | The first admin choosing a recipe for an unfounded world, from the offline preview. Done once: it freezes the recipe. |
 | Door | mundos's `/enter`: every load passes through it and comes back with a token, or as a guest. |
 | Token | What mundos signs for one entry into one world: the account's id, its name and its level, good for a minute. Traded once, on entering, for a key. |
@@ -23,7 +23,7 @@ this file in the same change.
 | Hook | Where the core keeps a rule a plugin may change: who may do what, which avatars are offered. |
 | Host (code) | The part of the core that plugins register with: the registry, the hooks, the stores, the wire's envelope. Distinct from mundos, which hosts worlds. |
 | Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. |
-| Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands, renders events, holds no rule. |
+| Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands and renders events; the rules are the core's. |
 | World | One recipe and one world folder. An instance is exactly one. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |
 | Generator | The deterministic function from recipe + address to terrain. Versioned, frozen per world. |
@@ -81,7 +81,7 @@ this file in the same change.
 | Landlord | A wish: the role on a volume that builds, subdivides and names builders inside, in the land plugin. |
 | Builder | The level `builder`: builds, anywhere in the world. |
 | Admin | The level `admin`: founds the world, chooses its plugins, builds. A superadmin of mundos, or an admin of this world there. |
-| Visitor | A session with no account, the level `anonymous`. Walks, under a name of their own choosing. |
+| Visitor | A guest: a session at the level `anonymous`. Walks, under a name of their own choosing. |
 | Agent | An AI client without a renderer: the same protocol and the same levels as a person. |
 | Offline preview | The engine with no server: how a planet is looked at before a world is founded, and the desktop explorer. Permanent. |
 | Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |

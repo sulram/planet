@@ -72,7 +72,8 @@ pub enum BuildRefusal {
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
-    /// The world says who builds in it, and this session is not one of them.
+    /// Building is a builder's and an admin's, and the world named this
+    /// session a lower level.
     Level,
 }
 
@@ -88,7 +89,7 @@ pub enum Level {
 }
 
 impl Level {
-    /// A level the wire names that this client does not know is the least.
+    /// A level this client has yet to learn reads as the least.
     pub(crate) fn from_wire(level: i32) -> Level {
         match protocol::Level::try_from(level) {
             Ok(protocol::Level::SignedIn) => Level::SignedIn,

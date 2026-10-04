@@ -421,9 +421,9 @@ impl Client {
         self.build.tool().is_some()
     }
 
-    /// Whether this client may build. A world says so in its welcome, and
-    /// until one has spoken there is no world to ask: the offline preview
-    /// builds freely. A server checks the same level when a stroke is an op.
+    /// Whether this client may build. A world says so in its welcome; before
+    /// one has spoken this is the offline preview, which builds freely. A
+    /// server checks the same level when a stroke is an op.
     fn may_build(&self) -> bool {
         self.level.is_none_or(|level| level >= Level::Builder)
     }

@@ -17,9 +17,9 @@ export async function build(): Promise<void> {
 
 /**
  * Starts the server on 127.0.0.1:8090 with its world in server/world. Alone,
- * with no mundos, every session is an admin unless `.env` says another level:
- * the one at the keyboard founds the world and builds. With mundos's three
- * variables in `.env`, mundos says the level and none is set here.
+ * every session is an admin, or the level `.env` names: the one at the
+ * keyboard founds the world and builds. With mundos's three variables in
+ * `.env`, mundos says the level.
  */
 export function serve() {
 	const env: Record<string, string | undefined> = { WORLD_DIR: `${DIR}/world`, ...process.env };

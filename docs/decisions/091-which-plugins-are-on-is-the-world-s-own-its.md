@@ -22,9 +22,8 @@ paired by a code, visits worlds of other versions and needs it before it
 enters: what it lacks it can refuse, or leave undrawn. The web pays nothing
 for this, since each world serves the client built with it.
 
-**What is promised, and what is not.** planet is at version zero and a
-breaking change is allowed: nothing here promises that an old world opens on a
-new version, or an old client in a new world. What is in from the first day is
+**What is promised.** planet is at version zero, where a breaking change is
+allowed and each version answers for itself. What is in from the first day is
 what is cheap now and dear later: the versions are said, the wire's envelope
 carries a plugin's name beside its payload so the core's part changes rarely,
 and a plugin moves its own store forward when it starts. mundos's upgrade is

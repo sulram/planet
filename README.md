@@ -20,7 +20,7 @@ bun run shot --out out/orbit.png --altitude 30000 --pitch -60 --boom 50
 bun run check      # everything CI runs
 ```
 
-- Alone, with no mundos, whoever opens the page is an admin. The first visit
+- Alone, whoever opens the page is an admin. The first visit
   founds the world: a seed, Earth or generated, its knobs. It is kept in
   `server/world`; delete that folder for an unfounded world again.
 - Hosted, a world is an image and three variables mundos sets:

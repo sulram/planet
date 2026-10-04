@@ -29,16 +29,13 @@ There are rockets and satellites you can build, and you can fly like Superman.
 
 ## A world is a world
 
-planet is not a platform. It is one kind of world among those mundos hosts:
-mundos knows who each person is, gives the world its address and its version,
-and keeps it running. The world knows none of that. It has no accounts, no
-administration and no list of other worlds; it has a recipe, a folder with
-what people did, and a door.
+planet is one kind of world among those mundos hosts. mundos knows who each
+person is, gives the world its address and its version, and keeps it running.
+The world is a recipe, a folder with what people did, and a door.
 
-A new world is empty of everything, even of a planet. Its first admin walks
-the candidates, an Earth or a seed's own continents, and founds it from the
-one on the screen. From then on anyone may enter, with no account at all, and
-those the world trusts build.
+A new world begins as a door alone. Its first admin walks the candidates, an
+Earth or a seed's own continents, and founds it from the one on the screen.
+From then on anyone enters, as a guest too, and those the world trusts build.
 
 One engine opens any world that speaks its language. Today that is a browser
 tab, handed the engine by the world itself. Further out it is a headset paired

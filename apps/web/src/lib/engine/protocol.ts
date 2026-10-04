@@ -26,7 +26,7 @@ export const platforms = [8, 16, 32, 64] as const;
 export type Base = 'pillars' | 'solid';
 export const bases = ['pillars', 'solid'] as const satisfies readonly Base[];
 
-/** Why a tool was not taken or no platform laid: where the body stands, or who it is. */
+/** Why the engine refused to build: where the body stands, or who it is. */
 export type BuildRefusal = 'moon' | 'sea' | 'seam' | 'level';
 
 /** What a session may do, as mundos says it and the world repeats it. A builder and an admin build. */

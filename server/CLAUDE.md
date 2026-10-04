@@ -6,12 +6,12 @@ The root `CLAUDE.md` applies here too.
   90). `cmd/planet` is the entry; who the instance is comes from the
   environment (docs/DEPLOY.md).
 - `internal/world` is the core: the hub, the actor, a session, the recipe, the
-  keys. It imports nothing of HTTP, of mundos or of the world folder: it is
-  told who a session is and what the recipe is.
+  keys. It is told who a session is and what the recipe is, through small
+  types of its own.
 - `internal/api` is the one package that knows HTTP, mundos's token and the
   world folder at once: the routes, the socket, the front end's files. A route
   answers an error as a code, never a sentence.
-- `internal/mundos` checks what mundos signs and nothing else.
+- `internal/mundos` checks what mundos signs.
   `internal/folder` is the world folder, and how it is copied into a world's
   next generation (`planet copy`).
 - A plugin's server half is a package of its own, never a file in

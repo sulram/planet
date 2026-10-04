@@ -17,7 +17,7 @@ export interface Arrival {
 	address: string;
 }
 
-/** Null when the page did not come through the door. */
+/** What the door left in the address, or null for a page yet to pass through it. */
 export function arrival(): Arrival | null {
 	const word = WORD.exec(location.hash);
 	if (!word) return null;
@@ -33,13 +33,13 @@ export function arrival(): Arrival | null {
 
 /**
  * Goes to the door, keeping the address for the way back: a place in a link
- * survives the sign in. The page is left; nothing after this runs for long.
+ * survives the sign in. The page is left here.
  */
 export function pass(door: string): void {
 	try {
 		sessionStorage.setItem(KEPT, location.search + location.hash);
 	} catch {
-		// storage blocked: the address is lost, the entry is not
+		// storage blocked: the entry goes on, from the world's own address
 	}
 	location.replace(`${door}?host=${encodeURIComponent(location.host)}`);
 }

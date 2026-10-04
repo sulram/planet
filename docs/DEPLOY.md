@@ -23,13 +23,13 @@ confirmed. What of it is built: BRIEF.md.
   its git tag names (21). mundos lists what the registry publishes, pulls the
   version a superadmin asks for, and a world runs only a version, never a
   branch or a hash. The repository and its package are public, so the box
-  holds no registry key, as with the Hyperfy fork.
+  pulls anonymously, as it does the Hyperfy fork.
 - In it: the Go binary, the web front end's files, the engine's WASM, and the
-  default asset set. One process runs (90), as a user of its own and never
-  root. The `Dockerfile` at the root builds it, with BuildKit.
+  default asset set. One process runs (90), as a user of its own. The
+  `Dockerfile` at the root builds it, with BuildKit.
 - The image sets its own variables: `HOST=0.0.0.0`, `PORT=3000`,
   `WORLD_DIR=/world` and `WEB_DIR`, where the page's files are.
-- The Go binary has no CGO, and the engine and the page are the same on every
+- The Go binary is static, and the engine and the page are the same on every
   architecture: the three builds run on the building machine and only the
   last stage differs.
 - What publishes a version, and whether the image carries the baked fields or
@@ -57,8 +57,8 @@ confirmed. What of it is built: BRIEF.md.
 - A Docker volume, named by mundos after the generation's id and mounted at
   `/world`, which the image gives to the user the server runs as. In it:
   `world.json`, the recipe, and each plugin's SQLite file (89).
-- It is the whole world. Nothing of a world lives in the image, and deleting a
-  generation deletes its folder and its bucket folder.
+- It is the whole world: deleting a generation deletes its folder and its
+  bucket folder.
 
 ## Health
 
@@ -68,24 +68,23 @@ confirmed. What of it is built: BRIEF.md.
 
 ## Updating a world
 
-- Never in place. mundos makes the world's next generation on the chosen
-  version and fills its folder before it first starts, by running the
+- By copy. mundos makes the world's next generation on the chosen version
+  and fills its folder before it first starts, by running the
   source's own image: `planet copy /from /world`, the source read-only at
   `/from` and the new volume where a world's own sits. Every file goes as it
   is while the source keeps running; a plugin's SQLite file goes through its
   online backup, when the first one exists. Then mundos copies the bucket
   folder, on the bucket's side.
 - The new version moves each plugin's store forward when it starts, on the
-  copy. The old generation is untouched and is the way back.
-- Never onto an older version: a store moved forward is not promised to open
-  on an older one.
+  copy. The old generation stays as it is, and is the way back.
+- Onto the same version or a newer one: a store moves forward only.
 - Someone walks the copy at its own address, and a promotion gives it the
   world's.
 
 ## Development
 
-- `bun run dev` runs a world alone: the Go server and Vite on one origin, no
-  mundos, every session an `admin` through `PLANET_DEV_LEVEL`.
+- `bun run dev` runs a world alone: the Go server and Vite on one origin,
+  every session an `admin` through `PLANET_DEV_LEVEL`.
 - Against a local mundos: build the image here and mundos's worlds page lists
   it among the versions this machine holds.
 

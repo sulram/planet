@@ -37,9 +37,9 @@ func (l Level) wire() pb.Level {
 }
 
 // Identity is who a session is, as it was settled before the socket opened.
-// The world core never asks mundos; it is told.
+// The world core is told; asking mundos is the routes' work.
 type Identity struct {
-	// The account's id in mundos. Empty for a visitor: someone with no account.
+	// The account's id in mundos. Empty for a visitor, who enters as a guest.
 	UserID string
 	// The account's name, as mundos signed it. Empty for a visitor.
 	Name string

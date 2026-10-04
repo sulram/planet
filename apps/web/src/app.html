@@ -5,8 +5,8 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/favicon.svg" />
 		<script>
-			// Before the first paint, so nothing flashes: the page is only
-			// files, and what a person chose is in two cookies of this browser.
+			// Before the first paint, so the page opens in the person's own
+			// theme and language: both are in cookies of this browser.
 			(function () {
 				var root = document.documentElement;
 				var theme = /(?:^|; )theme=(light|dark)/.exec(document.cookie);
