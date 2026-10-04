@@ -27,6 +27,7 @@
 //! ```json
 //! {"type":"build.hand","tool":"create","paint":4,"finish":"glass","edge":"black","platform":32}
 //! {"type":"build.over","volume":true}
+//! {"type":"build.stroke","size":[12,1,5]}
 //! {"type":"build.refused","reason":"sea"}
 //! {"type":"build.history","undo":true,"redo":false}
 //! ```
@@ -174,6 +175,10 @@ pub const HAND: &str = "hand";
 /// `build.over`: whether a volume stands under the body, whenever that
 /// changes while building.
 pub const OVER: &str = "over";
+/// `build.stroke`: how many cells the stroke being drawn covers each way of
+/// its seat, across, along and up, and `null` when none is drawn: what a hand
+/// counts by. Whenever that changes.
+pub const STROKE: &str = "stroke";
 /// `build.refused`: a tool, a platform or the closing of a volume was asked
 /// for and not given.
 pub const REFUSED: &str = "refused";
@@ -224,6 +229,11 @@ struct Hand {
 #[derive(Serialize)]
 struct Over {
     volume: bool,
+}
+
+#[derive(Serialize)]
+struct Drawn {
+    size: Option<[u32; 3]>,
 }
 
 #[derive(Serialize)]
@@ -398,6 +408,8 @@ pub struct Build {
     lays: Option<(Span, u64, bool)>,
     /// Whether a volume stood under the body, as last said.
     over: bool,
+    /// How many cells the stroke being drawn covered each way, as last said.
+    drawn: Option<[u32; 3]>,
     /// Whether there was a change to take back and one to put back, as last
     /// said.
     history: (bool, bool),
@@ -421,6 +433,7 @@ impl Default for Build {
             survey: None,
             lays: None,
             over: false,
+            drawn: None,
             history: (false, false),
         }
     }
@@ -539,6 +552,15 @@ impl Build {
         if volume != self.over {
             self.over = volume;
             host.emit(OVER, &Over { volume });
+        }
+    }
+
+    /// Says how many cells the stroke being drawn covers, when that changed.
+    fn say_stroke(&mut self, host: &mut Host<'_>) {
+        let size = self.stroke.map(|stroke| stroke.span().size());
+        if size != self.drawn {
+            self.drawn = size;
+            host.emit(STROKE, &Drawn { size });
         }
     }
 
@@ -830,6 +852,7 @@ impl Plugin for Build {
             self.cancel();
         }
         self.handle(turn, host);
+        self.say_stroke(host);
         self.read_ground(host, GROUND_ROWS_PER_TURN);
         self.guide(host, GROUND_ROWS_PER_TURN);
         if self.tool.is_some() {

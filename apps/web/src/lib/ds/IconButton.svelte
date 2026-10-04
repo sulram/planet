@@ -39,7 +39,7 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	.icon-button:hover {
+	.icon-button:not(:disabled):hover {
 		background: var(--action);
 		color: var(--action-text);
 	}

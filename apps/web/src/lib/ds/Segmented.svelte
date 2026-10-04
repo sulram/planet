@@ -4,6 +4,8 @@
 	interface Option {
 		value: T;
 		label: string;
+		/** The key that picks it, shown small before the label. */
+		hint?: string;
 	}
 	interface Props {
 		options: readonly Option[];
@@ -26,7 +28,7 @@
 			aria-pressed={opt.value === value}
 			onclick={(e) => onselect?.(opt.value, e)}
 		>
-			{opt.label}
+			{#if opt.hint}<kbd>{opt.hint}</kbd>{/if}{opt.label}
 		</button>
 	{/each}
 </div>
@@ -56,5 +58,9 @@
 		background: var(--action);
 		color: var(--action-text);
 		cursor: default;
+	}
+	kbd {
+		margin-right: var(--sp-2);
+		opacity: 0.55;
 	}
 </style>

@@ -278,8 +278,23 @@ fn a_drag_of_the_pointer_lays_cells_with_a_tool_in_hand() {
     client.update(1.0 / 60.0, &mut input);
     input.pointer = Some([0.6, 0.5]);
     client.update(1.0 / 60.0, &mut input);
+    // While it is drawn the stroke says how many cells it covers each way,
+    // and none once it lands.
+    let sizes = |client: &mut Client| -> Vec<Value> {
+        let strokes = said(client)
+            .into_iter()
+            .filter(|(kind, _)| kind == "stroke");
+        strokes.map(|(_, event)| event["size"].clone()).collect()
+    };
+    let drawn = sizes(&mut client);
+    let longest = drawn
+        .last()
+        .and_then(|size| (0..2).filter_map(|way| size[way].as_u64()).max());
+    assert!(drawn.len() == 2 && longest > Some(1), "{drawn:?}");
+    assert_eq!(drawn[1][2], 1, "one cell high: {drawn:?}");
     input.key(Key::Use, false);
     client.update(1.0 / 60.0, &mut input);
+    assert_eq!(sizes(&mut client), [Value::Null]);
     // The stroke landed: a second change to take back, over the platform.
     client.command_json(r#"{"type":"build.undo"}"#);
     assert_eq!(client.cells().history(), (true, true));

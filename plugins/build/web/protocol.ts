@@ -2,8 +2,8 @@
  * Building's own part of the seam: the commands `build.take`, `build.paint`,
  * `build.finish`, `build.edge`, `build.platform`, `build.lay`, `build.close`,
  * `build.undo`, `build.redo` and `build.state`, and the events `build.hand`,
- * `build.over`, `build.refused` and `build.history`, as the plugin's crate
- * writes them. Pure: no WASM, no DOM.
+ * `build.over`, `build.stroke`, `build.refused` and `build.history`, as the
+ * plugin's crate writes them. Pure: no WASM, no DOM.
  */
 
 /** What a hand does while building: three make a stroke, one drag each, and the fourth shows the platform that would be laid. */
@@ -61,6 +61,13 @@ export function parseHand(event: Record<string, unknown>): Hand | null {
 /** Reads an `over` event: whether a volume stands under the body. Null for one that does not say. */
 export function parseOver(event: Record<string, unknown>): boolean | null {
 	return typeof event.volume === 'boolean' ? event.volume : null;
+}
+
+/** Reads a `stroke` event: how many cells the stroke being drawn covers across, along and up. Null when none is drawn. */
+export function parseStroke(event: Record<string, unknown>): [number, number, number] | null {
+	const { size } = event;
+	if (!Array.isArray(size) || size.length !== 3 || !size.every((cells) => typeof cells === 'number')) return null;
+	return [size[0], size[1], size[2]];
 }
 
 /** Reads a `refused` event. Null for a reason this front end has no words for. */

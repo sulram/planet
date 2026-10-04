@@ -55,7 +55,7 @@ pub(crate) struct Stroke {
 }
 
 impl Stroke {
-    fn span(self) -> Span {
+    pub(crate) fn span(self) -> Span {
         Span::between(self.start, self.end)
     }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseHand, parseHistory, parseOver, parseRefused } from './protocol';
+import { parseHand, parseHistory, parseOver, parseRefused, parseStroke } from './protocol';
 
 describe('building at the seam', () => {
 	test('reads the hand, with a tool or without', () => {
@@ -30,5 +30,11 @@ describe('building at the seam', () => {
 		expect(parseOver({ volume: false })).toBe(false);
 		expect(parseOver({ volume: 'yes' })).toBeNull();
 		expect(parseRefused({ reason: 'empty' })).toBe('empty');
+	});
+
+	test('reads how many cells a stroke covers, and that none is drawn', () => {
+		expect(parseStroke({ type: 'build.stroke', size: [12, 1, 5] })).toEqual([12, 1, 5]);
+		expect(parseStroke({ size: null })).toBeNull();
+		expect(parseStroke({ size: [12, 1] })).toBeNull();
 	});
 });
