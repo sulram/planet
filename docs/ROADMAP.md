@@ -58,6 +58,7 @@ end to end.
 
 ### Chat (69)
 
+- [ ] Its world half in Rust, in the module the server runs (99): the contract of a world half, the bridge over wazero with a bench of its own, `internal/chat` and `near.go` gone. `near` then reaches by the recipe's own `sector_bits` (49), where `near.go` measures every world at `2^16`
 - [ ] A mute: an answer over the permission hook, which answers by level alone (98)
 
 ### Building (58, 75 to 86)
@@ -66,7 +67,7 @@ end to end.
 - [ ] An op is answered: it landed, or the code of why it was refused, matched to the op it answers (93, 98)
 - [ ] A stroke as an op on the socket: the host asks the permission hook with who, what and where, the plugin applies its rule, keeps it and an event tells everyone in the world (76, 93)
 - [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
-- [ ] The rules as a module the server runs (97): a leaf crate that exports them, embedded in the Go binary, with a bench of its own in wazero
+- [ ] Its world half in the module chat cut (97, 99): the rule the server runs, with the ground read by the generator there
 - [ ] Kept by volume (95): copy on first write, chunk versions, the plugin's store in the world folder (89)
 - [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote

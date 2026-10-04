@@ -57,8 +57,8 @@ not yet confirmed.
   the recipe), the picture (`render`, `scene`), a body walking it (controller,
   footing on the ground, camera), the link (socket, session, level, a stance
   for each session) and the host of plugins. It runs with every plugin off.
-- What is done on the sphere is a plugin: a slice through the client, the
-  server, the wire and a front end, compiled in and on or off for a world.
+- What is done on the sphere is a plugin: a client half and a world half in
+  Rust, its wire and a panel (99), compiled in and on or off for a world.
 - Every state has one owner, the core or one plugin, and what crosses a seam
   is an op, a question or an event (93). How a plugin is cut, what it owns
   and how it speaks: PLUGINS.md.
@@ -68,9 +68,10 @@ not yet confirmed.
 - One Go executable is the instance (90): the world socket, the world's
   routes, the files when there is no bucket, and the web front end as static
   files. `cmd/planet` is the entry, `internal/world` the core, `internal/api`
-  the routes, and a plugin's server half is a package of its own.
-- A plugin's rules are its Rust, run as a WASM module through wazero, the
-  generator with them (97). Go carries, checks who, keeps and relays.
+  the routes.
+- A plugin's world half is its Rust, run in one WASM module through wazero,
+  the generator with it (97, 99). Go offers services and reads no payload.
+  Built so far: chat's server half as a Go package (BRIEF.md).
 - Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
   source (66). `Hello` says the protocol version; any other is refused.
   `Welcome` carries the session, its level, the recipe, so a client checks it

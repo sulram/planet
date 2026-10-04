@@ -1,4 +1,4 @@
-# 98. The host is cut by chat: an envelope, ops said as data, a statement and one config (proposed)
+# 98. The host is cut by chat: an envelope, ops said as data, a statement and one config (decided; a plugin's server half is 99's)
 
 Logged 2026-10-04.
 

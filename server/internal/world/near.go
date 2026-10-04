@@ -10,8 +10,9 @@ import (
 // and pinned by near_test.go to values the Rust side prints, so the two
 // cannot drift unnoticed.
 const (
-	// Blocks per sector side, as a power of two. Every world is the reference
-	// size here until the server reads `sector_bits` from the recipe (OPEN.md).
+	// Blocks per sector side, as a power of two. Every world is measured at
+	// the reference size here; chat's world half measures by the recipe's own
+	// (DECISIONS 99, ROADMAP.md).
 	sectorBits = 16
 	// Metres per block edge at a sector centre.
 	blockM = 0.5

@@ -18,7 +18,11 @@ this file in the same change.
 | Key | What the world gives a page that entered with a token: kept in the page's memory, shown on the socket and on a founding. It stands for the life of the page. |
 | Level | What a session may do, as mundos says it: `admin`, `builder`, `signed_in`, `anonymous`. |
 | Core | The sphere and the host of plugins: what a plugin stands on. Runs with every plugin off. |
-| Plugin | A layer over the core, ours and compiled in: a crate in the client, a package in the server, a payload on the wire, a panel. On or off for a world. |
+| Plugin | A layer over the core, ours and compiled in: a client half and a world half in Rust, a payload on the wire, a panel. On or off for a world. |
+| Client half | The part of a plugin the engine hosts: commands in, messages from the server, events out. |
+| World half | The part of a plugin the server hosts, in the module: its ops and their levels, what each does, whom an event reaches, what is kept. |
+| Module | The one WASM file the server runs through wazero: the body's measures, the generator and every plugin's world half. |
+| Service | What the server offers every plugin and no plugin owns: who a session is, whether it may, the moment, an event told, a store. It carries no feature. |
 | Native plugin | A plugin every version carries: chat, building, land, avatars. |
 | Owner | The core or the one plugin that holds a piece of a world's state, and alone changes it. |
 | Question | What asks for an answer and changes nothing: a hook or a reading. |

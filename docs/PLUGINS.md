@@ -1,16 +1,17 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98; how much of
-it is built, and in what order, is in BRIEF.md.
+shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 and 99; how much
+of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
 - The core (88) is what a plugin stands on, and it runs with every plugin
   off. What it is made of: ARCHITECTURE.md § The core and its plugins.
-- A plugin is a slice through up to four places: a crate in the client, a
-  package in the server, a payload on the wire, a panel in each front end.
-  Ours, compiled in: a config at the root lists them and the build bundles
+- A plugin is written once, in Rust, as two halves (99): a client half the
+  engine hosts and a world half the server hosts. With them, a payload on
+  the wire and a panel in each front end.
+- Ours, compiled in: a config at the root lists them and the build bundles
   them, so a version is the core plus the plugins chosen for it.
 - Native plugins: chat, building, land, avatars, made in that order (96).
   Chat, building and avatars are extracted from where they stand today.
@@ -80,7 +81,7 @@ it is built, and in what order, is in BRIEF.md.
 |---|---|---|
 | Wire | `proto/planet/<name>/v1/` | its ops and events, its own schema |
 | Client | `crates/<name>/` | a `client::Plugin`: commands in, messages from the server, events out |
-| Server | `server/internal/<name>/` | a `world.Plugin`: its ops and their levels, what each does |
+| World | the plugin's crate, compiled into the server's module | its ops and their levels, what each does, whom an event reaches, what is kept |
 | Web | `apps/web/src/lib/plugins/<name>/` | a `WebPlugin`: its layer over the world, its label |
 
 - `plugins.json` at the root lists a version's plugins and whether each
@@ -88,6 +89,8 @@ it is built, and in what order, is in BRIEF.md.
   (`crates/plugins`, `server/internal/plugins`, `$lib/plugins/index.ts`), and
   `bun run proto` generates each plugin's wire into its own halves.
 - A plugin's name is a to z and `_`: it is the word before the dot.
+- Chat's world half is a Go package, `server/internal/chat`, the one cut
+  before the module (99, BRIEF.md).
 
 ## What the host offers
 
@@ -108,8 +111,10 @@ it is built, and in what order, is in BRIEF.md.
 - **The switch**: `POST /api/plugins {name, on}`, an admin's. The choice is
   kept in the world folder's `plugins.json`, which holds what the admin set
   and nothing else.
-- **On the server**, a room for the length of one op: the moment, who is near
-  whom, and `Tell` to say an event to the sessions the plugin picks.
+- **On the server**, services that carry no feature (99): who a session is,
+  whether it may, the moment, an event told to the sessions the plugin picks.
+  A store joins them with building. How near two sessions stand is the world
+  half's own measure, by `topology`.
 - **On the client**, a host: `send` an op up, `emit` an event over the seam,
   read a stance as a place.
 - **On the web**, a layer over the world, mounted while the plugin is on, and

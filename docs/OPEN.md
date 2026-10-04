@@ -24,6 +24,7 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 
 | Question | Unblocks | Context |
 |---|---|---|
+| **How a plugin's two halves share its crate.** The world half goes into the server's module and cannot import `client`. One crate over a contract both hosts implement, or two crates side by side | chat's world half | DECISIONS 99 · `crates/client/src/plugin.rs` |
 | **A plugin's panel outside Svelte.** On the web it is a Svelte component. On a desktop or a headset it is written again for that front end, or a plugin says its panel as data (buttons, a palette, a slider) and each front end draws it. Said as data, it is also what an agent reads to know what it may ask | the second screen; the first agent | DECISIONS 88, 94 · ROADMAP § Other screens |
 | **A world with a plugin the client lacks.** Refuse to enter, or enter and leave that layer undrawn. Moot on the web, where a world serves its own client | an installed client | DECISIONS 91 |
 | **A plugin that needs a shader of its own.** A plugin hands the picture plain data and never touches wgpu. Volumes already have a pipeline of their own in `render`: it stays in the core as a shape any plugin may hand over, or the rule gets an exception | extracting building | DECISIONS 88 · RENDER.md § Volumes |
@@ -58,5 +59,4 @@ The address is the save format: settled before the first volume is stored.
 |---|---|
 | **WORLD.md stands at its 200 lines.** The next fact about the world has no room, and which theme leaves for a doc of its own is not chosen: where you are (the place code and the pose), or the recipe and its generators | CLAUDE.md § Docs · `scripts/docs.ts` |
 | **The simplex kernel steps, and the warp rides on it.** `simplex_d` uses `0.6 - r²` over four corners, so value and gradient both jump a little at every simplex boundary, and `plates::shape` warps its domain by that gradient. Worst seen: 21 m of seabed, 250 m under water. `0.5 - r²` is continuous and costs amplitude; either way every world and every golden changes, so it waits for a reason to spend that | DECISIONS 63 · `worldgen/tests/cliffs.rs` guards at 60 m |
-| **`near` is measured at the reference size.** `near.go` holds `sectorBits = 16`, and a recipe names its own `sector_bits` (49): on a smaller world a line said `near` reaches the wrong distance | `server/internal/world/near.go` |
 | **A mute for chat.** Chat limits a line's length and a session's rate. Silencing one person is an answer over the permission hook, and the hook takes its first such answer with land: until then it answers by level alone | DECISIONS 69, 98 · PLUGINS.md |
