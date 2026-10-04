@@ -1,4 +1,4 @@
-# 85. A platform stands on pillars or solid, picked by the button that lays it (decided)
+# 85. A platform stands on pillars or solid, picked by the button that lays it (decided; the bases are 105's)
 
 Logged 2026-09-30.
 

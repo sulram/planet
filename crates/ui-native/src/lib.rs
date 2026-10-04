@@ -336,7 +336,11 @@ fn build_layout(root: &mut egui::Ui, building: &Building) -> Option<Command> {
                 }
             });
             ui.horizontal(|ui| {
-                for (label, base) in [("Platform", Base::Pillars), ("Solid", Base::Solid)] {
+                for (label, base) in [
+                    ("Deck", Base::Deck),
+                    ("Solid", Base::Solid),
+                    ("Floating", Base::Floating),
+                ] {
                     if ui.button(label).clicked() {
                         asked = Some(Command::LayPlatform { base });
                     }

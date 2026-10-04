@@ -337,9 +337,7 @@ fn the_world_says_who_builds() {
     client.command(create());
     assert!(!client.building());
     assert!(client.drain_events().contains(&refused));
-    client.command(Command::LayPlatform {
-        base: Base::Pillars,
-    });
+    client.command(Command::LayPlatform { base: Base::Deck });
     assert!(client.drain_events().contains(&refused));
 
     // Its word stands through a dropped link: offline is no way to a tool.

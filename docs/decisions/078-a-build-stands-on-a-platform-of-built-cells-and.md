@@ -1,4 +1,4 @@
-# 78. A build stands on a platform of built cells, and the ground stays as it is (decided)
+# 78. A build stands on a platform of built cells, and the ground stays as it is (decided; how high it stands is 105's)
 
 Logged 2026-09-30.
 

@@ -70,8 +70,8 @@ this file in the same change.
 | Paint | What a solid cell is: an index into the palette a volume is shown with. |
 | Gesture | Create, delete or paint over a box of cells, with one paint: what a volume applies. What an op carries. |
 | Plot | One square of the grid volumes are cut by: 64 by 64 columns of a sector, named by their address less six bits. A volume stands over it. |
-| Platform | What a build stands on: a slab of cells one thick, 8 to 64 a side as picked, cut by the address, its top over the highest ground under it, on a base down to the ground. |
-| Base | What carries a platform down to the ground: pillars at the corners of every bay, open under the slab, or solid, every column filled. Picked as it is laid. |
+| Platform | What a build stands on: a slab of cells one thick, 8 to 64 a side as picked, cut by the address, its top the higher of the highest ground under it and the feet of who asks, on a base. |
+| Base | What carries a platform down to the ground, picked as it is laid: a deck, pillars at the corners of every bay and open under the slab; solid, every column filled; floating, nothing. |
 | Tool | Create, delete or paint, in hand while building. |
 | Stroke | One click and drag of a tool: a slab on the side it started on, or with Alt a wall standing up from it. Lands as one gesture. |
 | Ghost | The see-through preview of exactly the cells a stroke would change. |

@@ -12,7 +12,8 @@
 //!
 //! The ground under a volume stays as nature made it (DECISIONS 78). What a
 //! build stands on is a platform, built where the body stands: a slab as
-//! high as the highest ground under it, on pillars down to the ground.
+//! high as the higher of the highest ground under it and the feet, on a deck's
+//! pillars, on a solid block, or on nothing (DECISIONS 105).
 //!
 //! Volumes live here only: nothing is sent or kept yet (DECISIONS 76).
 
@@ -259,6 +260,9 @@ struct Laying {
     square: Platform,
     base: Base,
     paint: u8,
+    /// How high the feet of the one who asked stand, in cells: the slab
+    /// stands no lower.
+    feet: i32,
     corners: Vec<f64>,
 }
 
@@ -435,17 +439,22 @@ impl Build {
         Ok(())
     }
 
-    /// Asks for a platform where a body stands, opening the volume of its
-    /// plot if none stands there: a slab of the side picked, in the paint in
-    /// hand, its top over the highest ground under it, on `base` down to the
-    /// ground. The ground under it is read a few rows an update and the
-    /// platform lands when all of it is read, a stroke like any other, kept
-    /// to take back; [`Build::take_laid`] says how high its top stands. A
-    /// platform asked for while another is being read takes its place.
+    /// Asks for a platform where a body stands, its feet `feet_m` over the
+    /// datum, opening the volume of its plot if none stands there: a slab of
+    /// the side picked, in the paint in hand, on `base` down to the ground.
+    /// Its top is the higher of the highest ground under it and the feet
+    /// (DECISIONS 105): feet on the ground, the ground decides, as it does on
+    /// a slope; a body in the air, or standing on what is built, is given the
+    /// slab where it stands. The ground under it is read a few rows an update
+    /// and the platform lands when all of it is read, a stroke like any
+    /// other, kept to take back; [`Build::take_laid`] says how high its top
+    /// stands. A platform asked for while another is being read takes its
+    /// place.
     pub fn lay_platform(
         &mut self,
         generator: &Generator,
         point: SurfacePoint,
+        feet_m: f64,
         base: Base,
     ) -> Result<(), BuildRefusal> {
         self.open(generator, point)?;
@@ -457,11 +466,23 @@ impl Build {
             .iter()
             .position(|site| site.sector == point.sector)
             .expect("a volume was opened on this sector");
+        // To the nearest cell, so a body standing on a slab is given the next
+        // one level with it, whichever side of the cell's edge its feet are.
+        let feet = (feet_m / BLOCK_M).round() as i32;
+        // A slab is the cell under its top, and a volume ends where it ends.
+        let ceiling = self.sites[site]
+            .volumes
+            .bounds(plot_of(point))
+            .map_or(i32::MAX, |held| held.max[2] + 1);
+        if feet > ceiling {
+            return Err(BuildRefusal::High);
+        }
         self.laying = Some(Laying {
             site,
             square,
             base,
             paint: self.paint,
+            feet,
             corners: Vec::with_capacity(across * across),
         });
         Ok(())
@@ -492,11 +513,12 @@ impl Build {
             square,
             base,
             paint,
+            feet,
             corners,
         } = self.laying.take().expect("a platform being laid");
         let highest = corners.iter().copied().fold(f64::MIN, f64::max);
         let platform = Platform {
-            top: highest.ceil() as i32,
+            top: (highest.ceil() as i32).max(feet),
             ..square
         };
         // A base reaches the lowest ground at the foot of its column, so
@@ -510,13 +532,17 @@ impl Build {
                 .min(at(dx + 1, dy + 1));
             lowest.floor() as i32
         };
-        let lowest = corners.iter().copied().fold(f64::MAX, f64::min);
         let mut reach = platform.slab();
-        reach.min[2] = reach.min[2].min(lowest.floor() as i32);
         let base = match base {
-            Base::Pillars => voxel::Base::Pillars,
+            Base::Deck => voxel::Base::Deck,
             Base::Solid => voxel::Base::Solid,
+            Base::Floating => voxel::Base::Floating,
         };
+        // A base reaches the ground, and what floats is its slab alone.
+        if base != voxel::Base::Floating {
+            let lowest = corners.iter().copied().fold(f64::MAX, f64::min);
+            reach.min[2] = reach.min[2].min(lowest.floor() as i32);
+        }
         self.change(generator, site, reach, |volumes| {
             platform
                 .gestures(base, under, paint)
@@ -534,8 +560,8 @@ impl Build {
         self.laid.take()
     }
 
-    /// Asks for a platform and lays it at once, however long the ground
-    /// takes to read: for tests.
+    /// Asks for a platform with the feet on the ground and lays it at once,
+    /// however long the ground takes to read: for tests.
     #[cfg(test)]
     pub(crate) fn lay_platform_now(
         &mut self,
@@ -543,7 +569,21 @@ impl Build {
         point: SurfacePoint,
         base: Base,
     ) -> Result<f64, BuildRefusal> {
-        self.lay_platform(generator, point, base)?;
+        let feet_m = ground(generator, point.sector, point.u, point.v) * BLOCK_M;
+        self.lay_platform_from(generator, point, feet_m, base)
+    }
+
+    /// The same with the feet `feet_m` over the datum: in the air, or on
+    /// what is built.
+    #[cfg(test)]
+    pub(crate) fn lay_platform_from(
+        &mut self,
+        generator: &Generator,
+        point: SurfacePoint,
+        feet_m: f64,
+        base: Base,
+    ) -> Result<f64, BuildRefusal> {
+        self.lay_platform(generator, point, feet_m, base)?;
         self.read_ground(generator, usize::MAX);
         Ok(self.take_laid().expect("a platform laid"))
     }
@@ -1144,7 +1184,7 @@ mod tests {
         let mut build = Build::default();
         build.set_platform(64);
         build
-            .lay_platform_now(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Deck)
             .expect("dry land");
         let platform = platform_at(&build, point);
         let origin = [platform.corner[0], platform.corner[1], platform.top];
@@ -1254,12 +1294,12 @@ mod tests {
         let mut build = Build::default();
         for (u, v) in [(10.0, point.v), (point.u, side - 10.0), (side - 1.0, 1.0)] {
             let edge = SurfacePoint::new(point.sector, u, v);
-            let opened = build.lay_platform_now(&generator, edge, Base::Pillars);
+            let opened = build.lay_platform_now(&generator, edge, Base::Deck);
             assert_eq!(opened.err(), Some(BuildRefusal::Seam), "{u} {v}");
         }
         // One plot in, the edge is no reason: the sea may be.
         let inside = SurfacePoint::new(point.sector, 70.0, side - 70.0);
-        let opened = build.lay_platform_now(&generator, inside, Base::Pillars);
+        let opened = build.lay_platform_now(&generator, inside, Base::Deck);
         assert_ne!(opened.err(), Some(BuildRefusal::Seam));
     }
 
@@ -1271,7 +1311,7 @@ mod tests {
         build.set_paint(6);
         assert_eq!(build.platform(), 16);
         let top_m = build
-            .lay_platform_now(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Deck)
             .unwrap();
         let platform = platform_at(&build, point);
         assert_eq!(f64::from(platform.top) * BLOCK_M, top_m);
@@ -1406,12 +1446,12 @@ mod tests {
         let mut build = Build::default();
         build.set_platform(16);
         build
-            .lay_platform_now(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Deck)
             .unwrap();
         let first = platform_at(&build, point).slab();
         let beside = SurfacePoint::new(point.sector, point.u + 16.0, point.v);
         build
-            .lay_platform_now(&generator, beside, Base::Pillars)
+            .lay_platform_now(&generator, beside, Base::Deck)
             .unwrap();
         let second = platform_at(&build, beside).slab();
         assert_eq!(second.min[0], first.max[0] + 1);
@@ -1423,7 +1463,7 @@ mod tests {
         let (generator, point) = world();
         let mut build = Build::default();
         let top_m = build
-            .lay_platform_now(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Deck)
             .unwrap();
         let footing = build.footing(point, top_m).unwrap();
         assert_eq!(footing.floor_m, Some(top_m));
@@ -1939,5 +1979,116 @@ mod tests {
         // Up is out of the planet.
         let normal = Vec3::from(mesh.vertices[0].normal).as_dvec3();
         assert!(normal.dot(a.normalize()) > 0.99);
+    }
+
+    /// The highest ground under the platform a body at `point` is given, in
+    /// cells: what its slab stands over when the feet are no higher.
+    fn highest_under(generator: &Generator, build: &Build, point: SurfacePoint) -> i32 {
+        let (x, y) = (point.u.floor() as i32, point.v.floor() as i32);
+        let square = Platform::over(x, y, build.platform_bits, 0);
+        let side = square.side as i32;
+        let highest = (0..=side)
+            .flat_map(|dy| (0..=side).map(move |dx| (dx, dy)))
+            .map(|(dx, dy)| {
+                let (u, v) = (square.corner[0] + dx, square.corner[1] + dy);
+                ground(generator, point.sector, f64::from(u), f64::from(v))
+            })
+            .fold(f64::MIN, f64::max);
+        highest.ceil() as i32
+    }
+
+    #[test]
+    fn the_higher_of_the_ground_and_the_feet_says_how_high_a_slab_stands() {
+        let (generator, point) = world();
+        let cells = |top_m: f64| (top_m / BLOCK_M).round() as i32;
+
+        // Feet on the ground, on a slope or not: the highest ground under
+        // the square decides, and the slab stands over all of it.
+        let mut build = Build::default();
+        let over = highest_under(&generator, &build, point);
+        let top = build
+            .lay_platform_now(&generator, point, Base::Deck)
+            .unwrap();
+        assert_eq!(cells(top), over);
+
+        // In the air over it, the feet decide: the slab is laid where the
+        // body is, to the nearest cell.
+        let mut build = Build::default();
+        let feet_m = f64::from(over) * BLOCK_M + 10.2;
+        let top = build
+            .lay_platform_from(&generator, point, feet_m, Base::Deck)
+            .unwrap();
+        assert_eq!(cells(top), over + 20);
+
+        // Under the highest ground, in a dip of it, the ground decides still.
+        let mut build = Build::default();
+        let feet_m = f64::from(over) * BLOCK_M - 3.0;
+        let top = build
+            .lay_platform_from(&generator, point, feet_m, Base::Deck)
+            .unwrap();
+        assert_eq!(cells(top), over);
+    }
+
+    #[test]
+    fn a_body_on_a_slab_is_given_the_next_one_level_with_it() {
+        let (generator, point) = world();
+        let mut build = Build::default();
+        let top = build
+            .lay_platform_now(&generator, point, Base::Deck)
+            .unwrap();
+        // The next square along, asked for from the top of the first, a
+        // hair to either side of the cell's edge.
+        let side = f64::from(build.platform());
+        let beside = SurfacePoint::new(point.sector, point.u + side, point.v);
+        let over = highest_under(&generator, &build, beside);
+        let level = (top / BLOCK_M).round() as i32;
+        for hair in [-1e-6, 1e-6] {
+            let next = build
+                .lay_platform_from(&generator, beside, top + hair, Base::Deck)
+                .unwrap();
+            assert_eq!((next / BLOCK_M).round() as i32, level.max(over));
+        }
+    }
+
+    #[test]
+    fn a_floating_platform_is_its_slab_alone() {
+        let (generator, point) = world();
+        let mut build = Build::default();
+        let over = highest_under(&generator, &build, point);
+        let feet_m = f64::from(over) * BLOCK_M + 12.0;
+        let top = build
+            .lay_platform_from(&generator, point, feet_m, Base::Floating)
+            .unwrap();
+        let platform = platform_at(&build, point);
+        assert_eq!(f64::from(platform.top) * BLOCK_M, top);
+        let volumes = &build.sites[0].volumes;
+        let held = build.cells_over(point).unwrap();
+        let slab = platform.slab();
+        let solid = (held.min[2]..=held.max[2])
+            .flat_map(|z| slab.cells().map(move |[x, y, _]| [x, y, z]))
+            .filter(|&at| volumes.solid(at))
+            .count();
+        assert_eq!(solid, (platform.side * platform.side) as usize);
+        // What is taken back is the slab, and nothing under it was touched.
+        assert_eq!(build.done.last().unwrap().span, slab);
+    }
+
+    #[test]
+    fn a_platform_over_the_top_of_its_volume_is_refused() {
+        let (generator, point) = world();
+        let mut build = Build::default();
+        let over = highest_under(&generator, &build, point);
+        // A volume holds 64 cells over the highest ground of its plot, which
+        // is no lower than the highest under one platform on it.
+        let high = f64::from(over + 2 * HEIGHT) * BLOCK_M;
+        let asked = build.lay_platform_from(&generator, point, high, Base::Floating);
+        assert_eq!(asked, Err(BuildRefusal::High));
+        assert!(build.laying.is_none());
+        let near = f64::from(over + HEIGHT - 1) * BLOCK_M;
+        assert!(
+            build
+                .lay_platform_from(&generator, point, near, Base::Floating)
+                .is_ok()
+        );
     }
 }

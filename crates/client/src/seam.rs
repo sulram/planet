@@ -30,14 +30,16 @@ pub enum Tool {
     Paint,
 }
 
-/// What carries the slab of a platform down to the ground: a pillar at the
-/// corners of every bay, open under the slab, or every column filled.
+/// What carries the slab of a platform down to the ground: a deck's pillars
+/// at the corners of every bay, a solid block of every column filled, or
+/// nothing, a slab that floats where it is laid.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Base {
     #[default]
-    Pillars,
+    Deck,
     Solid,
+    Floating,
 }
 
 /// Why no platform could be laid where the body stands. A front end says it
@@ -51,6 +53,9 @@ pub enum BuildRefusal {
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
+    /// The feet are over the top of the volume: it holds what is built from
+    /// its lowest ground to a height over its highest, and no further.
+    High,
     /// Building is a builder's and an admin's, and the world named this
     /// session a lower level.
     Level,
@@ -131,8 +136,9 @@ pub enum Command {
         side: u32,
     },
     /// Lays a platform where the body stands, opening the volume of its
-    /// plot where none stands: a slab over the highest ground under it, on a
-    /// base down to the ground. Pillars when the base is left out.
+    /// plot where none stands: a slab as high as the higher of the highest
+    /// ground under it and the feet, on a base down to the ground. A deck
+    /// when the base is left out.
     LayPlatform {
         #[serde(default)]
         base: Base,
@@ -388,8 +394,12 @@ mod tests {
         );
         assert_eq!(
             Command::from_json(r#"{"type":"lay_platform"}"#).unwrap(),
+            Command::LayPlatform { base: Base::Deck }
+        );
+        assert_eq!(
+            Command::from_json(r#"{"type":"lay_platform","base":"floating"}"#).unwrap(),
             Command::LayPlatform {
-                base: Base::Pillars
+                base: Base::Floating
             }
         );
         assert_eq!(

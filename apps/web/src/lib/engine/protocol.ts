@@ -17,12 +17,12 @@ export const tools = ['create', 'delete', 'paint'] as const satisfies readonly T
 /** The sides a platform can have, in cells. The engine takes the nearest. */
 export const platforms = [8, 16, 32, 64] as const;
 
-/** What carries a platform down to the ground: pillars under an open slab, or every column filled. */
-export type Base = 'pillars' | 'solid';
-export const bases = ['pillars', 'solid'] as const satisfies readonly Base[];
+/** What carries a platform down to the ground: a deck's pillars under an open slab, every column filled, or nothing, a slab that floats. */
+export type Base = 'deck' | 'solid' | 'floating';
+export const bases = ['deck', 'solid', 'floating'] as const satisfies readonly Base[];
 
 /** Why the engine refused to build: where the body stands, or who it is. */
-export type BuildRefusal = 'moon' | 'sea' | 'seam' | 'level';
+export type BuildRefusal = 'moon' | 'sea' | 'seam' | 'high' | 'level';
 
 /** What a session may do, as mundos says it and the world repeats it. A builder and an admin build. */
 export type Level = 'anonymous' | 'signed_in' | 'builder' | 'admin';
@@ -68,7 +68,7 @@ export type Command =
 	| { type: 'set_tool'; tool: Tool | null }
 	/** The side of the platform laid next, in cells. */
 	| { type: 'set_platform'; side: number }
-	/** Lay a platform where the body stands: a slab on a base down to the ground, pillars when left out. */
+	/** Lay a platform where the body stands: a slab as high as the higher of the ground under it and the feet, on a base, a deck when left out. */
 	| { type: 'lay_platform'; base?: Base }
 	/** The paint the next stroke lays: an index into the palette. */
 	| { type: 'set_paint'; paint: number }

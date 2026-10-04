@@ -43,9 +43,7 @@ fn a_tool_in_hand_builds_nothing() {
 fn a_platform_is_laid_where_it_is_asked_for() {
     let mut client = client();
     client.command(Command::SetPlatform { side: 16 });
-    client.command(Command::LayPlatform {
-        base: Base::Pillars,
-    });
+    client.command(Command::LayPlatform { base: Base::Deck });
     assert!(refusals(&mut client).is_empty());
     // It is laid and drawn over the next few frames, none of them at once.
     let built = |change: &VolumeChange| matches!(change, VolumeChange::Add(..));

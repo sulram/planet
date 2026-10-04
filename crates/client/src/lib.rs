@@ -455,8 +455,12 @@ impl Client {
         } else if self.controller.on_moon() {
             Err(BuildRefusal::Moon)
         } else {
-            self.build
-                .lay_platform(&self.generator, self.controller.point(), base)
+            self.build.lay_platform(
+                &self.generator,
+                self.controller.point(),
+                self.controller.height_m(),
+                base,
+            )
         };
         if let Err(reason) = asked {
             self.events.push(Event::BuildRefused { reason });

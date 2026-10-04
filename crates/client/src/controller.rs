@@ -944,7 +944,7 @@ mod tests {
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut build = Build::default();
         let floor_m = build
-            .lay_platform_now(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Deck)
             .unwrap();
         // A cell is the address it has: the wall stands on the slab eight
         // columns on from the body, across the whole of the plot.
@@ -982,7 +982,7 @@ mod tests {
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut build = Build::default();
         let floor_m = build
-            .lay_platform_now(&generator, point, Base::Pillars)
+            .lay_platform_now(&generator, point, Base::Deck)
             .unwrap();
         let top = (floor_m / BLOCK_M) as i32;
         let cells = build.cells_over(point).unwrap();

@@ -1,10 +1,10 @@
 //! A platform: what a build stands on, built.
 //!
 //! A slab one cell thick with its top at one height, on a base down to the
-//! ground: pillars, or every column filled. Nothing here knows what the
-//! ground is: whoever seats the volumes says how high the slab stands and how
-//! high the ground is under each column, in cells, and the base is as tall as
-//! the drop under it.
+//! ground: a deck's pillars, every column filled, or nothing at all, a slab
+//! that floats. Nothing here knows what the ground is: whoever seats the
+//! volumes says how high the slab stands and how high the ground is under
+//! each column, in cells, and the base is as tall as the drop under it.
 //!
 //! A platform is cut by the frame, as a plot is: those of one size tile it,
 //! and two side by side meet edge to edge with their pillars paired.
@@ -14,11 +14,13 @@ use crate::{Gesture, Span};
 /// What carries a slab down to the ground.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Base {
-    /// A pillar at the corners of every bay, and open under the slab.
+    /// A deck: a pillar at the corners of every bay, and open under the slab.
     #[default]
-    Pillars,
+    Deck,
     /// Every column filled down to the ground: a block standing on it.
     Solid,
+    /// Nothing: the slab alone, floating where it is laid.
+    Floating,
 }
 
 /// A square of columns under a slab.
@@ -82,13 +84,14 @@ impl Platform {
                 let foot = ground(x, y);
                 let mut end = x;
                 let carried = match base {
-                    Base::Pillars => self.pillar(x, y),
+                    Base::Deck => self.pillar(x, y),
                     Base::Solid => {
                         while end < slab.max[0] && ground(end + 1, y) == foot {
                             end += 1;
                         }
                         true
                     }
+                    Base::Floating => false,
                 };
                 if carried && foot < z {
                     gestures.push(Gesture::Create {
@@ -109,7 +112,7 @@ mod tests {
     use crate::Volumes;
 
     fn built(platform: Platform, ground: impl Fn(i32, i32) -> i32) -> Volumes {
-        built_on(Base::Pillars, platform, ground)
+        built_on(Base::Deck, platform, ground)
     }
 
     fn built_on(base: Base, platform: Platform, ground: impl Fn(i32, i32) -> i32) -> Volumes {
@@ -215,5 +218,20 @@ mod tests {
             .filter(|&x| !volumes.get([x, 0, 4]).is_air())
             .collect();
         assert_eq!(pillars, vec![64, 71]);
+    }
+
+    #[test]
+    fn a_floating_platform_has_nothing_under_its_slab() {
+        let platform = Platform::over(0, 0, 4, 20);
+        let gestures = platform.gestures(Base::Floating, |x, _| x / 2, 3);
+        assert_eq!(
+            gestures,
+            [Gesture::Create {
+                span: platform.slab(),
+                paint: 3
+            }]
+        );
+        // The same slab on a deck stands on pillars down to the ground.
+        assert!(platform.gestures(Base::Deck, |x, _| x / 2, 3).len() > 1);
     }
 }
