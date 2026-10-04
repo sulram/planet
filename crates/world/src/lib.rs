@@ -1,5 +1,7 @@
 //! What a plugin's world half stands on (DECISIONS 93, 99): the plugin as the
-//! server hosts it, and the room it is handed while it applies an op.
+//! server hosts it, and the room it is handed while it applies an op. And
+//! the systems of the core that run where the world is decided, the cells
+//! ([`cells`]), which are owners as a plugin is and stand on the same room.
 //!
 //! A world half is the part of a plugin that runs where the world is decided.
 //! It is the mirror of the client half's `client::Plugin` and its host: the
@@ -11,10 +13,12 @@ use core::time::Duration;
 
 use protocol::Stance;
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint, vec3};
+use worldgen::Generator;
 
+pub mod cells;
 mod host;
 
-pub use host::{Host, Installed, MeasureOf};
+pub use host::{GroundOf, Host, Installed, MeasureOf};
 pub use protocol::Level;
 
 /// One thing a session may ask of a plugin, and the least level that may ask
@@ -65,6 +69,17 @@ pub struct Measure {
 }
 
 impl Measure {
+    /// Where a stance on the planet is in the world, metres from its centre.
+    /// `None` on the moon, or for a stance that names no sector.
+    pub fn position(&self, stance: &Stance) -> Option<[f64; 3]> {
+        if stance.body() != protocol::Body::Planet {
+            return None;
+        }
+        let sector = Sector::new(u8::try_from(stance.sector).ok()?)?;
+        let point = SurfacePoint::new(sector, f64::from(stance.u), f64::from(stance.v));
+        Some(self.sphere.position(point, f64::from(stance.height_m)))
+    }
+
     /// How far apart two stances stand, in blocks: the great circle along the
     /// datum and the difference in height, taken together. `None` when they
     /// are on different bodies, or one names a sector that does not exist.
@@ -94,20 +109,43 @@ impl Measure {
     }
 }
 
-/// What the host offers a world half while it applies an op. It carries no
-/// feature: a plugin picks whom an event reaches and measures its own reach.
+/// What a world half is handed while it applies an op: the world as the
+/// server holds it at that moment, a way to tell an event to the sessions it
+/// picks, and the owner's store. A test hands it one of its own.
 pub trait Room {
-    /// The moment the op is applied.
+    /// The server's moment for this op.
     fn now(&self) -> Moment;
 
-    /// The size of this world's bodies.
+    /// How this world's bodies measure.
     fn measure(&self) -> Measure;
 
-    /// Everyone in the world, the session that asked included.
+    /// Everyone in the world, in the order of their sessions.
     fn sessions(&self) -> &[Who];
 
-    /// Says one event of the plugin, encoded once, to the sessions named.
+    /// Says an event of this owner to the sessions picked.
     fn tell(&mut self, kind: &str, payload: Vec<u8>, to: &[u32]);
+
+    /// The ground of this world, to read. `None` in a world whose ground
+    /// the server does not hold: one shaped by a field (OPEN).
+    fn ground(&self) -> Option<&Generator>;
+
+    /// What this owner keeps under a key, in its store in the world folder.
+    fn get(&mut self, key: &[u8]) -> Option<Vec<u8>>;
+
+    /// Every row this owner keeps whose key starts with a prefix, in the
+    /// order of the keys.
+    fn scan(&mut self, prefix: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)>;
+
+    /// Keeps a value under a key. What an op keeps is written when the op
+    /// has been applied, all of it or none.
+    fn keep(&mut self, key: &[u8], value: Vec<u8>);
+
+    /// Forgets a key.
+    fn forget(&mut self, key: &[u8]);
+
+    /// Answers the op being applied with the code of why it is refused. An
+    /// op nothing refuses has landed.
+    fn refuse(&mut self, code: &str);
 }
 
 /// A plugin's world half. The host calls it one call at a time, and may keep

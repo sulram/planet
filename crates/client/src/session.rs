@@ -140,11 +140,19 @@ impl Session {
     /// One message of a plugin, in the core's envelope. Nothing while
     /// offline: what is asked of nobody is not queued for later.
     pub fn envelope(&mut self, plugin: &str, kind: &str, payload: Vec<u8>) {
+        self.ask(plugin, kind, payload, 0);
+    }
+
+    /// One op of an owner, a plugin or a system of the core, with the
+    /// asker's own number for it: the world answers an op asked with a
+    /// number, that it landed or why it was refused. Zero asks for no answer.
+    pub fn ask(&mut self, owner: &str, kind: &str, payload: Vec<u8>, id: u32) {
         if self.online() {
             self.say(client_message::Message::Envelope(protocol::Envelope {
-                plugin: plugin.to_owned(),
+                plugin: owner.to_owned(),
                 kind: kind.to_owned(),
                 payload,
+                id,
             }));
         }
     }

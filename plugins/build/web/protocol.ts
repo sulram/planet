@@ -17,8 +17,8 @@ export type Base = 'deck' | 'solid' | 'floating';
 export const bases = ['deck', 'solid', 'floating'] as const satisfies readonly Base[];
 
 /** Why a tool was not handed over, or no platform laid: where the body stands, or who it is. */
-export type Refusal = 'moon' | 'sea' | 'seam' | 'high' | 'level';
-const refusals = ['moon', 'sea', 'seam', 'high', 'level'] as const satisfies readonly Refusal[];
+export type Refusal = 'moon' | 'sea' | 'seam' | 'high' | 'level' | 'field';
+const refusals = ['moon', 'sea', 'seam', 'high', 'level', 'field'] as const satisfies readonly Refusal[];
 
 /** `build.hand`: the tool in hand, null when not building, the paint it lays, and the side of the next platform. */
 export interface Hand {

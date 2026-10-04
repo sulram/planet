@@ -78,16 +78,30 @@ message Rename {
   string name = 1;
 }
 
-// A plugin's message, carried by the core and never read by it. The core
-// routes it by the plugin's name and checks who may ask for `kind`; the
-// payload is the plugin's own, encoded by its own schema under
-// `plugins/<plugin>/wire/` (DECISIONS 91, 93, 98, 100).
+// An owner's message, carried by the server and never read by it. The server
+// routes it by the owner's name and checks who may ask for `kind`; the
+// payload is the owner's own, encoded by its own schema: a plugin's under
+// `plugins/<plugin>/wire/`, the cells' under `proto/planet/cells/`
+// (DECISIONS 91, 93, 98, 100, 110).
 message Envelope {
-  // The plugin's name, as the world's statement says it.
+  // The owner's name: a plugin's, as the world's statement says it, or a
+  // system of the core's, `cells`.
   string plugin = 1;
-  // Up, the op asked for. Down, the event said. A name within the plugin.
+  // Up, the op asked for. Down, the event said. A name within the owner.
   string kind = 2;
   bytes payload = 3;
+  // Up, the asker's own number for an op it wants answered, and zero for
+  // one it does not. It comes back in an Answer.
+  uint32 id = 4;
+}
+
+// What became of an op asked with an id: it landed, or the code of why it
+// was refused. To the asker alone.
+message Answer {
+  uint32 id = 1;
+  // Empty when it landed. A code, never a sentence: `level`, `plugin`,
+  // `fault`, or one of the owner's own.
+  string code = 2;
 }
 
 message ClientMessage {
@@ -202,6 +216,7 @@ message ServerMessage {
     Renamed renamed = 8;
     Envelope envelope = 9;
     Plugins plugins = 10;
+    Answer answer = 11;
   }
   reserved 7;
 }

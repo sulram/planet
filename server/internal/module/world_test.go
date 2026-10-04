@@ -19,6 +19,7 @@ import (
 	"github.com/sulram/planet/server/internal/folder"
 	"github.com/sulram/planet/server/internal/module"
 	pb "github.com/sulram/planet/server/internal/protocol"
+	"github.com/sulram/planet/server/internal/store"
 	"github.com/sulram/planet/server/internal/world"
 )
 
@@ -34,7 +35,9 @@ func instance(t *testing.T, dir string, level world.Level) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hosted, err := module.Load(context.Background())
+	held := store.Open(dir)
+	t.Cleanup(func() { held.Close() })
+	hosted, err := module.Load(context.Background(), held)
 	if err != nil {
 		t.Fatal(err)
 	}

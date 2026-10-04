@@ -1,11 +1,11 @@
-//! The three names the server and the module know each other by
-//! (DECISIONS 102), and the one place in the workspace where `unsafe` is
-//! written: to export two functions and to import one.
+//! The four names the server and the module know each other by
+//! (DECISIONS 102, 110), and the one place in the workspace where `unsafe`
+//! is written: to export two functions and to import two.
 //!
-//! No pointer is read here. The server writes a call into a buffer this
-//! module owns and sized, and the module reads its own buffer; a reply goes
-//! out as an address and a length the server reads within the module's
-//! memory, or refuses.
+//! No pointer is read here. The server writes a call, or the answer to a
+//! question, into a buffer this module owns and sized, and the module reads
+//! its own buffer; a reply and a question go out as an address and a length
+//! the server reads within the module's memory, or refuses.
 
 use std::sync::Mutex;
 
@@ -17,6 +17,18 @@ static INBOX: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 unsafe extern "C" {
     /// Hands the server one reply, whole. It is read before this returns.
     safe fn reply(at: *const u8, len: usize);
+    /// Asks the server what an owner keeps. It sizes the inbox with
+    /// [`reserve`], writes the rows there and says how many bytes they are.
+    safe fn ask(at: *const u8, len: usize) -> usize;
+}
+
+/// Asks the server a question of an owner to its store, and takes the
+/// answer from the inbox.
+pub fn asked(asked: &[u8]) -> Vec<u8> {
+    let len = ask(asked.as_ptr(), asked.len());
+    let mut rows = std::mem::take(&mut *INBOX.lock().expect("the server calls one call at a time"));
+    rows.truncate(len);
+    rows
 }
 
 /// Sizes the inbox for a call of `len` bytes, and says where it is.

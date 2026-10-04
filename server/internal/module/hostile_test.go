@@ -13,7 +13,7 @@ import (
 )
 
 // Modules written by hand to break the bridge from the inside: what a world
-// half gone wrong, or one written to harm, could do with the three names.
+// half gone wrong, or one written to harm, could do with the four names.
 
 func leb(n uint32) []byte {
 	var out []byte
@@ -59,23 +59,30 @@ func body(code []byte) []byte {
 	return join(leb(uint32(len(code))), code)
 }
 
-// The import `host.reply` is function 0, `reserve` 1 and `call` 2.
-var sayReply = []byte{0x10, 0x00}
+// The imports `host.reply` and `host.ask` are functions 0 and 1, `reserve` 2
+// and `call` 3.
+var (
+	sayReply = []byte{0x10, 0x00}
+	// A question, and its answer's length dropped.
+	askStore = []byte{0x10, 0x01, 0x1a}
+)
 
 // hostile is a module with `pages` of memory, `data` at address zero, and the
 // two exports as the bodies given.
 func hostile(pages uint32, data, reserve, call []byte) []byte {
 	module := join(
 		[]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00},
-		// (i32) -> i32, () -> (), (i32, i32) -> ()
-		section(1, []byte{0x03, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00, 0x60, 0x02, 0x7f, 0x7f, 0x00}),
-		section(2, join([]byte{0x01}, named("host"), named("reply"), []byte{0x00, 0x02})),
+		// (i32) -> i32, () -> (), (i32, i32) -> (), (i32, i32) -> i32
+		section(1, []byte{0x04, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00, 0x60, 0x02, 0x7f, 0x7f, 0x00, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f}),
+		section(2, join([]byte{0x02},
+			named("host"), named("reply"), []byte{0x00, 0x02},
+			named("host"), named("ask"), []byte{0x00, 0x03})),
 		section(3, []byte{0x02, 0x00, 0x01}),
 		section(5, join([]byte{0x01, 0x00}, leb(pages))),
 		section(7, join([]byte{0x03},
 			named("memory"), []byte{0x02, 0x00},
-			named("reserve"), []byte{0x00, 0x01},
-			named("call"), []byte{0x00, 0x02})),
+			named("reserve"), []byte{0x00, 0x02},
+			named("call"), []byte{0x00, 0x03})),
 		section(10, join([]byte{0x02}, body(reserve), body(call))),
 	)
 	if len(data) > 0 {
@@ -118,6 +125,37 @@ func TestAnAddressOutsideTheModuleIsRefused(t *testing.T) {
 		if m.born != 2 {
 			t.Fatalf("%s: and the instance is replaced: born %d", name, m.born)
 		}
+	}
+}
+
+func TestAQuestionTheServerCannotTakeIsAFault(t *testing.T) {
+	outside := i32(-16)
+	// Ask{owner: "other", get: "k"}, asked while no owner's call runs.
+	another := []byte{0x0a, 0x05, 'o', 't', 'h', 'e', 'r', 0x12, 0x01, 'k'}
+	for name, wasm := range map[string][]byte{
+		"a question that points outside the module": hostile(1, nil, i32(0), join(outside, i32(16), askStore)),
+		"a question longer than one may be":         hostile(4, nil, i32(0), join(i32(0), i32(maxAskSize+1), askStore)),
+		"a question of another owner's store":       hostile(1, another, i32(0), join(i32(0), i32(int32(len(another))), askStore)),
+		"an answer with no inbox to be written in":  hostile(1, nil, outside, join(i32(0), i32(0), askStore)),
+		"questions without end":                     hostile(1, nil, i32(0), join([]byte{0x03, 0x40}, i32(0), i32(0), askStore, []byte{0x0c, 0x00, 0x0b})),
+	} {
+		m := opened(t, wasm)
+		began := time.Now()
+		if _, err := m.call(context.Background(), describe); err == nil {
+			t.Fatalf("%s: the call is a fault", name)
+		}
+		if took := time.Since(began); took > deadline/2 {
+			t.Fatalf("%s: it is stopped long before the deadline: %v", name, took)
+		}
+		if m.born != 2 {
+			t.Fatalf("%s: and the instance is replaced: born %d", name, m.born)
+		}
+	}
+	// A question the server can take is answered, with nothing where
+	// nothing is kept.
+	m := opened(t, hostile(1, nil, i32(0), join(i32(0), i32(0), askStore)))
+	if _, err := m.call(context.Background(), describe); err != nil || m.born != 1 {
+		t.Fatalf("an empty question is one: %v, born %d", err, m.born)
 	}
 }
 

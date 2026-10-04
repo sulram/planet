@@ -23,6 +23,7 @@ module = { path = "crates/module" }
 render = { path = "crates/render" }
 protocol = { path = "crates/protocol" }
 voxel = { path = "crates/voxel" }
+seat = { path = "crates/seat" }
 world = { path = "crates/world" }
 plugins-client = { path = "crates/plugins-client" }
 plugins-world = { path = "crates/plugins-world" }

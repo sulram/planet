@@ -9,6 +9,9 @@ publish.workspace = true
 [dependencies]
 topology.workspace = true
 protocol.workspace = true
+worldgen.workspace = true
+voxel.workspace = true
+seat.workspace = true
 libm.workspace = true
 prost.workspace = true
 

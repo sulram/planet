@@ -17,32 +17,31 @@
 //! a tool, a stroke, a platform, is a plugin's, and it speaks to the cells
 //! through its host (`crate::plugin`): aim, preview, apply, take back.
 //!
-//! Volumes live here only: nothing is sent or kept yet (DECISIONS 76).
+//! In a world, the world keeps the cells (DECISIONS 107, 110). A change is
+//! made here at once and asked of the world, which answers that it landed or
+//! why not; what others near change arrives as events, and a volume the
+//! body comes near is asked for whole. Until the world answers, a change is
+//! pending: what others changed meanwhile goes under it, and a refusal
+//! takes it away. With no world, a headless picture or a bench, the cells
+//! are held here alone.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use glam::{DVec3, Vec3};
+use protocol::Message;
+use protocol::cells as wire;
 use scene::{VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
+use seat::{DROP_M, PLOT_BITS, Stand, Unseated, plot_of};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
-use voxel::{CHUNK, CHUNK_BITS, Cell, Gesture, Hit, Quad, Span, Volumes, crossing};
-use worldgen::Generator;
+use voxel::{CHUNK, CHUNK_BITS, Cell, Gesture, Hit, Quad, Span, Volumes, crossing, unpack};
+use worldgen::{Generator, Source};
+
+pub use seat::Seat;
+pub(crate) use seat::ground;
 
 use crate::collision::{Footing, STEP_M};
 use crate::grass::TUFT_M;
 
-/// Blocks along the side of a plot, as a power of two: 64 of them, 32 metres
-/// at the middle of a sector. The address of a column, less these bits, is
-/// the plot it is on.
-const PLOT_BITS: u32 = 6;
-/// Cells a volume rises over the highest ground of its plot: as many as the
-/// plot is wide.
-const HEIGHT: i32 = 1 << PLOT_BITS;
-/// Blocks between the columns whose ground is read to find how low and how
-/// high the ground of a plot stands.
-const SURVEY: i32 = 8;
-/// Cells a volume holds under the lowest ground its survey found: the dip
-/// between two columns of it.
-const UNDER: i32 = 8;
 /// Metres between the points of a line of sight where the ground is asked
 /// whether it hides what the pointer is over.
 const GROUND_STEP_M: f64 = 1.0;
@@ -60,6 +59,10 @@ const GHOST_LIFT_M: f32 = 0.012;
 const GHOST: VolumeMeshId = VolumeMeshId(u64::MAX);
 /// Changes kept to take back.
 const HISTORY: usize = 100;
+/// Seconds between two looks at what the world holds near the body.
+const LOOK_S: f64 = 1.0;
+/// Cells in a chunk.
+const CHUNK_CELLS: usize = (CHUNK * CHUNK * CHUNK) as usize;
 /// Chunks meshed in one update, the nearest the eye first. A change to more
 /// is drawn over as many updates as it takes, each chunk keeping the mesh it
 /// had until its new one is made, so no frame pays for a platform whole.
@@ -96,6 +99,9 @@ pub enum Refusal {
     /// Changing the cells is a builder's and an admin's, and the world named
     /// this session a lower level, or no world has spoken (DECISIONS 104).
     Level,
+    /// The world is shaped by a field, and its server does not hold the
+    /// field to say where a volume starts and ends (OPEN).
+    Field,
     /// The ground here is under the sea.
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
@@ -106,9 +112,9 @@ pub enum Refusal {
 struct Seated {
     sector: Sector,
     volumes: Volumes,
-    /// A ball around each volume, in the world: what a line of sight asks
-    /// before it is bent into cells.
-    balls: Vec<(DVec3, f64)>,
+    /// A ball around each volume, in the world, by its plot: what a line of
+    /// sight asks before it is bent into cells, and how far a body is from it.
+    balls: BTreeMap<[i32; 2], (DVec3, f64)>,
 }
 
 impl Seated {
@@ -137,7 +143,7 @@ impl Seated {
         let size = bounds.size().map(|n| n as i32);
         let middle = self.corner(sphere, [0, 1, 2].map(|i| bounds.min[i] + size[i] / 2));
         let radius_m = self.corner(sphere, bounds.min).distance(middle) * 1.5;
-        self.balls.push((middle, radius_m));
+        self.balls.insert(plot, (middle, radius_m));
     }
 
     /// A line of sight from `from` along `toward` (unit), as a path in this
@@ -145,7 +151,7 @@ impl Seated {
     fn sight(&self, sphere: QuadSphere, from: DVec3, toward: DVec3) -> Vec<[f64; 3]> {
         let stretch = self
             .balls
-            .iter()
+            .values()
             .filter_map(|&(middle, radius_m)| {
                 let along = (middle - from).dot(toward);
                 let miss2 = (middle - from).length_squared() - along * along;
@@ -173,22 +179,6 @@ impl Seated {
         // Heights run either side of the datum: 24 bits hold them all.
         let up = u64::from((h + (1 << 23)) as u32 & 0xff_ffff);
         VolumeMeshId((self.sector.index() as u64) << 56 | across(u) << 40 | across(v) << 24 | up)
-    }
-}
-
-/// What cells are seated on: the frame their addresses are counted in. A
-/// sector of the planet today. A body that moves, a ship with a room aboard,
-/// is the next kind (DECISIONS 108), so every word of the cells says where
-/// as a seat and never as a bare address.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[non_exhaustive]
-pub enum Seat {
-    Sector(Sector),
-}
-
-impl From<Sector> for Seat {
-    fn from(sector: Sector) -> Seat {
-        Seat::Sector(sector)
     }
 }
 
@@ -230,6 +220,69 @@ struct Change {
     after: Vec<Cell>,
 }
 
+/// A change made here and asked of the world, which has not answered: its
+/// gestures, and the cells of its box as they were before it.
+struct Pending {
+    id: u32,
+    site: usize,
+    gestures: Vec<Gesture>,
+    span: Span,
+    before: Vec<Cell>,
+}
+
+/// What else was asked of the world and waits for its answer.
+enum Waiting {
+    Open(Seat, [i32; 2]),
+    TakeBack,
+    PutBack,
+}
+
+/// An op to ask of the world's cells, in the envelope under their name.
+pub(crate) struct Ask {
+    pub kind: &'static str,
+    pub payload: Vec<u8>,
+    /// The number the world answers it by.
+    pub id: u32,
+}
+
+/// The cells as a world keeps them, from where this client stands.
+#[derive(Default)]
+struct Link {
+    /// This client's own session: a change it hears of under that number
+    /// is one it made.
+    me: u32,
+    /// The last number given to an op.
+    asked: u32,
+    /// What to ask the world, in order.
+    asks: Vec<Ask>,
+    /// Changes made here that the world has not answered, the first first.
+    pending: Vec<Pending>,
+    waiting: HashMap<u32, Waiting>,
+    /// The volumes held, each at the version the world last said of it.
+    versions: BTreeMap<(Seat, [i32; 2]), u64>,
+    /// How many of this session's changes the world can take back, and put
+    /// back.
+    history: (usize, usize),
+    since_look_s: f64,
+}
+
+impl Link {
+    /// Queues an op for the world, under the next number.
+    fn ask<M: Message>(&mut self, kind: &'static str, op: &M, waiting: Option<Waiting>) -> u32 {
+        self.asked = self.asked.wrapping_add(1).max(1);
+        let id = self.asked;
+        self.asks.push(Ask {
+            kind,
+            payload: op.encode_to_vec(),
+            id,
+        });
+        if let Some(waiting) = waiting {
+            self.waiting.insert(id, waiting);
+        }
+        id
+    }
+}
+
 /// Every volume of a world, what is drawn of them and what was changed.
 #[derive(Default)]
 pub struct Cells {
@@ -246,16 +299,44 @@ pub struct Cells {
     /// Where cells changed near enough the ground to cover or bare a tuft,
     /// as a cap of the body: its middle, unit, and its angle.
     touched: Vec<(DVec3, f64)>,
-    /// Changes to take back, the last one last, and those taken back.
+    /// Changes to take back, the last one last, and those taken back, while
+    /// the cells are held here alone.
     done: Vec<Change>,
     undone: Vec<Change>,
+    /// The world that keeps the cells, while this client is in one.
+    link: Option<Link>,
 }
 
 impl Cells {
     /// The volumes of a seat, when something is built on it.
     fn site(&self, seat: Seat) -> Option<usize> {
-        let Seat::Sector(sector) = seat;
+        let sector = seat.sector()?;
         self.sites.iter().position(|site| site.sector == sector)
+    }
+
+    /// A world keeps the cells from here on: what was held is forgotten, and
+    /// what the world holds near the body is asked for at once.
+    pub(crate) fn link(&mut self, me: u32) {
+        self.clear();
+        self.link = Some(Link {
+            me,
+            since_look_s: LOOK_S,
+            ..Link::default()
+        });
+    }
+
+    /// The world is gone, and what it kept with it.
+    pub(crate) fn unlink(&mut self) {
+        self.clear();
+        self.link = None;
+    }
+
+    /// What to ask the world since the last call, in order.
+    pub(crate) fn drain_asks(&mut self) -> Vec<Ask> {
+        self.link
+            .as_mut()
+            .map(|link| core::mem::take(&mut link.asks))
+            .unwrap_or_default()
     }
 
     /// Whether a volume stands on a column.
@@ -286,55 +367,84 @@ impl Cells {
 
     /// Opens the volume of the plot a column is on, where none stands. The
     /// ground stays as it is, and the volume holds the blocks from the lowest
-    /// of it to [`HEIGHT`] over the highest.
+    /// of it to a height over the highest (`seat::survey`). In a world, the
+    /// world is asked for it, and seats it by the same rule.
     pub(crate) fn open(
         &mut self,
         generator: &Generator,
         point: SurfacePoint,
     ) -> Result<(), Refusal> {
-        let sphere = generator.sphere();
-        let plot = plot_of(point);
-        // The corners of a sector are nature, and a build does not fold over
-        // a seam: a plot on the edge of its sector stays as it is.
-        let inside = sphere
-            .blocks()
-            .coarsened(PLOT_BITS)
-            .is_some_and(|plots| plot.iter().all(|&n| 0 < n && n < plots.side() as i32 - 1));
-        if !inside {
-            return Err(Refusal::Seam);
+        let field = matches!(generator.recipe().params.source, Source::Field(_));
+        if self.link.is_some() && field {
+            return Err(Refusal::Field);
         }
-        if ground(generator, point) < 0.0 {
-            return Err(Refusal::Sea);
-        }
+        let stand = seat::survey(generator, point).map_err(|why| match why {
+            Unseated::Sea => Refusal::Sea,
+            Unseated::Seam => Refusal::Seam,
+        })?;
         if self.covers(point) {
             return Ok(());
         }
-        let low = plot.map(|n| n << PLOT_BITS);
-        let side = 1 << PLOT_BITS;
-        let heights = (0..=side).step_by(SURVEY as usize).flat_map(|dv| {
-            (0..=side).step_by(SURVEY as usize).map(move |du| {
-                let (u, v) = (f64::from(low[0] + du), f64::from(low[1] + dv));
-                ground(generator, SurfacePoint::new(point.sector, u, v))
-            })
-        });
-        let (lowest, highest) = heights.fold((f64::MAX, f64::MIN), |(lo, hi), blocks| {
-            (lo.min(blocks), hi.max(blocks))
-        });
-        let bottom = lowest.floor() as i32 - UNDER;
-        let top = highest.ceil() as i32 + HEIGHT;
-        let site = match self.site(point.sector.into()) {
+        let (seat, plot) = (Seat::Sector(point.sector), plot_of(point));
+        self.stand(generator.sphere(), point.sector, plot, stand);
+        if let Some(link) = &mut self.link {
+            let open = wire::Open {
+                seat: Some(seat.wire()),
+                u: point.u,
+                v: point.v,
+            };
+            link.ask(wire::OPEN, &open, Some(Waiting::Open(seat, plot)));
+            link.versions.insert((seat, plot), 0);
+        }
+        Ok(())
+    }
+
+    /// Stands a volume over a plot of a sector. Returns the sector's site.
+    fn stand(&mut self, sphere: QuadSphere, sector: Sector, plot: [i32; 2], stand: Stand) -> usize {
+        let site = match self.site(sector.into()) {
             Some(site) => site,
             None => {
                 self.sites.push(Seated {
-                    sector: point.sector,
+                    sector,
                     volumes: Volumes::new(PLOT_BITS),
-                    balls: Vec::new(),
+                    balls: BTreeMap::new(),
                 });
                 self.sites.len() - 1
             }
         };
-        self.sites[site].open(sphere, plot, bottom, (top - bottom) as u32);
-        Ok(())
+        self.sites[site].open(sphere, plot, stand.low, stand.height);
+        site
+    }
+
+    /// Takes away the volume over a plot, cells, picture and all.
+    fn close(&mut self, seat: Seat, plot: [i32; 2]) {
+        let Some(site) = self.site(seat) else {
+            return;
+        };
+        let seated = &mut self.sites[site];
+        let Some(bounds) = seated.volumes.bounds(plot) else {
+            return;
+        };
+        for chunk in seated.volumes.chunks_in(bounds) {
+            let id = seated.mesh_id(chunk);
+            if self.drawn.remove(&id) {
+                self.changes.push(VolumeChange::Remove(id));
+            }
+            self.stale.remove(&(site, chunk));
+        }
+        seated.volumes.close(plot);
+        // The grass under it grows again, and what stood against it shows
+        // the sides it hid.
+        if let Some((middle, radius_m)) = seated.balls.remove(&plot) {
+            self.touched
+                .push((middle.normalize(), radius_m / middle.length()));
+        }
+        for chunk in seated.volumes.chunks_in(bounds.grown(1)) {
+            self.stale.insert((site, chunk));
+        }
+        if let Some(link) = &mut self.link {
+            link.versions.remove(&(seat, plot));
+        }
     }
 
     /// Forgets every volume: another world.
@@ -351,15 +461,34 @@ impl Cells {
         self.touched.clear();
         self.done.clear();
         self.undone.clear();
+        if let Some(link) = &mut self.link {
+            *link = Link {
+                me: link.me,
+                asked: link.asked,
+                since_look_s: LOOK_S,
+                ..Link::default()
+            };
+        }
     }
 
-    /// Whether there is a change to take back, and one to put back.
+    /// Whether there is a change to take back, and one to put back. In a
+    /// world, a change of this session's that the world can.
     pub fn history(&self) -> (bool, bool) {
-        (!self.done.is_empty(), !self.undone.is_empty())
+        match &self.link {
+            Some(link) => (link.history.0 > 0, link.history.1 > 0),
+            None => (!self.done.is_empty(), !self.undone.is_empty()),
+        }
     }
 
-    /// Takes back the last change that landed.
+    /// Takes back the last change that landed. In a world, the world is
+    /// asked to, and says what the cells are then.
     pub(crate) fn take_back(&mut self, generator: &Generator) {
+        if let Some(link) = &mut self.link {
+            if link.history.0 > 0 {
+                link.ask(wire::TAKE_BACK, &wire::TakeBack {}, Some(Waiting::TakeBack));
+            }
+            return;
+        }
         if let Some(change) = self.done.pop() {
             let changed = self.sites[change.site]
                 .volumes
@@ -373,6 +502,12 @@ impl Cells {
 
     /// Puts back the last change taken back.
     pub(crate) fn put_back(&mut self, generator: &Generator) {
+        if let Some(link) = &mut self.link {
+            if link.history.1 > 0 {
+                link.ask(wire::PUT_BACK, &wire::PutBack {}, Some(Waiting::PutBack));
+            }
+            return;
+        }
         if let Some(change) = self.undone.pop() {
             let changed = self.sites[change.site]
                 .volumes
@@ -441,20 +576,25 @@ impl Cells {
 
     /// Where a lattice point of a seat's cells is in the world.
     pub fn corner(&self, sphere: QuadSphere, seat: impl Into<Seat>, p: [i32; 3]) -> DVec3 {
-        let Seat::Sector(sector) = seat.into();
+        let Some(sector) = seat.into().sector() else {
+            return DVec3::ZERO;
+        };
         let point = SurfacePoint::new(sector, f64::from(p[0]), f64::from(p[1]));
         DVec3::from(sphere.position(point, f64::from(p[2]) * BLOCK_M))
     }
 
-    /// Applies gestures to the cells of a seat as one change, kept to take
-    /// back as one, and draws what it changed. False when no cell changed.
+    /// Applies gestures to the cells of a seat as one change, taken back as
+    /// one, and draws what it changed. False when no cell changed. In a
+    /// world the change is asked of the world too, and pending until it
+    /// answers.
     pub(crate) fn apply(
         &mut self,
         generator: &Generator,
         seat: impl Into<Seat>,
         gestures: &[Gesture],
     ) -> bool {
-        let Some(site) = self.site(seat.into()) else {
+        let seat = seat.into();
+        let Some(site) = self.site(seat) else {
             return false;
         };
         let reach = gestures
@@ -474,17 +614,38 @@ impl Cells {
         let Some(changed) = changed else {
             return false;
         };
-        let after = volumes.cells(span);
-        self.done.push(Change {
-            site,
-            span,
-            before,
-            after,
-        });
-        if self.done.len() > HISTORY {
-            self.done.remove(0);
+        match &mut self.link {
+            Some(link) => {
+                let change = wire::Change {
+                    seat: Some(seat.wire()),
+                    gestures: gestures
+                        .iter()
+                        .map(|&made| seat::gesture_wire(made))
+                        .collect(),
+                };
+                let id = link.ask(wire::CHANGE, &change, None);
+                link.pending.push(Pending {
+                    id,
+                    site,
+                    gestures: gestures.to_vec(),
+                    span,
+                    before,
+                });
+            }
+            None => {
+                let after = volumes.cells(span);
+                self.done.push(Change {
+                    site,
+                    span,
+                    before,
+                    after,
+                });
+                if self.done.len() > HISTORY {
+                    self.done.remove(0);
+                }
+                self.undone.clear();
+            }
         }
-        self.undone.clear();
         self.landed |= gestures.len() > 1;
         self.redraw(generator, site, changed);
         true
@@ -646,16 +807,318 @@ impl Cells {
     }
 }
 
-/// The plot a column is on: its address, less the bits of a plot.
-fn plot_of(point: SurfacePoint) -> [i32; 2] {
-    [point.u, point.v].map(|at| at.floor() as i32 >> PLOT_BITS)
-}
+/// The cells as a world keeps them: what it says, and what it answers.
+impl Cells {
+    /// One frame of keeping in step with the world: once in a while, lets go
+    /// of the volumes the body left behind and asks the world what it holds
+    /// near the body that this client lacks. `body` is where the body is in
+    /// the world, while it is on the planet.
+    pub(crate) fn look(&mut self, body: Option<DVec3>, dt: f64) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        link.since_look_s += dt;
+        if link.since_look_s < LOOK_S {
+            return;
+        }
+        link.since_look_s = 0.0;
+        if let Some(body) = body {
+            let far: Vec<(Seat, [i32; 2])> = self
+                .sites
+                .iter()
+                .flat_map(|site| {
+                    let left = site
+                        .balls
+                        .iter()
+                        .filter(move |(_, (middle, _))| middle.distance(body) > DROP_M);
+                    left.map(|(plot, _)| (Seat::Sector(site.sector), *plot))
+                })
+                .collect();
+            for (seat, plot) in far {
+                self.close(seat, plot);
+            }
+        }
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        let held = link
+            .versions
+            .iter()
+            .map(|(&(seat, plot), &version)| wire::Held {
+                seat: Some(seat.wire()),
+                plot_x: plot[0],
+                plot_y: plot[1],
+                version,
+            });
+        let look = wire::Look {
+            held: held.collect(),
+        };
+        link.ask(wire::LOOK, &look, None);
+    }
 
-/// How high the ground stands at a point, in blocks: the ground in full
-/// detail, as a body stands on it.
-pub(crate) fn ground(generator: &Generator, point: SurfacePoint) -> f64 {
-    let direction = generator.sphere().blocks().direction(point);
-    generator.sample_at(direction, 0.0).height_m / BLOCK_M
+    /// An event of the world's cells.
+    pub(crate) fn receive(&mut self, generator: &Generator, kind: &str, payload: &[u8]) {
+        let Some(me) = self.link.as_ref().map(|link| link.me) else {
+            return;
+        };
+        match kind {
+            wire::OPENED => {
+                if let Ok(opened) = wire::Opened::decode(payload) {
+                    self.opened(generator, &opened);
+                }
+            }
+            wire::CHANGED => {
+                if let Ok(changed) = wire::Changed::decode(payload) {
+                    self.changed(generator, &changed, me);
+                }
+            }
+            wire::RESTORED => {
+                if let Ok(restored) = wire::Restored::decode(payload) {
+                    self.restored(generator, &restored);
+                }
+            }
+            wire::SEEN => {
+                if let Ok(seen) = wire::Seen::decode(payload) {
+                    self.seen(generator, seen);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Someone opened a volume near: it stands here too.
+    fn opened(&mut self, generator: &Generator, opened: &wire::Opened) {
+        let seat = Seat::from_wire(opened.seat.as_ref());
+        let (Some(seat), Some(stood)) = (seat, &opened.stood) else {
+            return;
+        };
+        let Some(sector) = seat.sector() else {
+            return;
+        };
+        let plot = [stood.plot_x, stood.plot_y];
+        let stand = Stand {
+            low: stood.low,
+            height: stood.height,
+        };
+        self.stand(generator.sphere(), sector, plot, stand);
+        if let Some(link) = &mut self.link {
+            link.versions.entry((seat, plot)).or_insert(stood.version);
+        }
+    }
+
+    /// Gestures landed. Someone else's are made here, under what this client
+    /// made and the world has not answered; its own are here already.
+    fn changed(&mut self, generator: &Generator, changed: &wire::Changed, me: u32) {
+        let Some(seat) = Seat::from_wire(changed.seat.as_ref()) else {
+            return;
+        };
+        let gestures: Option<Vec<Gesture>> = changed
+            .gestures
+            .iter()
+            .map(seat::gesture_from_wire)
+            .collect();
+        if let (Some(site), Some(gestures), true) =
+            (self.site(seat), gestures, changed.session != me)
+        {
+            self.rebase(generator, site, None, |volumes| {
+                let made = gestures.iter().filter_map(|&made| volumes.apply(made));
+                made.reduce(|a, b| a.with(b.min).with(b.max))
+            });
+        }
+        self.counted(seat, &changed.stood);
+    }
+
+    /// A change was taken back or put back: the cells of its box are as the
+    /// world says, under what this client made and the world has not
+    /// answered.
+    fn restored(&mut self, generator: &Generator, restored: &wire::Restored) {
+        let Some(seat) = Seat::from_wire(restored.seat.as_ref()) else {
+            return;
+        };
+        let span = Span::between(
+            [restored.x0, restored.y0, restored.z0],
+            [restored.x1, restored.y1, restored.z1],
+        );
+        // A box no volume here could hold is no box of this world's.
+        let count: u64 = span.size().iter().map(|&n| u64::from(n)).product();
+        let cells = (count <= 1 << 24).then(|| unpack(&restored.cells, count as usize));
+        if let (Some(site), Some(Some(cells))) = (self.site(seat), cells) {
+            self.rebase(generator, site, None, |volumes| {
+                volumes.restore(span, &cells)
+            });
+        }
+        self.counted(seat, &restored.stood);
+    }
+
+    /// The world's answer to a look: volumes whole, and those that are gone.
+    fn seen(&mut self, generator: &Generator, seen: wire::Seen) {
+        let sphere = generator.sphere();
+        for volume in seen.volumes {
+            let seat = Seat::from_wire(volume.seat.as_ref());
+            let (Some(seat), Some(stood)) = (seat, volume.stood) else {
+                continue;
+            };
+            let Some(sector) = seat.sector() else {
+                continue;
+            };
+            let plot = [stood.plot_x, stood.plot_y];
+            let stand = Stand {
+                low: stood.low,
+                height: stood.height,
+            };
+            // Held at the version shown, this is more of the same volume.
+            // At another, or not at all, it is the volume anew.
+            let held = self
+                .link
+                .as_ref()
+                .and_then(|link| link.versions.get(&(seat, plot)));
+            if held != Some(&stood.version) {
+                self.close(seat, plot);
+            }
+            let site = self.stand(sphere, sector, plot, stand);
+            let Some(bounds) = self.sites[site].volumes.bounds(plot) else {
+                continue;
+            };
+            if let Some(link) = &mut self.link {
+                link.versions.insert((seat, plot), stood.version);
+            }
+            self.rebase(generator, site, Some(bounds), |volumes| {
+                for chunk in &volume.chunks {
+                    if let Some(cells) = unpack(&chunk.cells, CHUNK_CELLS) {
+                        let span = Volumes::chunk_span([chunk.x, chunk.y, chunk.z]);
+                        volumes.restore(span, &cells);
+                    }
+                }
+                Some(bounds)
+            });
+        }
+        for gone in seen.gone {
+            if let Some(seat) = Seat::from_wire(gone.seat.as_ref()) {
+                self.close(seat, [gone.plot_x, gone.plot_y]);
+            }
+        }
+    }
+
+    /// Counts a change in the volumes it landed in. A volume that missed one
+    /// stays at the version it had, and the next look brings it whole.
+    fn counted(&mut self, seat: Seat, stood: &[wire::Stood]) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        for stood in stood {
+            if let Some(held) = link.versions.get_mut(&(seat, [stood.plot_x, stood.plot_y]))
+                && *held + 1 == stood.version
+            {
+                *held = stood.version;
+            }
+        }
+    }
+
+    /// Changes the cells of a site as the world says, under what this client
+    /// made and the world has not answered: its pending changes come off,
+    /// the world's change is made, and they go back on, each over what is
+    /// there now. With `fresh`, the box of a volume the world just showed
+    /// whole, there is nothing of the pending under it to take off.
+    fn rebase(
+        &mut self,
+        generator: &Generator,
+        site: usize,
+        fresh: Option<Span>,
+        change: impl FnOnce(&mut Volumes) -> Option<Span>,
+    ) {
+        let join = |a: Option<Span>, b: Option<Span>| match (a, b) {
+            (Some(a), Some(b)) => Some(a.with(b.min).with(b.max)),
+            (a, b) => a.or(b),
+        };
+        let mut pending = match &mut self.link {
+            Some(link) => core::mem::take(&mut link.pending),
+            None => Vec::new(),
+        };
+        let volumes = &mut self.sites[site].volumes;
+        let mut changed = None;
+        if fresh.is_none() {
+            for made in pending.iter().rev().filter(|made| made.site == site) {
+                changed = join(changed, volumes.restore(made.span, &made.before));
+            }
+        }
+        changed = join(changed, change(volumes));
+        for made in pending.iter_mut().filter(|made| made.site == site) {
+            made.before = volumes.cells(made.span);
+            for &gesture in &made.gestures {
+                changed = join(changed, volumes.apply(gesture));
+            }
+        }
+        if let Some(link) = &mut self.link {
+            link.pending = pending;
+        }
+        if let Some(changed) = changed {
+            self.redraw(generator, site, changed);
+        }
+    }
+
+    /// Takes a refused change off from under what was made after it: those
+    /// come off first, it comes off, and they go back on.
+    fn unmake(&mut self, generator: &Generator, refused: Pending) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        // What was made before it stays as it is: only what came after it
+        // may stand on what it made.
+        let later = link
+            .pending
+            .iter()
+            .position(|made| made.id.wrapping_sub(refused.id) < u32::MAX / 2)
+            .unwrap_or(link.pending.len());
+        let earlier: Vec<Pending> = link.pending.drain(..later).collect();
+        self.rebase(generator, refused.site, None, |volumes| {
+            volumes.restore(refused.span, &refused.before)
+        });
+        if let Some(link) = &mut self.link {
+            link.pending.splice(0..0, earlier);
+        }
+    }
+
+    /// The world's answer to an op of the cells: it landed, with an empty
+    /// code, or the code of why it was refused. False for an answer to
+    /// nothing the cells asked.
+    pub(crate) fn answered(&mut self, generator: &Generator, id: u32, code: &str) -> bool {
+        let Some(link) = &mut self.link else {
+            return false;
+        };
+        let landed = code.is_empty();
+        if let Some(at) = link.pending.iter().position(|made| made.id == id) {
+            if landed {
+                link.pending.remove(at);
+                link.history = (link.history.0 + 1, 0);
+                return true;
+            }
+            // Refused: it comes off from under what was made after it.
+            let refused = link.pending.remove(at);
+            self.unmake(generator, refused);
+            return true;
+        }
+        match link.waiting.remove(&id) {
+            Some(Waiting::Open(seat, plot)) => {
+                if !landed {
+                    self.close(seat, plot);
+                }
+            }
+            Some(Waiting::TakeBack) => {
+                link.history = match landed {
+                    true => (link.history.0.saturating_sub(1), link.history.1 + 1),
+                    false => (0, link.history.1),
+                };
+            }
+            Some(Waiting::PutBack) => {
+                link.history = match landed {
+                    true => (link.history.0 + 1, link.history.1.saturating_sub(1)),
+                    false => (link.history.0, 0),
+                };
+            }
+            None => return false,
+        }
+        true
+    }
 }
 
 /// The colour and gloss a paint is drawn with.
@@ -850,7 +1313,7 @@ mod tests {
         assert_eq!(held.min[2] % 16, 0);
         let feet = (ground_m / BLOCK_M) as i32;
         assert!(held.contains([point.u as i32, point.v as i32, feet]));
-        assert!(held.max[2] >= feet + HEIGHT);
+        assert!(held.max[2] >= feet + seat::HEIGHT);
         // Nature is as it was: no stamp, and nothing built.
         assert!(generator.stamps().is_empty());
         assert_eq!(generator.sample(direction).height_m, ground_m);
@@ -1093,7 +1556,7 @@ mod tests {
         let seated = |sector: u8| Seated {
             sector: Sector::new(sector).unwrap(),
             volumes: Volumes::new(PLOT_BITS),
-            balls: Vec::new(),
+            balls: BTreeMap::new(),
         };
         let chunks = [[64, 128, 32], [80, 128, 32], [64, 144, 32], [64, 128, -32]];
         let mut ids = BTreeSet::new();

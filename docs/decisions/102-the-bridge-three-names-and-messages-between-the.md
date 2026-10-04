@@ -1,4 +1,4 @@
-# 102. The bridge: three names and messages between the server and its module (decided)
+# 102. The bridge: three names and messages between the server and its module (decided; a fourth name asks the store, 110)
 
 Logged 2026-10-04.
 

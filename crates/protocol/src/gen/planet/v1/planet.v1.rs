@@ -64,20 +64,37 @@ pub struct Rename {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
-/// A plugin's message, carried by the core and never read by it. The core
-/// routes it by the plugin's name and checks who may ask for `kind`; the
-/// payload is the plugin's own, encoded by its own schema under
-/// `plugins/<plugin>/wire/` (DECISIONS 91, 93, 98, 100).
+/// An owner's message, carried by the server and never read by it. The server
+/// routes it by the owner's name and checks who may ask for `kind`; the
+/// payload is the owner's own, encoded by its own schema: a plugin's under
+/// `plugins/<plugin>/wire/`, the cells' under `proto/planet/cells/`
+/// (DECISIONS 91, 93, 98, 100, 110).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Envelope {
-    /// The plugin's name, as the world's statement says it.
+    /// The owner's name: a plugin's, as the world's statement says it, or a
+    /// system of the core's, `cells`.
     #[prost(string, tag="1")]
     pub plugin: ::prost::alloc::string::String,
-    /// Up, the op asked for. Down, the event said. A name within the plugin.
+    /// Up, the op asked for. Down, the event said. A name within the owner.
     #[prost(string, tag="2")]
     pub kind: ::prost::alloc::string::String,
     #[prost(bytes="vec", tag="3")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// Up, the asker's own number for an op it wants answered, and zero for
+    /// one it does not. It comes back in an Answer.
+    #[prost(uint32, tag="4")]
+    pub id: u32,
+}
+/// What became of an op asked with an id: it landed, or the code of why it
+/// was refused. To the asker alone.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Answer {
+    #[prost(uint32, tag="1")]
+    pub id: u32,
+    /// Empty when it landed. A code, never a sentence: `level`, `plugin`,
+    /// `fault`, or one of the owner's own.
+    #[prost(string, tag="2")]
+    pub code: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientMessage {
@@ -209,7 +226,7 @@ pub struct Refused {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerMessage {
-    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 8, 9, 10")]
+    #[prost(oneof="server_message::Message", tags="1, 2, 3, 4, 5, 6, 8, 9, 10, 11")]
     pub message: ::core::option::Option<server_message::Message>,
 }
 /// Nested message and enum types in `ServerMessage`.
@@ -234,6 +251,8 @@ pub mod server_message {
         Envelope(super::Envelope),
         #[prost(message, tag="10")]
         Plugins(super::Plugins),
+        #[prost(message, tag="11")]
+        Answer(super::Answer),
     }
 }
 /// The body a stance is measured from. Every body is parametrised on the

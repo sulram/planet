@@ -2,7 +2,7 @@
 //! plugged into a client, in a world that says it is on, driven by hand made
 //! server frames, the way a shell drives it with a socket.
 
-use client::{Chord, Client, Event, Input, Key, Recipe};
+use client::{Chord, Client, Event, Input, Key, Level, Recipe};
 use protocol::server_message;
 use scene::VolumeChange;
 use serde_json::{Value, json};
@@ -48,13 +48,33 @@ fn alone() -> Client {
     client
 }
 
-/// The same, welcomed by a world as a builder.
+/// The same, welcomed by a world as a builder. The world of these tests
+/// says hello and no more: what it answers a change with is tried in
+/// `kept.rs`, over the server's own module.
 fn builder() -> Client {
     let mut client = alone();
     client.link_opened();
     client.receive(&welcome(&client, protocol::Level::Builder));
     client.drain_events();
     client
+}
+
+/// The same with no world, standing in for one: the cells are held by the
+/// client alone, as in a headless picture.
+fn rehearsed() -> Client {
+    let mut client = alone();
+    client.rehearse(Level::Builder);
+    client.drain_events();
+    client
+}
+
+/// Lives until the platform asked for is laid.
+fn laid(client: &mut Client) {
+    for _ in 0..10 {
+        client.update(1.0 / 60.0, &mut Input::default());
+    }
+    let feet = client.host("build").feet();
+    assert!(client.cells().covers(feet.point), "a platform is laid");
 }
 
 /// What building said since the last call, each event under its name
@@ -130,7 +150,34 @@ fn a_platform_is_laid_where_it_is_asked_for() {
     assert!(drawn);
     // Asking lays it with no tool in hand, and takes none.
     assert!(!client.pointing());
-    // It is a change to take back, and building says so.
+    // What was asked of the world went up in the envelope of the cells: the
+    // volume opened, and the platform as one change.
+    let asked: Vec<String> = client
+        .drain_outbound()
+        .into_iter()
+        .filter_map(|out| match out {
+            client::Outbound::Frame(frame) => {
+                match protocol::decode::<protocol::ClientMessage>(&frame)
+                    .ok()?
+                    .message?
+                {
+                    protocol::client_message::Message::Envelope(envelope) => {
+                        (envelope.plugin == "cells" && envelope.kind != "look")
+                            .then_some(envelope.kind)
+                    }
+                    _ => None,
+                }
+            }
+            client::Outbound::Close => None,
+        })
+        .collect();
+    assert_eq!(asked, ["open", "change"]);
+
+    // With no world, the client holds the cells alone and what was laid is
+    // its own change to take back, which building says.
+    let mut client = rehearsed();
+    client.command_json(LAY);
+    laid(&mut client);
     let history = json!({"type": "build.history", "undo": true, "redo": false});
     assert!(said(&mut client).contains(&("history".to_owned(), history)));
 }
@@ -169,7 +216,7 @@ fn the_world_says_who_builds() {
 
 #[test]
 fn building_hears_the_keys_it_asked_for_by_name() {
-    let mut client = builder();
+    let mut client = rehearsed();
     let plain = Chord::default();
     assert!(client.asks("KeyB", plain) && client.asks("Escape", plain));
     assert!(
@@ -193,9 +240,7 @@ fn building_hears_the_keys_it_asked_for_by_name() {
 
     // The chord takes back a platform, and puts it back.
     client.command_json(LAY);
-    while client.cells().history() != (true, false) {
-        client.update(1.0 / 60.0, &mut Input::default());
-    }
+    laid(&mut client);
     let command = |shift| Chord {
         command: true,
         shift,
@@ -212,11 +257,9 @@ fn building_hears_the_keys_it_asked_for_by_name() {
 
 #[test]
 fn a_drag_of_the_pointer_lays_cells_with_a_tool_in_hand() {
-    let mut client = builder();
+    let mut client = rehearsed();
     client.command_json(LAY);
-    while client.cells().history() != (true, false) {
-        client.update(1.0 / 60.0, &mut Input::default());
-    }
+    laid(&mut client);
     // Looking down at the slab under the feet, from a little over it.
     client.pose(6.0, -1.2, 0.0);
     client.command_json(TAKE_CREATE);
@@ -242,9 +285,7 @@ fn a_drag_of_the_pointer_lays_cells_with_a_tool_in_hand() {
 fn a_world_that_switches_building_off_takes_the_tool_and_leaves_what_stands() {
     let mut client = builder();
     client.command_json(LAY);
-    while client.cells().history() != (true, false) {
-        client.update(1.0 / 60.0, &mut Input::default());
-    }
+    laid(&mut client);
     client.command_json(TAKE_CREATE);
     assert!(client.pointing());
     let off = protocol::Plugins { plugins: vec![] };

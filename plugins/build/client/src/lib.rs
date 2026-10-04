@@ -87,12 +87,16 @@ pub enum Refusal {
     /// Building is a builder's and an admin's, and the world named this
     /// session a lower level.
     Level,
+    /// This world is shaped by a field, and its server does not hold the
+    /// field to seat a volume by.
+    Field,
 }
 
 impl From<client::Refusal> for Refusal {
     fn from(refusal: client::Refusal) -> Refusal {
         match refusal {
             client::Refusal::Level => Refusal::Level,
+            client::Refusal::Field => Refusal::Field,
             client::Refusal::Sea => Refusal::Sea,
             client::Refusal::Seam => Refusal::Seam,
         }

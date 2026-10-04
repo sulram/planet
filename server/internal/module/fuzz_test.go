@@ -18,7 +18,7 @@ import (
 // Whatever bytes are run as a call, the module answers or says nothing: it
 // never traps, and it is the same instance after.
 func FuzzAnyBytesAsACall(f *testing.F) {
-	m, err := Load(context.Background())
+	m, err := Load(context.Background(), nil)
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func FuzzAnyBytesAsACall(f *testing.F) {
 // number among them: the module never traps, and what it tells is chat's own,
 // for those in the room alone.
 func FuzzAnOpOfAnyShape(f *testing.F) {
-	m, err := Load(context.Background())
+	m, err := Load(context.Background(), nil)
 	if err != nil {
 		f.Fatal(err)
 	}

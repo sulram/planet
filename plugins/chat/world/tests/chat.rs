@@ -39,6 +39,31 @@ impl Room for Three {
         self.heard
             .extend(to.iter().map(|session| (*session, said.clone())));
     }
+
+    // Chat reads no ground and keeps nothing.
+    fn ground(&self) -> Option<&worldgen::Generator> {
+        None
+    }
+
+    fn get(&mut self, _key: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
+
+    fn scan(&mut self, _prefix: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)> {
+        Vec::new()
+    }
+
+    fn keep(&mut self, key: &[u8], _value: Vec<u8>) {
+        panic!("chat keeps nothing: {key:?}");
+    }
+
+    fn forget(&mut self, key: &[u8]) {
+        panic!("chat keeps nothing: {key:?}");
+    }
+
+    fn refuse(&mut self, code: &str) {
+        panic!("chat refuses nothing: {code}");
+    }
 }
 
 impl Three {

@@ -22,6 +22,7 @@ import (
 
 	pb "github.com/sulram/planet/server/internal/protocol"
 	bridge "github.com/sulram/planet/server/internal/protocol/module"
+	"github.com/sulram/planet/server/internal/store"
 	"github.com/sulram/planet/server/internal/world"
 )
 
@@ -41,10 +42,30 @@ const (
 	// it keeps of what the module says.
 	maxReplies   = 1024
 	maxReplySize = 1 << 20
+	// And a limit on what a call asks of its owner's store: how many
+	// questions, how long each is, and how much all the answers weigh.
+	maxAsks     = 4096
+	maxAskSize  = 1 << 16
+	maxRowsSize = 16 << 20
 )
 
-// Module is the world halves of a version, running. One call at a time.
+// Keeper is where owners keep what they keep: the store of the world folder.
+type Keeper interface {
+	Get(owner string, key []byte) ([]byte, bool, error)
+	Scan(owner string, prefix []byte) ([]store.Row, error)
+	Apply(owner string, writes []store.Write) error
+}
+
+// Module is the owners of a version, running: the systems of the core that
+// run in the world, and the world halves. One call at a time.
 type Module struct {
+	// Where owners keep what they keep. Nil in a test that keeps nothing.
+	keeper Keeper
+	// The owner the running call belongs to, and what it has asked of its
+	// store so far.
+	owner    string
+	asks     int
+	weighed  int
 	mu       sync.Mutex
 	runtime  wazero.Runtime
 	compiled wazero.CompiledModule
@@ -64,11 +85,12 @@ type Module struct {
 }
 
 // Load compiles the module built into this binary and asks what it carries.
-func Load(ctx context.Context) (*Module, error) {
+func Load(ctx context.Context, keeper Keeper) (*Module, error) {
 	m, err := open(ctx, built)
 	if err != nil {
 		return nil, err
 	}
+	m.keeper = keeper
 	replies, err := m.call(ctx, &bridge.Call{Call: &bridge.Call_Describe{Describe: &bridge.Describe{}}})
 	if err != nil {
 		return nil, fmt.Errorf("module: asked what it carries: %w", err)
@@ -91,6 +113,7 @@ func open(ctx context.Context, wasm []byte) (*Module, error) {
 		WithMemoryLimitPages(memoryPages))
 	if _, err := m.runtime.NewHostModuleBuilder("host").
 		NewFunctionBuilder().WithFunc(m.reply).Export("reply").
+		NewFunctionBuilder().WithFunc(m.asked).Export("ask").
 		Instantiate(ctx); err != nil {
 		return nil, fmt.Errorf("module: %w", err)
 	}
@@ -179,6 +202,80 @@ func (m *Module) take(instance api.Module, at, size uint32) error {
 // call asks the module one thing and gathers what it says back. After any
 // fault, a trap, a deadline or a reply that cannot be read, the instance is
 // replaced and the call is lost.
+// asked answers what an owner asks of its store while a call runs: the rows
+// are written in the module's inbox, which the module sizes itself, and
+// their length is handed back. A question that cannot be taken or answered
+// ends the instance, as a reply that cannot be taken does.
+func (m *Module) asked(ctx context.Context, instance api.Module, at, size uint32) uint32 {
+	if m.fault != nil {
+		return 0
+	}
+	rows, err := m.answer(instance, at, size)
+	if err == nil {
+		var where []uint64
+		where, err = instance.ExportedFunction("reserve").Call(ctx, uint64(len(rows)))
+		if err == nil && !instance.Memory().Write(uint32(where[0]), rows) {
+			err = errors.New("an inbox outside the module's memory")
+		}
+	}
+	if err != nil {
+		m.fault = err
+		_ = instance.CloseWithExitCode(ctx, 1)
+		return 0
+	}
+	return uint32(len(rows))
+}
+
+func (m *Module) answer(instance api.Module, at, size uint32) ([]byte, error) {
+	if m.asks++; m.asks > maxAsks {
+		return nil, fmt.Errorf("more than %d questions in one call", maxAsks)
+	}
+	if size > maxAskSize {
+		return nil, fmt.Errorf("a question of %d bytes", size)
+	}
+	view, ok := instance.Memory().Read(at, size)
+	if !ok {
+		return nil, errors.New("a question outside the module's memory")
+	}
+	ask := &bridge.Ask{}
+	if err := proto.Unmarshal(bytes.Clone(view), ask); err != nil {
+		return nil, fmt.Errorf("a question that is no message: %w", err)
+	}
+	// An owner reads its own store and no other's.
+	if ask.Owner != m.owner {
+		return nil, fmt.Errorf("%q asks for the store of %q", m.owner, ask.Owner)
+	}
+	found := &bridge.Rows{}
+	if m.keeper != nil {
+		switch asked := ask.Ask.(type) {
+		case *bridge.Ask_Get:
+			value, there, err := m.keeper.Get(ask.Owner, asked.Get)
+			if err != nil {
+				return nil, err
+			}
+			if there {
+				found.Rows = append(found.Rows, &bridge.Row{Key: asked.Get, Value: value})
+			}
+		case *bridge.Ask_Scan:
+			rows, err := m.keeper.Scan(ask.Owner, asked.Scan)
+			if err != nil {
+				return nil, err
+			}
+			for _, row := range rows {
+				found.Rows = append(found.Rows, &bridge.Row{Key: row.Key, Value: row.Value})
+			}
+		}
+	}
+	rows, err := proto.Marshal(found)
+	if err != nil {
+		return nil, err
+	}
+	if m.weighed += len(rows); m.weighed > maxRowsSize {
+		return nil, fmt.Errorf("more than %d bytes read in one call", maxRowsSize)
+	}
+	return rows, nil
+}
+
 func (m *Module) call(ctx context.Context, call *bridge.Call) ([]*bridge.Reply, error) {
 	if m.instance == nil {
 		if err := m.replace(ctx); err != nil {
@@ -190,6 +287,7 @@ func (m *Module) call(ctx context.Context, call *bridge.Call) ([]*bridge.Reply, 
 		return nil, err
 	}
 	m.replies, m.fault = nil, nil
+	m.asks, m.weighed = 0, 0
 	if err := m.ask(ctx, frame); err != nil {
 		if again := m.replace(ctx); again != nil {
 			log.Printf("module: no new instance: %v", again)
@@ -243,6 +341,7 @@ func (m *Module) Plugins() []world.Installed {
 		installed = append(installed, world.Installed{
 			Plugin: &hosted{module: m, name: carried.Name, version: carried.Version, ops: ops},
 			On:     carried.On,
+			Core:   carried.Core,
 		})
 	}
 	return installed
@@ -290,14 +389,40 @@ func (h *hosted) Do(room world.Room, who world.Who, kind string, payload []byte)
 			Stance:  other.Stance,
 		})
 	}
+	m.owner = h.name
 	replies, err := m.call(ctx, &bridge.Call{Call: &bridge.Call_Op{Op: op}})
+	m.owner = ""
 	if err != nil {
 		log.Printf("module: %s.%s is dropped: %v", h.name, kind, err)
+		room.Refuse("fault")
 		return
 	}
+	// What the op kept is written first, all of it or none: an event tells
+	// of nothing the world did not keep. An owner writes its own store.
+	var writes []store.Write
 	for _, reply := range replies {
+		if keep := reply.GetKeep(); keep != nil && keep.Owner == h.name {
+			writes = append(writes, store.Write{Key: keep.Key, Value: keep.Value, Forget: keep.Forget})
+		}
+	}
+	if len(writes) != 0 {
+		if m.keeper == nil {
+			err = errors.New("this world has no store")
+		} else {
+			err = m.keeper.Apply(h.name, writes)
+		}
+		if err != nil {
+			log.Printf("module: %s.%s is not kept: %v", h.name, kind, err)
+			room.Refuse("fault")
+			return
+		}
+	}
+	for _, reply := range replies {
+		if answered := reply.GetAnswered(); answered != nil {
+			room.Refuse(answered.Code)
+		}
 		tell := reply.GetTell()
-		// A world half speaks under its own name alone.
+		// An owner speaks under its own name alone.
 		if tell == nil || tell.Plugin != h.name {
 			continue
 		}

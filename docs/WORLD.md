@@ -91,7 +91,7 @@ m4-K7M42Q@40,180,-5
   nothing to be inside of, and not editable by anyone in world. What is built
   leaves it as it is (78).
 - A volume is an integer address box with an inside: cellars and overhangs.
-  It lives in the client alone today, nothing sent or kept (76).
+  The world keeps it, and tells a change to whoever is near (107, 110).
 - The address cuts volumes (77): plots of 64 blocks a side, `(u >> 6, v >> 6)`,
   a volume over each from its lowest ground to 64 cells over its highest.
   They touch and are read as one, so a build stands over two neighbours.

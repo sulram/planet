@@ -63,6 +63,7 @@ fn heard(plugin: &str, kind: &str, text: &str) -> Vec<u8> {
         plugin: plugin.into(),
         kind: kind.into(),
         payload: text.as_bytes().to_vec(),
+        id: 0,
     }))
 }
 
@@ -127,7 +128,8 @@ fn a_plugin_is_off_until_a_world_says_it_is_on() {
         vec![protocol::Envelope {
             plugin: "echo".into(),
             kind: "shout".into(),
-            payload: b"hi".to_vec()
+            payload: b"hi".to_vec(),
+            id: 0,
         }],
         "a command with the plugin's name goes up in its envelope"
     );

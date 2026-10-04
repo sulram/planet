@@ -79,6 +79,7 @@ export const en = {
 	'engine.build.refused.seam': 'Too close to the edge of a sector. Walk a little further in.',
 	'engine.build.refused.high': 'Too high. A platform is laid up to 32 m over the highest ground of its plot.',
 	'engine.build.refused.level': 'Only builders of this world can build here.',
+	'engine.build.refused.field': 'Building is not kept yet in a world shaped by a field.',
 	'engine.stats.fps': 'Frames',
 	'engine.stats.altitude': 'Altitude',
 	'engine.stats.speed': 'Speed',

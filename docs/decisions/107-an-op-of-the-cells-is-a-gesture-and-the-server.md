@@ -1,4 +1,4 @@
-# 107. An op of the cells is a gesture, and the server seats the volume it lands in (proposed)
+# 107. An op of the cells is a gesture, and the server seats the volume it lands in (decided)
 
 Logged 2026-10-04.
 
@@ -7,7 +7,8 @@ box, in a volume. A platform is the gestures a building plugin comes to in
 the client, from the ground and the feet it reads there (105): a slab, and
 the boxes of its base. The server reads the ground once for a volume, when it
 is first written in, to say where it starts and ends. From there it checks
-who may change the volume and applies boxes.
+who may change the volume and applies boxes. A change is told to whoever is
+near the volume, and who arrives later asks for what stands there.
 
 **Why a gesture, and not a platform.** It follows from 106: a kind of
 construction is a plugin's, and the core knows boxes. No rule of the core
@@ -26,6 +27,10 @@ bounds a client says are bounds a client may lie about. Reading that ground
 costs 5 to 10 ms in wazero (97), once for a volume, and what it gives is kept
 with the volume.
 
+**Why whoever is near.** Marlus: the message goes to who is near, and no
+further. A world is larger than anyone sees of it, and a change told to
+everyone is paid by everyone for what most never look at.
+
 **What it changes in 97.** A platform is no op of the core. The rest stands:
 the rule is written once, in Rust, the server runs it in the module, and
 applying a gesture to a volume is `voxel`'s on both sides.
@@ -39,4 +44,4 @@ generator; a volume's bounds said by the first client to write in it; a
 server with no generator, which every law of the core that stands on the
 ground would bring back.
 
-**Lives in:** OPEN.md; ROADMAP.md § The cells.
+**Lives in:** WORLD.md; `crates/seat`; `crates/world/src/cells.rs`.

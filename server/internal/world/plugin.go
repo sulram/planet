@@ -7,11 +7,11 @@ import (
 	pb "github.com/sulram/planet/server/internal/protocol"
 )
 
-// The host of plugins: who is installed, which are on in this world, and
-// what an op passes on its way to its owner (DECISIONS 88, 93, 98). A
-// plugin's world half is Rust in the server's module (DECISIONS 99), and
-// `internal/module` hands each one over as a Plugin; the core names no
-// plugin and reads no payload.
+// The host of owners: who is installed, which are on in this world, and
+// what an op passes on its way to its owner (DECISIONS 88, 93, 98). An owner
+// is a plugin's world half or a system of the core, the cells: both are Rust
+// in the server's module (DECISIONS 99, 110), and `internal/module` hands
+// each one over as a Plugin. The server names none and reads no payload.
 
 // Op is one thing a session may ask of a plugin, and the least level that
 // may ask it. What a plugin offers is said as data, so a front end and an
@@ -44,6 +44,9 @@ type Room interface {
 	// Tell says one event of the plugin, encoded once, to every session `to`
 	// admits.
 	Tell(kind string, payload []byte, to func(Who) bool)
+	// Refuse answers the op being applied with the code of why it is
+	// refused. An op nothing refuses has landed.
+	Refuse(code string)
 }
 
 // Plugin is a plugin's server half. The actor calls it, one call at a time,
@@ -62,11 +65,13 @@ type Plugin interface {
 	Gone(session uint32)
 }
 
-// Installed is a plugin a version carries, and whether a world starts with
-// it on.
+// Installed is an owner a version carries, and whether a world starts with
+// it on. A system of the core is on in every world: nobody switches it, and
+// a world's statement leaves it out.
 type Installed struct {
 	Plugin Plugin
 	On     bool
+	Core   bool
 }
 
 // Spoken is one line of a world's statement: a plugin that is on, and its
@@ -80,6 +85,8 @@ type Spoken struct {
 type plugged struct {
 	plugin Plugin
 	on     bool
+	// A system of the core: left out of the statement.
+	core bool
 	// The least level each op asks, by kind.
 	ops map[string]Level
 }
@@ -87,7 +94,7 @@ type plugged struct {
 func plug(installed []Installed, on map[string]bool) []*plugged {
 	held := make([]*plugged, 0, len(installed))
 	for _, in := range installed {
-		p := &plugged{plugin: in.Plugin, on: on[in.Plugin.Name()], ops: map[string]Level{}}
+		p := &plugged{plugin: in.Plugin, on: on[in.Plugin.Name()], core: in.Core, ops: map[string]Level{}}
 		for _, op := range in.Plugin.Ops() {
 			p.ops[op.Kind] = op.Level
 		}
@@ -103,27 +110,42 @@ func may(who Who, p *plugged, kind string) bool {
 	return known && who.Identity.Level >= level
 }
 
-// do passes one op along the path of a change: the plugin is found and on,
-// the hook says the session may, and the owner applies it. An op that stops
-// on the way is dropped unheard; a plugin that answers a refusal says so
-// itself.
+// do passes one op along the path of a change: the owner is found and on,
+// the hook says the session may, and the owner applies it. An op asked with
+// an id is answered: it landed, or the code of why it was refused, by the
+// host when it stops on the way and by its owner after (DECISIONS 93, 110).
+// One asked with none is dropped unheard.
 func (a *actor) do(s *session, envelope *pb.Envelope) {
+	answer := func(code string) {
+		if envelope.Id != 0 {
+			s.send(&pb.ServerMessage{Message: &pb.ServerMessage_Answer{Answer: &pb.Answer{Id: envelope.Id, Code: code}}})
+		}
+	}
 	for _, p := range a.plugins {
 		if p.plugin.Name() != envelope.Plugin {
 			continue
 		}
-		if who := s.who(); p.on && may(who, p, envelope.Kind) {
-			p.plugin.Do(room{actor: a, plugin: p.plugin.Name(), now: time.Now()}, who, envelope.Kind, envelope.Payload)
+		who := s.who()
+		switch {
+		case !p.on:
+			answer("plugin")
+		case !may(who, p, envelope.Kind):
+			answer("level")
+		default:
+			refused := ""
+			p.plugin.Do(room{actor: a, plugin: p.plugin.Name(), now: time.Now(), refused: &refused}, who, envelope.Kind, envelope.Payload)
+			answer(refused)
 		}
 		return
 	}
+	answer("plugin")
 }
 
 // spoken is the plugins that are on, as the statement lists them.
 func spoken(held []*plugged) []Spoken {
 	on := make([]Spoken, 0, len(held))
 	for _, p := range held {
-		if p.on {
+		if p.on && !p.core {
 			on = append(on, Spoken{Name: p.plugin.Name(), Version: p.plugin.Version()})
 		}
 	}
@@ -143,9 +165,13 @@ type room struct {
 	actor  *actor
 	plugin string
 	now    time.Time
+	// The code the op is refused with, when its owner refuses it.
+	refused *string
 }
 
 func (r room) Now() time.Time { return r.now }
+
+func (r room) Refuse(code string) { *r.refused = code }
 
 func (r room) Tell(kind string, payload []byte, to func(Who) bool) {
 	message := &pb.ServerMessage{Message: &pb.ServerMessage_Envelope{Envelope: &pb.Envelope{

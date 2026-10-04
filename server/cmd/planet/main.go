@@ -20,6 +20,7 @@ import (
 	"github.com/sulram/planet/server/internal/folder"
 	"github.com/sulram/planet/server/internal/module"
 	"github.com/sulram/planet/server/internal/mundos"
+	"github.com/sulram/planet/server/internal/store"
 	"github.com/sulram/planet/server/internal/world"
 )
 
@@ -63,8 +64,12 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	// The plugins of this version are the world halves the module carries.
-	hosted, err := module.Load(context.Background())
+	// What owners keep is in the world folder, a file apiece.
+	held := store.Open(envOr("WORLD_DIR", "world"))
+	defer held.Close()
+	// The owners of this version are what the module carries: the systems
+	// of the core that run in the world, and the world halves.
+	hosted, err := module.Load(context.Background(), held)
 	if err != nil {
 		return err
 	}

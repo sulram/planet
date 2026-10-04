@@ -1,7 +1,8 @@
 //! The wire messages between a client and a world server.
 //!
 //! Generated from `proto/planet/v1/world.proto` by `bun run proto`, which
-//! writes `src/gen/`, with the bridge of the server's module beside it.
+//! writes `src/gen/`, with the cells' payloads and the bridge of the
+//! server's module beside it.
 //! Nothing here is written by hand except this file; the same schemas
 //! generate the Go side, so the two cannot drift.
 
@@ -9,7 +10,7 @@ pub use prost::Message;
 
 /// The protocol a client speaks, said in `Hello`. Bumped with any change an
 /// older client cannot read; the server refuses every other number.
-pub const PROTOCOL: u32 = 4;
+pub const PROTOCOL: u32 = 5;
 
 pub mod v1 {
     #![allow(clippy::all, clippy::pedantic)]
@@ -28,6 +29,32 @@ pub mod module {
     }
 
     pub use v1::*;
+}
+
+/// The cells of a world on the wire, generated from
+/// `proto/planet/cells/v1/cells.proto`: the payloads of the envelopes whose
+/// owner is [`cells::OWNER`] (DECISIONS 110).
+pub mod cells {
+    pub mod v1 {
+        #![allow(clippy::all, clippy::pedantic)]
+        include!("gen/planet/cells/v1/planet.cells.v1.rs");
+    }
+
+    pub use v1::*;
+
+    /// The name the envelope says for the cells, a system of the core.
+    pub const OWNER: &str = "cells";
+    /// The ops a client asks of the cells.
+    pub const OPEN: &str = "open";
+    pub const CHANGE: &str = "change";
+    pub const TAKE_BACK: &str = "take_back";
+    pub const PUT_BACK: &str = "put_back";
+    pub const LOOK: &str = "look";
+    /// The events the world says of them.
+    pub const OPENED: &str = "opened";
+    pub const CHANGED: &str = "changed";
+    pub const RESTORED: &str = "restored";
+    pub const SEEN: &str = "seen";
 }
 
 /// One message as one WebSocket frame.

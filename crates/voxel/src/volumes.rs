@@ -96,6 +96,35 @@ impl Volumes {
         true
     }
 
+    /// Takes away the volume over a plot, cells and all. False where none
+    /// stands.
+    pub fn close(&mut self, plot: [i32; 2]) -> bool {
+        self.standing.remove(&plot).is_some()
+    }
+
+    /// Every chunk of the volume over a plot that holds something, each
+    /// named by its lowest corner in the frame.
+    pub fn stored(&self, plot: [i32; 2]) -> Vec<[i32; 3]> {
+        let Some(standing) = self.standing.get(&plot) else {
+            return Vec::new();
+        };
+        let [cx, cy, cz] = standing.volume.chunk_count();
+        let chunks =
+            (0..cz).flat_map(|z| (0..cy).flat_map(move |y| (0..cx).map(move |x| [x, y, z])));
+        chunks
+            .filter(|&chunk| standing.volume.chunk_stored(chunk))
+            .map(|chunk| [0, 1, 2].map(|i| standing.origin[i] + (chunk[i] * CHUNK) as i32))
+            .collect()
+    }
+
+    /// The cells of the chunk named by its lowest corner, as a box.
+    pub fn chunk_span(chunk: [i32; 3]) -> Span {
+        Span {
+            min: chunk,
+            max: chunk.map(|n| n + CHUNK as i32 - 1),
+        }
+    }
+
     /// Whether a volume stands over a plot.
     pub fn is_open(&self, plot: [i32; 2]) -> bool {
         self.standing.contains_key(&plot)
@@ -330,6 +359,24 @@ fn join(span: Option<Span>, other: Span) -> Span {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_volume_lists_the_chunks_that_hold_something_and_is_closed_whole() {
+        let mut volumes = Volumes::new(6);
+        volumes.open([1, 0], 0, 64);
+        assert!(volumes.stored([1, 0]).is_empty());
+        let span = Span::between([64, 0, 16], [80, 3, 16]);
+        volumes.apply(Gesture::Create { span, paint: 1 });
+        assert_eq!(volumes.stored([1, 0]), vec![[64, 0, 16], [80, 0, 16]]);
+        assert!(volumes.stored([0, 0]).is_empty());
+        // The cells of a chunk come back whole from its box.
+        let chunk = Volumes::chunk_span([64, 0, 16]);
+        let solid = volumes.cells(chunk).iter().filter(|c| !c.is_air()).count();
+        assert_eq!(solid, 16 * 4);
+        assert!(volumes.close([1, 0]));
+        assert!(!volumes.close([1, 0]));
+        assert!(!volumes.holds([64, 0, 16]));
+    }
     use crate::Face;
 
     /// Two volumes side by side along `x`, 32 cells a side: the first from

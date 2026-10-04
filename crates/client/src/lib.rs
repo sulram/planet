@@ -700,6 +700,8 @@ impl Client {
                 }
                 self.session.welcomed(welcome.session);
                 self.level = Some(Level::from_wire(welcome.level));
+                // The world keeps the cells from here on.
+                self.cells.link(welcome.session);
                 for peer in &welcome.peers {
                     self.peers.add(peer, &self.generator);
                 }
@@ -742,9 +744,28 @@ impl Client {
                 self.peers.renamed(renamed.session, &renamed.name);
                 self.peers_changed();
             }
+            // The cells are the core's, and their events come under their
+            // name as a plugin's do under its own.
+            Some(Message::Envelope(envelope)) if envelope.plugin == protocol::cells::OWNER => {
+                self.cells
+                    .receive(&self.generator, &envelope.kind, &envelope.payload);
+            }
             Some(Message::Envelope(envelope)) => {
                 let (plugins, lent) = self.lend();
                 plugins.receive(&envelope, lent);
+            }
+            Some(Message::Answer(answer)) => {
+                let cells = self
+                    .cells
+                    .answered(&self.generator, answer.id, &answer.code);
+                if cells && !answer.code.is_empty() {
+                    self.events.push(Event::Rejected {
+                        message: format!(
+                            "the world refused a change to the cells: {}",
+                            answer.code
+                        ),
+                    });
+                }
             }
             Some(Message::Plugins(plugins)) => self.spoken(&plugins.plugins),
             Some(Message::Refused(refused)) => {
@@ -785,6 +806,8 @@ impl Client {
     }
 
     fn went_offline(&mut self) {
+        // What the world kept went with it.
+        self.cells.unlink();
         self.peers.clear();
         self.dress_all();
         self.events.push(Event::Session {
@@ -800,6 +823,10 @@ impl Client {
 
     /// What the shell sends on the link, in order. Empty while offline.
     pub fn drain_outbound(&mut self) -> Vec<Outbound> {
+        for ask in self.cells.drain_asks() {
+            self.session
+                .ask(protocol::cells::OWNER, ask.kind, ask.payload, ask.id);
+        }
         self.session.drain_outbound()
     }
 
@@ -924,10 +951,13 @@ impl Client {
             // A captured pointer aims through the middle of the view.
             pointer: input.pointer.unwrap_or([0.5, 0.5]).map(f64::from),
         };
-        // Each plugin's turn, then the cells drawn as the turns left them.
+        // Each plugin's turn, then the cells drawn as the turns left them,
+        // and kept in step with what the world holds near the body.
         let (plugins, lent) = self.lend();
         plugins.turn(&eye, input, taken.interrupted, lent);
         self.cells.update(self.generator.sphere(), eye.position);
+        let body = (!self.controller.on_moon()).then(|| self.controller.position());
+        self.cells.look(body, dt);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.

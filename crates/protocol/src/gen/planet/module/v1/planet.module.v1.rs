@@ -80,7 +80,7 @@ pub struct Gone {
 /// What the module says back.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Reply {
-    #[prost(oneof="reply::Reply", tags="1, 2")]
+    #[prost(oneof="reply::Reply", tags="1, 2, 3, 4")]
     pub reply: ::core::option::Option<reply::Reply>,
 }
 /// Nested message and enum types in `Reply`.
@@ -91,7 +91,66 @@ pub mod reply {
         Statement(super::Statement),
         #[prost(message, tag="2")]
         Tell(super::Tell),
+        #[prost(message, tag="3")]
+        Keep(super::Keep),
+        #[prost(message, tag="4")]
+        Answered(super::Answered),
     }
+}
+/// Something an owner keeps, or forgets, in its store in the world folder.
+/// The server writes what a call kept once the call has returned, all of it
+/// or none.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Keep {
+    /// The owner's name: its store is its own.
+    #[prost(string, tag="1")]
+    pub owner: ::prost::alloc::string::String,
+    #[prost(bytes="vec", tag="2")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes="vec", tag="3")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+    /// Forgets the key in place of keeping a value for it.
+    #[prost(bool, tag="4")]
+    pub forget: bool,
+}
+/// What the op being applied is answered with, when its asker gave it an id:
+/// the code of why it was refused. An op nothing answers has landed.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Answered {
+    #[prost(string, tag="1")]
+    pub code: ::prost::alloc::string::String,
+}
+/// What an owner asks of its store while it applies an op, through
+/// `host.ask`: the value of one key, or every row whose key starts with a
+/// prefix. It is answered at once with Rows, written in the module's inbox.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Ask {
+    #[prost(string, tag="1")]
+    pub owner: ::prost::alloc::string::String,
+    #[prost(oneof="ask::Ask", tags="2, 3")]
+    pub ask: ::core::option::Option<ask::Ask>,
+}
+/// Nested message and enum types in `Ask`.
+pub mod ask {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Ask {
+        #[prost(bytes, tag="2")]
+        Get(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag="3")]
+        Scan(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Rows {
+    #[prost(message, repeated, tag="1")]
+    pub rows: ::prost::alloc::vec::Vec<Row>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Row {
+    #[prost(bytes="vec", tag="1")]
+    pub key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes="vec", tag="2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// The plugins the module carries, in the order the config lists them.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -112,6 +171,10 @@ pub struct Carried {
     pub on: bool,
     #[prost(message, repeated, tag="4")]
     pub ops: ::prost::alloc::vec::Vec<Offered>,
+    /// A system of the core, the cells: always on, never switched, and left
+    /// out of what a world says it speaks.
+    #[prost(bool, tag="5")]
+    pub core: bool,
 }
 /// One thing a session may ask of a plugin, and the least level that may.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

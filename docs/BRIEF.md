@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91, 93 to 106, 108 and 109. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 110. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -55,8 +55,8 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
 9. [x] **Building as a plugin** (106, 109): the cells stay the core's, a
    system the plugin speaks to, and building's tools, kinds of construction,
    keys and panel are in `plugins/build`.
-10. [ ] **The cells kept**: a gesture as an op of the core on the socket, the
-    permission hook and the store by volume (93, 95, 107).
+10. [x] **The cells kept** (107, 110): a gesture is an op of the cells on the
+    socket, answered, kept by the world and told to whoever is near.
 11. [ ] **Land**: permission to build by volume, to a person or an agent, the
     second answer to the permission hook (95, 96).
 12. [ ] **Avatars**: the figure and the offer of avatars with its hook.

@@ -55,6 +55,7 @@ fn said(stance: Option<protocol::Stance>) -> Vec<u8> {
             stance,
         }
         .encode_to_vec(),
+        id: 0,
     }))
 }
 

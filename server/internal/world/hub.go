@@ -17,7 +17,7 @@ import (
 
 // Protocol is the wire version this server speaks. Hello says the client's;
 // any other number is refused. Kept equal to `protocol::PROTOCOL` in Rust.
-const Protocol = 4
+const Protocol = 5
 
 // A client says Hello within this long of connecting, and then something at
 // least every few seconds; a silent link is a dead one.
@@ -60,6 +60,10 @@ func NewHub(catalog Catalog, installed []Installed, set map[string]bool) *Hub {
 		on[in.Plugin.Name()] = in.On
 		if chosen, said := set[in.Plugin.Name()]; said {
 			on[in.Plugin.Name()] = chosen
+		}
+		// A system of the core is on in every world, whatever a folder says.
+		if in.Core {
+			on[in.Plugin.Name()] = true
 		}
 	}
 	return &Hub{catalog: catalog, installed: installed, on: on}
@@ -171,10 +175,11 @@ func (h *Hub) Active() bool {
 	return h.actor != nil
 }
 
-// Carries is whether this version has a plugin of that name, on or off.
+// Carries is whether this version has a plugin of that name, on or off. A
+// system of the core is no plugin, and nobody switches it.
 func (h *Hub) Carries(name string) bool {
 	for _, in := range h.installed {
-		if in.Plugin.Name() == name {
+		if in.Plugin.Name() == name && !in.Core {
 			return true
 		}
 	}
@@ -187,7 +192,7 @@ func (h *Hub) Speaks() []Spoken {
 	defer h.mu.Unlock()
 	on := make([]Spoken, 0, len(h.installed))
 	for _, in := range h.installed {
-		if h.on[in.Plugin.Name()] {
+		if h.on[in.Plugin.Name()] && !in.Core {
 			on = append(on, Spoken{Name: in.Plugin.Name(), Version: in.Plugin.Version()})
 		}
 	}

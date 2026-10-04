@@ -460,6 +460,8 @@ type Reply struct {
 	//
 	//	*Reply_Statement
 	//	*Reply_Tell
+	//	*Reply_Keep
+	//	*Reply_Answered
 	Reply         isReply_Reply `protobuf_oneof:"reply"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -520,6 +522,24 @@ func (x *Reply) GetTell() *Tell {
 	return nil
 }
 
+func (x *Reply) GetKeep() *Keep {
+	if x != nil {
+		if x, ok := x.Reply.(*Reply_Keep); ok {
+			return x.Keep
+		}
+	}
+	return nil
+}
+
+func (x *Reply) GetAnswered() *Answered {
+	if x != nil {
+		if x, ok := x.Reply.(*Reply_Answered); ok {
+			return x.Answered
+		}
+	}
+	return nil
+}
+
 type isReply_Reply interface {
 	isReply_Reply()
 }
@@ -532,9 +552,329 @@ type Reply_Tell struct {
 	Tell *Tell `protobuf:"bytes,2,opt,name=tell,proto3,oneof"`
 }
 
+type Reply_Keep struct {
+	Keep *Keep `protobuf:"bytes,3,opt,name=keep,proto3,oneof"`
+}
+
+type Reply_Answered struct {
+	Answered *Answered `protobuf:"bytes,4,opt,name=answered,proto3,oneof"`
+}
+
 func (*Reply_Statement) isReply_Reply() {}
 
 func (*Reply_Tell) isReply_Reply() {}
+
+func (*Reply_Keep) isReply_Reply() {}
+
+func (*Reply_Answered) isReply_Reply() {}
+
+// Something an owner keeps, or forgets, in its store in the world folder.
+// The server writes what a call kept once the call has returned, all of it
+// or none.
+type Keep struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The owner's name: its store is its own.
+	Owner string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Key   []byte `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value []byte `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// Forgets the key in place of keeping a value for it.
+	Forget        bool `protobuf:"varint,4,opt,name=forget,proto3" json:"forget,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Keep) Reset() {
+	*x = Keep{}
+	mi := &file_planet_module_v1_module_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Keep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Keep) ProtoMessage() {}
+
+func (x *Keep) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_module_v1_module_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Keep.ProtoReflect.Descriptor instead.
+func (*Keep) Descriptor() ([]byte, []int) {
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Keep) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *Keep) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *Keep) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *Keep) GetForget() bool {
+	if x != nil {
+		return x.Forget
+	}
+	return false
+}
+
+// What the op being applied is answered with, when its asker gave it an id:
+// the code of why it was refused. An op nothing answers has landed.
+type Answered struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Answered) Reset() {
+	*x = Answered{}
+	mi := &file_planet_module_v1_module_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Answered) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Answered) ProtoMessage() {}
+
+func (x *Answered) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_module_v1_module_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Answered.ProtoReflect.Descriptor instead.
+func (*Answered) Descriptor() ([]byte, []int) {
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Answered) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+// What an owner asks of its store while it applies an op, through
+// `host.ask`: the value of one key, or every row whose key starts with a
+// prefix. It is answered at once with Rows, written in the module's inbox.
+type Ask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Owner string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	// Types that are valid to be assigned to Ask:
+	//
+	//	*Ask_Get
+	//	*Ask_Scan
+	Ask           isAsk_Ask `protobuf_oneof:"ask"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Ask) Reset() {
+	*x = Ask{}
+	mi := &file_planet_module_v1_module_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Ask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Ask) ProtoMessage() {}
+
+func (x *Ask) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_module_v1_module_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Ask.ProtoReflect.Descriptor instead.
+func (*Ask) Descriptor() ([]byte, []int) {
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Ask) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *Ask) GetAsk() isAsk_Ask {
+	if x != nil {
+		return x.Ask
+	}
+	return nil
+}
+
+func (x *Ask) GetGet() []byte {
+	if x != nil {
+		if x, ok := x.Ask.(*Ask_Get); ok {
+			return x.Get
+		}
+	}
+	return nil
+}
+
+func (x *Ask) GetScan() []byte {
+	if x != nil {
+		if x, ok := x.Ask.(*Ask_Scan); ok {
+			return x.Scan
+		}
+	}
+	return nil
+}
+
+type isAsk_Ask interface {
+	isAsk_Ask()
+}
+
+type Ask_Get struct {
+	Get []byte `protobuf:"bytes,2,opt,name=get,proto3,oneof"`
+}
+
+type Ask_Scan struct {
+	Scan []byte `protobuf:"bytes,3,opt,name=scan,proto3,oneof"`
+}
+
+func (*Ask_Get) isAsk_Ask() {}
+
+func (*Ask_Scan) isAsk_Ask() {}
+
+type Rows struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rows          []*Row                 `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Rows) Reset() {
+	*x = Rows{}
+	mi := &file_planet_module_v1_module_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Rows) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Rows) ProtoMessage() {}
+
+func (x *Rows) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_module_v1_module_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Rows.ProtoReflect.Descriptor instead.
+func (*Rows) Descriptor() ([]byte, []int) {
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Rows) GetRows() []*Row {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
+type Row struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Row) Reset() {
+	*x = Row{}
+	mi := &file_planet_module_v1_module_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Row) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Row) ProtoMessage() {}
+
+func (x *Row) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_module_v1_module_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Row.ProtoReflect.Descriptor instead.
+func (*Row) Descriptor() ([]byte, []int) {
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Row) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *Row) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
 
 // The plugins the module carries, in the order the config lists them.
 type Statement struct {
@@ -546,7 +886,7 @@ type Statement struct {
 
 func (x *Statement) Reset() {
 	*x = Statement{}
-	mi := &file_planet_module_v1_module_proto_msgTypes[7]
+	mi := &file_planet_module_v1_module_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -558,7 +898,7 @@ func (x *Statement) String() string {
 func (*Statement) ProtoMessage() {}
 
 func (x *Statement) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_module_v1_module_proto_msgTypes[7]
+	mi := &file_planet_module_v1_module_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -571,7 +911,7 @@ func (x *Statement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Statement.ProtoReflect.Descriptor instead.
 func (*Statement) Descriptor() ([]byte, []int) {
-	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{7}
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Statement) GetPlugins() []*Carried {
@@ -588,15 +928,18 @@ type Carried struct {
 	// The version of its wire and of its seam.
 	Version uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	// Whether a world starts with it on.
-	On            bool       `protobuf:"varint,3,opt,name=on,proto3" json:"on,omitempty"`
-	Ops           []*Offered `protobuf:"bytes,4,rep,name=ops,proto3" json:"ops,omitempty"`
+	On  bool       `protobuf:"varint,3,opt,name=on,proto3" json:"on,omitempty"`
+	Ops []*Offered `protobuf:"bytes,4,rep,name=ops,proto3" json:"ops,omitempty"`
+	// A system of the core, the cells: always on, never switched, and left
+	// out of what a world says it speaks.
+	Core          bool `protobuf:"varint,5,opt,name=core,proto3" json:"core,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Carried) Reset() {
 	*x = Carried{}
-	mi := &file_planet_module_v1_module_proto_msgTypes[8]
+	mi := &file_planet_module_v1_module_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -608,7 +951,7 @@ func (x *Carried) String() string {
 func (*Carried) ProtoMessage() {}
 
 func (x *Carried) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_module_v1_module_proto_msgTypes[8]
+	mi := &file_planet_module_v1_module_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -621,7 +964,7 @@ func (x *Carried) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Carried.ProtoReflect.Descriptor instead.
 func (*Carried) Descriptor() ([]byte, []int) {
-	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{8}
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Carried) GetName() string {
@@ -652,6 +995,13 @@ func (x *Carried) GetOps() []*Offered {
 	return nil
 }
 
+func (x *Carried) GetCore() bool {
+	if x != nil {
+		return x.Core
+	}
+	return false
+}
+
 // One thing a session may ask of a plugin, and the least level that may.
 type Offered struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -663,7 +1013,7 @@ type Offered struct {
 
 func (x *Offered) Reset() {
 	*x = Offered{}
-	mi := &file_planet_module_v1_module_proto_msgTypes[9]
+	mi := &file_planet_module_v1_module_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -675,7 +1025,7 @@ func (x *Offered) String() string {
 func (*Offered) ProtoMessage() {}
 
 func (x *Offered) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_module_v1_module_proto_msgTypes[9]
+	mi := &file_planet_module_v1_module_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +1038,7 @@ func (x *Offered) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Offered.ProtoReflect.Descriptor instead.
 func (*Offered) Descriptor() ([]byte, []int) {
-	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{9}
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Offered) GetKind() string {
@@ -718,7 +1068,7 @@ type Tell struct {
 
 func (x *Tell) Reset() {
 	*x = Tell{}
-	mi := &file_planet_module_v1_module_proto_msgTypes[10]
+	mi := &file_planet_module_v1_module_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -730,7 +1080,7 @@ func (x *Tell) String() string {
 func (*Tell) ProtoMessage() {}
 
 func (x *Tell) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_module_v1_module_proto_msgTypes[10]
+	mi := &file_planet_module_v1_module_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -743,7 +1093,7 @@ func (x *Tell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tell.ProtoReflect.Descriptor instead.
 func (*Tell) Descriptor() ([]byte, []int) {
-	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{10}
+	return file_planet_module_v1_module_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Tell) GetPlugin() string {
@@ -804,18 +1154,38 @@ const file_planet_module_v1_module_proto_rawDesc = "" +
 	"\x04here\x18\x06 \x03(\v2\x15.planet.module.v1.WhoR\x04here\"8\n" +
 	"\x04Gone\x12\x16\n" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x18\n" +
-	"\asession\x18\x02 \x01(\rR\asession\"{\n" +
+	"\asession\x18\x02 \x01(\rR\asession\"\xe3\x01\n" +
 	"\x05Reply\x12;\n" +
 	"\tstatement\x18\x01 \x01(\v2\x1b.planet.module.v1.StatementH\x00R\tstatement\x12,\n" +
-	"\x04tell\x18\x02 \x01(\v2\x16.planet.module.v1.TellH\x00R\x04tellB\a\n" +
-	"\x05reply\"@\n" +
+	"\x04tell\x18\x02 \x01(\v2\x16.planet.module.v1.TellH\x00R\x04tell\x12,\n" +
+	"\x04keep\x18\x03 \x01(\v2\x16.planet.module.v1.KeepH\x00R\x04keep\x128\n" +
+	"\banswered\x18\x04 \x01(\v2\x1a.planet.module.v1.AnsweredH\x00R\bansweredB\a\n" +
+	"\x05reply\"\\\n" +
+	"\x04Keep\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\x12\x16\n" +
+	"\x06forget\x18\x04 \x01(\bR\x06forget\"\x1e\n" +
+	"\bAnswered\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\"L\n" +
+	"\x03Ask\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x12\n" +
+	"\x03get\x18\x02 \x01(\fH\x00R\x03get\x12\x14\n" +
+	"\x04scan\x18\x03 \x01(\fH\x00R\x04scanB\x05\n" +
+	"\x03ask\"1\n" +
+	"\x04Rows\x12)\n" +
+	"\x04rows\x18\x01 \x03(\v2\x15.planet.module.v1.RowR\x04rows\"-\n" +
+	"\x03Row\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"@\n" +
 	"\tStatement\x123\n" +
-	"\aplugins\x18\x01 \x03(\v2\x19.planet.module.v1.CarriedR\aplugins\"t\n" +
+	"\aplugins\x18\x01 \x03(\v2\x19.planet.module.v1.CarriedR\aplugins\"\x88\x01\n" +
 	"\aCarried\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x12\x0e\n" +
 	"\x02on\x18\x03 \x01(\bR\x02on\x12+\n" +
-	"\x03ops\x18\x04 \x03(\v2\x19.planet.module.v1.OfferedR\x03ops\"E\n" +
+	"\x03ops\x18\x04 \x03(\v2\x19.planet.module.v1.OfferedR\x03ops\x12\x12\n" +
+	"\x04core\x18\x05 \x01(\bR\x04core\"E\n" +
 	"\aOffered\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12&\n" +
 	"\x05level\x18\x02 \x01(\x0e2\x10.planet.v1.LevelR\x05level\"\\\n" +
@@ -837,7 +1207,7 @@ func file_planet_module_v1_module_proto_rawDescGZIP() []byte {
 	return file_planet_module_v1_module_proto_rawDescData
 }
 
-var file_planet_module_v1_module_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_planet_module_v1_module_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_planet_module_v1_module_proto_goTypes = []any{
 	(*Call)(nil),            // 0: planet.module.v1.Call
 	(*Describe)(nil),        // 1: planet.module.v1.Describe
@@ -846,33 +1216,41 @@ var file_planet_module_v1_module_proto_goTypes = []any{
 	(*Op)(nil),              // 4: planet.module.v1.Op
 	(*Gone)(nil),            // 5: planet.module.v1.Gone
 	(*Reply)(nil),           // 6: planet.module.v1.Reply
-	(*Statement)(nil),       // 7: planet.module.v1.Statement
-	(*Carried)(nil),         // 8: planet.module.v1.Carried
-	(*Offered)(nil),         // 9: planet.module.v1.Offered
-	(*Tell)(nil),            // 10: planet.module.v1.Tell
-	(*protocol.Recipe)(nil), // 11: planet.v1.Recipe
-	(protocol.Level)(0),     // 12: planet.v1.Level
-	(*protocol.Stance)(nil), // 13: planet.v1.Stance
+	(*Keep)(nil),            // 7: planet.module.v1.Keep
+	(*Answered)(nil),        // 8: planet.module.v1.Answered
+	(*Ask)(nil),             // 9: planet.module.v1.Ask
+	(*Rows)(nil),            // 10: planet.module.v1.Rows
+	(*Row)(nil),             // 11: planet.module.v1.Row
+	(*Statement)(nil),       // 12: planet.module.v1.Statement
+	(*Carried)(nil),         // 13: planet.module.v1.Carried
+	(*Offered)(nil),         // 14: planet.module.v1.Offered
+	(*Tell)(nil),            // 15: planet.module.v1.Tell
+	(*protocol.Recipe)(nil), // 16: planet.v1.Recipe
+	(protocol.Level)(0),     // 17: planet.v1.Level
+	(*protocol.Stance)(nil), // 18: planet.v1.Stance
 }
 var file_planet_module_v1_module_proto_depIdxs = []int32{
 	1,  // 0: planet.module.v1.Call.describe:type_name -> planet.module.v1.Describe
 	2,  // 1: planet.module.v1.Call.start:type_name -> planet.module.v1.Start
 	4,  // 2: planet.module.v1.Call.op:type_name -> planet.module.v1.Op
 	5,  // 3: planet.module.v1.Call.gone:type_name -> planet.module.v1.Gone
-	11, // 4: planet.module.v1.Start.recipe:type_name -> planet.v1.Recipe
-	12, // 5: planet.module.v1.Who.level:type_name -> planet.v1.Level
-	13, // 6: planet.module.v1.Who.stance:type_name -> planet.v1.Stance
+	16, // 4: planet.module.v1.Start.recipe:type_name -> planet.v1.Recipe
+	17, // 5: planet.module.v1.Who.level:type_name -> planet.v1.Level
+	18, // 6: planet.module.v1.Who.stance:type_name -> planet.v1.Stance
 	3,  // 7: planet.module.v1.Op.here:type_name -> planet.module.v1.Who
-	7,  // 8: planet.module.v1.Reply.statement:type_name -> planet.module.v1.Statement
-	10, // 9: planet.module.v1.Reply.tell:type_name -> planet.module.v1.Tell
-	8,  // 10: planet.module.v1.Statement.plugins:type_name -> planet.module.v1.Carried
-	9,  // 11: planet.module.v1.Carried.ops:type_name -> planet.module.v1.Offered
-	12, // 12: planet.module.v1.Offered.level:type_name -> planet.v1.Level
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	12, // 8: planet.module.v1.Reply.statement:type_name -> planet.module.v1.Statement
+	15, // 9: planet.module.v1.Reply.tell:type_name -> planet.module.v1.Tell
+	7,  // 10: planet.module.v1.Reply.keep:type_name -> planet.module.v1.Keep
+	8,  // 11: planet.module.v1.Reply.answered:type_name -> planet.module.v1.Answered
+	11, // 12: planet.module.v1.Rows.rows:type_name -> planet.module.v1.Row
+	13, // 13: planet.module.v1.Statement.plugins:type_name -> planet.module.v1.Carried
+	14, // 14: planet.module.v1.Carried.ops:type_name -> planet.module.v1.Offered
+	17, // 15: planet.module.v1.Offered.level:type_name -> planet.v1.Level
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_planet_module_v1_module_proto_init() }
@@ -889,6 +1267,12 @@ func file_planet_module_v1_module_proto_init() {
 	file_planet_module_v1_module_proto_msgTypes[6].OneofWrappers = []any{
 		(*Reply_Statement)(nil),
 		(*Reply_Tell)(nil),
+		(*Reply_Keep)(nil),
+		(*Reply_Answered)(nil),
+	}
+	file_planet_module_v1_module_proto_msgTypes[9].OneofWrappers = []any{
+		(*Ask_Get)(nil),
+		(*Ask_Scan)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -896,7 +1280,7 @@ func file_planet_module_v1_module_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_planet_module_v1_module_proto_rawDesc), len(file_planet_module_v1_module_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

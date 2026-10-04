@@ -56,10 +56,6 @@ end to end.
 
 ### The cells (58, 75 to 86, 106)
 
-- [ ] An op is answered: it landed, or the code of why it was refused, matched to the op it answers (93, 98)
-- [ ] A gesture as an op of the core on the socket: the host asks the permission hook with who, what and where, the core applies it, keeps it and an event tells everyone in the world (76, 93)
-- [ ] Applied in the module (97): `voxel` on the server as in the client
-- [ ] Kept by volume (95): copy on first write, chunk versions, the cells' store in the world folder (89)
 - [ ] The palette kept by the world (103): its sixteen colours in the cells' store, the version's for a new world. Later, a world's admin changes them, as an op
 - [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote
@@ -68,7 +64,7 @@ end to end.
   - [ ] **Chunk version retention is the real knob**: undo depth, and how far back a volume rolls, are bounded by how many versions of a chunk are kept, not by how many ops are
   - [ ] **Compaction runs in the world actor**, off the hot path, on a schedule
   - [ ] Measure before choosing the window: bytes per op, and bytes per stored chunk version after zstd
-- [ ] Delta sync on reconnect; client chunk cache (SQLite native, OPFS web)
+- [ ] A client chunk cache, so a volume seen before is not sent again (SQLite native, OPFS web)
 - [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
 - [ ] A volume on the moon: a platform asked for there is laid as on the planet (today it is refused)
 - [ ] First cut leftovers: the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam

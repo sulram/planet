@@ -120,14 +120,15 @@ A plugin is one folder, `plugins/<name>/` (100):
 - The server's module is every world half of a version as one WASM file,
   `crates/module`, built by `bun run module` and embedded in the Go binary.
   `world::Host` is the host of world halves inside it.
-- Three names (102): the module exports `reserve` and `call`, and imports
-  `host.reply`. The server writes one call in the module's inbox and runs it;
-  the module hands back each reply before the call returns.
+- Four names (102, 110): the module exports `reserve` and `call`, and imports
+  `host.reply` and `host.ask`. The server writes one call in the module's
+  inbox and runs it; the module hands back each reply before it returns.
 - A call and a reply are messages of `proto/planet/module/v1`: describe,
   start, an op, a session gone; a statement, an event told. A service a
   plugin asks for is one more message.
-- An op carries its room whole: who asks, the moment, everyone here. The
-  module holds nothing of the core between two calls.
+- An op carries its room whole: who asks, the moment, everyone here. What an
+  owner keeps it asks of its store while the call runs, and what it writes
+  goes back as replies, kept when the call returns, all of it or none.
 - A call has a deadline of 250 ms, the module a ceiling of 64 MB, and a call
   is answered with at most 1024 replies of 1 MB each. After a fault, a trap,
   a deadline or a reply that cannot be taken, the instance is replaced, the
@@ -137,7 +138,7 @@ A plugin is one folder, `plugins/<name>/` (100):
   nothing: it never panics. `internal/module` holds it with hostile modules
   written by hand and two fuzz targets, `crates/module` with property tests.
 - `unsafe` is written in `crates/module/src/abi.rs` alone, three times, to
-  say the three names. `bun run docs` holds it.
+  say the four names. `bun run docs` holds it.
 
 ## What the host offers
 
@@ -149,8 +150,7 @@ A plugin is one folder, `plugins/<name>/` (100):
   carries, is let pass.
 - **Ops said as data**: a plugin lists its ops, each with the least level
   that may ask it. The host checks the level before the plugin sees the op.
-  The answer to an op, landed or refused, is cut by the gesture on the
-  socket: until it is, an op that stops at the host is dropped unheard.
+  An op asked with an id is answered: it landed, or the code of why not.
 - **The statement**: the plugins that are on, each with its version, at
   `GET /api/world`, in `Welcome` and in `Plugins` when the admin switches
   one. A client mounts a plugin when the world says its name at the version
@@ -161,8 +161,8 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **On the server**, services that carry no feature (99), a `world::Room`:
   the moment, who is here, the body's measure, an event told to the sessions
   the plugin picks. Whether a session may is asked before the plugin sees the
-  op. A store joins them with the cells kept. How near two sessions stand is
-  the world half's own sum, with the room's measure.
+  op, and a store of its own keeps what it keeps. How near two sessions stand
+  is the world half's own sum, with the room's measure.
 - **On the client**, a host: `send` an op up, `emit` an event over the seam,
   read a stance as a place.
 - **A turn**: each frame, after the body moved and before the picture, with

@@ -72,7 +72,47 @@ message Reply {
   oneof reply {
     Statement statement = 1;
     Tell tell = 2;
+    Keep keep = 3;
+    Answered answered = 4;
   }
+}
+
+// Something an owner keeps, or forgets, in its store in the world folder.
+// The server writes what a call kept once the call has returned, all of it
+// or none.
+message Keep {
+  // The owner's name: its store is its own.
+  string owner = 1;
+  bytes key = 2;
+  bytes value = 3;
+  // Forgets the key in place of keeping a value for it.
+  bool forget = 4;
+}
+
+// What the op being applied is answered with, when its asker gave it an id:
+// the code of why it was refused. An op nothing answers has landed.
+message Answered {
+  string code = 1;
+}
+
+// What an owner asks of its store while it applies an op, through
+// `host.ask`: the value of one key, or every row whose key starts with a
+// prefix. It is answered at once with Rows, written in the module's inbox.
+message Ask {
+  string owner = 1;
+  oneof ask {
+    bytes get = 2;
+    bytes scan = 3;
+  }
+}
+
+message Rows {
+  repeated Row rows = 1;
+}
+
+message Row {
+  bytes key = 1;
+  bytes value = 2;
 }
 
 // The plugins the module carries, in the order the config lists them.
@@ -88,6 +128,9 @@ message Carried {
   // Whether a world starts with it on.
   bool on = 3;
   repeated Offered ops = 4;
+  // A system of the core, the cells: always on, never switched, and left
+  // out of what a world says it speaks.
+  bool core = 5;
 }
 
 // One thing a session may ask of a plugin, and the least level that may.

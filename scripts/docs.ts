@@ -114,14 +114,15 @@ const ALLOWED: Record<string, string[]> = {
 	scene: [],
 	protocol: [],
 	voxel: [],
+	seat: ['topology', 'worldgen', 'voxel', 'protocol'],
 	worldgen: ['topology'],
 	avatar: ['scene'],
 	render: ['scene'],
-	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'protocol'],
+	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'seat', 'protocol'],
 	'ui-native': ['client', 'scene'],
 	// What a plugin's world half stands on, and the host of world halves. It
 	// never imports `client`, and neither does the module that is its shell.
-	world: ['topology', 'protocol'],
+	world: ['topology', 'protocol', 'worldgen', 'voxel', 'seat'],
 	module: ['world', 'plugins-world', 'protocol', 'worldgen'],
 	// A plugin's rows name crates of the core and its own world half, never
 	// another plugin's (DECISIONS 93). A world half's names no `client`.

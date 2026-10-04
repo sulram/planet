@@ -1,0 +1,143 @@
+// The cells of a world on the wire (DECISIONS 106, 107, 110): what a client
+// asks of them and what the world says of them, each the payload of an
+// Envelope whose owner is `cells`.
+//
+// Up, the ops: `open`, `change`, `take_back`, `put_back`, `look`.
+// Down, the events: `opened`, `changed`, `restored`, `seen`.
+syntax = "proto3";
+
+package planet.cells.v1;
+
+option go_package = "github.com/sulram/planet/server/internal/protocol/cells;cells";
+
+// What cells are seated on: the frame their addresses are counted in. A
+// sector of the planet today, and a union so a body that moves is the next.
+message Seat {
+  oneof seat {
+    uint32 sector = 1;
+  }
+}
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  // Fills the air of a box with a paint.
+  KIND_CREATE = 1;
+  // Empties a box.
+  KIND_DELETE = 2;
+  // Repaints what is solid in a box.
+  KIND_PAINT = 3;
+}
+
+// One gesture: a kind over a box of cells, both corners in it.
+message Gesture {
+  Kind kind = 1;
+  sint32 x0 = 2;
+  sint32 y0 = 3;
+  sint32 z0 = 4;
+  sint32 x1 = 5;
+  sint32 y1 = 6;
+  sint32 z1 = 7;
+  uint32 paint = 8;
+}
+
+// A volume as it stands over its plot: where its cells start and end, and
+// how many changes it has taken. What the world keeps of it, less its cells.
+message Stood {
+  sint32 plot_x = 1;
+  sint32 plot_y = 2;
+  // The lowest cell it holds, and how many it holds above it.
+  sint32 low = 3;
+  uint32 height = 4;
+  // One more for each change that landed in it.
+  uint64 version = 5;
+}
+
+// `open`: opens the volume of the plot a column is on, where none stands.
+// The world reads the ground under the plot and says where the volume
+// starts and ends.
+message Open {
+  Seat seat = 1;
+  // The column asked from, in blocks of the sector.
+  double u = 2;
+  double v = 3;
+}
+
+// `change`: gestures applied as one change, taken back as one.
+message Change {
+  Seat seat = 1;
+  repeated Gesture gestures = 2;
+}
+
+// `take_back`: takes back the last change of this session that landed.
+message TakeBack {}
+
+// `put_back`: puts back the last change this session took back.
+message PutBack {}
+
+// `look`: what this client holds of the volumes near it. The world answers
+// with `seen`.
+message Look {
+  repeated Held held = 1;
+}
+
+// A volume a client holds, at the version it holds it.
+message Held {
+  Seat seat = 1;
+  sint32 plot_x = 2;
+  sint32 plot_y = 3;
+  uint64 version = 4;
+}
+
+// `opened`: a volume was opened, to everyone near it.
+message Opened {
+  Seat seat = 1;
+  Stood stood = 2;
+}
+
+// `changed`: gestures landed, to everyone near them, the asker included.
+message Changed {
+  // Who asked.
+  uint32 session = 1;
+  Seat seat = 2;
+  repeated Gesture gestures = 3;
+  // The volumes they landed in, at the version each has now.
+  repeated Stood stood = 4;
+}
+
+// `restored`: a change was taken back or put back, to everyone near it: the
+// cells of a box as they are now.
+message Restored {
+  uint32 session = 1;
+  Seat seat = 2;
+  sint32 x0 = 3;
+  sint32 y0 = 4;
+  sint32 z0 = 5;
+  sint32 x1 = 6;
+  sint32 y1 = 7;
+  sint32 z1 = 8;
+  // The cells of the box, `x` fastest, then `y`, then `z`, packed.
+  bytes cells = 9;
+  repeated Stood stood = 10;
+}
+
+// The cells of one chunk, named by its lowest corner, packed.
+message Chunk {
+  sint32 x = 1;
+  sint32 y = 2;
+  sint32 z = 3;
+  bytes cells = 4;
+}
+
+// A volume whole: where it stands and every chunk that holds something.
+message Volume {
+  Seat seat = 1;
+  Stood stood = 2;
+  repeated Chunk chunks = 3;
+}
+
+// `seen`: the answer to `look`. The volumes near the asker that it lacks or
+// holds at another version, whole, and those it holds that stand no more.
+message Seen {
+  repeated Volume volumes = 1;
+  repeated Held gone = 2;
+}

@@ -31,6 +31,9 @@ func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 		// Accept has answered the request itself.
 		return
 	}
+	// A change of many gestures is the largest thing a client says: a solid
+	// platform on steep ground is a few thousand boxes.
+	conn.SetReadLimit(1 << 20)
 
 	err = s.hub.Join(r.Context(), identity, socketConn{conn})
 	if errors.Is(err, world.ErrRefused) {

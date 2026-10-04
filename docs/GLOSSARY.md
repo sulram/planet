@@ -23,7 +23,7 @@ this file in the same change.
 | Client half | The part of a plugin the engine hosts: commands in, messages from the server, events out. |
 | World half | The part of a plugin the server hosts, in the module: its ops and their levels, what each does, whom an event reaches, what is kept. |
 | Module | The one WASM file the server runs through wazero: every plugin's world half, hosted by `world::Host`. Built by `bun run module`, embedded in the Go binary. |
-| Bridge | How the server and the module speak: three names, `reserve`, `call` and `host.reply`, and the messages of `proto/planet/module/v1`. |
+| Bridge | How the server and the module speak: four names, `reserve`, `call`, `host.reply` and `host.ask`, and the messages of `proto/planet/module/v1`. |
 | Service | What the server offers every plugin and no plugin owns: who a session is, whether it may, the moment, an event told, a store. It carries no feature. |
 | Room | What a world half is handed while it applies an op: the moment, who is here, the body's measure, and a way to tell an event to the sessions it picks. |
 | Measure | The size of a world's bodies, as its recipe says them: what turns two stances into a distance in blocks. |

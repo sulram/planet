@@ -61,6 +61,40 @@ impl Cell {
     }
 }
 
+/// Cells as bytes, for the wire and for what a world keeps: runs of one cell,
+/// each a count and the cell. A chunk of air and a slab is a few bytes.
+pub fn pack(cells: &[Cell]) -> Vec<u8> {
+    let mut packed = Vec::new();
+    let mut at = 0;
+    while at < cells.len() {
+        let cell = cells[at];
+        let run = cells[at..]
+            .iter()
+            .take(usize::from(u8::MAX))
+            .take_while(|&&next| next == cell)
+            .count();
+        packed.extend([run as u8, cell.0]);
+        at += run;
+    }
+    packed
+}
+
+/// The cells [`pack`] packed, when they are exactly `count` of them: `None`
+/// for bytes that are no such thing.
+pub fn unpack(packed: &[u8], count: usize) -> Option<Vec<Cell>> {
+    let mut cells = Vec::with_capacity(count);
+    for run in packed.chunks(2) {
+        let &[run, cell] = run else {
+            return None;
+        };
+        if run == 0 || cells.len() + usize::from(run) > count {
+            return None;
+        }
+        cells.extend(core::iter::repeat_n(Cell(cell), usize::from(run)));
+    }
+    (cells.len() == count).then_some(cells)
+}
+
 /// One side of a cell: an axis and which way along it the side faces.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Face {
@@ -425,6 +459,22 @@ impl Volume {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cells_pack_into_runs_and_come_back_the_same() {
+        let mut cells = vec![Cell::AIR; 4096];
+        cells[..256].fill(Cell::solid(3));
+        cells[4000] = Cell::solid(200);
+        let packed = pack(&cells);
+        assert!(packed.len() < 80, "{}", packed.len());
+        assert_eq!(unpack(&packed, cells.len()), Some(cells));
+        assert_eq!(unpack(&pack(&[]), 0), Some(Vec::new()));
+        // Too few, too many, a run of none and half a run are no cells.
+        assert_eq!(unpack(&packed, 4095), None);
+        assert_eq!(unpack(&packed, 4097), None);
+        assert_eq!(unpack(&[0, 1], 0), None);
+        assert_eq!(unpack(&[1], 1), None);
+    }
 
     #[test]
     fn a_cell_keeps_its_paint_and_air_has_none() {

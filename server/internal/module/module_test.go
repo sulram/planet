@@ -16,7 +16,7 @@ import (
 
 func loaded(t *testing.T) *Module {
 	t.Helper()
-	m, err := Load(context.Background())
+	m, err := Load(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,15 +37,22 @@ func chat(t *testing.T, m *Module) world.Plugin {
 }
 
 func TestTheModuleSaysWhatItCarries(t *testing.T) {
-	plugins := loaded(t).Plugins()
-	if len(plugins) != 2 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On {
+	carried := loaded(t).Plugins()
+	// The cells come first: a system of the core, on in every world, whose
+	// ops a builder asks and whose look anyone does.
+	cells := carried[0]
+	if cells.Plugin.Name() != "cells" || !cells.Core || !cells.On || len(cells.Plugin.Ops()) != 5 {
+		t.Fatalf("the core's cells are carried as an owner: %v %v", cells, cells.Plugin.Ops())
+	}
+	plugins := carried[1:]
+	if len(plugins) != 2 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On || plugins[0].Core {
 		t.Fatalf("this version carries chat, on, and building after it: %v", plugins)
 	}
 	if ops := plugins[0].Plugin.Ops(); len(ops) != 1 || ops[0] != (world.Op{Kind: "say", Level: world.LevelAnonymous}) {
 		t.Fatalf("chat offers one op, to every level: %v", ops)
 	}
 	// Building is a hand's, and a hand is in the client: its world half
-	// offers the world no op, and the gesture is the core's.
+	// offers the world no op, and the gesture is the cells'.
 	build := plugins[1].Plugin
 	if build.Name() != "build" || build.Version() != 1 || !plugins[1].On || len(build.Ops()) != 0 {
 		t.Fatalf("building is on and offers no op: %s %d %v", build.Name(), build.Version(), build.Ops())
@@ -91,9 +98,12 @@ type room struct {
 	heard map[uint32][]string
 	// The recipe's params, as JSON. Empty is every default.
 	params string
+	// The code the last op was refused with.
+	refused string
 }
 
-func (r *room) Now() time.Time { return r.now }
+func (r *room) Now() time.Time     { return r.now }
+func (r *room) Refuse(code string) { r.refused = code }
 func (r *room) Recipe() world.Recipe {
 	recipe, _ := world.NewRecipe("00000000deadbeef", 3, []byte(r.params))
 	return recipe
@@ -239,7 +249,7 @@ func TestAReplacedInstanceHostsTheWorldAgain(t *testing.T) {
 
 // What one line costs through the bridge, in a room of a hundred.
 func BenchmarkALineInARoomOfAHundred(b *testing.B) {
-	m, err := Load(context.Background())
+	m, err := Load(context.Background(), nil)
 	if err != nil {
 		b.Fatal(err)
 	}

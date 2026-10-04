@@ -80,6 +80,7 @@ export const pt: Messages = {
 	'engine.build.refused.seam': 'Perto demais da borda de um setor. Ande um pouco mais para dentro.',
 	'engine.build.refused.high': 'Alto demais. Uma plataforma é erguida até 32 m acima do chão mais alto do lote.',
 	'engine.build.refused.level': 'Só construtores deste mundo podem construir aqui.',
+	'engine.build.refused.field': 'Em um mundo feito de um campo, o que se constrói ainda não fica guardado.',
 	'engine.stats.fps': 'Quadros',
 	'engine.stats.altitude': 'Altitude',
 	'engine.stats.speed': 'Velocidade',

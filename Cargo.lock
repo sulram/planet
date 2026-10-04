@@ -279,6 +279,8 @@ dependencies = [
  "build-world",
  "client",
  "glam",
+ "module",
+ "prost",
  "protocol",
  "scene",
  "serde",
@@ -405,6 +407,7 @@ dependencies = [
  "protocol",
  "topology",
  "world",
+ "worldgen",
 ]
 
 [[package]]
@@ -416,6 +419,7 @@ dependencies = [
  "libm",
  "protocol",
  "scene",
+ "seat",
  "serde",
  "serde_json",
  "topology",
@@ -1386,6 +1390,10 @@ dependencies = [
  "proptest",
  "prost",
  "protocol",
+ "seat",
+ "serde_json",
+ "topology",
+ "voxel",
  "world",
  "worldgen",
 ]
@@ -2357,6 +2365,16 @@ dependencies = [
  "memmap2",
  "smithay-client-toolkit",
  "tiny-skia",
+]
+
+[[package]]
+name = "seat"
+version = "0.0.0"
+dependencies = [
+ "protocol",
+ "topology",
+ "voxel",
+ "worldgen",
 ]
 
 [[package]]
@@ -3501,7 +3519,10 @@ dependencies = [
  "libm",
  "prost",
  "protocol",
+ "seat",
  "topology",
+ "voxel",
+ "worldgen",
 ]
 
 [[package]]

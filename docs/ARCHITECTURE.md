@@ -72,8 +72,8 @@ not yet confirmed.
   the routes.
 - A plugin's world half is its Rust, run in one WASM module through wazero
   (97, 99): `internal/module` embeds it and hands each plugin to the core. Go
-  offers services and reads no payload. The bridge is three names and one
-  schema of messages, with a deadline and a ceiling of memory (102).
+  offers services, a store among them, and reads no payload. The bridge is
+  four names and one schema, with a deadline and a ceiling of memory (102, 110).
 - Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
   source (66). `Hello` says the protocol version; any other is refused.
   `Welcome` carries the session, its level, the recipe, so a client checks it
