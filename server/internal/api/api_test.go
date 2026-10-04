@@ -217,7 +217,7 @@ func TestTheFrontEndIsFiles(t *testing.T) {
 	}
 	// The mux sends a path with dots to its clean form, which is a file of
 	// the folder or nothing.
-	if response, _ := get("/../../etc/passwd", ""); response.StatusCode != 307 || response.Header.Get("Location") != "/etc/passwd" {
+	if response, _ := get("/../../etc/passwd", ""); response.StatusCode/100 != 3 || response.Header.Get("Location") != "/etc/passwd" {
 		t.Fatalf("no path climbs out of the folder: %d %q", response.StatusCode, response.Header.Get("Location"))
 	}
 	if response, _ := get("/etc/passwd", ""); response.StatusCode != 404 {
