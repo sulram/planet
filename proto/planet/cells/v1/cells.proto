@@ -2,7 +2,7 @@
 // asks of them and what the world says of them, each the payload of an
 // Envelope whose owner is `cells`.
 //
-// Up, the ops: `open`, `change`, `take_back`, `put_back`, `look`.
+// Up, the ops: `open`, `change`, `close`, `take_back`, `put_back`, `look`.
 // Down, the events: `opened`, `changed`, `restored`, `seen`.
 syntax = "proto3";
 
@@ -66,6 +66,15 @@ message Open {
 message Change {
   Seat seat = 1;
   repeated Gesture gestures = 2;
+}
+
+// `close`: closes the volume over a plot. What was built in it goes with it
+// and the plot is nature again: a change of this session's, taken back as
+// one. Everyone near is told with `seen`, the volume gone.
+message Close {
+  Seat seat = 1;
+  sint32 plot_x = 2;
+  sint32 plot_y = 3;
 }
 
 // `take_back`: takes back the last change of this session that landed.
@@ -135,8 +144,10 @@ message Volume {
   repeated Chunk chunks = 3;
 }
 
-// `seen`: the answer to `look`. The volumes near the asker that it lacks or
-// holds at another version, whole, and those it holds that stand no more.
+// `seen`: volumes as they stand, whole, and those that stand no more. The
+// answer to `look`, of the volumes near the asker that it lacks or holds at
+// another version, and what everyone near is told when a volume is closed
+// or stands again.
 message Seen {
   repeated Volume volumes = 1;
   repeated Held gone = 2;

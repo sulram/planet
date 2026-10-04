@@ -307,5 +307,119 @@ fn a_world_that_switches_building_off_takes_the_tool_and_leaves_what_stands() {
         .into_iter()
         .map(|(kind, _)| kind)
         .collect();
-    assert_eq!(kinds, ["hand", "history"]);
+    assert_eq!(kinds, ["hand", "over", "history"]);
+}
+
+/// Lives a few frames with nothing held down.
+fn live(client: &mut Client) {
+    for _ in 0..10 {
+        client.update(1.0 / 60.0, &mut Input::default());
+    }
+}
+
+#[test]
+fn a_tool_in_hand_shows_where_cells_are() {
+    let mut client = rehearsed();
+    let feet = client.host("build").feet();
+    assert!(client.cells().guides().is_empty());
+
+    // Before anything is built, the slab a platform would lay, in the paint
+    // in hand, as wide as the side picked.
+    client.command_json(r#"{"type":"build.paint","paint":4}"#);
+    client.command_json(TAKE_CREATE);
+    live(&mut client);
+    let [slab] = client.cells().guides() else {
+        panic!("one guide: {:?}", client.cells().guides());
+    };
+    assert_eq!(slab.paint, Some(4));
+    assert_eq!(slab.span.size(), [16, 16, 1]);
+    assert!(
+        slab.span
+            .contains([feet.point.u as i32, feet.point.v as i32, slab.span.min[2]])
+    );
+    assert_eq!(client.settled_frame().guides.len(), 1);
+    client.command_json(r#"{"type":"build.platform","side":64}"#);
+    live(&mut client);
+    assert_eq!(client.cells().guides()[0].span.size(), [64, 64, 1]);
+
+    // The platform lands where its slab was shown. Then the body is in a
+    // volume, shown as room to build in, and there is no slab left to lay.
+    let shown = client.cells().guides()[0].span;
+    client.command_json(LAY);
+    laid(&mut client);
+    live(&mut client);
+    assert!(!client.cells().cell(feet.point.sector, shown.min).is_air());
+    let [room] = client.cells().guides() else {
+        panic!("one guide: {:?}", client.cells().guides());
+    };
+    assert_eq!(room.paint, None);
+    assert_eq!(Some(room.span), client.cells().bounds_over(feet.point));
+    let over = json!({"type": "build.over", "volume": true});
+    assert!(said(&mut client).contains(&("over".to_owned(), over)));
+
+    // A hole in the slab is a cell a platform would make: the slab shows.
+    let hole = voxel::Gesture::Delete {
+        span: voxel::Span::cell(shown.min),
+    };
+    assert_eq!(
+        client.host("build").apply(feet.point.sector, &[hole]),
+        Ok(true)
+    );
+    live(&mut client);
+    assert_eq!(client.cells().guides().len(), 2);
+
+    // With the tool put down nothing is shown.
+    client.command_json(r#"{"type":"build.take","tool":null}"#);
+    assert!(client.cells().guides().is_empty());
+    assert!(client.settled_frame().guides.is_empty());
+}
+
+#[test]
+fn a_volume_is_closed_with_all_built_in_it_and_stands_again() {
+    let mut client = rehearsed();
+    let feet = client.host("build").feet();
+    // With nothing built there is none to close.
+    client.command_json(r#"{"type":"build.close"}"#);
+    assert_eq!(refusals(&mut client), ["empty"]);
+
+    client.command_json(LAY);
+    laid(&mut client);
+    client.command_json(TAKE_CREATE);
+    live(&mut client);
+    client.drain_events();
+    let held = client.cells().bounds_over(feet.point).expect("a volume");
+    let slab = client.host("build").feet();
+    let under = [
+        slab.point.u as i32,
+        slab.point.v as i32,
+        (slab.height_m / topology::BLOCK_M).round() as i32 - 1,
+    ];
+    assert!(!client.cells().cell(feet.point.sector, under).is_air());
+
+    client.command_json(r#"{"type":"build.close"}"#);
+    assert!(refusals(&mut client).is_empty());
+    assert!(!client.cells().covers(feet.point));
+    assert!(client.cells().cell(feet.point.sector, under).is_air());
+    live(&mut client);
+    let over = json!({"type": "build.over", "volume": false});
+    assert!(said(&mut client).contains(&("over".to_owned(), over)));
+    assert!(client.settled_frame().volumes.is_empty());
+
+    // It is a change like any other: taken back, the volume stands as it
+    // was, and put back, it is gone again.
+    client.command_json(r#"{"type":"build.undo"}"#);
+    assert_eq!(client.cells().bounds_over(feet.point), Some(held));
+    assert!(!client.cells().cell(feet.point.sector, under).is_air());
+    assert!(!client.settled_frame().volumes.is_empty());
+    client.command_json(r#"{"type":"build.redo"}"#);
+    assert!(!client.cells().covers(feet.point));
+    assert_eq!(client.cells().history(), (true, false));
+
+    // A visitor closes nothing.
+    let mut client = alone();
+    client.link_opened();
+    client.receive(&welcome(&client, protocol::Level::Anonymous));
+    client.drain_events();
+    client.command_json(r#"{"type":"build.close"}"#);
+    assert_eq!(refusals(&mut client), ["level"]);
 }

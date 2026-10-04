@@ -1,11 +1,11 @@
-//! Volume meshes: the cubes of the build layer, and the ghost of a stroke.
-//! One vertex and index buffer each, placed by the same per view ring of
-//! offsets terrain uses.
+//! Volume meshes: the cubes of the build layer, the ghost of a stroke, and
+//! the guides that show where cells are. One vertex and index buffer each,
+//! placed by the same per view ring of offsets terrain uses.
 
 use std::collections::HashMap;
 
 use glam::DVec3;
-use scene::{VolumeChange, VolumeMeshId, VolumeVertex};
+use scene::{Frame, GuideVertex, VolumeChange, VolumeMeshId, VolumeVertex};
 use wgpu::util::DeviceExt;
 
 use crate::terrain::PatchUniforms;
@@ -23,6 +23,9 @@ pub struct Volumes {
     pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
     ghost_pipeline: wgpu::RenderPipeline,
+    guide_pipeline: wgpu::RenderPipeline,
+    /// Every mesh held, cubes and guides alike: a frame says which is drawn
+    /// as what.
     meshes: HashMap<VolumeMeshId, Mesh>,
 }
 
@@ -54,46 +57,84 @@ impl Volumes {
                 },
             )
         };
+        let guide_pipeline = pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "guide",
+                source: include_str!("shaders/guide.wgsl"),
+                layouts: &[view_layout, placement_layout],
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: size_of::<GuideVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4
+                    ],
+                })],
+                surface: Surface::Guide,
+            },
+        );
         Volumes {
             pipeline: make(view_layout, Surface::Solid),
             shadow_pipeline: make(shadow_layout, Surface::Shadow),
             ghost_pipeline: make(view_layout, Surface::Ghost),
+            guide_pipeline,
             meshes: HashMap::new(),
         }
     }
 
+    fn hold(
+        &mut self,
+        device: &wgpu::Device,
+        id: VolumeMeshId,
+        origin: DVec3,
+        vertices: &[u8],
+        indices: &[u32],
+        radius_m: f32,
+    ) {
+        if indices.is_empty() {
+            self.meshes.remove(&id);
+            return;
+        }
+        let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("volume"),
+            contents: vertices,
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let count = indices.len() as u32;
+        let indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("volume indices"),
+            contents: bytemuck::cast_slice(indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        self.meshes.insert(
+            id,
+            Mesh {
+                origin,
+                vertices,
+                indices,
+                count,
+                radius_m,
+            },
+        );
+    }
+
     pub fn apply(&mut self, device: &wgpu::Device, change: VolumeChange) {
+        let reach = |positions: &mut dyn Iterator<Item = [f32; 3]>| {
+            positions
+                .map(|at| glam::Vec3::from(at).length())
+                .fold(0.0, f32::max)
+        };
         match change {
             VolumeChange::Add(id, mesh) => {
-                if mesh.indices.is_empty() {
-                    self.meshes.remove(&id);
-                    return;
-                }
-                let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("volume"),
-                    contents: bytemuck::cast_slice(&mesh.vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-                let indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("volume indices"),
-                    contents: bytemuck::cast_slice(&mesh.indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-                let radius_m = mesh
-                    .vertices
-                    .iter()
-                    .map(|v| glam::Vec3::from(v.position).length())
-                    .fold(0.0, f32::max);
-                self.meshes.insert(
-                    id,
-                    Mesh {
-                        origin: mesh.origin,
-                        vertices,
-                        indices,
-                        count: mesh.indices.len() as u32,
-                        radius_m,
-                    },
-                );
+                let radius_m = reach(&mut mesh.vertices.iter().map(|v| v.position));
+                let vertices = bytemuck::cast_slice(&mesh.vertices);
+                self.hold(device, id, mesh.origin, vertices, &mesh.indices, radius_m);
+            }
+            VolumeChange::Guide(id, mesh) => {
+                let radius_m = reach(&mut mesh.vertices.iter().map(|v| v.position));
+                let vertices = bytemuck::cast_slice(&mesh.vertices);
+                self.hold(device, id, mesh.origin, vertices, &mesh.indices, radius_m);
             }
             VolumeChange::Remove(id) => {
                 self.meshes.remove(&id);
@@ -101,32 +142,37 @@ impl Volumes {
         }
     }
 
-    /// Places every mesh a frame names that this renderer holds, the ghost
-    /// last, and returns them in slot order. A mesh named before it was
-    /// applied is skipped, never a panic.
+    /// Places every mesh a frame names that this renderer holds, the cubes,
+    /// then the guides, then the ghost, and returns them in slot order. A
+    /// mesh named before it was applied is skipped, never a panic.
     pub fn place(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         uniforms: &mut PatchUniforms,
-        wanted: &[VolumeMeshId],
-        ghost: Option<VolumeMeshId>,
+        frame: &Frame,
         camera: DVec3,
     ) -> Placed {
-        let solid: Vec<VolumeMeshId> = wanted
-            .iter()
-            .copied()
-            .filter(|id| self.meshes.contains_key(id))
-            .collect();
-        let ghost = ghost.filter(|id| self.meshes.contains_key(id));
+        let held = |wanted: &[VolumeMeshId]| -> Vec<VolumeMeshId> {
+            let held = wanted.iter().filter(|id| self.meshes.contains_key(id));
+            held.copied().collect()
+        };
+        let solid = held(&frame.volumes);
+        let guides = held(&frame.guides);
+        let ghost = frame.ghost.filter(|id| self.meshes.contains_key(id));
         // Volumes stand on the planet, whose centre is the world origin.
         let origins: Vec<(DVec3, DVec3)> = solid
             .iter()
+            .chain(&guides)
             .chain(&ghost)
             .map(|id| (DVec3::ZERO, self.meshes[id].origin))
             .collect();
         uniforms.place(device, queue, &origins, camera);
-        Placed { solid, ghost }
+        Placed {
+            solid,
+            guides,
+            ghost,
+        }
     }
 
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, uniforms: &PatchUniforms, placed: &Placed) {
@@ -152,18 +198,25 @@ impl Volumes {
         }
     }
 
-    /// The ghost, after everything opaque and the sky: it tests depth and
-    /// writes none, so what stands in front of it hides it and it hides
-    /// nothing.
-    pub fn draw_ghost(
+    /// The guides and the ghost over them, after everything opaque and the
+    /// sky: they test depth and write none, so what stands in front of them
+    /// hides them and they hide nothing.
+    pub fn draw_over(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         uniforms: &PatchUniforms,
         placed: &Placed,
     ) {
+        let first = placed.solid.len();
+        if !placed.guides.is_empty() {
+            pass.set_pipeline(&self.guide_pipeline);
+        }
+        for (slot, id) in placed.guides.iter().enumerate() {
+            self.draw_one(pass, uniforms, first + slot, id);
+        }
         if let Some(id) = &placed.ghost {
             pass.set_pipeline(&self.ghost_pipeline);
-            self.draw_one(pass, uniforms, placed.solid.len(), id);
+            self.draw_one(pass, uniforms, first + placed.guides.len(), id);
         }
     }
 
@@ -185,5 +238,6 @@ impl Volumes {
 /// What one view draws of the volumes this frame, in slot order.
 pub struct Placed {
     solid: Vec<VolumeMeshId>,
+    guides: Vec<VolumeMeshId>,
     ghost: Option<VolumeMeshId>,
 }

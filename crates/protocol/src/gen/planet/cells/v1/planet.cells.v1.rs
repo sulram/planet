@@ -73,6 +73,18 @@ pub struct Change {
     #[prost(message, repeated, tag="2")]
     pub gestures: ::prost::alloc::vec::Vec<Gesture>,
 }
+/// `close`: closes the volume over a plot. What was built in it goes with it
+/// and the plot is nature again: a change of this session's, taken back as
+/// one. Everyone near is told with `seen`, the volume gone.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Close {
+    #[prost(message, optional, tag="1")]
+    pub seat: ::core::option::Option<Seat>,
+    #[prost(sint32, tag="2")]
+    pub plot_x: i32,
+    #[prost(sint32, tag="3")]
+    pub plot_y: i32,
+}
 /// `take_back`: takes back the last change of this session that landed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TakeBack {
@@ -170,8 +182,10 @@ pub struct Volume {
     #[prost(message, repeated, tag="3")]
     pub chunks: ::prost::alloc::vec::Vec<Chunk>,
 }
-/// `seen`: the answer to `look`. The volumes near the asker that it lacks or
-/// holds at another version, whole, and those it holds that stand no more.
+/// `seen`: volumes as they stand, whole, and those that stand no more. The
+/// answer to `look`, of the volumes near the asker that it lacks or holds at
+/// another version, and what everyone near is told when a volume is closed
+/// or stands again.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Seen {
     #[prost(message, repeated, tag="1")]

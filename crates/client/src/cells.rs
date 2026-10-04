@@ -30,7 +30,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use glam::{DVec3, Vec3};
 use protocol::Message;
 use protocol::cells as wire;
-use scene::{VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
+use scene::{GuideMesh, GuideVertex, VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
 use seat::{DROP_M, PLOT_BITS, Stand, Unseated, plot_of};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
 use voxel::{CHUNK, CHUNK_BITS, Cell, Gesture, Hit, Quad, Span, Volumes, crossing, unpack};
@@ -57,6 +57,20 @@ const BODY_HALF: f64 = 0.6;
 const GHOST_LIFT_M: f32 = 0.012;
 /// The ghost's id, which no chunk of any volume has.
 const GHOST: VolumeMeshId = VolumeMeshId(u64::MAX);
+/// The first guide's id: the next ones count down from it.
+const GUIDES: u64 = u64::MAX - 1;
+/// Cells along a side of the quads a guide is made of, at most: few enough
+/// that its sides bend with the planet as the cells they show do.
+const GUIDE_STEP: i32 = 8;
+/// How far a guide stands off the box it shows, in cells: clear of the cubes
+/// that fill the box to its sides.
+const GUIDE_LIFT: f64 = 0.04;
+/// What a guide in no paint is drawn in.
+const ROOM_COLOR: [u8; 3] = [255, 255, 255];
+/// How much of a guide shows between its lines, of 255: room to build in is
+/// barely there, and what a hand would lay is plain to see.
+const ROOM_FILL: u8 = 5;
+const LAY_FILL: u8 = 34;
 /// Changes kept to take back.
 const HISTORY: usize = 100;
 /// Seconds between two looks at what the world holds near the body.
@@ -106,6 +120,16 @@ pub enum Refusal {
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
+}
+
+/// A box of a seat's cells shown as a faint grid, a line between each cell
+/// and the next: where cells are, before any is laid. In a paint, what a
+/// hand would lay there. In none, room to build in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Guide {
+    pub seat: Seat,
+    pub span: Span,
+    pub paint: Option<u8>,
 }
 
 /// The volumes of one sector, seated: a cell is the address it has.
@@ -212,12 +236,22 @@ impl Sight {
     }
 }
 
-/// A change that landed, as the cells of its box before and after.
-struct Change {
-    site: usize,
-    span: Span,
-    before: Vec<Cell>,
-    after: Vec<Cell>,
+/// A change that landed, as what takes it back and puts it back.
+enum Change {
+    /// Cells changed: those of its box before and after.
+    Cells {
+        site: usize,
+        span: Span,
+        before: Vec<Cell>,
+        after: Vec<Cell>,
+    },
+    /// A volume was closed: the cells it held, and all they were.
+    Closed {
+        seat: Seat,
+        plot: [i32; 2],
+        span: Span,
+        cells: Vec<Cell>,
+    },
 }
 
 /// A change made here and asked of the world, which has not answered: its
@@ -233,6 +267,7 @@ struct Pending {
 /// What else was asked of the world and waits for its answer.
 enum Waiting {
     Open(Seat, [i32; 2]),
+    Close,
     TakeBack,
     PutBack,
 }
@@ -290,6 +325,10 @@ pub struct Cells {
     sites: Vec<Seated>,
     /// What the ghost shows now: it is meshed again only when that changes.
     ghost: Option<(Seat, Gesture)>,
+    /// The guides shown now, each under the id its place in the list gives.
+    guides: Vec<Guide>,
+    /// One more for every change to what the cells hold.
+    revision: u64,
     drawn: BTreeSet<VolumeMeshId>,
     /// Chunks owed a mesh since their cells changed, by site.
     stale: BTreeSet<(usize, [i32; 3])>,
@@ -339,6 +378,13 @@ impl Cells {
             .unwrap_or_default()
     }
 
+    /// How many times what the cells hold has changed: a volume opened or
+    /// closed, a cell made, emptied or repainted. What was read of them at
+    /// one count stands until the next.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Whether a volume stands on a column.
     pub fn covers(&self, point: SurfacePoint) -> bool {
         self.site(point.sector.into())
@@ -365,6 +411,33 @@ impl Cells {
             .map_or_else(Cell::default, |site| self.sites[site].volumes.get(at))
     }
 
+    /// Where a volume over the plot a column is on starts and ends, or why
+    /// none can stand there.
+    fn survey(&self, generator: &Generator, point: SurfacePoint) -> Result<Stand, Refusal> {
+        let field = matches!(generator.recipe().params.source, Source::Field(_));
+        if self.link.is_some() && field {
+            return Err(Refusal::Field);
+        }
+        seat::survey(generator, point).map_err(|why| match why {
+            Unseated::Sea => Refusal::Sea,
+            Unseated::Seam => Refusal::Seam,
+        })
+    }
+
+    /// The cells the volume of the plot a column is on holds, or would hold
+    /// once opened: the room there is to build in. Why none can stand there,
+    /// where none can.
+    pub fn room(&self, generator: &Generator, point: SurfacePoint) -> Result<Span, Refusal> {
+        if let Some(held) = self.bounds_over(point) {
+            return Ok(held);
+        }
+        let stand = self.survey(generator, point)?;
+        let plot = plot_of(point);
+        let mut opened = Volumes::new(PLOT_BITS);
+        opened.open(plot, stand.low, stand.height);
+        opened.bounds(plot).ok_or(Refusal::Seam)
+    }
+
     /// Opens the volume of the plot a column is on, where none stands. The
     /// ground stays as it is, and the volume holds the blocks from the lowest
     /// of it to a height over the highest (`seat::survey`). In a world, the
@@ -374,14 +447,7 @@ impl Cells {
         generator: &Generator,
         point: SurfacePoint,
     ) -> Result<(), Refusal> {
-        let field = matches!(generator.recipe().params.source, Source::Field(_));
-        if self.link.is_some() && field {
-            return Err(Refusal::Field);
-        }
-        let stand = seat::survey(generator, point).map_err(|why| match why {
-            Unseated::Sea => Refusal::Sea,
-            Unseated::Seam => Refusal::Seam,
-        })?;
+        let stand = self.survey(generator, point)?;
         if self.covers(point) {
             return Ok(());
         }
@@ -413,11 +479,50 @@ impl Cells {
             }
         };
         self.sites[site].open(sphere, plot, stand.low, stand.height);
+        self.revision += 1;
         site
     }
 
+    /// Closes the volume over a column: what was built in it goes with it,
+    /// and its plot is nature again. A change like any other, taken back as
+    /// one. False where no volume stands. In a world, the world is asked to.
+    pub(crate) fn close(&mut self, point: SurfacePoint) -> bool {
+        let (seat, plot) = (Seat::Sector(point.sector), plot_of(point));
+        let Some(span) = self.bounds_over(point) else {
+            return false;
+        };
+        match &mut self.link {
+            Some(link) => {
+                let close = wire::Close {
+                    seat: Some(seat.wire()),
+                    plot_x: plot[0],
+                    plot_y: plot[1],
+                };
+                link.ask(wire::CLOSE, &close, Some(Waiting::Close));
+            }
+            None => {
+                let held = self
+                    .site(seat)
+                    .map(|site| self.sites[site].volumes.cells(span));
+                let cells = held.unwrap_or_default();
+                self.done.push(Change::Closed {
+                    seat,
+                    plot,
+                    span,
+                    cells,
+                });
+                if self.done.len() > HISTORY {
+                    self.done.remove(0);
+                }
+                self.undone.clear();
+            }
+        }
+        self.remove(seat, plot);
+        true
+    }
+
     /// Takes away the volume over a plot, cells, picture and all.
-    fn close(&mut self, seat: Seat, plot: [i32; 2]) {
+    fn remove(&mut self, seat: Seat, plot: [i32; 2]) {
         let Some(site) = self.site(seat) else {
             return;
         };
@@ -445,6 +550,11 @@ impl Cells {
         if let Some(link) = &mut self.link {
             link.versions.remove(&(seat, plot));
         }
+        // The ghost showed what the cells were.
+        if self.ghost.take().is_some() {
+            self.changes.push(VolumeChange::Remove(GHOST));
+        }
+        self.revision += 1;
     }
 
     /// Forgets every volume: another world.
@@ -455,6 +565,10 @@ impl Cells {
         if self.ghost.take().is_some() {
             self.changes.push(VolumeChange::Remove(GHOST));
         }
+        for slot in 0..core::mem::take(&mut self.guides).len() {
+            self.changes.push(VolumeChange::Remove(guide_id(slot)));
+        }
+        self.revision += 1;
         self.sites.clear();
         self.stale.clear();
         self.landed = false;
@@ -490,13 +604,36 @@ impl Cells {
             return;
         }
         if let Some(change) = self.done.pop() {
-            let changed = self.sites[change.site]
-                .volumes
-                .restore(change.span, &change.before);
-            if let Some(changed) = changed {
-                self.redraw(generator, change.site, changed);
+            match &change {
+                Change::Cells {
+                    site, span, before, ..
+                } => self.put(generator, *site, *span, before),
+                // The volume stands again where it stood, as it was.
+                Change::Closed {
+                    seat,
+                    plot,
+                    span,
+                    cells,
+                } => {
+                    if let Some(sector) = seat.sector() {
+                        let stand = Stand {
+                            low: span.min[2],
+                            height: span.size()[2],
+                        };
+                        let site = self.stand(generator.sphere(), sector, *plot, stand);
+                        self.put(generator, site, *span, cells);
+                    }
+                }
             }
             self.undone.push(change);
+        }
+    }
+
+    /// Makes the cells of a box what they were at another time, and draws
+    /// what that changed.
+    fn put(&mut self, generator: &Generator, site: usize, span: Span, cells: &[Cell]) {
+        if let Some(changed) = self.sites[site].volumes.restore(span, cells) {
+            self.redraw(generator, site, changed);
         }
     }
 
@@ -509,11 +646,11 @@ impl Cells {
             return;
         }
         if let Some(change) = self.undone.pop() {
-            let changed = self.sites[change.site]
-                .volumes
-                .restore(change.span, &change.after);
-            if let Some(changed) = changed {
-                self.redraw(generator, change.site, changed);
+            match &change {
+                Change::Cells {
+                    site, span, after, ..
+                } => self.put(generator, *site, *span, after),
+                Change::Closed { seat, plot, .. } => self.remove(*seat, *plot),
             }
             self.done.push(change);
         }
@@ -634,7 +771,7 @@ impl Cells {
             }
             None => {
                 let after = volumes.cells(span);
-                self.done.push(Change {
+                self.done.push(Change::Cells {
                     site,
                     span,
                     before,
@@ -657,6 +794,7 @@ impl Cells {
     /// ground the grass under it is to grow again.
     fn redraw(&mut self, generator: &Generator, site: usize, changed: Span) {
         let sphere = generator.sphere();
+        self.revision += 1;
         // The ghost showed what the cells were: it is meshed again from what
         // they are now.
         if self.ghost.take().is_some() {
@@ -753,6 +891,26 @@ impl Cells {
         self.changes.push(VolumeChange::Add(GHOST, mesh));
     }
 
+    /// Shows guides over the world, in place of those shown before: none,
+    /// with none to show. A guide is meshed again only when it is another.
+    pub(crate) fn guide(&mut self, sphere: QuadSphere, wanted: &[Guide]) {
+        if wanted == self.guides {
+            return;
+        }
+        for slot in 0..wanted.len().max(self.guides.len()) {
+            let id = guide_id(slot);
+            match (wanted.get(slot), self.guides.get(slot)) {
+                (Some(guide), shown) if shown != Some(guide) => {
+                    let mesh = guide_mesh(sphere, *guide);
+                    self.changes.push(VolumeChange::Guide(id, mesh));
+                }
+                (None, Some(_)) => self.changes.push(VolumeChange::Remove(id)),
+                _ => {}
+            }
+        }
+        self.guides = wanted.to_vec();
+    }
+
     /// What holds up a body standing at a point with its feet at `feet_m`,
     /// as far as the volumes go: `None` away from every volume.
     ///
@@ -805,6 +963,16 @@ impl Cells {
     pub fn ghost(&self) -> Option<VolumeMeshId> {
         self.ghost.map(|_| GHOST)
     }
+
+    /// The guides shown now.
+    pub fn guides(&self) -> &[Guide] {
+        &self.guides
+    }
+
+    /// The mesh of every guide to draw.
+    pub fn guides_drawn(&self) -> Vec<VolumeMeshId> {
+        (0..self.guides.len()).map(guide_id).collect()
+    }
 }
 
 /// The cells as a world keeps them: what it says, and what it answers.
@@ -835,7 +1003,7 @@ impl Cells {
                 })
                 .collect();
             for (seat, plot) in far {
-                self.close(seat, plot);
+                self.remove(seat, plot);
             }
         }
         let Some(link) = &mut self.link else {
@@ -973,7 +1141,7 @@ impl Cells {
                 .as_ref()
                 .and_then(|link| link.versions.get(&(seat, plot)));
             if held != Some(&stood.version) {
-                self.close(seat, plot);
+                self.remove(seat, plot);
             }
             let site = self.stand(sphere, sector, plot, stand);
             let Some(bounds) = self.sites[site].volumes.bounds(plot) else {
@@ -994,7 +1162,7 @@ impl Cells {
         }
         for gone in seen.gone {
             if let Some(seat) = Seat::from_wire(gone.seat.as_ref()) {
-                self.close(seat, [gone.plot_x, gone.plot_y]);
+                self.remove(seat, [gone.plot_x, gone.plot_y]);
             }
         }
     }
@@ -1100,9 +1268,14 @@ impl Cells {
         match link.waiting.remove(&id) {
             Some(Waiting::Open(seat, plot)) => {
                 if !landed {
-                    self.close(seat, plot);
+                    self.remove(seat, plot);
                 }
             }
+            // A volume the world kept is asked for again at once.
+            Some(Waiting::Close) => match landed {
+                true => link.history = (link.history.0 + 1, 0),
+                false => link.since_look_s = LOOK_S,
+            },
             Some(Waiting::TakeBack) => {
                 link.history = match landed {
                     true => (link.history.0.saturating_sub(1), link.history.1 + 1),
@@ -1125,6 +1298,84 @@ impl Cells {
 fn paint_color(paint: u8) -> [u8; 4] {
     let [r, g, b] = PALETTE[usize::from(paint).min(PALETTE.len() - 1)];
     [r, g, b, 0]
+}
+
+fn guide_id(slot: usize) -> VolumeMeshId {
+    VolumeMeshId(GUIDES - slot as u64)
+}
+
+/// The sides of a guide's box, bent onto the planet as the cells are and
+/// standing a little off it, each corner saying where it is on its side.
+fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
+    let (low, high) = (guide.span.min, guide.span.max.map(|n| n + 1));
+    let mut mesh = GuideMesh {
+        origin: DVec3::ZERO,
+        vertices: Vec::new(),
+        indices: Vec::new(),
+    };
+    let Some(sector) = guide.seat.sector() else {
+        return mesh;
+    };
+    let color = match guide.paint {
+        Some(paint) => {
+            let [r, g, b, _] = paint_color(paint);
+            [r, g, b, LAY_FILL]
+        }
+        None => {
+            let [r, g, b] = ROOM_COLOR;
+            [r, g, b, ROOM_FILL]
+        }
+    };
+    let at = |p: [f64; 3]| {
+        let point = SurfacePoint::new(sector, p[0], p[1]);
+        DVec3::from(sphere.position(point, p[2] * BLOCK_M))
+    };
+    mesh.origin = at(low.map(f64::from));
+    // Lines are counted from a corner of the frame every plot has: those of
+    // two guides side by side meet.
+    let from = |n: i32| (n.rem_euclid(1 << PLOT_BITS)) as f32;
+    // Where the quads of a side are cut along an axis: every few cells.
+    let cuts = |axis: usize| -> Vec<i32> {
+        let mut cuts: Vec<i32> = (low[axis]..high[axis])
+            .step_by(GUIDE_STEP as usize)
+            .collect();
+        cuts.push(high[axis]);
+        cuts
+    };
+    for axis in 0..3 {
+        let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+        let (along_a, along_b) = (cuts(a), cuts(b));
+        for (level, out) in [(low[axis], -GUIDE_LIFT), (high[axis], GUIDE_LIFT)] {
+            for across_a in along_a.windows(2) {
+                for across_b in along_b.windows(2) {
+                    let base = mesh.vertices.len() as u32;
+                    let corners = [
+                        (across_a[0], across_b[0]),
+                        (across_a[1], across_b[0]),
+                        (across_a[1], across_b[1]),
+                        (across_a[0], across_b[1]),
+                    ];
+                    for (pa, pb) in corners {
+                        let mut p = [0.0; 3];
+                        p[axis] = f64::from(level) + out;
+                        p[a] = f64::from(pa);
+                        p[b] = f64::from(pb);
+                        mesh.vertices.push(GuideVertex {
+                            position: (at(p) - mesh.origin).as_vec3().to_array(),
+                            lattice: [
+                                from(low[a]) + (pa - low[a]) as f32,
+                                from(low[b]) + (pb - low[b]) as f32,
+                            ],
+                            color,
+                        });
+                    }
+                    mesh.indices
+                        .extend([0, 1, 2, 0, 2, 3].map(|corner| base + corner));
+                }
+            }
+        }
+    }
+    mesh
 }
 
 /// Bends the sides of a sector's cells onto the planet: every corner goes

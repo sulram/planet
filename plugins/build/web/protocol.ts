@@ -1,8 +1,9 @@
 /**
  * Building's own part of the seam: the commands `build.take`, `build.paint`,
- * `build.platform`, `build.lay`, `build.undo`, `build.redo` and `build.state`,
- * and the events `build.hand`, `build.refused` and `build.history`, as the
- * plugin's crate writes them. Pure: no WASM, no DOM.
+ * `build.platform`, `build.lay`, `build.close`, `build.undo`, `build.redo`
+ * and `build.state`, and the events `build.hand`, `build.over`,
+ * `build.refused` and `build.history`, as the plugin's crate writes them.
+ * Pure: no WASM, no DOM.
  */
 
 /** What a stroke in a volume does. One drag is one stroke. */
@@ -16,9 +17,9 @@ export const platforms = [8, 16, 32, 64] as const;
 export type Base = 'deck' | 'solid' | 'floating';
 export const bases = ['deck', 'solid', 'floating'] as const satisfies readonly Base[];
 
-/** Why a tool was not handed over, or no platform laid: where the body stands, or who it is. */
-export type Refusal = 'moon' | 'sea' | 'seam' | 'high' | 'level' | 'field';
-const refusals = ['moon', 'sea', 'seam', 'high', 'level', 'field'] as const satisfies readonly Refusal[];
+/** Why a tool was not handed over, no platform laid or no volume deleted: where the body stands, or who it is. */
+export type Refusal = 'moon' | 'sea' | 'seam' | 'high' | 'level' | 'field' | 'empty';
+const refusals = ['moon', 'sea', 'seam', 'high', 'level', 'field', 'empty'] as const satisfies readonly Refusal[];
 
 /** `build.hand`: the tool in hand, null when not building, the paint it lays, and the side of the next platform. */
 export interface Hand {
@@ -42,6 +43,11 @@ export function parseHand(event: Record<string, unknown>): Hand | null {
 	if (tool !== null && !isTool(tool)) return null;
 	if (typeof paint !== 'number' || typeof platform !== 'number') return null;
 	return { tool, paint, platform };
+}
+
+/** Reads an `over` event: whether a volume stands under the body. Null for one that does not say. */
+export function parseOver(event: Record<string, unknown>): boolean | null {
+	return typeof event.volume === 'boolean' ? event.volume : null;
 }
 
 /** Reads a `refused` event. Null for a reason this front end has no words for. */

@@ -1,8 +1,8 @@
 //! The cells of a world where the world is decided (DECISIONS 106, 107,
 //! 110): a system of the core, an owner as a plugin is. It seats a volume by
 //! the ground under its plot, applies the gestures a session asks for, keeps
-//! what they made in its store, tells whoever is near, and takes a change
-//! back for the one who made it.
+//! what they made in its store, tells whoever is near, closes a volume, and
+//! takes a change back for the one who made it.
 //!
 //! It holds no cell between two ops: a change reads the chunks it reaches
 //! from the store and writes back those it changed. What it holds in memory
@@ -60,18 +60,36 @@ impl Stood {
     }
 }
 
-/// A change that landed, as what takes it back: its gestures, and the cells
-/// of its box before it, packed.
-struct Kept {
-    seat: Seat,
-    span: Span,
-    gestures: Vec<Gesture>,
-    before: Vec<u8>,
+/// A change that landed, as what takes it back.
+enum Kept {
+    /// Gestures, and the cells of their box before them, packed.
+    Change {
+        seat: Seat,
+        span: Span,
+        gestures: Vec<Gesture>,
+        before: Vec<u8>,
+    },
+    /// A volume closed: how it stood, and every chunk the store held of it,
+    /// under its key.
+    Closed {
+        seat: Seat,
+        plot: [i32; 2],
+        stood: Stood,
+        chunks: Vec<(Vec<u8>, Vec<u8>)>,
+    },
 }
 
 impl Kept {
     fn bytes(&self) -> usize {
-        self.before.len() + self.gestures.len() * size_of::<Gesture>()
+        match self {
+            Kept::Change {
+                gestures, before, ..
+            } => before.len() + gestures.len() * size_of::<Gesture>(),
+            Kept::Closed { chunks, .. } => chunks
+                .iter()
+                .map(|(key, cells)| key.len() + cells.len())
+                .sum(),
+        }
     }
 }
 
@@ -80,6 +98,18 @@ impl Kept {
 struct History {
     done: Vec<Kept>,
     undone: Vec<Kept>,
+}
+
+impl History {
+    /// Keeps a change that landed as the last to take back, and lets go of
+    /// the oldest over what a session may keep.
+    fn did(&mut self, kept: Kept) {
+        self.done.push(kept);
+        let mut bytes: usize = self.done.iter().map(Kept::bytes).sum();
+        while self.done.len() > HISTORY || (bytes > HISTORY_BYTES && self.done.len() > 1) {
+            bytes -= self.done.remove(0).bytes();
+        }
+    }
 }
 
 /// The system. The host calls it one op at a time.
@@ -282,16 +312,12 @@ impl Cells {
         let touched = self.save(room, sector, &volumes, changed);
         let history = self.histories.entry(who.session).or_default();
         history.undone.clear();
-        history.done.push(Kept {
+        history.did(Kept::Change {
             seat,
             span,
             gestures,
             before: pack(&before),
         });
-        let mut bytes: usize = history.done.iter().map(Kept::bytes).sum();
-        while history.done.len() > HISTORY || (bytes > HISTORY_BYTES && history.done.len() > 1) {
-            bytes -= history.done.remove(0).bytes();
-        }
         let changed = wire::Changed {
             session: who.session,
             seat: Some(seat.wire()),
@@ -305,31 +331,145 @@ impl Cells {
         room.tell(wire::CHANGED, changed.encode_to_vec(), &to);
     }
 
+    fn close(&mut self, payload: &[u8], who: &Who, room: &mut dyn Room) {
+        let Ok(close) = wire::Close::decode(payload) else {
+            return room.refuse("message");
+        };
+        let Some(seat) = Seat::from_wire(close.seat.as_ref()) else {
+            return room.refuse("message");
+        };
+        let Some(kept) = self.shut(seat, [close.plot_x, close.plot_y], room) else {
+            return room.refuse("volume");
+        };
+        let history = self.histories.entry(who.session).or_default();
+        history.undone.clear();
+        history.did(kept);
+    }
+
+    /// Takes the volume over a plot out of the world, and tells whoever is
+    /// near that it is gone. What takes that back, where a volume stood.
+    fn shut(&mut self, seat: Seat, plot: [i32; 2], room: &mut dyn Room) -> Option<Kept> {
+        let sector = seat.sector()?;
+        let stood = self.index(room).remove(&(seat, plot))?;
+        let chunks = room.scan(&chunks_key(sector, plot));
+        for (key, _) in &chunks {
+            room.forget(key);
+        }
+        room.forget(&volume_key(sector, plot));
+        let gone = wire::Held {
+            seat: Some(seat.wire()),
+            plot_x: plot[0],
+            plot_y: plot[1],
+            version: stood.version,
+        };
+        let seen = wire::Seen {
+            volumes: Vec::new(),
+            gone: vec![gone],
+        };
+        let to = near(room, sector, &[(plot, stood)], TELL_M);
+        room.tell(wire::SEEN, seen.encode_to_vec(), &to);
+        Some(Kept::Closed {
+            seat,
+            plot,
+            stood,
+            chunks,
+        })
+    }
+
+    /// Stands a closed volume again where it stood, as it was, and shows it
+    /// whole to whoever is near. False where another stands since.
+    fn stand_again(
+        &mut self,
+        seat: Seat,
+        plot: [i32; 2],
+        stood: Stood,
+        chunks: &[(Vec<u8>, Vec<u8>)],
+        room: &mut dyn Room,
+    ) -> bool {
+        let Some(sector) = seat.sector() else {
+            return false;
+        };
+        if self.index(room).contains_key(&(seat, plot)) {
+            return false;
+        }
+        // One more than it was, so a client that still holds it asks again.
+        let stood = Stood {
+            version: stood.version + 1,
+            ..stood
+        };
+        room.keep(&volume_key(sector, plot), stood.wire(plot).encode_to_vec());
+        for (key, cells) in chunks {
+            room.keep(key, cells.clone());
+        }
+        self.index(room).insert((seat, plot), stood);
+        let to = near(room, sector, &[(plot, stood)], TELL_M);
+        show(room, sector, plot, stood, &to);
+        true
+    }
+
     /// Takes back the last change of a session, or puts back the last it
     /// took back. A cell someone else changed since stays as they left it:
     /// taking back restores a cell that is still as the change made it, and
-    /// putting back changes one that is still as it was before.
+    /// putting back changes one that is still as it was before. A volume
+    /// closed stands again where no other stands since, and putting that
+    /// back closes it as it is then.
     fn restore(&mut self, back: bool, who: &Who, room: &mut dyn Room) {
         let history = self.histories.entry(who.session).or_default();
         let kept = match back {
             true => history.done.pop(),
             false => history.undone.pop(),
         };
-        let Some(kept) = kept else {
+        let kept = match kept {
+            None => return room.refuse("none"),
+            Some(Kept::Closed {
+                seat,
+                plot,
+                stood,
+                chunks,
+            }) => {
+                let kept = match back {
+                    true => self
+                        .stand_again(seat, plot, stood, &chunks, room)
+                        .then_some(Kept::Closed {
+                            seat,
+                            plot,
+                            stood,
+                            chunks,
+                        }),
+                    false => self.shut(seat, plot, room),
+                };
+                let history = self.histories.entry(who.session).or_default();
+                match (kept, back) {
+                    (Some(kept), true) => history.undone.push(kept),
+                    (Some(kept), false) => history.did(kept),
+                    (None, _) => {}
+                }
+                return;
+            }
+            Some(kept @ Kept::Change { .. }) => kept,
+        };
+        let Kept::Change {
+            seat,
+            span,
+            gestures,
+            before: packed,
+        } = &kept
+        else {
+            return;
+        };
+        let (seat, span) = (*seat, *span);
+        let count = span.cells().count();
+        let (Some(sector), Some(before)) = (seat.sector(), unpack(packed, count)) else {
             return room.refuse("none");
         };
-        let count = kept.span.cells().count();
-        let (Some(sector), Some(before)) = (kept.seat.sector(), unpack(&kept.before, count)) else {
-            return room.refuse("none");
-        };
-        let mut volumes = self.load(room, sector, &[kept.span]);
-        let now = volumes.cells(kept.span);
+        let mut volumes = self.load(room, sector, &[span]);
+        let now = volumes.cells(span);
         let mut made = volumes.clone();
-        made.restore(kept.span, &before);
-        for &gesture in &kept.gestures {
+        made.restore(span, &before);
+        for &gesture in gestures {
             made.apply(gesture);
         }
-        let after = made.cells(kept.span);
+        let after = made.cells(span);
         let (from, to) = match back {
             true => (&after, &before),
             false => (&before, &after),
@@ -337,11 +477,10 @@ impl Cells {
         let next: Vec<Cell> = (0..count)
             .map(|at| if now[at] == from[at] { to[at] } else { now[at] })
             .collect();
-        let touched = match volumes.restore(kept.span, &next) {
+        let touched = match volumes.restore(span, &next) {
             Some(changed) => self.save(room, sector, &volumes, changed),
             None => Vec::new(),
         };
-        let (seat, span) = (kept.seat, kept.span);
         let history = self.histories.entry(who.session).or_default();
         match back {
             true => history.undone.push(kept),
@@ -420,34 +559,41 @@ impl Cells {
         }
         let mut budget = LOOK_BYTES;
         for (_, sector, plot, stood) in lacking {
-            let mut volume = wire::Volume {
-                seat: Some(Seat::Sector(sector).wire()),
-                stood: Some(stood.wire(plot)),
-                chunks: Vec::new(),
-            };
-            let (mut bytes, mut sent) = (0, false);
-            for (key, cells) in room.scan(&chunks_key(sector, plot)) {
-                let at = |from: usize| number(key.get(from..from + 4)?);
-                let (Some(x), Some(y), Some(z)) = (at(10), at(14), at(18)) else {
-                    continue;
-                };
-                bytes += cells.len();
-                volume.chunks.push(wire::Chunk { x, y, z, cells });
-                if bytes > SEEN_BYTES {
-                    budget = budget.saturating_sub(bytes);
-                    tell_seen(room, &mut volume, &to);
-                    (bytes, sent) = (0, true);
-                }
-            }
-            if !sent || !volume.chunks.is_empty() {
-                budget = budget.saturating_sub(bytes);
-                tell_seen(room, &mut volume, &to);
-            }
+            budget = budget.saturating_sub(show(room, sector, plot, stood, &to));
             if budget == 0 {
                 break;
             }
         }
     }
+}
+
+/// Shows a volume whole, in as many messages as its chunks take. How many
+/// bytes of chunks went.
+fn show(room: &mut dyn Room, sector: Sector, plot: [i32; 2], stood: Stood, to: &[u32]) -> usize {
+    let mut volume = wire::Volume {
+        seat: Some(Seat::Sector(sector).wire()),
+        stood: Some(stood.wire(plot)),
+        chunks: Vec::new(),
+    };
+    let (mut bytes, mut sent, mut all) = (0, false, 0);
+    for (key, cells) in room.scan(&chunks_key(sector, plot)) {
+        let at = |from: usize| number(key.get(from..from + 4)?);
+        let (Some(x), Some(y), Some(z)) = (at(10), at(14), at(18)) else {
+            continue;
+        };
+        bytes += cells.len();
+        volume.chunks.push(wire::Chunk { x, y, z, cells });
+        if bytes > SEEN_BYTES {
+            all += bytes;
+            tell_seen(room, &mut volume, to);
+            (bytes, sent) = (0, true);
+        }
+    }
+    if !sent || !volume.chunks.is_empty() {
+        all += bytes;
+        tell_seen(room, &mut volume, to);
+    }
+    all
 }
 
 /// Says a volume, or the part of it gathered so far, and starts the next
@@ -505,7 +651,13 @@ impl Plugin for Cells {
 
     /// Changing the cells is a builder's and an admin's. Anyone looks.
     fn ops(&self) -> Vec<Op> {
-        let builder = [wire::OPEN, wire::CHANGE, wire::TAKE_BACK, wire::PUT_BACK];
+        let builder = [
+            wire::OPEN,
+            wire::CHANGE,
+            wire::CLOSE,
+            wire::TAKE_BACK,
+            wire::PUT_BACK,
+        ];
         let mut ops: Vec<Op> = builder
             .into_iter()
             .map(|kind| Op {
@@ -524,6 +676,7 @@ impl Plugin for Cells {
         match kind {
             wire::OPEN => self.open(payload, who, room),
             wire::CHANGE => self.change(payload, who, room),
+            wire::CLOSE => self.close(payload, who, room),
             wire::TAKE_BACK => self.restore(true, who, room),
             wire::PUT_BACK => self.restore(false, who, room),
             wire::LOOK => self.look(payload, who, room),

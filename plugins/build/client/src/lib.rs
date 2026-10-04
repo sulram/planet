@@ -1,8 +1,10 @@
 //! The build plugin's client half (DECISIONS 106): how a hand arrives at
 //! gestures. A tool in hand, a stroke from a click and a drag, a platform
 //! where the body stands, the key that turns a stroke and the chord that
-//! takes one back. The cells are the core's: this half reads them and asks
-//! for gestures through its host, and holds none.
+//! takes one back. While it builds it shows where cells are: the volume the
+//! body is in, and the slab a platform would lay. The cells are the core's:
+//! this half reads them and asks for gestures through its host, and holds
+//! none.
 //!
 //! Over the seam, JSON tagged by `type`. What a front end or an agent asks:
 //!
@@ -11,6 +13,7 @@
 //! {"type":"build.paint","paint":4}
 //! {"type":"build.platform","side":32}
 //! {"type":"build.lay","base":"deck"}
+//! {"type":"build.close"}
 //! {"type":"build.undo"}
 //! {"type":"build.redo"}
 //! {"type":"build.state"}
@@ -20,6 +23,7 @@
 //!
 //! ```json
 //! {"type":"build.hand","tool":"create","paint":4,"platform":32}
+//! {"type":"build.over","volume":true}
 //! {"type":"build.refused","reason":"sea"}
 //! {"type":"build.history","undo":true,"redo":false}
 //! ```
@@ -27,10 +31,11 @@
 mod stroke;
 
 use build_world::Platform;
-use client::{Aim, Feet, Host, KeyAsk, Plugin, Turn};
+use client::{Aim, Feet, Guide, Host, KeyAsk, Plugin, Turn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use topology::{BLOCK_M, Sector, SurfacePoint};
+use voxel::Span;
 
 use stroke::Stroke;
 
@@ -90,6 +95,8 @@ pub enum Refusal {
     /// This world is shaped by a field, and its server does not hold the
     /// field to seat a volume by.
     Field,
+    /// No volume stands under the body: there is none to close.
+    Empty,
 }
 
 impl From<client::Refusal> for Refusal {
@@ -117,18 +124,26 @@ pub const PLATFORM: &str = "platform";
 /// its plot where none stands: a slab as high as the higher of the highest
 /// ground under it and the feet, on a base. A deck when the base is left out.
 pub const LAY: &str = "lay";
+/// `build.close`: closes the volume the body is over. What was built in it
+/// goes with it and its plot is nature again: one change, taken back as one.
+pub const CLOSE: &str = "close";
 /// `build.undo`: takes back the last change that landed.
 pub const UNDO: &str = "undo";
 /// `build.redo`: puts back the last change taken back.
 pub const REDO: &str = "redo";
-/// `build.state`: asks what is in hand and what there is to take back. It
-/// changes nothing, and is answered with [`HAND`] and [`HISTORY`].
+/// `build.state`: asks what is in hand, what the body is over and what there
+/// is to take back. It changes nothing, and is answered with [`HAND`],
+/// [`OVER`] and [`HISTORY`].
 pub const STATE: &str = "state";
 
 /// `build.hand`: the tool in hand, `null` when not building, the paint it
 /// lays and the side of the platform laid next, whenever one changes.
 pub const HAND: &str = "hand";
-/// `build.refused`: a tool or a platform was asked for and not given.
+/// `build.over`: whether a volume stands under the body, whenever that
+/// changes while building.
+pub const OVER: &str = "over";
+/// `build.refused`: a tool, a platform or the closing of a volume was asked
+/// for and not given.
 pub const REFUSED: &str = "refused";
 /// `build.history`: whether there is a change to take back and one to put
 /// back, whenever that changes.
@@ -160,6 +175,11 @@ struct Hand {
     tool: Option<Tool>,
     paint: u8,
     platform: u32,
+}
+
+#[derive(Serialize)]
+struct Over {
+    volume: bool,
 }
 
 #[derive(Serialize)]
@@ -198,17 +218,109 @@ const PAINTS: u8 = client::PALETTE.len() as u8;
 /// reads 65 rows of 65 corners, each a sample of the ground in full detail.
 const GROUND_ROWS_PER_TURN: usize = 13;
 
-/// A platform asked for, and the ground under it read so far: the height of
-/// each corner of each column, in blocks, row by row.
-struct Laying {
+/// The ground under the square of a platform, read a few rows a turn: the
+/// height of each corner of each column, in blocks, row by row.
+#[derive(Clone)]
+struct Survey {
     sector: Sector,
+    /// The square, its top left unsaid.
     square: Platform,
+    /// The cells the volume of its plot holds, or would hold once opened.
+    /// None where no volume can stand, and no platform be laid.
+    room: Option<Span>,
+    corners: Vec<f64>,
+}
+
+impl Survey {
+    /// The square of `2^bits` columns a side that a body's feet are over.
+    fn square(feet: Feet, bits: u32) -> Platform {
+        let (x, y) = (feet.point.u.floor() as i32, feet.point.v.floor() as i32);
+        Platform::over(x, y, bits, 0)
+    }
+
+    /// The square of `2^bits` columns a side that a body's feet are over,
+    /// with none of its ground read.
+    fn under(feet: Feet, bits: u32, host: &Host<'_>) -> Survey {
+        let square = Survey::square(feet, bits);
+        let across = square.side as usize + 1;
+        Survey {
+            sector: feet.point.sector,
+            square,
+            room: host.room(feet.point).ok(),
+            corners: Vec::with_capacity(across * across),
+        }
+    }
+
+    /// Whether it is of the square of `2^bits` columns a side that a body's
+    /// feet are over.
+    fn is_under(&self, feet: Feet, bits: u32) -> bool {
+        self.sector == feet.point.sector && self.square == Survey::square(feet, bits)
+    }
+
+    fn across(&self) -> usize {
+        self.square.side as usize + 1
+    }
+
+    /// Whether every corner of every column is read.
+    fn read(&self) -> bool {
+        self.corners.len() >= self.across() * self.across()
+    }
+
+    /// Reads up to `rows` more rows of the ground. True once all is read.
+    fn more(&mut self, host: &Host<'_>, rows: usize) -> bool {
+        let across = self.across();
+        let [x0, y0] = self.square.corner;
+        let read = self.corners.len() / across;
+        for row in read..(read.saturating_add(rows)).min(across) {
+            self.corners.extend((0..across).map(|dx| {
+                let (u, v) = (x0 + dx as i32, y0 + row as i32);
+                host.ground(SurfacePoint::new(self.sector, f64::from(u), f64::from(v)))
+            }));
+        }
+        self.read()
+    }
+
+    /// The platform a body with its feet `feet` cells high is given on this
+    /// square: its top is the higher of the highest ground under it and the
+    /// feet (DECISIONS 105).
+    fn platform(&self, feet: i32) -> Platform {
+        let highest = self.corners.iter().copied().fold(f64::MIN, f64::max);
+        Platform {
+            top: (highest.ceil() as i32).max(feet),
+            ..self.square
+        }
+    }
+
+    /// The lowest ground at the foot of a column, in cells: a base reaches
+    /// it, so no ground shows under it.
+    fn foot(&self, x: i32, y: i32) -> i32 {
+        let across = self.across();
+        let [x0, y0] = self.square.corner;
+        let (dx, dy) = ((x - x0) as usize, (y - y0) as usize);
+        let at = |dx: usize, dy: usize| self.corners[dy * across + dx];
+        let lowest = at(dx, dy)
+            .min(at(dx + 1, dy))
+            .min(at(dx, dy + 1))
+            .min(at(dx + 1, dy + 1));
+        lowest.floor() as i32
+    }
+}
+
+/// How high a body's feet stand, in cells. To the nearest, so a body on a
+/// slab is given the next one level with it, whichever side of the cell's
+/// edge its feet are.
+fn level(feet: Feet) -> i32 {
+    (feet.height_m / BLOCK_M).round() as i32
+}
+
+/// A platform asked for, whose ground is still being read.
+struct Laying {
+    survey: Survey,
     base: Base,
     paint: u8,
     /// How high the feet of the one who asked stand, in cells: the slab
     /// stands no lower.
     feet: i32,
-    corners: Vec<f64>,
 }
 
 /// The tool in hand and what it is drawing.
@@ -229,6 +341,14 @@ pub struct Build {
     turned: usize,
     /// The platform asked for whose ground is still being read.
     laying: Option<Laying>,
+    /// The ground under the square the body is over, read while a tool is
+    /// in hand: what the slab of the next platform is shown by.
+    survey: Option<Survey>,
+    /// Whether laying a slab would make a cell, as last worked out: the
+    /// slab, and the count of the cells' changes it was read at.
+    lays: Option<(Span, u64, bool)>,
+    /// Whether a volume stood under the body, as last said.
+    over: bool,
     /// Whether there was a change to take back and one to put back, as last
     /// said.
     history: (bool, bool),
@@ -247,6 +367,9 @@ impl Default for Build {
             turning: false,
             turned: 0,
             laying: None,
+            survey: None,
+            lays: None,
+            over: false,
             history: (false, false),
         }
     }
@@ -292,6 +415,9 @@ impl Build {
         host.pass(tool.is_some());
         if tool.is_none() {
             host.preview(None);
+            host.guide(&[]);
+            self.survey = None;
+            self.lays = None;
         }
         self.say_hand(host);
     }
@@ -329,6 +455,97 @@ impl Build {
         );
     }
 
+    /// Whether a volume stands under the body.
+    fn is_over(host: &Host<'_>) -> bool {
+        let feet = host.feet();
+        !feet.moon && host.cells().covers(feet.point)
+    }
+
+    /// Says whether a volume stands under the body, when that changed.
+    fn say_over(&mut self, host: &mut Host<'_>) {
+        let volume = Build::is_over(host);
+        if volume != self.over {
+            self.over = volume;
+            host.emit(OVER, &Over { volume });
+        }
+    }
+
+    /// Closes the volume the body is over.
+    fn close(&mut self, host: &mut Host<'_>) -> Result<(), Refusal> {
+        if !host.may_change() {
+            return Err(Refusal::Level);
+        }
+        let feet = host.feet();
+        if feet.moon {
+            return Err(Refusal::Moon);
+        }
+        // What was half done in it goes with it.
+        self.cancel();
+        self.laying = None;
+        match host.close(feet.point)? {
+            true => Ok(()),
+            false => Err(Refusal::Empty),
+        }
+    }
+
+    /// Shows where cells are while a tool is in hand: the volume the body is
+    /// in, as room to build in, and the slab a platform would lay where it
+    /// stands, in the paint in hand, wherever laying one would make a cell.
+    /// The ground under the slab is read `rows` rows a turn, and the slab
+    /// shows once all of it is.
+    fn guide(&mut self, host: &mut Host<'_>, rows: usize) {
+        if self.tool.is_none() {
+            return;
+        }
+        let feet = host.feet();
+        if feet.moon {
+            self.survey = None;
+            return host.guide(&[]);
+        }
+        let seat = feet.point.sector.into();
+        let room = host.cells().bounds_over(feet.point).map(|span| Guide {
+            seat,
+            span,
+            paint: None,
+        });
+        let slab = self.slab(feet, host, rows).map(|span| Guide {
+            seat,
+            span,
+            paint: Some(self.paint),
+        });
+        let guides: Vec<Guide> = room.into_iter().chain(slab).collect();
+        host.guide(&guides);
+    }
+
+    /// The slab of the platform a body would be given where it stands, once
+    /// the ground under it is read, `rows` more rows of it now, when laying
+    /// it would make a cell.
+    fn slab(&mut self, feet: Feet, host: &Host<'_>, rows: usize) -> Option<Span> {
+        let bits = self.platform_bits;
+        if !matches!(&self.survey, Some(held) if held.is_under(feet, bits)) {
+            self.survey = Some(Survey::under(feet, bits, host));
+        }
+        let survey = self.survey.as_mut()?;
+        let room = survey.room?;
+        // A platform being laid has the turn's reading of the ground.
+        if !survey.read() && (self.laying.is_some() || !survey.more(host, rows)) {
+            return None;
+        }
+        let feet = level(feet);
+        if feet > room.max[2] + 1 {
+            return None;
+        }
+        let slab = survey.platform(feet).slab();
+        let (cells, seat) = (host.cells(), survey.sector);
+        let revision = cells.revision();
+        let lays = match self.lays {
+            Some((span, at, lays)) if span == slab && at == revision => lays,
+            _ => slab.cells().any(|cell| cells.cell(seat, cell).is_air()),
+        };
+        self.lays = Some((slab, revision, lays));
+        lays.then_some(slab)
+    }
+
     /// Says whether there is a change to take back or to put back, when that
     /// changed.
     fn say_history(&mut self, host: &mut Host<'_>) {
@@ -362,27 +579,25 @@ impl Build {
             return Err(Refusal::Moon);
         }
         host.open(feet.point)?;
-        let (x, y) = (feet.point.u.floor() as i32, feet.point.v.floor() as i32);
-        let square = Platform::over(x, y, self.platform_bits, 0);
-        let across = square.side as usize + 1;
-        // To the nearest cell, so a body standing on a slab is given the next
-        // one level with it, whichever side of the cell's edge its feet are.
-        let level = (feet.height_m / BLOCK_M).round() as i32;
         // A slab is the cell under its top, and a volume ends where it ends.
         let ceiling = host
             .cells()
             .bounds_over(feet.point)
             .map_or(i32::MAX, |held| held.max[2] + 1);
-        if level > ceiling {
+        if level(feet) > ceiling {
             return Err(Refusal::High);
         }
+        // The ground the slab was shown by is read already, or partly.
+        let bits = self.platform_bits;
+        let survey = match &self.survey {
+            Some(held) if held.is_under(feet, bits) => held.clone(),
+            _ => Survey::under(feet, bits, host),
+        };
         self.laying = Some(Laying {
-            sector: feet.point.sector,
-            square,
+            survey,
             base,
             paint: self.paint,
-            feet: level,
-            corners: Vec::with_capacity(across * across),
+            feet: level(feet),
         });
         Ok(())
     }
@@ -392,46 +607,18 @@ impl Build {
     /// gestures it comes to, as one change, and the body lifted onto its
     /// slab. The height of its top, in cells, when it landed.
     fn read_ground(&mut self, host: &mut Host<'_>, rows: usize) -> Option<i32> {
-        let laying = self.laying.as_mut()?;
-        let sector = laying.sector;
-        let [x0, y0] = laying.square.corner;
-        let across = laying.square.side as usize + 1;
-        let read = laying.corners.len() / across;
-        for row in read..(read.saturating_add(rows)).min(across) {
-            laying.corners.extend((0..across).map(|dx| {
-                let (u, v) = (x0 + dx as i32, y0 + row as i32);
-                host.ground(SurfacePoint::new(sector, f64::from(u), f64::from(v)))
-            }));
-        }
-        if laying.corners.len() < across * across {
+        if !self.laying.as_mut()?.survey.more(host, rows) {
             return None;
         }
         let Laying {
-            square,
+            survey,
             base,
             paint,
             feet,
-            corners,
-            ..
         } = self.laying.take()?;
-        let highest = corners.iter().copied().fold(f64::MIN, f64::max);
-        let platform = Platform {
-            top: (highest.ceil() as i32).max(feet),
-            ..square
-        };
-        // A base reaches the lowest ground at the foot of its column, so
-        // no ground shows under it.
-        let under = |x: i32, y: i32| {
-            let (dx, dy) = ((x - x0) as usize, (y - y0) as usize);
-            let at = |dx: usize, dy: usize| corners[dy * across + dx];
-            let lowest = at(dx, dy)
-                .min(at(dx + 1, dy))
-                .min(at(dx, dy + 1))
-                .min(at(dx + 1, dy + 1));
-            lowest.floor() as i32
-        };
-        let gestures = platform.gestures(base.kind(), under, paint);
-        match host.apply(sector, &gestures) {
+        let platform = survey.platform(feet);
+        let gestures = platform.gestures(base.kind(), |x, y| survey.foot(x, y), paint);
+        match host.apply(survey.sector, &gestures) {
             Ok(_) => host.lift(f64::from(platform.top) * BLOCK_M),
             Err(refusal) => refuse(host, refusal.into()),
         }
@@ -483,10 +670,17 @@ impl Plugin for Build {
                     refuse(host, reason);
                 }
             }
+            CLOSE => {
+                if let Err(reason) = self.close(host) {
+                    refuse(host, reason);
+                }
+            }
             UNDO => self.undo(host),
             REDO => self.redo(host),
             STATE => {
                 self.say_hand(host);
+                self.over = Build::is_over(host);
+                host.emit(OVER, &Over { volume: self.over });
                 let (undo, redo) = host.cells().history();
                 self.history = (undo, redo);
                 host.emit(HISTORY, &History { undo, redo });
@@ -537,28 +731,35 @@ impl Plugin for Build {
     /// One turn of the tool: what the line of sight through the pointer
     /// meets, the stroke while the button is held, and the gesture when it
     /// is let go. Then a few more rows of the ground under a platform asked
-    /// for.
+    /// for, and where cells are, for a hand to see.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
         if turn.interrupted {
             self.cancel();
         }
         self.handle(turn, host);
         self.read_ground(host, GROUND_ROWS_PER_TURN);
+        self.guide(host, GROUND_ROWS_PER_TURN);
+        if self.tool.is_some() {
+            self.say_over(host);
+        }
         self.say_history(host);
     }
 
     fn busy(&self) -> bool {
-        self.laying.is_some()
+        let reading = |survey: &Survey| survey.room.is_some() && !survey.read();
+        self.laying.is_some() || self.survey.as_ref().is_some_and(reading)
     }
 
     fn settle(&mut self, host: &mut Host<'_>) {
         self.read_ground(host, usize::MAX);
+        self.guide(host, usize::MAX);
         self.say_history(host);
     }
 
     fn rest(&mut self, host: &mut Host<'_>) {
         self.laying = None;
         self.using = false;
+        self.over = false;
         if self.tool.is_some() {
             self.take(None, host);
         }

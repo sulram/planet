@@ -6,7 +6,8 @@
 
 	// Building: a button in the bottom right corner, and the panel it opens
 	// while a tool is in hand. It shows the tool, the paint and the platform
-	// its layer says are picked, and asks for others.
+	// its layer says are picked, and asks for others. Deleting the volume the
+	// body is in is asked for here too, and undone like any change.
 	interface Props {
 		/** The tool in hand, null when not building. */
 		tool: Tool | null;
@@ -16,7 +17,9 @@
 		platform: number;
 		/** The paints a cell can take, as `#rrggbb`, in order. */
 		palette: string[];
-		/** Why the last platform asked for could not be laid, until the next one. */
+		/** Whether a volume stands under the body: one to delete. */
+		volume: boolean;
+		/** Why the last thing asked for was not done, until the next one. */
 		refused: Refusal | null;
 		/** Whether there is a change to take back, and one to put back. */
 		history: { undo: boolean; redo: boolean };
@@ -25,11 +28,13 @@
 		onplatform: (side: number) => void;
 		/** Lay a platform where the body stands, on a base. */
 		onlay: (base: Base) => void;
+		/** Delete the volume the body is in, with all built in it. */
+		onclosevolume: () => void;
 		onundo: () => void;
 		onredo: () => void;
 	}
 
-	let { tool, paint, platform, palette, refused, history, onbuild, onpaint, onplatform, onlay, onundo, onredo }: Props = $props();
+	let { tool, paint, platform, palette, volume, refused, history, onbuild, onpaint, onplatform, onlay, onclosevolume, onundo, onredo }: Props = $props();
 
 	const toolOptions = $derived(tools.map((value) => ({ value, label: t(`tool.${value}`) })));
 	const platformOptions = platforms.map((side) => ({ value: String(side), label: String(side) }));
@@ -79,6 +84,7 @@
 		<div class="history">
 			<Button variant="ghost" type="button" disabled={!history.undo} onclick={onundo}>{t('undo')}</Button>
 			<Button variant="ghost" type="button" disabled={!history.redo} onclick={onredo}>{t('redo')}</Button>
+			<Button variant="danger" type="button" disabled={!volume} onclick={onclosevolume}>{t('close')}</Button>
 		</div>
 		<p class="hint">{t('hint')}</p>
 	</Panel>
@@ -136,6 +142,9 @@
 	.history {
 		display: flex;
 		gap: var(--sp-2);
+	}
+	.history :global(.btn--danger) {
+		margin-left: auto;
 	}
 	.hint {
 		color: var(--text-muted);

@@ -47,6 +47,7 @@ pub mod cells {
     /// The ops a client asks of the cells.
     pub const OPEN: &str = "open";
     pub const CHANGE: &str = "change";
+    pub const CLOSE: &str = "close";
     pub const TAKE_BACK: &str = "take_back";
     pub const PUT_BACK: &str = "put_back";
     pub const LOOK: &str = "look";

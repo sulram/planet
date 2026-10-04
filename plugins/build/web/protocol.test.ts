@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseHand, parseHistory, parseRefused } from './protocol';
+import { parseHand, parseHistory, parseOver, parseRefused } from './protocol';
 
 describe('building at the seam', () => {
 	test('reads the hand, with a tool or without', () => {
@@ -18,5 +18,12 @@ describe('building at the seam', () => {
 		expect(parseRefused({ reason: 'weather' })).toBeNull();
 		expect(parseHistory({ type: 'build.history', undo: true, redo: false })).toEqual({ undo: true, redo: false });
 		expect(parseHistory({ undo: 1, redo: 0 })).toBeNull();
+	});
+
+	test('reads whether a volume stands under the body', () => {
+		expect(parseOver({ type: 'build.over', volume: true })).toBe(true);
+		expect(parseOver({ volume: false })).toBe(false);
+		expect(parseOver({ volume: 'yes' })).toBeNull();
+		expect(parseRefused({ reason: 'empty' })).toBe('empty');
 	});
 });

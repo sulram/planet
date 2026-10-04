@@ -187,3 +187,58 @@ func TestAChangeIsTakenBackByTheOneWhoMadeIt(t *testing.T) {
 		t.Fatalf("and put back: %q %v", code, restored.Cells)
 	}
 }
+
+func TestAVolumeIsClosedAndStandsAgainWhenThatIsTakenBack(t *testing.T) {
+	dir := t.TempDir()
+	web := founded(t, dir, world.LevelAdmin)
+	a, _ := dial(t, web)
+	a.stands(0)
+	shut := &cells.Close{Seat: seat()}
+	a.asks(1, "close", shut)
+	if code := a.answered(1); code != "volume" {
+		t.Fatalf("there is no volume to close yet: %q", code)
+	}
+	a.asks(2, "open", &cells.Open{Seat: seat(), U: atU, V: atV})
+	var opened cells.Opened
+	a.told("opened", &opened)
+	stood := opened.Stood
+	x, y, z := stood.PlotX*64+3, stood.PlotY*64+3, stood.Low+int32(stood.Height)-4
+	cube := &cells.Gesture{Kind: cells.Kind_KIND_CREATE, Paint: 2, X0: x, Y0: y, Z0: z, X1: x, Y1: y, Z1: z}
+	a.asks(3, "change", &cells.Change{Seat: seat(), Gestures: []*cells.Gesture{cube}})
+	if code := a.answered(3); code != "" {
+		t.Fatalf("the change lands: %q", code)
+	}
+
+	// Closed, whoever is near is told it is gone, and a look finds nothing.
+	shut.PlotX, shut.PlotY = stood.PlotX, stood.PlotY
+	a.asks(4, "close", shut)
+	var seen cells.Seen
+	a.told("seen", &seen)
+	if code := a.answered(4); code != "" || len(seen.Gone) != 1 || len(seen.Volumes) != 0 {
+		t.Fatalf("the volume is closed: %q %v", code, &seen)
+	}
+
+	// Taken back, it stands again as it was, and is shown whole.
+	a.asks(5, "take_back", &cells.TakeBack{})
+	a.told("seen", &seen)
+	if code := a.answered(5); code != "" || len(seen.Volumes) != 1 || len(seen.Volumes[0].Chunks) != 1 {
+		t.Fatalf("the volume stands again: %q %v", code, &seen)
+	}
+	if again := seen.Volumes[0].Stood; again.Low != stood.Low || again.Height != stood.Height || again.Version != 2 {
+		t.Fatalf("where it stood, at a version nobody holds: %v", again)
+	}
+
+	// Another process over the same folder holds it: what stands again is kept.
+	again := founded(t, dir, world.LevelAnonymous)
+	b, _ := dial(t, again)
+	b.stands(0)
+	b.asks(1, "look", &cells.Look{})
+	b.told("seen", &seen)
+	if len(seen.Volumes) != 1 || len(seen.Volumes[0].Chunks) != 1 {
+		t.Fatalf("it is kept: %v", &seen)
+	}
+	b.asks(2, "close", shut)
+	if code := b.answered(2); code != "level" {
+		t.Fatalf("a visitor closes nothing: %q", code)
+	}
+}

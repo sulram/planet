@@ -151,9 +151,9 @@ not yet confirmed.
   no setting of its own. Both UIs put a button in the top right corner; the
   web keeps the choice in the browser, since it belongs to the machine.
 - Building is a plugin (106, 109): `build.take` takes a tool or `null`, then
-  `build.paint`, `build.platform`, `build.lay` with its base, `build.undo`,
-  `build.redo`; it says `build.hand`, `build.refused`, `build.history`, and
-  the core says `palette`. With a tool in hand the plugin has the pointer: it
+  `build.paint`, `build.platform`, `build.lay` with its base, `build.close`,
+  `build.undo`, `build.redo`; it says `build.hand`, `build.over`,
+  `build.refused`, `build.history`, and the core says `palette`. With a tool in hand the plugin has the pointer: it
   is free, the primary button is the tool's, the secondary one looks. Its
   keys are asked for by name and each shell binds them: B, 1 2 3 take a tool,
   Alt turns a stroke, Escape drops the stroke and then the tool, Cmd or Ctrl

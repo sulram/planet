@@ -15,10 +15,10 @@ use glam::{DQuat, DVec3};
 use serde::Serialize;
 use serde_json::Value;
 use topology::{QuadSphere, SurfacePoint};
-use voxel::Gesture;
+use voxel::{Gesture, Span};
 use worldgen::Generator;
 
-use crate::cells::{self, Cells, Refusal, Seat, Sight};
+use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
 use crate::controller::Controller;
 use crate::input::{Chord, Input, Key, KeyAsk};
 use crate::place::Pose;
@@ -288,10 +288,25 @@ impl Host<'_> {
         }
     }
 
+    /// The cells the volume of the plot a column is on holds, or would hold
+    /// once opened: the room there is to build in. Why none can stand there,
+    /// where none can.
+    pub fn room(&self, point: SurfacePoint) -> Result<Span, Refusal> {
+        self.lent.cells.room(self.lent.generator, point)
+    }
+
     /// Opens the volume of the plot a column is on, where none stands.
     pub fn open(&mut self, point: SurfacePoint) -> Result<(), Refusal> {
         self.permitted()?;
         self.lent.cells.open(self.lent.generator, point)
+    }
+
+    /// Closes the volume over a column: what was built in it goes with it,
+    /// and its plot is nature again. A change like any other, taken back as
+    /// one. `Ok(false)` where no volume stands.
+    pub fn close(&mut self, point: SurfacePoint) -> Result<bool, Refusal> {
+        self.permitted()?;
+        Ok(self.lent.cells.close(point))
     }
 
     /// Applies gestures to the cells of a seat as one change, taken back as
@@ -306,6 +321,13 @@ impl Host<'_> {
     pub fn preview(&mut self, gesture: Option<(Seat, Gesture)>) {
         let sphere = self.sphere();
         self.lent.cells.preview(sphere, gesture);
+    }
+
+    /// Shows guides over the world, in place of those shown before, and
+    /// none with none to show: each a box of a seat's cells as a faint grid.
+    pub fn guide(&mut self, guides: &[Guide]) {
+        let sphere = self.sphere();
+        self.lent.cells.guide(sphere, guides);
     }
 
     /// Takes back the last change that landed.
@@ -496,12 +518,13 @@ impl Plugins {
 }
 
 /// Has a plugin put down what it had in hand, and takes back from it what a
-/// host lends one plugin at a time: the pointer and the ghost.
+/// host lends one plugin at a time: the pointer, the ghost and the guides.
 fn rest(held: &mut Plugged, lent: Lent<'_>) {
     let mut host = lent.host(held.plugin.name());
     held.plugin.rest(&mut host);
     if host.pointing() {
         host.point(false);
         host.preview(None);
+        host.guide(&[]);
     }
 }

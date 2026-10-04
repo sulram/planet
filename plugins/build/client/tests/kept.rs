@@ -114,7 +114,8 @@ impl World {
     /// One op on its way to its owner: the level is asked first, as the
     /// server's actor asks it, and the asker is answered.
     fn op(&mut self, at: usize, envelope: protocol::Envelope) {
-        let builder = ["open", "change", "take_back", "put_back"].contains(&envelope.kind.as_str());
+        let builder = ["open", "change", "close", "take_back", "put_back"];
+        let builder = builder.contains(&envelope.kind.as_str());
         let may = !builder || self.here[at].level >= protocol::Level::Builder;
         let mut code = match may {
             true => String::new(),
@@ -300,6 +301,39 @@ fn what_is_built_is_the_worlds() {
         .host("build")
         .apply(seat, &[Gesture::Delete { span }]);
     assert_eq!(refused, Err(client::Refusal::Level));
+
+    // One closes the volume, and it is gone for everyone near, cells and
+    // all. It is a change of theirs: taken back, the volume stands again for
+    // everyone as it was, and put back, it is gone again.
+    world.client(a).command_json(r#"{"type":"build.close"}"#);
+    assert!(!world.client(a).cells().covers(point));
+    world.live(0.2);
+    for who in [a, b, far] {
+        assert!(!world.client(who).cells().covers(point), "client {who}");
+    }
+    assert_eq!(world.client(a).cells().history(), (true, false));
+    world.client(a).command_json(r#"{"type":"build.undo"}"#);
+    world.live(0.2);
+    for who in [b, far] {
+        assert_eq!(
+            same(&world.here[a].client, &world.here[who].client, point),
+            Some(slab + 3),
+            "client {who}"
+        );
+    }
+    world.client(a).command_json(r#"{"type":"build.redo"}"#);
+    world.live(0.2);
+    assert!(!world.client(b).cells().covers(point));
+    world.client(a).command_json(r#"{"type":"build.undo"}"#);
+    world.live(0.2);
+    assert_eq!(
+        same(&world.here[a].client, &world.here[b].client, point),
+        Some(slab + 3)
+    );
+    // A visitor closes none.
+    world.client(far).command_json(r#"{"type":"build.close"}"#);
+    world.live(0.2);
+    assert!(world.client(a).cells().covers(point));
 
     // Who walks away lets the volume go, and a link that drops takes what
     // the world kept with it.

@@ -251,7 +251,7 @@ pub struct BoxPart {
 }
 
 /// Stable identity of a volume mesh while it is in the scene: one chunk of
-/// one volume, or the ghost of a stroke.
+/// one volume, the ghost of a stroke, or a guide.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct VolumeMeshId(pub u64);
 
@@ -278,10 +278,35 @@ pub struct VolumeMesh {
     pub indices: Vec<u32>,
 }
 
+/// A corner of a guide.
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct GuideVertex {
+    /// Metres from [`GuideMesh::origin`].
+    pub position: [f32; 3],
+    /// Where it is on its side of the box, in cells: a line is drawn
+    /// wherever either is whole.
+    pub lattice: [f32; 2],
+    /// `rgb`: sRGB. `a`: how much of it shows between the lines, the lines
+    /// themselves a few times as much.
+    pub color: [u8; 4],
+}
+
+/// A box of cells drawn as a faint grid, its sides seen from both sides: where
+/// cells are, before any is laid. Bent onto the body by the client, as a
+/// [`VolumeMesh`] is.
+#[derive(Clone, Debug)]
+pub struct GuideMesh {
+    pub origin: DVec3,
+    pub vertices: Vec<GuideVertex>,
+    pub indices: Vec<u32>,
+}
+
 /// A change to the set of volume meshes a renderer holds.
 #[derive(Clone, Debug)]
 pub enum VolumeChange {
     Add(VolumeMeshId, VolumeMesh),
+    Guide(VolumeMeshId, GuideMesh),
     Remove(VolumeMeshId),
 }
 
@@ -392,4 +417,7 @@ pub struct Frame {
     /// The stroke a build tool would make: drawn see-through over the world,
     /// cast by nothing.
     pub ghost: Option<VolumeMeshId>,
+    /// The guides to draw over the world. All were announced by a
+    /// [`VolumeChange::Guide`].
+    pub guides: Vec<VolumeMeshId>,
 }

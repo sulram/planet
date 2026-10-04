@@ -199,7 +199,8 @@ impl Renderer {
         }
     }
 
-    /// Uploads and drops the meshes of volumes and of the ghost of a stroke.
+    /// Uploads and drops the meshes of volumes, of the ghost of a stroke and
+    /// of guides.
     pub fn apply_volumes(&mut self, changes: Vec<VolumeChange>) {
         for change in changes {
             self.volumes.apply(&self.device, change);
@@ -259,8 +260,7 @@ impl Renderer {
             &self.device,
             &self.queue,
             &mut resources.volumes,
-            &frame.volumes,
-            frame.ghost,
+            frame,
             view.camera.position,
         );
         let box_count = resources.boxes.write(
@@ -380,7 +380,7 @@ impl Renderer {
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
         self.volumes
-            .draw_ghost(&mut pass, &resources.volumes, &volumes);
+            .draw_over(&mut pass, &resources.volumes, &volumes);
         drop(pass);
 
         // Then the sea and the clouds, the nearer last: a camera under the
@@ -581,6 +581,8 @@ enum Surface {
     /// A preview over the world: blended, tested against depth and writing
     /// none. Its fragment entry is `fs_ghost`.
     Ghost,
+    /// A guide over the world: as a ghost is, and seen from both sides.
+    Guide,
     Foliage,
     Shadow,
     ShadowCutout,
@@ -604,8 +606,11 @@ fn pipeline(
     let shadow = matches!(spec.surface, Surface::Shadow | Surface::ShadowCutout);
     let targets = [Some(wgpu::ColorTargetState {
         format,
-        blend: matches!(spec.surface, Surface::Translucent | Surface::Ghost)
-            .then_some(wgpu::BlendState::ALPHA_BLENDING),
+        blend: matches!(
+            spec.surface,
+            Surface::Translucent | Surface::Ghost | Surface::Guide
+        )
+        .then_some(wgpu::BlendState::ALPHA_BLENDING),
         write_mask: wgpu::ColorWrites::ALL,
     })];
     let groups: Vec<Option<&wgpu::BindGroupLayout>> =

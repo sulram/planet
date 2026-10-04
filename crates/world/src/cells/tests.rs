@@ -393,11 +393,106 @@ fn taking_back_leaves_what_someone_else_changed_since() {
     assert_eq!(stage.refused.as_deref(), Some("none"));
 }
 
+fn close(cells: &mut Cells, stage: &mut Stage, session: u32, point: SurfacePoint) {
+    let [plot_x, plot_y] = seat::plot_of(point);
+    let close = wire::Close {
+        seat: seat_of(point),
+        plot_x,
+        plot_y,
+    };
+    ask(cells, stage, session, wire::CLOSE, &close);
+}
+
+#[test]
+fn a_volume_is_closed_and_stands_again_when_that_is_taken_back() {
+    let (mut stage, point) = stage();
+    let mut cells = Cells::default();
+    // Where no volume stands there is none to close.
+    close(&mut cells, &mut stage, 1, point);
+    assert_eq!(stage.refused.as_deref(), Some("volume"));
+
+    open(&mut cells, &mut stage, 1, point);
+    let row = boxed(&stage, point, [3, 3, 0], [8, 3, 0]);
+    let made = [Gesture::Create {
+        span: row,
+        paint: 1,
+    }];
+    change(&mut cells, &mut stage, 1, point, &made);
+    assert!(!stage.store.is_empty());
+
+    // Closed, the store holds nothing of it, and who is near is told it is
+    // gone: the one far along the sector hears nothing.
+    stage.told.clear();
+    close(&mut cells, &mut stage, 1, point);
+    assert_eq!(stage.refused, None);
+    assert!(stage.store.is_empty());
+    let (kind, payload, to) = stage.told.last().unwrap();
+    assert_eq!((kind.as_str(), to.as_slice()), (wire::SEEN, &[1][..]));
+    let gone = wire::Seen::decode(payload.as_slice()).unwrap().gone;
+    assert_eq!(gone.len(), 1);
+    assert!(seen(&mut cells, &mut stage, 1, Vec::new()).is_empty());
+    // A look that still holds it is told the same.
+    let told = seen(&mut cells, &mut stage, 1, gone.clone());
+    assert_eq!(told[0].gone, gone);
+
+    // Taken back, it stands as it was, shown whole to who is near, at a
+    // version no client holds.
+    stage.told.clear();
+    ask(
+        &mut cells,
+        &mut stage,
+        1,
+        wire::TAKE_BACK,
+        &wire::TakeBack {},
+    );
+    assert_eq!(stage.refused, None);
+    let (kind, payload, to) = stage.told.last().unwrap();
+    assert_eq!((kind.as_str(), to.as_slice()), (wire::SEEN, &[1][..]));
+    let back = wire::Seen::decode(payload.as_slice()).unwrap();
+    let stood = back.volumes[0].stood.as_ref().unwrap();
+    assert_eq!(stood.version, gone[0].version + 1);
+    let paints = |cells: Vec<Cell>| cells.iter().map(|cell| cell.paint()).collect::<Vec<_>>();
+    assert_eq!(paints(shown(&mut cells, &mut stage, 1, row)), [Some(1); 6]);
+
+    // The change before it is still this session's to take back, and to put
+    // back: then the closing is put back too, and the plot is nature again.
+    ask(
+        &mut cells,
+        &mut stage,
+        1,
+        wire::TAKE_BACK,
+        &wire::TakeBack {},
+    );
+    assert_eq!(paints(shown(&mut cells, &mut stage, 1, row)), [None; 6]);
+    ask(&mut cells, &mut stage, 1, wire::PUT_BACK, &wire::PutBack {});
+    ask(&mut cells, &mut stage, 1, wire::PUT_BACK, &wire::PutBack {});
+    assert_eq!(stage.refused, None);
+    assert!(stage.store.is_empty());
+
+    // Where someone opened another since, taking it back leaves theirs.
+    open(&mut cells, &mut stage, 1, point);
+    ask(
+        &mut cells,
+        &mut stage,
+        1,
+        wire::TAKE_BACK,
+        &wire::TakeBack {},
+    );
+    assert_eq!(paints(shown(&mut cells, &mut stage, 1, row)), [None; 6]);
+}
+
 #[test]
 fn the_cells_are_a_builders_to_change_and_anyones_to_look_at() {
     let ops = Cells::default().ops();
     let level = |kind: &str| ops.iter().find(|op| op.kind == kind).map(|op| op.level);
-    for kind in [wire::OPEN, wire::CHANGE, wire::TAKE_BACK, wire::PUT_BACK] {
+    let builder = [
+        wire::OPEN,
+        wire::CHANGE,
+        wire::CLOSE,
+        wire::TAKE_BACK,
+        wire::PUT_BACK,
+    ];
+    for kind in builder {
         assert_eq!(level(kind), Some(Level::Builder), "{kind}");
     }
     assert_eq!(level(wire::LOOK), Some(Level::Anonymous));

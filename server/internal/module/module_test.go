@@ -41,7 +41,7 @@ func TestTheModuleSaysWhatItCarries(t *testing.T) {
 	// The cells come first: a system of the core, on in every world, whose
 	// ops a builder asks and whose look anyone does.
 	cells := carried[0]
-	if cells.Plugin.Name() != "cells" || !cells.Core || !cells.On || len(cells.Plugin.Ops()) != 5 {
+	if cells.Plugin.Name() != "cells" || !cells.Core || !cells.On || len(cells.Plugin.Ops()) != 6 {
 		t.Fatalf("the core's cells are carried as an owner: %v %v", cells, cells.Plugin.Ops())
 	}
 	plugins := carried[1:]

@@ -2,10 +2,11 @@
 	import { builds } from '$lib/instance';
 	import type { LayerProps } from '$lib/plugins/plugin';
 	import Panel from './Panel.svelte';
-	import { parseHand, parseHistory, parseRefused, type Base, type Refusal, type Tool } from './protocol';
+	import { parseHand, parseHistory, parseOver, parseRefused, type Base, type Refusal, type Tool } from './protocol';
 
-	// Building over the world: what the plugin says is in hand, why it last
-	// refused, and what there is to take back. A front end only: it shows
+	// Building over the world: what the plugin says is in hand, whether a
+	// volume stands under the body, why it last refused, and what there is to
+	// take back. A front end only: it shows
 	// those and asks for others, and what a tool, a stroke and a platform do
 	// is the plugin's crate's.
 	let { seam, level, palette }: LayerProps = $props();
@@ -13,6 +14,7 @@
 	let tool = $state<Tool | null>(null);
 	let paint = $state(0);
 	let platform = $state(16);
+	let volume = $state(false);
 	let refused = $state<Refusal | null>(null);
 	let history = $state({ undo: false, redo: false });
 
@@ -21,7 +23,8 @@
 			if (kind === 'hand') {
 				const hand = parseHand(event);
 				if (hand) ({ tool, paint, platform } = hand);
-			} else if (kind === 'refused') refused = parseRefused(event);
+			} else if (kind === 'over') volume = parseOver(event) ?? volume;
+			else if (kind === 'refused') refused = parseRefused(event);
 			else if (kind === 'history') history = parseHistory(event) ?? history;
 		});
 		// What is in hand was said before this layer listened: ask for it.
@@ -38,6 +41,11 @@
 		refused = null;
 		seam.command('lay', { base });
 	}
+
+	function closeVolume() {
+		refused = null;
+		seam.command('close');
+	}
 </script>
 
 {#if builds(level)}
@@ -46,12 +54,14 @@
 		{paint}
 		{platform}
 		{palette}
+		{volume}
 		{refused}
 		{history}
 		onbuild={take}
 		onpaint={(next) => seam.command('paint', { paint: next })}
 		onplatform={(side) => seam.command('platform', { side })}
 		onlay={lay}
+		onclosevolume={closeVolume}
 		onundo={() => seam.command('undo')}
 		onredo={() => seam.command('redo')}
 	/>
