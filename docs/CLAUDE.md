@@ -2,6 +2,15 @@
 
 The root `CLAUDE.md` applies here too.
 
+## Test first, write after
+
+- A step is built, shown running and tried by Marlus in the world before its
+  docs are written. While it is refined, the commit's why is its record.
+- In the commit that changes code: what a script checks (`bun run docs`), and
+  the deletion of every line the change made false.
+- When the shape has held: the theme doc, once, and a decision only for what
+  is dear to undo.
+
 ## Homes
 
 | Information | Home |
@@ -13,8 +22,8 @@ The root `CLAUDE.md` applies here too.
 | A design drawn ahead of its code | a sketch in `sketches/` |
 | What changed, line by line | git |
 
-- A change touches at most three homes, in the commit that makes it: the theme
-  doc, DECISIONS, and ROADMAP **or** OPEN. Anywhere else, a pointer.
+- A change touches at most three homes: the theme doc, DECISIONS, and ROADMAP
+  **or** OPEN. Anywhere else, a pointer.
 - Operational docs and the guides: titles + bullets, no prose, under 200 lines.
   VISION, DECISIONS and sketches keep prose: they carry the why and the what if.
 - OPEN is tables: question, what it unblocks, context. A question nothing
