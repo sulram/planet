@@ -10,6 +10,7 @@ target
 node_modules
 **/node_modules
 server/bin
+server/internal/module/world.wasm
 server/world
 server/pb_data
 apps/web/build

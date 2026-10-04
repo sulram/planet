@@ -1,6 +1,7 @@
 package world
 
 import (
+	"slices"
 	"time"
 
 	pb "github.com/sulram/planet/server/internal/protocol"
@@ -8,8 +9,9 @@ import (
 
 // The host of plugins: who is installed, which are on in this world, and
 // what an op passes on its way to its owner (DECISIONS 88, 93, 98). A
-// plugin's server half is a package of its own that imports this one; the
-// core names no plugin.
+// plugin's world half is Rust in the server's module (DECISIONS 99), and
+// `internal/module` hands each one over as a Plugin; the core names no
+// plugin and reads no payload.
 
 // Op is one thing a session may ask of a plugin, and the least level that
 // may ask it. What a plugin offers is said as data, so a front end and an
@@ -30,16 +32,18 @@ type Who struct {
 	Stance *pb.Stance
 }
 
-// Room is what the host offers a plugin while it applies an op.
+// Room is what the host offers a plugin while it applies an op: services
+// that carry no feature (DECISIONS 99).
 type Room interface {
 	// Now is the moment the op is applied.
 	Now() time.Time
+	// Recipe is the world's: what its bodies are measured by.
+	Recipe() Recipe
+	// Here is everyone in the world, the one who asks included, by session.
+	Here() []Who
 	// Tell says one event of the plugin, encoded once, to every session `to`
 	// admits.
 	Tell(kind string, payload []byte, to func(Who) bool)
-	// Near is whether two sessions stand within `blocks` of each other on the
-	// same body.
-	Near(a, b Who, blocks float64) bool
 }
 
 // Plugin is a plugin's server half. The actor calls it, one call at a time,
@@ -152,7 +156,13 @@ func (r room) Tell(kind string, payload []byte, to func(Who) bool) {
 	r.actor.relay(message, func(s *session) bool { return to(s.who()) })
 }
 
-func (r room) Near(a, b Who, blocks float64) bool {
-	apart, same := apart(a.Stance, b.Stance)
-	return same && apart <= blocks
+func (r room) Recipe() Recipe { return r.actor.recipe }
+
+func (r room) Here() []Who {
+	here := make([]Who, 0, len(r.actor.sessions))
+	for _, s := range r.actor.sessions {
+		here = append(here, s.who())
+	}
+	slices.SortFunc(here, func(a, b Who) int { return int(a.Session) - int(b.Session) })
+	return here
 }

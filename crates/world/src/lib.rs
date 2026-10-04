@@ -12,6 +12,9 @@ use core::time::Duration;
 use protocol::Stance;
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint, vec3};
 
+mod host;
+
+pub use host::{Host, Installed, MeasureOf};
 pub use protocol::Level;
 
 /// One thing a session may ask of a plugin, and the least level that may ask
@@ -107,8 +110,9 @@ pub trait Room {
     fn tell(&mut self, kind: &str, payload: Vec<u8>, to: &[u32]);
 }
 
-/// A plugin's world half. The host calls it one call at a time.
-pub trait Plugin {
+/// A plugin's world half. The host calls it one call at a time, and may keep
+/// it behind a lock or hand it to the task that runs a world: it is `Send`.
+pub trait Plugin: Send {
     /// The name the wire's envelope and the world's statement say.
     fn name(&self) -> &'static str;
 

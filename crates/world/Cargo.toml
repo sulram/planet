@@ -10,6 +10,7 @@ publish.workspace = true
 topology.workspace = true
 protocol.workspace = true
 libm.workspace = true
+prost.workspace = true
 
 [lints]
 workspace = true

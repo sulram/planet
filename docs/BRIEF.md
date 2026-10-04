@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91 and 93 to 101. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 102. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -48,10 +48,10 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    world runs with it on or off.
 7. [x] **A plugin is one folder** (100): chat's crate, schema and panel in
    `plugins/chat/`, a member of the Cargo workspace and a package of Bun's.
-8. [ ] **The module, and chat's world half in it** (99): the bridge between
-   Go and the module over wazero, and chat's world half, written and tested
-   in Rust on the crate `world` (101), in place of `internal/chat` and
-   `near.go`. A plugin then touches no Go.
+8. [x] **The module, and chat's world half in it** (99, 102): the bridge
+   between Go and the module over wazero, and chat's world half in Rust on
+   the crate `world` (101). The server holds no plugin's code: a line said
+   in one browser is heard in another through the module.
 9. [ ] **Building as a plugin, and kept**: the turn in a frame, the solids and
    the picture through `scene`; then a stroke as an op on the socket, the
    permission hook, the store by volume and its world half in the module

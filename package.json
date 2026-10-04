@@ -20,6 +20,7 @@
 		"bench": "bun scripts/bench.ts",
 		"proto": "bun scripts/proto.ts",
 		"plugins": "bun scripts/plugins.ts",
+		"module": "bun scripts/module.ts",
 		"docs": "bun scripts/docs.ts",
 		"check": "bun scripts/check.ts",
 		"build": "bun run wasm && bun run --cwd apps/web build"

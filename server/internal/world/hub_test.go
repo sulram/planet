@@ -3,6 +3,7 @@ package world
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -335,8 +336,8 @@ func TestANameIsGivenAndChanged(t *testing.T) {
 	c.leave()
 }
 
-// echo is a plugin that says back what it is asked, to everyone near the
-// asker, and counts who left.
+// echo is a plugin that says back what it is asked, to everyone the room
+// places within 64 blocks of the asker along u, and counts who left.
 type echo struct {
 	gone []uint32
 }
@@ -347,7 +348,13 @@ func (e *echo) Ops() []Op {
 	return []Op{{Kind: "shout", Level: LevelAnonymous}, {Kind: "decree", Level: LevelBuilder}}
 }
 func (e *echo) Do(room Room, who Who, kind string, payload []byte) {
-	room.Tell(kind+"ed", payload, func(other Who) bool { return room.Near(who, other, 64) })
+	near := map[uint32]bool{}
+	for _, other := range room.Here() {
+		if who.Stance != nil && other.Stance != nil && math.Abs(float64(who.Stance.U-other.Stance.U)) <= 64 {
+			near[other.Session] = true
+		}
+	}
+	room.Tell(kind+"ed", payload, func(other Who) bool { return near[other.Session] })
 }
 func (e *echo) Gone(session uint32) { e.gone = append(e.gone, session) }
 
@@ -388,7 +395,8 @@ func TestAnOpPassesTheHostOnItsWayToItsPlugin(t *testing.T) {
 	if heard := visitor.envelope(); heard != "echo.shouted:hi" {
 		t.Fatalf("what passed the host: %v", heard)
 	}
-	// A level that may, and a neighbour hears it: the host says who is near.
+	// A level that may, and a neighbour hears it: the room says who is here,
+	// and where.
 	builder.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(110)}})
 	builder.say(ask("echo", "decree", "so be it"))
 	if heard := visitor.envelope(); heard != "echo.decreeed:so be it" {

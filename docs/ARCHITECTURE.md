@@ -69,9 +69,10 @@ not yet confirmed.
   routes, the files when there is no bucket, and the web front end as static
   files. `cmd/planet` is the entry, `internal/world` the core, `internal/api`
   the routes.
-- A plugin's world half is its Rust, run in one WASM module through wazero,
-  the generator with it (97, 99). Go offers services and reads no payload.
-  Built so far: chat's server half as a Go package (BRIEF.md).
+- A plugin's world half is its Rust, run in one WASM module through wazero
+  (97, 99): `internal/module` embeds it and hands each plugin to the core. Go
+  offers services and reads no payload. The bridge is three names and one
+  schema of messages, with a deadline and a ceiling of memory (102).
 - Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
   source (66). `Hello` says the protocol version; any other is refused.
   `Welcome` carries the session, its level, the recipe, so a client checks it
@@ -89,12 +90,12 @@ not yet confirmed.
   the key and checks its level. An error is a code, never a sentence.
 - The actor is the host of plugins on the server (PLUGINS.md): it finds the
   plugin an envelope names, checks the level its op asks and hands it over.
-- Chat (69) is a plugin, `internal/chat`: `say` up, `said` down, relayed to
-  everyone in scope, the speaker included, never stored. `near` reaches
-  `NearBlocks` on the same body, measured by the core with the client's own
-  projection mirrored in `near.go`; `world` reaches every body. A line said
-  with `here` comes back with the speaker's stance as the actor holds it.
-  Its limits are its own: `LineChars`, five lines in five seconds.
+- Chat (69) is a plugin, and the server holds none of it: `say` up, `said`
+  down, relayed to everyone in scope, the speaker included, never stored.
+  `near` reaches `NEAR_BLOCKS` on the same body, measured by its world half
+  with the recipe's own size; `world` reaches every body. A line said with
+  `here` comes back with the speaker's stance as the actor holds it. Its
+  limits are its own: `LINE_CHARS`, five lines in five seconds.
 - The world folder (89): `world.json`, the recipe the founding froze;
   `plugins.json`, the plugins its admin switched; and one SQLite file for
   each plugin that keeps things, moved forward by that plugin when it starts.

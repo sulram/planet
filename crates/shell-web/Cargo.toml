@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 client.workspace = true
-plugins.workspace = true
+plugins-client.workspace = true
 render.workspace = true
 log.workspace = true
 

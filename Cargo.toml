@@ -19,11 +19,13 @@ worldgen = { path = "crates/worldgen" }
 scene = { path = "crates/scene" }
 avatar = { path = "crates/avatar" }
 client = { path = "crates/client" }
+module = { path = "crates/module" }
 render = { path = "crates/render" }
 protocol = { path = "crates/protocol" }
 voxel = { path = "crates/voxel" }
 world = { path = "crates/world" }
-plugins = { path = "crates/plugins" }
+plugins-client = { path = "crates/plugins-client" }
+plugins-world = { path = "crates/plugins-world" }
 ui-native = { path = "crates/ui-native" }
 
 # Pins shared with vybe (CLAUDE.md, Toolchain pins).

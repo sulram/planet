@@ -1,14 +1,12 @@
 // The chat plugin's wire: what rides the core's envelope under the name
 // `chat` (DECISIONS 69, 93). `say` goes up as a Say, `said` comes down as a
-// Said. `bun run proto` generates Rust into the world half's src/gen and Go
-// into server/internal/chat/wire.
+// Said. `bun run proto` generates Rust into the world half's src/gen: the
+// server carries a payload and never reads it (DECISIONS 99).
 syntax = "proto3";
 
 package planet.chat.v1;
 
 import "planet/v1/world.proto";
-
-option go_package = "github.com/sulram/planet/server/internal/chat/wire;wire";
 
 // Who hears a line.
 enum Scope {

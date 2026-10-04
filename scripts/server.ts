@@ -1,7 +1,9 @@
-// The Go server: build the binary and serve one world from server/world.
+// The Go server: build the module it embeds, then the binary, and serve one
+// world from server/world.
 // Bun loads .env from the cwd and spawned processes inherit process.env, so
 // the server reads the same variables (.env.example).
 import { ROOT } from './lib';
+import { buildModule } from './module';
 
 const DIR = `${ROOT}/server`;
 const BIN = `${DIR}/bin/planet`;
@@ -12,6 +14,9 @@ async function run(cmd: string[], cwd: string): Promise<void> {
 }
 
 export async function build(): Promise<void> {
+	// The world halves are part of the binary: cargo is incremental, and a
+	// stale module silently runs an older plugin than the engine holds.
+	await buildModule();
 	await run(['go', 'build', '-o', BIN, './cmd/planet'], DIR);
 }
 

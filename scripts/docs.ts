@@ -119,8 +119,10 @@ const ALLOWED: Record<string, string[]> = {
 	render: ['scene'],
 	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'protocol'],
 	'ui-native': ['client', 'scene'],
-	// What a plugin's world half stands on. It never imports `client`.
+	// What a plugin's world half stands on, and the host of world halves. It
+	// never imports `client`, and neither does the module that is its shell.
 	world: ['topology', 'protocol'],
+	module: ['world', 'plugins-world', 'protocol', 'worldgen'],
 	// A plugin's rows name crates of the core and its own world half, never
 	// another plugin's (DECISIONS 93). A world half's names no `client`.
 	'chat-world': ['world', 'protocol'],
@@ -159,6 +161,26 @@ for (const [crate, allowed] of Object.entries(ALLOWED)) {
 	for (const m of deps.matchAll(/^([a-z-]+)(?:\.workspace| *=)/gm)) {
 		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`${home}: imports \`${m[1]}\`, which CLAUDE.md § How it grows forbids`);
 	}
+}
+
+/* ------------------------------- `unsafe` is written in one file (DECISIONS 102) */
+
+// The workspace forbids `unsafe`. The module says the three names the server
+// knows it by, and they are the exception: one file, three marks, in a crate
+// that denies the rest. Every other crate inherits the workspace's lints.
+const ABI = 'crates/module/src/abi.rs';
+const MARKS = 3;
+for (const file of new Bun.Glob('{crates,plugins}/**/*.rs').scanSync(ROOT)) {
+	if (file.includes('node_modules') || file.includes('/target/')) continue;
+	const marks = read(file).match(/allow\(unsafe_code\)/g)?.length ?? 0;
+	if (file === ABI ? marks !== MARKS : marks !== 0) problems.push(`${file}: ${marks} allow(unsafe_code); ${ABI} holds ${MARKS} and no other file any`);
+}
+for (const crate of ours) {
+	const home = plugged.get(crate)?.path ?? `crates/${crate}`;
+	const toml = read(`${home}/Cargo.toml`);
+	if (crate === 'module') {
+		if (!/^\[lints\.rust\]\nunsafe_code = "deny"$/m.test(toml)) problems.push(`${home}/Cargo.toml: the module denies unsafe_code, and allows it on its three names alone`);
+	} else if (!/^\[lints\]\nworkspace = true$/m.test(toml)) problems.push(`${home}/Cargo.toml: no \`[lints] workspace = true\`, so \`unsafe\` is not forbidden there`);
 }
 
 /* ------------------------------------------- crate bullets match crates/ */

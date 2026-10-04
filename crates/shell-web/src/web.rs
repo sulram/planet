@@ -63,7 +63,7 @@ impl Engine {
         let mut client =
             Client::new(client::Recipe::new(1)).map_err(|e| JsError::new(&e.to_string()))?;
         // What this version carries, off until a world says which are on.
-        for plugin in plugins::all() {
+        for plugin in plugins_client::all() {
             client.plug(plugin);
         }
         let state = Rc::new(RefCell::new(State {

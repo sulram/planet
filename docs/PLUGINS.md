@@ -1,7 +1,7 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98 to 101; how
+shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98 to 102; how
 much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
@@ -91,15 +91,35 @@ A plugin is one folder, `plugins/<name>/` (100):
   imports the web front end's own `$lib`.
 - `plugins.json` at the root lists a version's plugins and whether each
   starts on. `bun run plugins` writes from it the three registries
-  (`crates/plugins`, `server/internal/plugins`, `$lib/plugins/index.ts`) and
-  buf's list of schemas, `buf.yaml`. `bun run proto` generates each plugin's
-  wire into its world half's `src/gen`.
+  (`crates/plugins-client` for the engine, `crates/plugins-world` for the
+  server's module, `$lib/plugins/index.ts` for the web) and buf's list of
+  schemas, `buf.yaml`. `bun run proto` generates each plugin's wire into its
+  world half's `src/gen`.
 - A new plugin with a panel adds its package to `apps/web/package.json`;
   `bun run plugins` says so when it is missing.
 - A plugin's name is a to z and `_`: it is the word before the dot.
-- The server runs chat from a Go package, `server/internal/chat`, cut before
-  the module: chat's world half is written and takes its place with the
-  module (99, BRIEF.md).
+- The server holds no plugin's code and no plugin's schema: a new plugin
+  touches its own folder, `plugins.json` and nothing else written by hand.
+
+## The bridge
+
+- The server's module is every world half of a version as one WASM file,
+  `crates/module`, built by `bun run module` and embedded in the Go binary.
+  `world::Host` is the host of world halves inside it.
+- Three names (102): the module exports `reserve` and `call`, and imports
+  `host.reply`. The server writes one call in the module's inbox and runs it;
+  the module hands back each reply before the call returns.
+- A call and a reply are messages of `proto/planet/module/v1`: describe,
+  start, an op, a session gone; a statement, an event told. A service a
+  plugin asks for is one more message.
+- An op carries its room whole: who asks, the moment, everyone here. The
+  module holds nothing of the core between two calls.
+- A call has a deadline of 250 ms and the module a ceiling of 64 MB. After a
+  fault, a trap or a deadline, the instance is replaced, the op is dropped
+  and the world starts in the new instance. What a world half held in memory
+  goes with it: what a world keeps is in its folder.
+- `unsafe` is written in `crates/module/src/abi.rs` alone, three times, to
+  say the three names. `bun run docs` holds it.
 
 ## What the host offers
 

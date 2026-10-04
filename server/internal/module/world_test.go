@@ -1,4 +1,4 @@
-package plugins_test
+package module_test
 
 import (
 	"bytes"
@@ -11,17 +11,21 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/sulram/planet/server/internal/api"
-	"github.com/sulram/planet/server/internal/chat/wire"
 	"github.com/sulram/planet/server/internal/folder"
-	"github.com/sulram/planet/server/internal/plugins"
+	"github.com/sulram/planet/server/internal/module"
 	pb "github.com/sulram/planet/server/internal/protocol"
 	"github.com/sulram/planet/server/internal/world"
 )
 
-// instance is a world alone over a folder, with the plugins this version
+// A whole instance over the module this binary carries: the routes, the
+// socket, the world folder and the world halves, as `planet serve` wires
+// them.
+
+// instance is a world alone over a folder, with the plugins the module
 // carries, where every session has `level`.
 func instance(t *testing.T, dir string, level world.Level) *httptest.Server {
 	t.Helper()
@@ -29,7 +33,12 @@ func instance(t *testing.T, dir string, level world.Level) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	web := httptest.NewServer(api.New(api.Config{DevLevel: level, Version: "test"}, kept, plugins.All()).Handler())
+	hosted, err := module.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hosted.Close(context.Background()) })
+	web := httptest.NewServer(api.New(api.Config{DevLevel: level, Version: "test"}, kept, hosted.Plugins()).Handler())
 	t.Cleanup(web.Close)
 	return web
 }
@@ -102,13 +111,36 @@ func (s *socket) hear(want func(*pb.ServerMessage) bool) *pb.ServerMessage {
 	}
 }
 
-func line(t *testing.T, text string) *pb.ClientMessage {
+// line is a line of chat for the whole world, in an envelope. Chat's wire is
+// written by its numbers: the server has no schema of a plugin.
+func line(text string) *pb.ClientMessage {
+	var say []byte
+	say = protowire.AppendTag(say, 1, protowire.VarintType)
+	say = protowire.AppendVarint(say, 1)
+	say = protowire.AppendTag(say, 2, protowire.BytesType)
+	say = protowire.AppendString(say, text)
+	return &pb.ClientMessage{Message: &pb.ClientMessage_Envelope{Envelope: &pb.Envelope{Plugin: "chat", Kind: "say", Payload: say}}}
+}
+
+// said reads the session and the text of a line heard, its first and third
+// fields.
+func said(t *testing.T, payload []byte) (session uint64, text string) {
 	t.Helper()
-	payload, err := proto.Marshal(&wire.Say{Scope: wire.Scope_SCOPE_WORLD, Text: text})
-	if err != nil {
-		t.Fatal(err)
+	for len(payload) > 0 {
+		number, kind, n := protowire.ConsumeTag(payload)
+		if n < 0 {
+			t.Fatal("a said that is no message")
+		}
+		payload = payload[n:]
+		switch {
+		case number == 1 && kind == protowire.VarintType:
+			session, _ = protowire.ConsumeVarint(payload)
+		case number == 3 && kind == protowire.BytesType:
+			text, _ = protowire.ConsumeString(payload)
+		}
+		payload = payload[protowire.ConsumeFieldValue(number, kind, payload):]
 	}
-	return &pb.ClientMessage{Message: &pb.ClientMessage_Envelope{Envelope: &pb.Envelope{Plugin: "chat", Kind: "say", Payload: payload}}}
+	return session, text
 }
 
 var recipe = map[string]any{"seed": "00000000deadbeef", "generator_version": 3, "params": map[string]any{}}
@@ -136,14 +168,11 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 	if len(welcome.Plugins) != 1 || welcome.Plugins[0].Name != "chat" || welcome.Plugins[0].Version != 1 {
 		t.Fatalf("and says it again in its welcome: %v", welcome.Plugins)
 	}
-	a.say(line(t, "hi"))
+	a.say(line("hi"))
 	heard := a.hear(func(m *pb.ServerMessage) bool { return m.GetEnvelope() != nil }).GetEnvelope()
-	var said wire.Said
-	if err := proto.Unmarshal(heard.Payload, &said); err != nil {
-		t.Fatal(err)
-	}
-	if heard.Plugin != "chat" || heard.Kind != "said" || said.Text != "hi" || said.Session != welcome.Session {
-		t.Fatalf("a line goes up in an envelope and comes back in one: %v %v", heard, &said)
+	session, text := said(t, heard.Payload)
+	if heard.Plugin != "chat" || heard.Kind != "said" || text != "hi" || uint32(session) != welcome.Session {
+		t.Fatalf("a line goes up in an envelope and comes back in one: %v %d %q", heard, session, text)
 	}
 
 	if status, answer := call(t, "POST", web.URL+"/api/plugins", map[string]any{"name": "voxels", "on": true}); status != http.StatusNotFound || answer["error"] != "plugin" {
@@ -160,7 +189,7 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 		t.Fatalf("whoever is here is told: %v", on)
 	}
 	// Off, a line is dropped: the next thing heard from a plugin is none.
-	a.say(line(t, "anyone?"))
+	a.say(line("anyone?"))
 	b, late := dial(t, web)
 	if len(late.Plugins) != 0 {
 		t.Fatalf("and whoever arrives after hears it off: %v", late.Plugins)

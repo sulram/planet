@@ -1353,6 +1353,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "module"
+version = "0.0.0"
+dependencies = [
+ "plugins-world",
+ "prost",
+ "protocol",
+ "serde_json",
+ "world",
+ "worldgen",
+]
+
+[[package]]
 name = "naga"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1874,11 +1886,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
-name = "plugins"
+name = "plugins-client"
 version = "0.0.0"
 dependencies = [
  "chat-client",
  "client",
+]
+
+[[package]]
+name = "plugins-world"
+version = "0.0.0"
+dependencies = [
+ "chat-world",
+ "world",
 ]
 
 [[package]]
@@ -2373,7 +2393,7 @@ dependencies = [
  "client",
  "env_logger",
  "log",
- "plugins",
+ "plugins-client",
  "pollster",
  "render",
  "topology",
@@ -2391,7 +2411,7 @@ dependencies = [
  "console_log",
  "js-sys",
  "log",
- "plugins",
+ "plugins-client",
  "render",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3451,6 +3471,7 @@ name = "world"
 version = "0.0.0"
 dependencies = [
  "libm",
+ "prost",
  "protocol",
  "topology",
 ]

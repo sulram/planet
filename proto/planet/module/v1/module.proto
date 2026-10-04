@@ -1,0 +1,105 @@
+// The bridge between the Go server and the module it runs (DECISIONS 99,
+// 102): what the server asks of the world halves, and what they say back.
+// The server writes one Call and the module answers with any number of
+// Reply, each one whole. Nothing here is a plugin's: a payload passes
+// through unread, as it does on the wire.
+//
+// `bun run proto` generates Rust into crates/protocol and Go into
+// server/internal/protocol/module. A change here is the two sides of one
+// binary: the module is built into the server, so they never meet apart.
+syntax = "proto3";
+
+package planet.module.v1;
+
+import "planet/v1/world.proto";
+
+option go_package = "github.com/sulram/planet/server/internal/protocol/module;module";
+
+// What the server asks. One a call.
+message Call {
+  oneof call {
+    Describe describe = 1;
+    Start start = 2;
+    Op op = 3;
+    Gone gone = 4;
+  }
+}
+
+// Asks what the module carries. Answered with one Statement.
+message Describe {}
+
+// The world starts, or starts again after the module was replaced: its
+// recipe is what the bodies are measured by.
+message Start {
+  planet.v1.Recipe recipe = 1;
+}
+
+// A session as a world half sees it.
+message Who {
+  uint32 session = 1;
+  // The account's id in mundos. Empty for a visitor.
+  string user = 2;
+  // What the person is called here.
+  string name = 3;
+  planet.v1.Level level = 4;
+  // Absent until the session has said where it is.
+  planet.v1.Stance stance = 5;
+}
+
+// An op the server let through: the plugin is on, the kind is one of its ops
+// and the session's level may ask it. The room rides with it whole, so a
+// call stands alone.
+message Op {
+  string plugin = 1;
+  string kind = 2;
+  bytes payload = 3;
+  // Who asks: one of `here`.
+  uint32 session = 4;
+  // The moment, in milliseconds since the Unix epoch.
+  uint64 now_ms = 5;
+  // Everyone in the world, the one who asks included.
+  repeated Who here = 6;
+}
+
+// A session left: what the plugin kept for it is dropped.
+message Gone {
+  string plugin = 1;
+  uint32 session = 2;
+}
+
+// What the module says back.
+message Reply {
+  oneof reply {
+    Statement statement = 1;
+    Tell tell = 2;
+  }
+}
+
+// The plugins the module carries, in the order the config lists them.
+message Statement {
+  repeated Carried plugins = 1;
+}
+
+// One plugin's world half.
+message Carried {
+  string name = 1;
+  // The version of its wire and of its seam.
+  uint32 version = 2;
+  // Whether a world starts with it on.
+  bool on = 3;
+  repeated Offered ops = 4;
+}
+
+// One thing a session may ask of a plugin, and the least level that may.
+message Offered {
+  string kind = 1;
+  planet.v1.Level level = 2;
+}
+
+// One event of a plugin, for the sessions named.
+message Tell {
+  string plugin = 1;
+  string kind = 2;
+  bytes payload = 3;
+  repeated uint32 to = 4;
+}

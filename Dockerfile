@@ -1,11 +1,13 @@
-# One image is one version of planet (docs/DEPLOY.md): the Go binary, the page
-# as files, the engine's WASM and the default asset set. The three builds run
-# on the machine that builds, whatever the image is for: the engine and the
-# page are the same on every architecture, and Go cross compiles.
+# One image is one version of planet (docs/DEPLOY.md): the Go binary with the
+# module of world halves in it, the page as files, the engine's WASM and the
+# default asset set. The three builds run on the machine that builds, whatever
+# the image is for: the engine, the module and the page are the same on every
+# architecture, and Go cross compiles.
 #
 #   docker build -t ghcr.io/sulram/planet:<version> --build-arg VERSION=<version> .
 
 # The engine: shell-web compiled to WASM, with the bindings the page loads.
+# And the module: the plugins' world halves as one WASM file the server embeds.
 FROM --platform=$BUILDPLATFORM rust:1 AS engine
 WORKDIR /src
 RUN rustup target add wasm32-unknown-unknown
@@ -20,8 +22,9 @@ COPY crates crates
 COPY plugins plugins
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
 	--mount=type=cache,target=/src/target \
-	cargo build --release --target wasm32-unknown-unknown -p shell-web \
-	&& wasm-bindgen --target web --out-dir /pkg target/wasm32-unknown-unknown/release/shell_web.wasm
+	cargo build --release --target wasm32-unknown-unknown -p shell-web -p module \
+	&& wasm-bindgen --target web --out-dir /pkg target/wasm32-unknown-unknown/release/shell_web.wasm \
+	&& cp target/wasm32-unknown-unknown/release/module.wasm /world.wasm
 
 # The page: SvelteKit built into plain files, the asset set beside them.
 FROM --platform=$BUILDPLATFORM oven/bun:1 AS web
@@ -46,6 +49,7 @@ WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server ./
+COPY --from=engine /world.wasm internal/module/world.wasm
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
 	go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o /planet ./cmd/planet
 

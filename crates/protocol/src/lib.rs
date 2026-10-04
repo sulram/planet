@@ -1,8 +1,9 @@
 //! The wire messages between a client and a world server.
 //!
 //! Generated from `proto/planet/v1/world.proto` by `bun run proto`, which
-//! writes `src/gen/`. Nothing here is written by hand except this file; the
-//! same schema generates the Go side, so the two cannot drift.
+//! writes `src/gen/`, with the bridge of the server's module beside it.
+//! Nothing here is written by hand except this file; the same schemas
+//! generate the Go side, so the two cannot drift.
 
 pub use prost::Message;
 
@@ -16,6 +17,18 @@ pub mod v1 {
 }
 
 pub use v1::*;
+
+/// The bridge between the server and the module it runs, generated from
+/// `proto/planet/module/v1/module.proto`: what the server asks of the world
+/// halves and what they say back (DECISIONS 102).
+pub mod module {
+    pub mod v1 {
+        #![allow(clippy::all, clippy::pedantic)]
+        include!("gen/planet/module/v1/planet.module.v1.rs");
+    }
+
+    pub use v1::*;
+}
 
 /// One message as one WebSocket frame.
 pub fn encode<M: Message>(message: &M) -> Vec<u8> {

@@ -60,11 +60,12 @@ end to end.
 
 - [ ] A plugin's strings in its own folder, merged into the web front end's catalogue
 - [ ] Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
-- [ ] The image built with `plugins/` in it: the `Dockerfile` copies the folder, and no machine here builds it
+- [ ] The image built with `plugins/` and the module in it: the `Dockerfile` copies the folder and embeds the module, and no machine here builds it
+- [ ] The room kept in the module, told who joins, moves and leaves, when a world's size makes a room sent whole with each op too much (102)
+- [ ] The memory ceiling and the deadline of the module measured against building: a platform of 64 a side reads its ground in 8 ms (97), and a world of a field holds 25 MB
 
 ### Chat (69)
 
-- [ ] The module the server runs, with chat's world half in it (99): the bridge over wazero with a bench of its own, `internal/chat` and `near.go` gone. `near` then reaches by the recipe's own `sector_bits` (49), where `near.go` measures every world at `2^16`
 - [ ] A mute: an answer over the permission hook, which answers by level alone (98)
 
 ### Building (58, 75 to 86)

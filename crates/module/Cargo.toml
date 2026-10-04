@@ -1,0 +1,28 @@
+[package]
+name = "module"
+description = "The server's module: every world half of a version as one WASM file, and the three names the Go server calls it by."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+world.workspace = true
+plugins-world.workspace = true
+protocol.workspace = true
+worldgen.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+prost.workspace = true
+
+# The workspace forbids `unsafe`. Here it is denied, and allowed on the three
+# declarations of `src/abi.rs` alone (DECISIONS 102); `bun run docs` holds it.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

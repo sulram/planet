@@ -28,7 +28,7 @@ pub fn run(
         None => Client::new(recipe),
     }
     .map_err(|e| e.to_string())?;
-    for plugin in plugins::all() {
+    for plugin in plugins_client::all() {
         client.plug(plugin);
     }
     if let Some(place) = &at {

@@ -20,8 +20,9 @@ apps/web/build/
 apps/web/.svelte-kit/
 apps/web/src/lib/engine/pkg/
 
-# server binary and the world folder of a development run
+# server binary, the module it embeds and the world folder of a development run
 server/bin/
+server/internal/module/world.wasm
 server/world/
 
 # headless render output
