@@ -37,9 +37,10 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    `feat/planet-type` there). Each type has one adapter: the image's
    repository, the shape of a version, the container's spec, the copy into a
    next generation.
-5. [ ] **Walk it.** On a local mundos: create a planet, found it as an admin,
-   enter as anonymous and as a builder, upgrade it into a next generation and
-   promote it. Then on the box.
+5. [ ] **Walk it.** A planet runs on the box under mundos, founded by its
+   admin. Left to walk: entering as anonymous and as a builder, then an
+   upgrade into a next generation and its promotion, which wait for plugin
+   work worth shipping.
 6. [ ] **The host of plugins, cut by chat**: the wire's envelope, the registry
    and its config, a panel's place. Chat is the first plugin, and a world
    runs with it on or off.
@@ -52,8 +53,9 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
 10. [ ] **A second way of building**, a proof of concept: the second
     implementation that makes those seams real (65).
 
-Steps 2 to 5 are the gate. Step 6 on, and everything in ROADMAP, resumes when
-a world is deployable and updatable by mundos.
+Steps 2 to 4 were the gate: a world is deployed by mundos, and step 6 on
+moves. The upgrade of step 5 is walked with the first version that carries
+plugin work, on Marlus's word.
 
 ## What it keeps
 

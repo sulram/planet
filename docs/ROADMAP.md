@@ -7,8 +7,9 @@ end to end.
 
 ## Now: a world mundos hosts
 
-- The campaign and its order of work: [BRIEF.md](BRIEF.md). Until a world is
-  deployable and updatable by mundos, nothing below moves (87).
+- The campaign and its order of work: [BRIEF.md](BRIEF.md). A world is
+  deployed by mundos (87); its upgrade is walked with the first version that
+  carries plugin work.
 
 ## The core: the sphere
 
