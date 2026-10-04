@@ -35,10 +35,20 @@ func main() {
 		if err := serve(); err != nil {
 			log.Fatal(err)
 		}
+	case "copy":
+		// What mundos runs, from the source's own image, to fill the folder of
+		// a world's next generation before it first starts.
+		if len(os.Args) != 4 {
+			fmt.Fprintln(os.Stderr, "usage: planet copy <from> <to>")
+			os.Exit(2)
+		}
+		if err := folder.Copy(os.Args[2], os.Args[3]); err != nil {
+			log.Fatal(err)
+		}
 	case "version":
 		fmt.Println(version)
 	default:
-		fmt.Fprintln(os.Stderr, "usage: planet [serve | version]")
+		fmt.Fprintln(os.Stderr, "usage: planet [serve | copy <from> <to> | version]")
 		os.Exit(2)
 	}
 }

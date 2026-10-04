@@ -12,7 +12,8 @@ The root `CLAUDE.md` applies here too.
   world folder at once: the routes, the socket, the front end's files. A route
   answers an error as a code, never a sentence.
 - `internal/mundos` checks what mundos signs and nothing else.
-  `internal/folder` is the world folder.
+  `internal/folder` is the world folder, and how it is copied into a world's
+  next generation (`planet copy`).
 - A plugin's server half is a package of its own, never a file in
   `internal/world` (DECISIONS 88).
 - The dependencies are the standard library, the socket and protobuf. Another

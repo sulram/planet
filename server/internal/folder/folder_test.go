@@ -75,3 +75,50 @@ func TestAFileThatDoesNotReadIsNoUnfoundedWorld(t *testing.T) {
 		t.Fatal("a broken file must stop the server, or a founding would write over a world")
 	}
 }
+
+func TestAWorldIsCopiedIntoItsNextGeneration(t *testing.T) {
+	from := t.TempDir()
+	source, _ := Open(from)
+	first := aRecipe(t, "00000000deadbeef")
+	if err := source.Found(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(from, "plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(from, "plugin", "kept"), []byte("a trace"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	to := filepath.Join(t.TempDir(), "next")
+	if err := Copy(from, to); err != nil {
+		t.Fatal(err)
+	}
+	clone, err := Open(to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept, err := clone.Recipe(context.Background()); err != nil || !kept.Equal(first) {
+		t.Fatalf("the copy is the same world: %v %v", kept, err)
+	}
+	if trace, _ := os.ReadFile(filepath.Join(to, "plugin", "kept")); string(trace) != "a trace" {
+		t.Fatalf("with everything its folder held: %q", trace)
+	}
+
+	if err := Copy(from, to); err == nil {
+		t.Fatal("a copy over a world is refused")
+	}
+	if err := Copy(filepath.Join(from, "nowhere"), filepath.Join(t.TempDir(), "x")); err == nil {
+		t.Fatal("a copy of nothing is refused")
+	}
+
+	// An unfounded world copies to an unfounded world.
+	empty := filepath.Join(t.TempDir(), "empty")
+	if err := Copy(t.TempDir(), empty); err != nil {
+		t.Fatal(err)
+	}
+	blank, _ := Open(empty)
+	if _, err := blank.Recipe(context.Background()); !errors.Is(err, world.ErrUnfounded) {
+		t.Fatalf("an empty folder copies to an unfounded world: %v", err)
+	}
+}
