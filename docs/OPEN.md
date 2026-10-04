@@ -10,6 +10,7 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 |---|---|---|
 | **The name.** `planet` is a codename | crate, repo, image and domain names | README |
 | **Confirm the proposed entries** 03 (raw wgpu), 05 (numbers), 06, 19, 20 | code that depends on them | DECISIONS |
+| **Confirm 107.** The cells take gestures and nothing else; a platform is the gestures building comes to in the client, from the ground and the feet; the server reads the ground once for a volume, to say where it starts and ends | the gesture as an op on the socket | DECISIONS 106, 107 |
 | **Which of entries 51 to 55 survive 58.** They came out of the voxel pyramid 58 retired: the frame budget counting chunks (51), the far field as the same grid coarsened (52), nothing coming down before its replacement is up (53), one level per piece of ground (54), coarse ground not casting (55). Some are still cited by ROADMAP; the rest get their titles struck | a reading pass over the decisions | DECISIONS 58 |
 | **A fourth shadow cascade.** Three step tenfold (40 m, 400 m, 4 km): a texel is 7.8 cm near the eye and 78 cm from 35 m on, wider than a cube. Tried and put back: four at 16, 100, 630 and 4000 m, three constants in `render::shadow`. The shadow of an avatar gets its legs and meets its feet; a texel is 3.1 cm near the eye and 20 cm out to 100 m, and 1.2 m from there to 630 m against 78 cm with three. It costs one more pass of casters. The one reading of that cost, 0.2 ms a frame on the development machine, is taken beside a browser running the world and is no measure: measure alone first, and the numbers go in the commit | shadows of builds seen from further than 35 m; the contact shadow of an avatar | ROADMAP wishes · DECISIONS 34, 83 |
 
@@ -17,7 +18,7 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **Where fields are hosted.** 25 MB each, gitignored, baked by `bun run field` from a public source. A field is immutable and a recipe names it by content id, so it can live outside the image: a public folder on a CDN with an index, read by the founding screen and fetched by the browser. Until fields have that home, an image built in CI carries the generated ground alone. The server holds a world's field too once it runs building's rules (97), and what that weighs is unmeasured | Earth in a published version; a second field | DEPLOY.md · DECISIONS 44, 72, 97 |
+| **Where fields are hosted.** 25 MB each, gitignored, baked by `bun run field` from a public source. A field is immutable and a recipe names it by content id, so it can live outside the image: a public folder on a CDN with an index, read by the founding screen and fetched by the browser. Until fields have that home, an image built in CI carries the generated ground alone. The server holds a world's field too once it reads the ground to seat a volume (97, 107), and what that weighs is unmeasured | Earth in a published version; a second field | DEPLOY.md · DECISIONS 44, 72, 97 |
 | **What a planet says about itself.** mundos's catalog and door show a title, a description and an image that a world's builders set inside it. A planet has nowhere to set them yet, and answers with its name alone | a planet in the catalog with a face | mundos `docs/BRIEFING.md` § Domain |
 
 ## Blocks plugins
@@ -42,7 +43,8 @@ The address is the save format: settled before the first volume is stored.
 | Question | Unblocks | Context |
 |---|---|---|
 | **Default asset set: where it is hosted** (repo, LFS, bucket). Committed for now, imported from `refs/` by `bun run assets`; avatars are CC0 | a public release | `assets/` · RENDER.md § Avatars |
-| ECS crate: `hecs` or `bevy_ecs` standalone | entities | DECISIONS 03 |
+| **Bodies as an ECS.** A vehicle, a ship and a thing carried are bodies beside the avatar, each composed of parts: a seat, a thrust, a hold. With one kind of body an ECS is a list, so the crate is chosen with the second kind: `hecs` or `bevy_ecs` standalone. The ground is a function and the cells are grids by address: neither is kept as entities | the first vehicle; entities | DECISIONS 03, 108 |
+| **Who simulates a body.** Each client moves its own body, and the server relays its stance. Physics the server decides is a simulation kept in the module, with a state and a turn of its own: the bridge holds nothing between two calls (102) and is cut again for it, and what is left to Go is the door (99) | a vehicle two people ride; a thing two people carry | DECISIONS 99, 102, 108 |
 | How much building is possible outside the browser (Pi, headset) | ROADMAP § Other screens | ARCHITECTURE |
 | Scripting model: server side; language and sandbox | scripts | VISION |
 | Chain for assets and deeds (leaning Tezos); when to anchor snapshots in Bitcoin | wallets | VISION |

@@ -11,7 +11,7 @@ end to end.
   deployed by mundos (87); its upgrade is walked with the first version that
   carries plugin work.
 
-## The core: the sphere
+## The core
 
 ### The shape
 
@@ -54,31 +54,14 @@ end to end.
 - [ ] The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
 - [ ] A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
 
-## Plugins: native
+### The cells (58, 75 to 86, 106)
 
-### The folder of a plugin (100)
-
-- [ ] A plugin's strings in its own folder, merged into the web front end's catalogue
-- [ ] Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
-- [ ] The image built with `plugins/` and the module in it: the `Dockerfile` copies the folder and embeds the module, and no machine here builds it
-- [ ] A plugin whose world half faults again and again is switched off by the host: each fault costs the room up to a deadline, 250 ms, and nothing stops the next (102)
-- [ ] An op has a rate for each session, asked before the module is: chat counts its lines inside its world half, after the call is paid
-- [ ] The room kept in the module, told who joins, moves and leaves, when a world's size makes a room sent whole with each op too much (102)
-- [ ] The memory ceiling and the deadline of the module measured against building: a platform of 64 a side reads its ground in 8 ms (97), and a world of a field holds 25 MB
-
-### Chat (69)
-
-- [ ] A mute: an answer over the permission hook, which answers by level alone (98)
-
-### Building (58, 75 to 86)
-
-- [ ] Extracted: a turn in the frame, solids for the footing, the picture through `scene` (BRIEF.md)
+- [ ] Cut as a system (108): the volumes, their picture and the footing on them stay in `client`, and its words are what building speaks: aim, preview, apply, take back (BRIEF.md)
 - [ ] An op is answered: it landed, or the code of why it was refused, matched to the op it answers (93, 98)
-- [ ] A stroke as an op on the socket: the host asks the permission hook with who, what and where, the plugin applies its rule, keeps it and an event tells everyone in the world (76, 93)
-- [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
-- [ ] Its world half in the module chat cut (97, 99): the rule the server runs, with the ground read by the generator there
-- [ ] Kept by volume (95): copy on first write, chunk versions, the plugin's store in the world folder (89)
-- [ ] The palette kept by the world (103): its sixteen colours in the plugin's store, the version's for a new world. Later, a world's admin changes them, as an op
+- [ ] A gesture as an op of the core on the socket: the host asks the permission hook with who, what and where, the core applies it, keeps it and an event tells everyone in the world (76, 93)
+- [ ] Applied in the module (97): `voxel` on the server as in the client
+- [ ] Kept by volume (95): copy on first write, chunk versions, the cells' store in the world folder (89)
+- [ ] The palette kept by the world (103): its sixteen colours in the cells' store, the version's for a new world. Later, a world's admin changes them, as an op
 - [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote
   - [ ] **The log is not the world.** Stored chunks are, by copy on first write, so the log is never replayed to rebuild anything: it exists for undo, audit and rollback, which is what makes it safe to compact
@@ -89,13 +72,40 @@ end to end.
 - [ ] Delta sync on reconnect; client chunk cache (SQLite native, OPFS web)
 - [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
 - [ ] A volume on the moon: a platform asked for there is laid as on the planet (today it is refused)
-- [ ] First cut leftovers: a key that lays a platform; the undo chord and the last tool said once in `client` rather than in each shell; the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
+- [ ] First cut leftovers: the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
 - [ ] The light of a volume: flood fill sun baked at mesh time, so an interior is dark and a doorway a gradient; no leak where a volume meets the ground; a glow channel
 - [ ] A volume streamed by proximity, a silhouette from afar; one under the sea
 - [ ] The camera boom cut by a volume's cells, as it is by rock under the ground
 - [ ] Ramp, wedge and half slab beside the cube (75)
-- [ ] Brushes inside a volume: dig, add, smooth, flatten
 - [ ] Blocky is a cosmetic toggle inside a volume, one viewer's choice, never the world's
+
+### Bodies (108)
+
+- [ ] A body that is no avatar: a vehicle, a ship, a thing carried. A session rides a body, and more than one answers to it (99). The first one cuts the system
+- [ ] Physics for every body, on the ground and on cells alike
+
+## Plugins: native
+
+### The folder of a plugin (100)
+
+- [ ] A plugin's strings in its own folder, merged into the web front end's catalogue
+- [ ] Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
+- [ ] The image built with `plugins/` and the module in it: the `Dockerfile` copies the folder and embeds the module, and no machine here builds it
+- [ ] A plugin whose world half faults again and again is switched off by the host: each fault costs the room up to a deadline, 250 ms, and nothing stops the next (102)
+- [ ] An op has a rate for each session, asked before the module is: chat counts its lines inside its world half, after the call is paid
+- [ ] The room kept in the module, told who joins, moves and leaves, when a world's size makes a room sent whole with each op too much (102)
+- [ ] The memory ceiling and the deadline of the module measured against the cells: the ground under a plot is read in 5 to 10 ms (97), and a world of a field holds 25 MB
+
+### Chat (69)
+
+- [ ] A mute: an answer over the permission hook, which answers by level alone (98)
+
+### Building (106)
+
+- [ ] Extracted to `plugins/build`: its tools, the stroke, the kinds of platform, the modifiers, its keys asked for by name and its panel (BRIEF.md)
+- [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
+- [ ] First cut leftovers: a key that lays a platform; the undo chord and the last tool said once in the plugin rather than in each shell
+- [ ] Brushes inside a volume: dig, add, smooth, flatten
 - [ ] A second way of building, a proof of concept beside this one (BRIEF.md)
 
 ### Land (14, 95)
@@ -120,7 +130,7 @@ end to end.
 - [ ] Images: URL or upload, client-made thumbnail and low version, proximity LOD, texture budget
 - [ ] Video on the web (browser decoder), decoder budget, posters
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
-- [ ] Vehicles: hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
+- [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
 - [ ] Portals between places, scales and worlds; magic as a capability

@@ -53,16 +53,16 @@ not yet confirmed.
 
 ## The core and its plugins
 
-- The core (88) is what a plugin stands on: the body (`topology`, `worldgen`,
-  the recipe), the picture (`render`, `scene`), a body walking it (controller,
-  footing on the ground, camera), the cells (`voxel`, 106), the link (socket,
-  session, level, a stance for each session) and the host of plugins. It runs
-  with every plugin off.
-- What is done on the sphere is a plugin: a client half and a world half in
-  Rust, its wire and a panel (99), compiled in and on or off for a world.
-- Every state has one owner, the core or one plugin, and what crosses a seam
-  is an op, a question or an event (93). How a plugin is cut, what it owns
-  and how it speaks: PLUGINS.md.
+- The core (88, 108) is what a world is made of and how it behaves, as
+  systems: the body (`topology`, `worldgen`, the recipe), the picture
+  (`render`, `scene`), a body walking it (controller, footing, camera), the
+  cells (`voxel`, 106), the link (socket, session, level, a stance for each
+  session) and the host of plugins. It runs with every plugin off.
+- What is done with it is a plugin (99): a tool, a rule, a panel, as two
+  halves in Rust and a wire, compiled in and on or off for a world.
+- Every state has one owner, a system of the core or one plugin, and what
+  crosses a seam is an op, a question or an event (93). How a plugin is cut,
+  what it owns and how it speaks: PLUGINS.md.
 
 ## The server
 

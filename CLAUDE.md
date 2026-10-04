@@ -72,7 +72,7 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   entities, scripts). From scratch, free software end to end.
 - One world per instance, hosted by mundos (`~/Dev/mundos`): it says who is
   who and addresses, versions and upgrades the world (DECISIONS 87).
-- The core is the sphere and its cells; what is done on it is a plugin (DECISIONS 88, 106).
+- The core is what a world is made of and how it behaves; what is done with it is a plugin (DECISIONS 88, 106, 108).
 - One Rust client (wgpu) on every screen: desktop, browser (WASM + WebGPU),
   Raspberry Pi, Quest, Pico. One Go server. The world is a recipe; the world
   folder holds only what someone changed. Offline mode is permanent.

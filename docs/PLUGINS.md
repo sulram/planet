@@ -1,13 +1,21 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104 and
-106; how much of it is built, and in what order, is in BRIEF.md.
+shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106
+and 108; how much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
-- The core (88) is what a plugin stands on, and it runs with every plugin
-  off. What it is made of: ARCHITECTURE.md § The core and its plugins.
+- The core (88, 108) is what a world is made of and how it behaves: the
+  ground, the cells, the bodies in it, their physics. It runs with every
+  plugin off. What it holds today: ARCHITECTURE.md § The core and its
+  plugins.
+- A system is an owner in the core with its words: ops, questions, events
+  (93). A plugin is what is done with systems, a tool, a rule or a panel:
+  it speaks to them and holds no substance of the world.
+- Two questions say which side a thing is on. With the plugin off, must
+  what it made still stand and behave? Do two plugins touch it? A yes to
+  either makes it the core's. A system knows no tool, key or permission.
 - A plugin is written once, in Rust, as two halves (99): a client half the
   engine hosts and a world half the server hosts. With them, a payload on
   the wire and a panel in each front end.
@@ -27,7 +35,8 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104 and
 - Every piece of a world's state has one owner, the core or one plugin (93).
   The owner alone changes it; everyone else sends it an op or asks it a
   question.
-- The core owns the recipe, who a session is, its level and its stance.
+- The core owns the recipe, who a session is, its level, its stance and the
+  cells.
 - A plugin owns what it keeps: its store in the world folder, its payloads on
   the wire, its panel.
 

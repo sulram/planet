@@ -1,4 +1,4 @@
-# 97. A plugin's rules are Rust, and the server runs them as WASM (decided)
+# 97. A plugin's rules are Rust, and the server runs them as WASM (decided; a platform is a plugin's gestures, 106)
 
 Logged 2026-10-04.
 

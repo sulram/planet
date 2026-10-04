@@ -17,8 +17,9 @@ this file in the same change.
 | Token | What mundos signs for one entry into one world: the account's id, its name and its level, good for a minute. Traded once, on entering, for a key. |
 | Key | What the world gives a page that entered with a token: kept in the page's memory, shown on the socket and on a founding. It stands for the life of the page. |
 | Level | What a session may do, as mundos says it: `admin`, `builder`, `signed_in`, `anonymous`. |
-| Core | The sphere, its cells and the host of plugins: what a plugin stands on. Runs with every plugin off. |
-| Plugin | A layer over the core, ours and compiled in, one folder under `plugins/`: a client half and a world half in Rust, a payload on the wire, a panel. On or off for a world. |
+| Core | What a world is made of and how it behaves, and the host of plugins: today the sphere, a body walking it and the cells. Runs with every plugin off. |
+| System | An owner in the core with its words, ops, questions and events: the cells are the first. It knows no tool, key or permission. |
+| Plugin | What is done with the core's systems, a tool, a rule or a panel, ours and compiled in, one folder under `plugins/`: a client half and a world half in Rust, a payload on the wire, a panel. On or off for a world. |
 | Client half | The part of a plugin the engine hosts: commands in, messages from the server, events out. |
 | World half | The part of a plugin the server hosts, in the module: its ops and their levels, what each does, whom an event reaches, what is kept. |
 | Module | The one WASM file the server runs through wazero: every plugin's world half, hosted by `world::Host`. Built by `bun run module`, embedded in the Go binary. |
@@ -80,7 +81,7 @@ this file in the same change.
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |
 | Op | One permission-checked request to an owner to change what it holds. The only way world state changes. |
-| Rule | What an op does to what a plugin owns: one piece of Rust, compiled into the client and run by the server as WASM. |
+| Rule | What an op does to what its owner holds: one piece of Rust, compiled into the client and run by the server as WASM. |
 | Op log | Append-only record of ops: who, when, address, before, after. |
 | Rollback | A volume restored to how it stood at an earlier moment, whoever built in it since. Undo is a person taking back their own strokes. |
 | World actor | The single goroutine that owns the world's state and writes. Started by the hub on the first session, gone after the last. |
