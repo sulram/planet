@@ -55,8 +55,9 @@ not yet confirmed.
 
 - The core (88) is what a plugin stands on: the body (`topology`, `worldgen`,
   the recipe), the picture (`render`, `scene`), a body walking it (controller,
-  footing on the ground, camera), the link (socket, session, level, a stance
-  for each session) and the host of plugins. It runs with every plugin off.
+  footing on the ground, camera), the cells (`voxel`, 106), the link (socket,
+  session, level, a stance for each session) and the host of plugins. It runs
+  with every plugin off.
 - What is done on the sphere is a plugin: a client half and a world half in
   Rust, its wire and a panel (99), compiled in and on or off for a world.
 - Every state has one owner, the core or one plugin, and what crosses a seam

@@ -1,4 +1,4 @@
-# 88. The core is the sphere, and what is done on it is a plugin composed at build (decided; the order is 96's)
+# 88. The core is the sphere, and what is done on it is a plugin composed at build (decided; the order is 96's, and the cells are the core's, 106)
 
 Logged 2026-10-04.
 

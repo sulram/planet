@@ -17,7 +17,7 @@ this file in the same change.
 | Token | What mundos signs for one entry into one world: the account's id, its name and its level, good for a minute. Traded once, on entering, for a key. |
 | Key | What the world gives a page that entered with a token: kept in the page's memory, shown on the socket and on a founding. It stands for the life of the page. |
 | Level | What a session may do, as mundos says it: `admin`, `builder`, `signed_in`, `anonymous`. |
-| Core | The sphere and the host of plugins: what a plugin stands on. Runs with every plugin off. |
+| Core | The sphere, its cells and the host of plugins: what a plugin stands on. Runs with every plugin off. |
 | Plugin | A layer over the core, ours and compiled in, one folder under `plugins/`: a client half and a world half in Rust, a payload on the wire, a panel. On or off for a world. |
 | Client half | The part of a plugin the engine hosts: commands in, messages from the server, events out. |
 | World half | The part of a plugin the server hosts, in the module: its ops and their levels, what each does, whom an event reaches, what is kept. |

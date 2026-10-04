@@ -1,4 +1,4 @@
-# 99. A plugin has no Go: its world half is Rust, and the server hosts it (decided)
+# 99. A plugin has no Go: its world half is Rust, and the server hosts it (decided; the grid of cells is the core's, 106)
 
 Logged 2026-10-04.
 

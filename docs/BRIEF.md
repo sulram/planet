@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91 and 93 to 104. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 106. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -52,10 +52,10 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    between Go and the module over wazero, and chat's world half in Rust on
    the crate `world` (101). The server holds no plugin's code: a line said
    in one browser is heard in another through the module.
-9. [ ] **Building as a plugin, and kept**: the turn in a frame, the solids and
-   the picture through `scene`; then a stroke as an op on the socket, the
-   permission hook, the store by volume and its world half in the module
-   (93, 95).
+9. [ ] **Building as a plugin, and the cells kept** (106): the cells stay
+   the core's, and building's tools, kinds of construction, keys and panel
+   leave for `plugins/build`. Then a gesture as an op of the core on the
+   socket, the permission hook and the store by volume (93, 95).
 10. [ ] **Land**: permission to build by volume, to a person or an agent, the
     second answer to the permission hook (95, 96).
 11. [ ] **Avatars**: the figure and the offer of avatars with its hook.

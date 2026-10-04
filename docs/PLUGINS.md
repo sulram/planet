@@ -1,8 +1,8 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102 and 104;
-how much of it is built, and in what order, is in BRIEF.md.
+shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104 and
+106; how much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
@@ -71,9 +71,13 @@ how much of it is built, and in what order, is in BRIEF.md.
 - **Where**: the address. A box of it, or a plot, which is the address less
   six bits (77).
 - **What**: the name of the action, the plugin's before it: `build.create`.
-- A volume is the unit building and land share (95): cells and their history
+- A volume is the unit the cells and land share (95): cells and their history
   are kept by volume, permission is given by volume, and a rollback restores
   a volume.
+- The cells are the core's (106): the volumes, their picture, the footing on
+  them and the op that changes them, a gesture over a box. Building is a
+  plugin of how a hand arrives at gestures: tools, kinds of construction,
+  modifiers, keys, a panel. With building off, what stands, stands.
 
 ## Where a plugin lives
 
@@ -128,8 +132,8 @@ A plugin is one folder, `plugins/<name>/` (100):
 ## What the host offers
 
 - Cut as each plugin asks for it, by extracting what exists (88). Chat cut
-  these (98); building cuts a store, where an op lands, a turn in each frame,
-  solids for the footing and the picture.
+  these (98); building cuts a turn in each frame, its keys asked for by name,
+  and the words of the cells: aim, preview, apply, take back (106).
 - **The envelope**: `Envelope { plugin, kind, payload }`, up for an op and
   down for an event. A message for a plugin that is off, or that nobody
   carries, is let pass.
