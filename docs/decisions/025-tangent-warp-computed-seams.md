@@ -1,4 +1,4 @@
-# 25. Tangent warp, computed seams (proposed)
+# 25. Tangent warp, computed seams (decided)
 
 Logged 2026-09-20.
 

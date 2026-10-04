@@ -7,7 +7,7 @@ ARCHITECTURE.md; how the picture is made is in RENDER.md.
 ## Topology: quad sphere, single build band
 
 - Six sectors (cube faces), each a square grid, projected onto the sphere with
-  the tangent warp (p): grid coordinate `s` moves to `tan(s * pi / 4)` on the
+  the tangent warp (25): grid coordinate `s` moves to `tan(s * pi / 4)` on the
   face. A block edge is 0.5 m at a sector centre, 0.35 m at the corners.
 - Seams are computed, not tabled: a column is an integer point on a cube, a
   step over an edge is one vector sum, swaps and flips fall out of the frames.
