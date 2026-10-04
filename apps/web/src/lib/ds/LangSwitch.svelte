@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { locales, t, type Locale } from '$lib/i18n';
+	import { keepLocale, locales, t, type Locale } from '$lib/i18n';
 	import Segmented from './Segmented.svelte';
 
 	const options = locales.map((value) => ({ value, label: value }));
@@ -11,8 +11,7 @@
 	// the screen survives.
 	async function choose(locale: Locale) {
 		if (locale === current) return;
-		document.cookie = `lang=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
-		document.documentElement.lang = locale;
+		keepLocale(locale);
 		await invalidateAll();
 	}
 </script>

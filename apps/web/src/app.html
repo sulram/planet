@@ -11,8 +11,9 @@
 				var root = document.documentElement;
 				var theme = /(?:^|; )theme=(light|dark)/.exec(document.cookie);
 				if (theme) root.dataset.theme = theme[1];
-				var lang = /(?:^|; )lang=([a-z]{2})(?:;|$)/.exec(document.cookie);
-				if (lang) root.lang = lang[1];
+				var said = /[?&]lang=([a-z]{2})(?:&|$)/.exec(location.search);
+				var lang = said || /(?:^|; )lang=([a-z]{2})(?:;|$)/.exec(document.cookie);
+				if (lang) root.lang = { pt: 'pt-BR', zh: 'zh-CN' }[lang[1]] || lang[1];
 			})();
 		</script>
 		%sveltekit.head%

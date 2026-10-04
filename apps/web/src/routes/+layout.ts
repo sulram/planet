@@ -1,4 +1,5 @@
-import { resolveLocale } from '$lib/i18n/config';
+import { language } from '$lib/door';
+import { htmlLang, isLocale, keepLocale, resolveLocale } from '$lib/i18n/config';
 import type { LayoutLoad } from './$types';
 
 // The page is files (DECISIONS 90): every route is built once as a shell the
@@ -7,12 +8,15 @@ export const ssr = false;
 export const prerender = true;
 
 /**
- * The language: the choice kept in the `lang` cookie, then the browser's own
+ * The language: the one mundos's door says the person reads, kept as their
+ * choice; else the choice kept in the `lang` cookie, then the browser's own
  * list, then the default. Read again whenever the choice changes.
  */
 export const load: LayoutLoad = () => {
+	const said = language();
+	if (said && isLocale(said)) keepLocale(said);
 	const kept = /(?:^|; )lang=([^;]+)/.exec(document.cookie)?.[1];
 	const locale = resolveLocale(kept, navigator.languages.join(','));
-	document.documentElement.lang = locale;
+	document.documentElement.lang = htmlLang[locale];
 	return { locale };
 };

@@ -2,7 +2,8 @@
  * mundos's door (DECISIONS 87). Every load passes through it: a page that
  * arrives with no word from the door goes there, and comes back with a token
  * mundos signed, or as a guest, in the address's fragment, which browsers
- * keep out of requests and logs.
+ * keep out of requests and logs. The language the person reads in mundos
+ * comes back beside it, in the query: `/?lang=pt#identity=…`.
  */
 
 const WORD = /^#identity=(.+)$/;
@@ -29,6 +30,16 @@ export function arrival(): Arrival | null {
 		// storage blocked: the page comes back to the world's own address
 	}
 	return { identity: decodeURIComponent(word[1]), address: `/${before}` };
+}
+
+/**
+ * The language mundos says the person reads, on the way back from the door:
+ * a code mundos and this page share, or null. It rides the query, where a
+ * world that does not read it loses nothing, and needs no signature: it is a
+ * preference, never who someone is.
+ */
+export function language(): string | null {
+	return new URLSearchParams(location.search).get('lang');
 }
 
 /**

@@ -36,4 +36,21 @@ const pt: typeof en = {
 	'hint.chat': 'conversar'
 };
 
-export const t = words({ en, pt });
+const zh: typeof en = {
+	name: '聊天',
+	title: '聊天',
+	near: '附近',
+	world: '世界',
+	scope: '谁能听到你',
+	placeholder: '说点什么。{here} 会分享你所在的位置。',
+	offline: '上线后即可聊天。',
+	send: '发送',
+	closed: '按 Enter 聊天',
+	left: '还剩 {n} 个字符',
+	here: '@这里',
+	goto: '前往 {place}',
+	lines: '聊天记录',
+	'hint.chat': '聊天'
+};
+
+export const t = words({ en, pt, zh });

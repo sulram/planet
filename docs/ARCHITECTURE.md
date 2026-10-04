@@ -24,9 +24,9 @@ not yet confirmed.
 
 - Who is who is mundos's: accounts live there, and the world checks a
   signature and keeps a level.
-- Every load passes through mundos's door: a page with no `#identity=` in its
-  address goes to `<mundos>/enter?host=<host>` and comes back with a token, or
-  with `guest`. The pose in the address bar is kept across the hop.
+- Every load passes through mundos's door: a page with no `#identity=` goes to
+  `<mundos>/enter?host=<host>`, back with a token or `guest`, and `?lang=` the
+  language read there, kept as the page's. The pose is kept across the hop.
 - The token is a JWT signed with Ed25519 (`EdDSA`): `iss` `mundos`, `aud` the
   world's name, `sub` the account's id, `name`, `level`, `exp` a minute on,
   read with 30 s of leeway. The server checks it with `MUNDOS_PUBLIC_KEY`.
@@ -185,7 +185,7 @@ not yet confirmed.
   a spring, along up only; all else the camera follows with no play (81).
 - Design system: `apps/web/src/lib/ds`, planet's own (74); catalogue at `/ds`.
   Components reference semantic tokens only. i18n: flat dotted keys, `en.ts`
-  is the source, `pt.ts` must match it. A plugin's words are in its own
+  is the source, `pt.ts` and `zh.ts` match it. A plugin's words are in its own
   folder, read through `words`.
 - The renderer accepts N views (1 desktop, 2 XR) and writes reversed depth.
 

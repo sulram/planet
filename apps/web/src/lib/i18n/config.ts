@@ -4,15 +4,26 @@
  */
 import { en, type MessageKey, type Messages } from './en';
 import { pt } from './pt';
+import { zh } from './zh';
 
-export const locales = ['en', 'pt'] as const;
+/** The languages the page speaks: those mundos speaks, by the same codes. */
+export const locales = ['en', 'pt', 'zh'] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = 'en';
 
-const catalogs: Record<Locale, Messages> = { en, pt };
+const catalogs: Record<Locale, Messages> = { en, pt, zh };
+
+/** What `<html lang>` says for each: the script and region a font is picked by. */
+export const htmlLang: Record<Locale, string> = { en: 'en', pt: 'pt-BR', zh: 'zh-CN' };
 
 export function isLocale(value: string): value is Locale {
 	return (locales as readonly string[]).includes(value);
+}
+
+/** Keeps a language as this browser's choice, and has the page say it. In the browser only. */
+export function keepLocale(locale: Locale): void {
+	document.cookie = `lang=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+	document.documentElement.lang = htmlLang[locale];
 }
 
 /** Request locale: explicit cookie, then Accept-Language, then the default. */
