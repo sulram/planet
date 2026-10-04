@@ -22,7 +22,7 @@ mod paint;
 mod trace;
 mod volumes;
 
-pub use afar::{AFAR, CHUNK_AFAR, CHUNK_AFAR_CELLS, afar};
+pub use afar::{AFAR, afar, chunk_afar};
 pub use faces::Quad;
 pub use gesture::Gesture;
 pub use paint::{Edge, Finish, Paint};

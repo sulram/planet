@@ -115,8 +115,10 @@ pub struct Held {
     pub plot_y: i32,
     #[prost(uint64, tag="4")]
     pub version: u64,
-    #[prost(bool, tag="5")]
-    pub afar: bool,
+    /// Cells of the volume along each side of a cell held afar: 4 or 16. 0,
+    /// held whole.
+    #[prost(uint32, tag="5")]
+    pub afar: u32,
 }
 /// `opened`: a volume was opened, to everyone near it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -180,7 +182,8 @@ pub struct Chunk {
 }
 /// A volume whole: where it stands and every chunk that holds something. Or,
 /// with `afar`, as it is seen from afar: the cells of each chunk a cell for
-/// every 4 of them each way, 4 x 4 x 4 of them, solid where any is.
+/// every `afar` of them each way, solid where any is. At 4, 4 x 4 x 4 cells
+/// a chunk; at 16, one.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Volume {
     #[prost(message, optional, tag="1")]
@@ -189,8 +192,8 @@ pub struct Volume {
     pub stood: ::core::option::Option<Stood>,
     #[prost(message, repeated, tag="3")]
     pub chunks: ::prost::alloc::vec::Vec<Chunk>,
-    #[prost(bool, tag="4")]
-    pub afar: bool,
+    #[prost(uint32, tag="4")]
+    pub afar: u32,
 }
 /// `seen`: volumes as they stand, and those that stand no more. The answer to
 /// `look`, of the volumes near the asker that it lacks or holds at another

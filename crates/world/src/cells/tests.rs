@@ -265,12 +265,12 @@ fn a_change_is_kept_told_to_who_is_near_and_shown_to_who_arrives() {
         .flat_map(|seen| &seen.volumes)
         .next()
         .expect("afar");
-    assert!(volume.afar);
+    assert_eq!(volume.afar, 4);
     // The row of 18 cells is in two chunks, and is a row of 5 afar.
     let afar_cells: Vec<Cell> = volume
         .chunks
         .iter()
-        .flat_map(|chunk| unpack(&chunk.cells, voxel::CHUNK_AFAR_CELLS).expect("a chunk afar"))
+        .flat_map(|chunk| unpack(&chunk.cells, 64).expect("a chunk afar"))
         .collect();
     let solid = afar_cells.iter().filter(|cell| !cell.is_air());
     assert!(solid.clone().all(|cell| cell.paint() == Some(5)));
@@ -281,13 +281,25 @@ fn a_change_is_kept_told_to_who_is_near_and_shown_to_who_arrives() {
         plot_x: x,
         plot_y: y,
         version: 1,
-        afar: true,
+        afar: 4,
     };
     assert!(seen(&mut again, &mut stage, 2, vec![held_afar]).is_empty());
-    // Further still, it is not shown at all.
+    // Further still, a step further: a cell for each chunk, and nothing
+    // more to a client that holds it nearer.
     let mut further = stage.here[1].stance.unwrap();
     further.u += 1000.0;
     let walked = stage.here[1].stance.replace(further);
+    assert!(seen(&mut again, &mut stage, 2, vec![held_afar]).is_empty());
+    let further_off = seen(&mut again, &mut stage, 2, Vec::new());
+    let volume = further_off.iter().flat_map(|seen| &seen.volumes).next();
+    let volume = volume.expect("further afar");
+    assert_eq!(volume.afar, 16);
+    let one = |chunk: &wire::Chunk| unpack(&chunk.cells, 1) == Some(vec![Cell::solid(5)]);
+    assert!(volume.chunks.iter().all(one));
+    // And past the last step, not at all.
+    let mut beyond = further;
+    beyond.u += 17000.0;
+    stage.here[1].stance = Some(beyond);
     assert!(seen(&mut again, &mut stage, 2, Vec::new()).is_empty());
     stage.here[1].stance = walked;
     // Whoever looks from near is shown it whole: the visitor, walked over.
@@ -302,7 +314,7 @@ fn a_change_is_kept_told_to_who_is_near_and_shown_to_who_arrives() {
         plot_x,
         plot_y: y,
         version,
-        afar: false,
+        afar: 0,
     };
     assert!(seen(&mut again, &mut stage, 2, vec![held(x, 1)]).is_empty());
     assert_eq!(seen(&mut again, &mut stage, 2, vec![held(x, 0)]).len(), 1);

@@ -18,11 +18,12 @@
 //! The ground under a volume stays as nature made it (DECISIONS 78).
 //!
 //! Past holding distance a volume is held as it is seen from afar
-//! (`voxel::afar`): a cell for every few each way, drawn as cubes as wide,
+//! (`voxel::afar`), a step further for every step of distance
+//! (`seat::AFAR`): a cell for every few each way, drawn as cubes as wide,
 //! with no edge, no lamp and nothing to stand on or aim at. A volume left
-//! behind is made so here from what was held of it, and one never held
-//! comes so from the world. Come near again, it is drawn afar until it is
-//! drawn whole.
+//! behind is made so here from what was held of it, a step further, and one
+//! never held comes so from the world. Whichever way a body goes, the copy
+//! it held is drawn until the next one is.
 //!
 //! The cells are a system of the core (DECISIONS 108): anyone reads what
 //! they hold, and a gesture alone changes it. How a hand arrives at gestures,
@@ -45,11 +46,11 @@ use protocol::{Body, Message};
 use scene::{
     GuideMesh, GuideVertex, Lamp, VolumeChange, VolumeDraw, VolumeMesh, VolumeMeshId, VolumeVertex,
 };
-use seat::{AFAR_DROP_M, DROP_M, PLOT_BITS, Stand, Unseated, plot_of};
+use seat::{DROP_M, PLOT_BITS, Stand, Unseated, plot_of};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
 use voxel::{
-    AFAR, CHUNK, CHUNK_AFAR, CHUNK_AFAR_CELLS, CHUNK_BITS, Cell, Edge, Face, Finish, Gesture, Hit,
-    Paint, Quad, Span, Volumes, crossing, unpack,
+    AFAR, CHUNK, Cell, Edge, Face, Finish, Gesture, Hit, Paint, Quad, Span, Volumes, crossing,
+    unpack,
 };
 use worldgen::{Generator, Source};
 
@@ -75,8 +76,6 @@ const GROUND_HALVINGS: usize = 5;
 const BODY_HALF: f64 = 0.6;
 /// How far the ghost of a gesture stands off the cubes it covers, metres.
 const GHOST_LIFT_M: f32 = 0.012;
-/// What marks the mesh of a chunk of a volume seen from afar.
-const AFAR_MESH: u64 = 1 << 61;
 /// The ghost's id, which no chunk of any volume has.
 const GHOST: VolumeMeshId = VolumeMeshId(u64::MAX);
 /// The first guide's id: the next ones count down from it.
@@ -180,7 +179,8 @@ struct Seated {
     /// radius that turns them into metres.
     sphere: QuadSphere,
     /// Cells of the seat along each side of a cell of these volumes: 1, the
-    /// cells themselves, or [`AFAR`], the volumes as they are seen from afar.
+    /// cells themselves, or a step afar (`seat::AFAR`), the volumes as they
+    /// are seen from there.
     scale: i32,
     volumes: Volumes,
     /// A ball around each volume, by its plot: what a line of sight asks
@@ -282,12 +282,15 @@ impl Seated {
     /// The mesh of a chunk, named by the address of its lowest corner.
     fn mesh_id(&self, chunk: [i32; 3]) -> VolumeMeshId {
         let [u, v, h] = chunk;
-        let across = |n: i32| u64::from(n as u32 >> CHUNK_BITS);
-        // Heights run either side of the datum: 24 bits hold them all.
-        let up = u64::from((h + (1 << 23)) as u32 & 0xff_ffff);
-        let afar = if self.afar() { AFAR_MESH } else { 0 };
+        // A chunk starts every chunk, or every plot where a plot is narrower.
+        let grain = self.volumes.side().min(CHUNK).trailing_zeros();
+        let across = |n: i32| u64::from(n as u32 >> grain);
+        // Heights run either side of the datum: 20 bits hold 262 km each way.
+        let up = u64::from((h + (1 << 19)) as u32 & 0xf_ffff);
+        // Which step: 0 for the cells themselves, then 1, 2 afar.
+        let step = u64::from(self.scale.trailing_zeros() / AFAR.trailing_zeros());
         VolumeMeshId(
-            afar | u64::from(self.seat.key()) << 56 | across(u) << 40 | across(v) << 24 | up,
+            step << 57 | u64::from(self.seat.key()) << 52 | across(u) << 36 | across(v) << 20 | up,
         )
     }
 }
@@ -400,9 +403,9 @@ struct Link {
     waiting: HashMap<u32, Waiting>,
     /// The volumes held, each at the version the world last said of it.
     versions: BTreeMap<(Seat, [i32; 2]), u64>,
-    /// The volumes held as they are seen from afar, each at the version it
-    /// was seen at.
-    afar: BTreeMap<(Seat, [i32; 2]), u64>,
+    /// The volumes held as they are seen from afar, each by its step, at the
+    /// version it was seen at.
+    afar: BTreeMap<(Seat, [i32; 2], i32), u64>,
     /// How many of this session's changes the world can take back, and put
     /// back.
     history: (usize, usize),
@@ -449,12 +452,12 @@ pub struct Cells {
     lamps: BTreeMap<VolumeMeshId, (Seat, Lamp)>,
     /// Chunks owed a mesh since their cells changed, by site.
     stale: BTreeSet<(usize, [i32; 3])>,
-    /// Volumes come near again, drawn as they are seen from afar until they
-    /// are drawn whole.
-    retiring: BTreeSet<(Seat, [i32; 2])>,
-    /// Volumes left behind, drawn whole until they are drawn as they are
-    /// seen from afar.
-    leaving: BTreeSet<(Seat, [i32; 2])>,
+    /// Copies afar of volumes come nearer, each by its step, drawn until the
+    /// nearer copy is drawn.
+    retiring: BTreeSet<(Seat, [i32; 2], i32)>,
+    /// Copies of volumes left behind, each by its step, drawn until the copy
+    /// a step further is drawn.
+    leaving: BTreeSet<(Seat, [i32; 2], i32)>,
     /// Whether a change of many gestures landed since the last update.
     landed: bool,
     changes: Vec<VolumeChange>,
@@ -472,14 +475,19 @@ pub struct Cells {
 impl Cells {
     /// The volumes of a seat, when something is built on it.
     fn site(&self, seat: Seat) -> Option<usize> {
-        let whole = |site: &Seated| site.seat == seat && !site.afar();
-        self.sites.iter().position(whole)
+        self.site_at(seat, 1)
     }
 
-    /// The volumes of a seat held as they are seen from afar, when some are.
-    fn afar_site(&self, seat: Seat) -> Option<usize> {
-        let afar = |site: &Seated| site.seat == seat && site.afar();
-        self.sites.iter().position(afar)
+    /// The volumes of a seat held at a step: 1, whole, or a step afar.
+    fn site_at(&self, seat: Seat, scale: i32) -> Option<usize> {
+        let at = |site: &Seated| site.seat == seat && site.scale == scale;
+        self.sites.iter().position(at)
+    }
+
+    /// Whether the volume over a plot of a seat is held at a step.
+    fn held_at(&self, seat: Seat, plot: [i32; 2], scale: i32) -> bool {
+        self.site_at(seat, scale)
+            .is_some_and(|site| self.sites[site].volumes.is_open(plot))
     }
 
     /// Where the centre of a body is now.
@@ -539,11 +547,14 @@ impl Cells {
             .is_some_and(|site| self.sites[site].volumes.is_open(plot_of(point)))
     }
 
-    /// Whether the volume over a column of a seat is held as it is seen from
-    /// afar.
-    pub fn afar_over(&self, seat: Seat, point: SurfacePoint) -> bool {
-        self.afar_site(seat)
-            .is_some_and(|site| self.sites[site].volumes.is_open(plot_of(point)))
+    /// The nearest step the volume over a column of a seat is held at as it
+    /// is seen from afar: cells of it along each side of a cell held so.
+    pub fn afar_over(&self, seat: Seat, point: SurfacePoint) -> Option<i32> {
+        let plot = plot_of(point);
+        let steps = seat::AFAR.iter().map(|step| step.scale);
+        steps
+            .into_iter()
+            .find(|&scale| self.held_at(seat, plot, scale))
     }
 
     /// The cells the volume over a column of a seat holds.
@@ -688,13 +699,13 @@ impl Cells {
             }
         }
         self.remove(seat, plot);
-        self.remove_afar(seat, plot);
+        self.remove_afar_all(seat, plot);
         true
     }
 
     /// Takes away the volume over a plot, cells, picture and all.
     fn remove(&mut self, seat: Seat, plot: [i32; 2]) {
-        self.leaving.remove(&(seat, plot));
+        self.leaving.remove(&(seat, plot, 1));
         let Some(site) = self.site(seat) else {
             return;
         };
@@ -1368,8 +1379,8 @@ impl Cells {
         }
         link.since_look_s = 0.0;
         let (on, from) = (body.0, body.1.to_array());
-        // How far the body is from each volume held, whole or afar.
-        let away: Vec<(bool, Seat, [i32; 2], f64)> = self
+        // How far the body is from each volume held, at each step.
+        let away: Vec<(i32, Seat, [i32; 2], f64)> = self
             .sites
             .iter()
             .flat_map(|site| {
@@ -1385,35 +1396,45 @@ impl Cells {
                         true => seat::away_m(site.sphere, sector, plot, stand, from),
                         false => f64::INFINITY,
                     };
-                    Some((site.afar(), site.seat, plot, away_m))
+                    Some((site.scale, site.seat, plot, away_m))
                 })
             })
             .collect();
-        for (afar, seat, plot, away_m) in away {
-            let leaving = self.leaving.contains(&(seat, plot));
-            match afar {
-                true if away_m > AFAR_DROP_M => self.remove_afar(seat, plot),
-                false if away_m > AFAR_DROP_M => {
-                    self.remove(seat, plot);
-                    self.remove_afar(seat, plot);
+        for (scale, seat, plot, away_m) in away {
+            let drop_m = match scale {
+                1 => DROP_M,
+                _ => seat::AFAR
+                    .iter()
+                    .find(|step| step.scale == scale)
+                    .map_or(f64::INFINITY, |step| step.drop_m),
+            };
+            let further = seat::AFAR.iter().find(|step| step.scale == scale * AFAR);
+            let leaving = self.leaving.contains(&(seat, plot, scale));
+            if away_m > drop_m {
+                match further {
+                    Some(step) if away_m <= step.drop_m => {
+                        if !leaving {
+                            self.leave(generator, seat, plot, scale);
+                        }
+                    }
+                    _ => self.remove_at(seat, plot, scale),
                 }
-                false if away_m > DROP_M && !leaving => self.leave(generator, seat, plot),
-                // Come back before it was drawn afar: it stays whole.
-                false if away_m <= DROP_M && leaving => {
-                    self.leaving.remove(&(seat, plot));
-                    self.remove_afar(seat, plot);
-                }
-                _ => {}
+            } else if leaving {
+                // Come back before it was drawn further off: it stays as it is.
+                self.leaving.remove(&(seat, plot, scale));
+                self.remove_afar(seat, plot, scale * AFAR);
             }
         }
         let Some(link) = &mut self.link else {
             return;
         };
-        let whole = link.versions.iter().map(|held| (held, false));
-        let afar = link.afar.iter().map(|held| (held, true));
+        let whole = link.versions.iter();
+        let whole = whole.map(|(&(seat, plot), &version)| (seat, plot, version, 0));
+        let afar = link.afar.iter();
+        let afar = afar.map(|(&(seat, plot, scale), &version)| (seat, plot, version, scale as u32));
         let held = whole
             .chain(afar)
-            .map(|((&(seat, plot), &version), afar)| wire::Held {
+            .map(|(seat, plot, version, afar)| wire::Held {
                 seat: Some(seat.wire()),
                 plot_x: plot[0],
                 plot_y: plot[1],
@@ -1529,29 +1550,39 @@ impl Cells {
                 low: stood.low,
                 height: stood.height,
             };
-            // As it is seen from afar: held so, and whole no more.
-            if volume.afar {
+            let scale = match volume.afar {
+                0 => 1,
+                afar => afar as i32,
+            };
+            if scale != 1 && !seat::AFAR.iter().any(|step| step.scale == scale) {
+                continue;
+            }
+            // Nearer copies are of another version, or of a volume left
+            // behind: they go. Further ones are drawn until this one is.
+            for step in seat::AFAR.iter().filter(|step| step.scale < scale) {
+                self.remove_afar(seat, plot, step.scale);
+            }
+            for step in seat::AFAR.iter().filter(|step| step.scale > scale) {
+                if self.held_at(seat, plot, step.scale) {
+                    self.retiring.insert((seat, plot, step.scale));
+                }
+            }
+            if scale != 1 {
+                let side = (CHUNK as i32 / scale) as usize;
                 let chunks: Vec<([i32; 3], Vec<Cell>)> = volume
                     .chunks
                     .iter()
                     .filter_map(|chunk| {
-                        let cells = unpack(&chunk.cells, CHUNK_AFAR_CELLS)?;
+                        let cells = unpack(&chunk.cells, side * side * side)?;
                         Some(([chunk.x, chunk.y, chunk.z], cells))
                     })
                     .collect();
                 self.remove(seat, plot);
-                self.stand_afar(generator, seat, plot, stand, &chunks);
+                self.stand_afar(generator, seat, plot, stand, scale, &chunks);
                 if let Some(link) = &mut self.link {
-                    link.afar.insert((seat, plot), stood.version);
+                    link.afar.insert((seat, plot, scale), stood.version);
                 }
                 continue;
-            }
-            // Held afar, it is drawn so until it is drawn whole.
-            if self
-                .afar_site(seat)
-                .is_some_and(|site| self.sites[site].volumes.is_open(plot))
-            {
-                self.retiring.insert((seat, plot));
             }
             // Held at the version shown, this is more of the same volume.
             // At another, or not at all, it is the volume anew.
@@ -1588,30 +1619,32 @@ impl Cells {
         for gone in seen.gone {
             if let Some(seat) = Seat::from_wire(gone.seat.as_ref()) {
                 self.remove(seat, [gone.plot_x, gone.plot_y]);
-                self.remove_afar(seat, [gone.plot_x, gone.plot_y]);
+                self.remove_afar_all(seat, [gone.plot_x, gone.plot_y]);
             }
         }
     }
 
-    /// Stands the volume over a plot of a seat as it is seen from afar, anew:
-    /// the cells afar of each chunk it holds, by the chunk's lowest corner in
-    /// the seat's cells. What was drawn of it stays until it is drawn again.
+    /// Stands the volume over a plot of a seat as it is seen from a step
+    /// afar, anew: each block of cells afar by the lowest corner, in the
+    /// seat's own cells, of the cells it is seen from. What was drawn of it
+    /// stays until it is drawn again.
     fn stand_afar(
         &mut self,
         generator: &Generator,
         seat: Seat,
         plot: [i32; 2],
         stand: Stand,
-        chunks: &[([i32; 3], Vec<Cell>)],
+        scale: i32,
+        blocks: &[([i32; 3], Vec<Cell>)],
     ) -> usize {
-        let site = match self.afar_site(seat) {
+        let site = match self.site_at(seat, scale) {
             Some(site) => site,
             None => {
                 self.sites.push(Seated {
                     seat,
                     sphere: seat.sphere(generator),
-                    scale: AFAR,
-                    volumes: Volumes::new(PLOT_BITS - AFAR.trailing_zeros()),
+                    scale,
+                    volumes: Volumes::new(PLOT_BITS - scale.trailing_zeros()),
                     balls: BTreeMap::new(),
                 });
                 self.sites.len() - 1
@@ -1620,12 +1653,13 @@ impl Cells {
         let volumes = &mut self.sites[site].volumes;
         let before = volumes.bounds(plot).map(|bounds| volumes.chunks_in(bounds));
         volumes.close(plot);
-        let low = stand.low.div_euclid(AFAR);
-        let top = (stand.low + stand.height as i32 + AFAR - 1).div_euclid(AFAR);
+        let low = stand.low.div_euclid(scale);
+        let top = (stand.low + stand.height as i32 + scale - 1).div_euclid(scale);
         volumes.open(plot, low, (top - low) as u32);
-        for (corner, cells) in chunks {
-            let at = corner.map(|n| n.div_euclid(AFAR));
-            volumes.restore(Span::between(at, at.map(|n| n + CHUNK_AFAR - 1)), cells);
+        for (corner, cells) in blocks {
+            let side = (cells.len() as f64).cbrt().round() as i32;
+            let at = corner.map(|n| n.div_euclid(scale));
+            volumes.restore(Span::between(at, at.map(|n| n + side - 1)), cells);
         }
         let now = volumes.bounds(plot).map(|bounds| volumes.chunks_in(bounds));
         for chunk in before.into_iter().chain(now).flatten() {
@@ -1634,49 +1668,64 @@ impl Cells {
         site
     }
 
-    /// Holds a volume the body left behind as it is seen from afar, made
-    /// from what is held of it. It is drawn whole until it is drawn afar, a
-    /// few chunks an update, so letting it go costs no frame more than
-    /// drawing any other change.
-    fn leave(&mut self, generator: &Generator, seat: Seat, plot: [i32; 2]) {
-        let Some(site) = self.site(seat) else {
+    /// Holds a volume the body left behind as it is seen from a step
+    /// further, made from what is held of it at `scale`. That copy is drawn
+    /// until the further one is, a few chunks an update, so letting it go
+    /// costs no frame more than drawing any other change.
+    fn leave(&mut self, generator: &Generator, seat: Seat, plot: [i32; 2], scale: i32) {
+        let Some(site) = self.site_at(seat, scale) else {
             return;
         };
         let volumes = &self.sites[site].volumes;
         let Some(bounds) = volumes.bounds(plot) else {
             return;
         };
-        let chunks: Vec<([i32; 3], Vec<Cell>)> = volumes
+        let blocks: Vec<([i32; 3], Vec<Cell>)> = volumes
             .stored(plot)
             .into_iter()
             .map(|chunk| {
+                let cells = volumes.cells(Volumes::chunk_span(chunk));
                 (
-                    chunk,
-                    voxel::afar(&volumes.cells(Volumes::chunk_span(chunk))),
+                    chunk.map(|n| n * scale),
+                    voxel::afar(&cells, CHUNK as usize),
                 )
             })
             .collect();
         let stand = Stand {
-            low: bounds.min[2],
-            height: bounds.size()[2],
+            low: bounds.min[2] * scale,
+            height: bounds.size()[2] * scale as u32,
         };
-        self.stand_afar(generator, seat, plot, stand, &chunks);
-        self.leaving.insert((seat, plot));
-        if let Some(link) = &mut self.link
-            && let Some(&version) = link.versions.get(&(seat, plot))
-        {
-            link.afar.insert((seat, plot), version);
+        let further = scale * AFAR;
+        self.stand_afar(generator, seat, plot, stand, further, &blocks);
+        self.leaving.insert((seat, plot, scale));
+        if let Some(link) = &mut self.link {
+            let version = match scale {
+                1 => link.versions.get(&(seat, plot)),
+                _ => link.afar.get(&(seat, plot, scale)),
+            };
+            if let Some(&version) = version {
+                link.afar.insert((seat, plot, further), version);
+            }
         }
     }
 
-    /// Takes away a volume held as it is seen from afar, and its picture.
-    fn remove_afar(&mut self, seat: Seat, plot: [i32; 2]) {
-        self.retiring.remove(&(seat, plot));
-        self.leaving.remove(&(seat, plot));
-        if let Some(link) = &mut self.link {
-            link.afar.remove(&(seat, plot));
+    /// Takes away the volume over a plot at a step: whole, or afar.
+    fn remove_at(&mut self, seat: Seat, plot: [i32; 2], scale: i32) {
+        match scale {
+            1 => self.remove(seat, plot),
+            _ => self.remove_afar(seat, plot, scale),
         }
-        let Some(site) = self.afar_site(seat) else {
+    }
+
+    /// Takes away a volume held as it is seen from a step afar, and its
+    /// picture.
+    fn remove_afar(&mut self, seat: Seat, plot: [i32; 2], scale: i32) {
+        self.retiring.remove(&(seat, plot, scale));
+        self.leaving.remove(&(seat, plot, scale));
+        if let Some(link) = &mut self.link {
+            link.afar.remove(&(seat, plot, scale));
+        }
+        let Some(site) = self.site_at(seat, scale) else {
             return;
         };
         let Some(bounds) = self.sites[site].volumes.bounds(plot) else {
@@ -1690,38 +1739,53 @@ impl Cells {
         self.sites[site].volumes.close(plot);
     }
 
-    /// Lets go of what is drawn afar of the volumes come near, once they are
-    /// drawn whole, and of what is drawn whole of the volumes left behind,
-    /// once they are drawn afar.
-    fn retire(&mut self) {
-        let drawn = |cells: &Cells, site: Option<usize>, plot: [i32; 2]| {
-            let Some(site) = site else {
-                return true;
-            };
-            let volumes = &cells.sites[site].volumes;
-            !cells
-                .stale
-                .iter()
-                .any(|&(at, chunk)| at == site && volumes.plot_of(chunk[0], chunk[1]) == plot)
-        };
-        let near: Vec<(Seat, [i32; 2])> = self
-            .retiring
-            .iter()
-            .copied()
-            .filter(|&(seat, plot)| drawn(self, self.site(seat), plot))
-            .collect();
-        for (seat, plot) in near {
-            self.remove_afar(seat, plot);
+    /// Takes away every copy afar of the volume over a plot.
+    fn remove_afar_all(&mut self, seat: Seat, plot: [i32; 2]) {
+        for step in seat::AFAR {
+            self.remove_afar(seat, plot, step.scale);
         }
-        let far: Vec<(Seat, [i32; 2])> = self
-            .leaving
-            .iter()
-            .copied()
-            .filter(|&(seat, plot)| drawn(self, self.afar_site(seat), plot))
+    }
+
+    /// Whether the volume over a plot is drawn at a step as it is held there:
+    /// no chunk of it owes a mesh.
+    fn drawn_at(&self, seat: Seat, plot: [i32; 2], scale: i32) -> bool {
+        let Some(site) = self.site_at(seat, scale) else {
+            return false;
+        };
+        let volumes = &self.sites[site].volumes;
+        let owed = |&&(at, chunk): &&(usize, [i32; 3])| {
+            at == site && volumes.plot_of(chunk[0], chunk[1]) == plot
+        };
+        volumes.is_open(plot) && !self.stale.iter().any(|owed_one| owed(&owed_one))
+    }
+
+    /// Lets go of a copy afar once the nearest copy held nearer is drawn,
+    /// and of a copy left behind once the copy a step further is drawn.
+    fn retire(&mut self) {
+        let steps: Vec<i32> = core::iter::once(1)
+            .chain(seat::AFAR.iter().map(|step| step.scale))
             .collect();
-        for (seat, plot) in far {
-            self.leaving.remove(&(seat, plot));
-            self.remove(seat, plot);
+        let retiring: Vec<(Seat, [i32; 2], i32)> = self.retiring.iter().copied().collect();
+        for (seat, plot, scale) in retiring {
+            let nearer = steps.iter().copied().filter(|&at| at < scale);
+            match nearer.into_iter().find(|&at| self.held_at(seat, plot, at)) {
+                Some(at) if self.drawn_at(seat, plot, at) => self.remove_afar(seat, plot, scale),
+                Some(_) => {}
+                // Nothing nearer is held: this copy is the best there is.
+                None => {
+                    self.retiring.remove(&(seat, plot, scale));
+                }
+            }
+        }
+        let leaving: Vec<(Seat, [i32; 2], i32)> = self.leaving.iter().copied().collect();
+        for (seat, plot, scale) in leaving {
+            let further = scale * AFAR;
+            if !self.held_at(seat, plot, further) {
+                self.leaving.remove(&(seat, plot, scale));
+            } else if self.drawn_at(seat, plot, further) {
+                self.leaving.remove(&(seat, plot, scale));
+                self.remove_at(seat, plot, scale);
+            }
         }
     }
 

@@ -391,7 +391,7 @@ fn a_volume_far_off_is_held_as_it_is_seen_from_afar() {
     // The visitor holds none of its cells, and draws it as it is seen from
     // afar.
     assert!(!world.client(far).cells().covers(seat, point));
-    assert!(world.client(far).cells().afar_over(seat, point));
+    assert_eq!(world.client(far).cells().afar_over(seat, point), Some(4));
     assert!(!world.client(far).settled_frame().volumes.is_empty());
 
     // Walked over, it is held whole, and once it is drawn whole what was
@@ -402,18 +402,26 @@ fn a_volume_far_off_is_held_as_it_is_seen_from_afar() {
         same(&world.here[a].client, &world.here[far].client, point),
         same(&world.here[a].client, &world.here[a].client, point)
     );
-    assert!(!world.client(far).cells().afar_over(seat, point));
+    assert_eq!(world.client(far).cells().afar_over(seat, point), None);
 
     // Walked off past holding distance, it is held afar again, made from
     // what was held of it, and nothing is asked of the world for it.
     world.client(far).teleport(along(1000.0));
     world.live(1.5);
     assert!(!world.client(far).cells().covers(seat, point));
-    assert!(world.client(far).cells().afar_over(seat, point));
+    assert_eq!(world.client(far).cells().afar_over(seat, point), Some(4));
 
-    // Past seeing distance, it is let go.
+    // Three kilometres off, it is held a step further, made from the copy
+    // held afar, and still drawn.
     world.client(far).teleport(along(6000.0));
     world.live(1.5);
-    assert!(!world.client(far).cells().afar_over(seat, point));
+    assert_eq!(world.client(far).cells().afar_over(seat, point), Some(16));
+    assert!(!world.client(far).settled_frame().volumes.is_empty());
+
+    // Past the last step, it is let go.
+    let beyond = if point.u > 32768.0 { -19000.0 } else { 19000.0 };
+    world.client(far).teleport(along(beyond));
+    world.live(1.5);
+    assert_eq!(world.client(far).cells().afar_over(seat, point), None);
     assert!(world.client(far).settled_frame().volumes.is_empty());
 }

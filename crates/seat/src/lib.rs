@@ -45,12 +45,42 @@ const UNDER: i32 = 8;
 pub const HOLD_M: f64 = 256.0;
 /// How far a body goes from a volume before its client lets it go.
 pub const DROP_M: f64 = 320.0;
-/// How near a body a volume is for its client to hold it as it is seen from
-/// afar, metres: past [`HOLD_M`] and within this, the world answers a look
-/// with it so. Further than the horizon from a hill of the planet.
-pub const AFAR_M: f64 = 2048.0;
-/// How far a body goes from a volume held afar before its client lets it go.
-pub const AFAR_DROP_M: f64 = 2304.0;
+/// A step a volume is seen at from afar: cells of it along each side of a
+/// cell seen so, how near a body it is shown so, metres, and how far a body
+/// goes before its client lets it go.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Afar {
+    pub scale: i32,
+    pub hold_m: f64,
+    pub drop_m: f64,
+}
+
+/// The steps a volume is seen at past [`HOLD_M`], the nearest first: a cell
+/// of two metres to 2 km, and of eight to the horizon seen from a kilometre
+/// up, where a body flying sees furthest.
+pub const AFAR: [Afar; 2] = [
+    Afar {
+        scale: 4,
+        hold_m: 2048.0,
+        drop_m: 2304.0,
+    },
+    Afar {
+        scale: 16,
+        hold_m: 8192.0,
+        drop_m: 9216.0,
+    },
+];
+
+/// The step a body this far from a volume is shown it at: 1, whole, near;
+/// `None` past every step.
+pub fn shown_at(away_m: f64) -> Option<i32> {
+    if away_m <= HOLD_M {
+        return Some(1);
+    }
+    AFAR.iter()
+        .find(|step| away_m <= step.hold_m)
+        .map(|step| step.scale)
+}
 /// How near a body a change is told to its session: further than a client
 /// holds a volume, so a body at the edge of holding one hears of it though
 /// its stance is a moment old.

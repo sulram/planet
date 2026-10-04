@@ -98,7 +98,9 @@ message Held {
   sint32 plot_x = 2;
   sint32 plot_y = 3;
   uint64 version = 4;
-  bool afar = 5;
+  // Cells of the volume along each side of a cell held afar: 4 or 16. 0,
+  // held whole.
+  uint32 afar = 5;
 }
 
 // `opened`: a volume was opened, to everyone near it.
@@ -143,12 +145,13 @@ message Chunk {
 
 // A volume whole: where it stands and every chunk that holds something. Or,
 // with `afar`, as it is seen from afar: the cells of each chunk a cell for
-// every 4 of them each way, 4 x 4 x 4 of them, solid where any is.
+// every `afar` of them each way, solid where any is. At 4, 4 x 4 x 4 cells
+// a chunk; at 16, one.
 message Volume {
   Seat seat = 1;
   Stood stood = 2;
   repeated Chunk chunks = 3;
-  bool afar = 4;
+  uint32 afar = 4;
 }
 
 // `seen`: volumes as they stand, and those that stand no more. The answer to

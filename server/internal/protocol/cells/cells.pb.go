@@ -652,12 +652,14 @@ func (x *Look) GetHeld() []*Held {
 // A volume a client holds, at the version it holds it: whole, or as it is
 // seen from afar.
 type Held struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Seat          *Seat                  `protobuf:"bytes,1,opt,name=seat,proto3" json:"seat,omitempty"`
-	PlotX         int32                  `protobuf:"zigzag32,2,opt,name=plot_x,json=plotX,proto3" json:"plot_x,omitempty"`
-	PlotY         int32                  `protobuf:"zigzag32,3,opt,name=plot_y,json=plotY,proto3" json:"plot_y,omitempty"`
-	Version       uint64                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	Afar          bool                   `protobuf:"varint,5,opt,name=afar,proto3" json:"afar,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Seat    *Seat                  `protobuf:"bytes,1,opt,name=seat,proto3" json:"seat,omitempty"`
+	PlotX   int32                  `protobuf:"zigzag32,2,opt,name=plot_x,json=plotX,proto3" json:"plot_x,omitempty"`
+	PlotY   int32                  `protobuf:"zigzag32,3,opt,name=plot_y,json=plotY,proto3" json:"plot_y,omitempty"`
+	Version uint64                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
+	// Cells of the volume along each side of a cell held afar: 4 or 16. 0,
+	// held whole.
+	Afar          uint32 `protobuf:"varint,5,opt,name=afar,proto3" json:"afar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -720,11 +722,11 @@ func (x *Held) GetVersion() uint64 {
 	return 0
 }
 
-func (x *Held) GetAfar() bool {
+func (x *Held) GetAfar() uint32 {
 	if x != nil {
 		return x.Afar
 	}
-	return false
+	return 0
 }
 
 // `opened`: a volume was opened, to everyone near it.
@@ -1041,13 +1043,14 @@ func (x *Chunk) GetCells() []byte {
 
 // A volume whole: where it stands and every chunk that holds something. Or,
 // with `afar`, as it is seen from afar: the cells of each chunk a cell for
-// every 4 of them each way, 4 x 4 x 4 of them, solid where any is.
+// every `afar` of them each way, solid where any is. At 4, 4 x 4 x 4 cells
+// a chunk; at 16, one.
 type Volume struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seat          *Seat                  `protobuf:"bytes,1,opt,name=seat,proto3" json:"seat,omitempty"`
 	Stood         *Stood                 `protobuf:"bytes,2,opt,name=stood,proto3" json:"stood,omitempty"`
 	Chunks        []*Chunk               `protobuf:"bytes,3,rep,name=chunks,proto3" json:"chunks,omitempty"`
-	Afar          bool                   `protobuf:"varint,4,opt,name=afar,proto3" json:"afar,omitempty"`
+	Afar          uint32                 `protobuf:"varint,4,opt,name=afar,proto3" json:"afar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1103,11 +1106,11 @@ func (x *Volume) GetChunks() []*Chunk {
 	return nil
 }
 
-func (x *Volume) GetAfar() bool {
+func (x *Volume) GetAfar() uint32 {
 	if x != nil {
 		return x.Afar
 	}
-	return false
+	return 0
 }
 
 // `seen`: volumes as they stand, and those that stand no more. The answer to
@@ -1211,7 +1214,7 @@ const file_planet_cells_v1_cells_proto_rawDesc = "" +
 	"\x06plot_x\x18\x02 \x01(\x11R\x05plotX\x12\x15\n" +
 	"\x06plot_y\x18\x03 \x01(\x11R\x05plotY\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\x04R\aversion\x12\x12\n" +
-	"\x04afar\x18\x05 \x01(\bR\x04afar\"a\n" +
+	"\x04afar\x18\x05 \x01(\rR\x04afar\"a\n" +
 	"\x06Opened\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12,\n" +
 	"\x05stood\x18\x02 \x01(\v2\x16.planet.cells.v1.StoodR\x05stood\"\xb2\x01\n" +
@@ -1241,7 +1244,7 @@ const file_planet_cells_v1_cells_proto_rawDesc = "" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12,\n" +
 	"\x05stood\x18\x02 \x01(\v2\x16.planet.cells.v1.StoodR\x05stood\x12.\n" +
 	"\x06chunks\x18\x03 \x03(\v2\x16.planet.cells.v1.ChunkR\x06chunks\x12\x12\n" +
-	"\x04afar\x18\x04 \x01(\bR\x04afar\"d\n" +
+	"\x04afar\x18\x04 \x01(\rR\x04afar\"d\n" +
 	"\x04Seen\x121\n" +
 	"\avolumes\x18\x01 \x03(\v2\x17.planet.cells.v1.VolumeR\avolumes\x12)\n" +
 	"\x04gone\x18\x02 \x03(\v2\x15.planet.cells.v1.HeldR\x04gone*N\n" +

@@ -57,11 +57,12 @@ impl core::fmt::Debug for Volumes {
 }
 
 impl Volumes {
-    /// No volume yet, over plots of `2^plot_bits` cells a side. A plot holds
-    /// at least a chunk.
+    /// No volume yet, over plots of `2^plot_bits` cells a side. A plot of
+    /// fewer cells than a chunk is wide, as a volume seen from far off is,
+    /// holds chunks cut by its own sides.
     pub fn new(plot_bits: u32) -> Volumes {
         Volumes {
-            bits: plot_bits.max(CHUNK_BITS),
+            bits: plot_bits,
             standing: BTreeMap::new(),
         }
     }
@@ -378,6 +379,29 @@ mod tests {
         assert!(!volumes.holds([64, 0, 16]));
     }
     use crate::Face;
+
+    #[test]
+    fn plots_narrower_than_a_chunk_each_draw_their_own_cells() {
+        // Volumes seen from afar: plots four cells wide, side by side.
+        let mut volumes = Volumes::new(2);
+        assert!(volumes.open([0, 0], 0, 8));
+        assert!(volumes.open([1, 0], 0, 8));
+        let row = Span::between([1, 1, 1], [6, 1, 1]);
+        volumes.apply(Gesture::Create {
+            span: row,
+            paint: 2,
+        });
+        assert_eq!(volumes.stored([0, 0]), vec![[0, 0, 0]]);
+        assert_eq!(volumes.stored([1, 0]), vec![[4, 0, 0]]);
+        // Each plot's chunk draws its own cells, and the side where the two
+        // meet is drawn by neither.
+        let first = volumes.faces([0, 0, 0]);
+        let second = volumes.faces([4, 0, 0]);
+        assert!(first.iter().all(|quad| quad.cell[0] < 4));
+        assert!(second.iter().all(|quad| (4..8).contains(&quad.cell[0])));
+        let ends = |quads: &[Quad]| quads.iter().filter(|quad| quad.face.axis == 0).count();
+        assert_eq!(ends(&first) + ends(&second), 2);
+    }
 
     /// Two volumes side by side along `x`, 32 cells a side: the first from
     /// the bottom of the frame and 32 tall, the second from `low` and as

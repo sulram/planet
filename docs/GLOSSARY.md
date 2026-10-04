@@ -77,7 +77,7 @@ this file in the same change.
 | Tool | Create, delete, paint or volume, in hand while building. The volume tool opens and deletes a volume and lays its platform. |
 | Stroke | One click and drag of a tool, from what is built or from the ground of a volume: a slab on the side it started on, or with Alt a wall standing up from it. Lands as one gesture. |
 | Ghost | The see-through preview of exactly the cells a stroke would change. |
-| Afar | A volume as it is seen from far off: a cell for every 4 each way, solid where any is. Held and drawn past 256 m, up to 2 km. |
+| Afar | A volume as it is seen from far off: a cell for every 4 each way, solid where any is, to 2 km; a cell for every 16, to 8 km. Held and drawn so past 256 m. |
 | Brush | A tool that shapes cells inside a volume: dig, add, smooth, flatten. |
 | Stored chunk | A chunk present in the build plugin's store because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
