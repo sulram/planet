@@ -1,8 +1,8 @@
 # CLAUDE.md: working guide for `planet`
 
 Rules for anyone writing code here, human or AI. Every `CLAUDE.md`, here and
-in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
-`CLAUDE.md`. `planet` is a codename; the name is pending (docs/OPEN.md).
+in `apps/web`, `server` and `docs`, has an `AGENTS.md` symlink beside it: edit
+only `CLAUDE.md`. `planet` is a codename; the name is pending (docs/OPEN.md).
 
 - Why: [VISION.md](docs/VISION.md)
 - Shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md); per theme,
@@ -11,34 +11,17 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - The one current campaign: [BRIEF.md](docs/BRIEF.md); it dissolves when it ships
 - Decisions and what was rejected: [DECISIONS.md](docs/DECISIONS.md), the index of `docs/decisions/`
 - Next: [ROADMAP.md](docs/ROADMAP.md). Unsettled, only there: [OPEN.md](docs/OPEN.md)
+- Drawn ahead, nothing in it decided: the sketches in `docs/sketches/`
 - Vocabulary: [GLOSSARY.md](docs/GLOSSARY.md). Use its terms, never invent synonyms
 - Reference checkouts in `refs/`: [REFS.md](docs/REFS.md) says what may be taken
 
 ## Docs: one fact, one place
 
-| Information | Home |
-|---|---|
-| Current state | the theme doc: ARCHITECTURE, WORLD, RENDER, PLUGINS, DEPLOY |
-| Why, and what was rejected | DECISIONS |
-| What comes next, in what order | ROADMAP |
-| A question with no answer, a problem with no chosen fix | OPEN |
-| What changed, line by line | git |
-
-- A change touches at most three homes, in the commit that makes it: the theme
-  doc, DECISIONS, and ROADMAP **or** OPEN. Anywhere else, a pointer.
-- Operational docs and this file: titles + bullets, no prose, under 200 lines.
-  VISION and DECISIONS keep prose: they carry the why.
-- A decision is the next file in `docs/decisions/`: `# NN. Title (status)`,
-  `Logged <date>.`, the decision in one breath, the why, **Rejected**,
-  **Lives in**. Written once; retired by a struck title with the number that
-  replaced it, or removed whole by a `**Removes:**` line. Then `bun run docs gen`.
-- OPEN is tables: question, what it unblocks, context. A question nothing
-  waits on is a wish, and wishes live in ROADMAP.
-- GLOSSARY updates in the change that adds, renames or shifts a term.
+- Each kind of fact has one home. The homes, a decision's shape and a
+  sketch's: `docs/CLAUDE.md`.
 - Present tense, affirmative, in docs and comments: what is and what to do. A
   hard rule comes with its alternative. No "used to be", no "no longer": the
-  past is git and DECISIONS. A struck ROADMAP item carries a DECISIONS number,
-  never the story.
+  past is git and DECISIONS.
 - Changed or removed code: rewrite or delete every comment and doc that speaks
   of it, in the same commit. A comment says why; the code says what.
 - Attentive eye: something stale or duplicated near your change, small and on
@@ -52,8 +35,19 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - Never the easy path: the cleanest, most long-term one, small core, sharp
   boundaries, cheap next change. "Works for now" is forbidden when a clean
   solution exists.
-- If the clean path is more work: say so and do it, or stop and discuss.
-  Never silently downgrade. "Start rough" means small scope, never low quality.
+- If the clean path is more work: say so and do it. Never silently
+  downgrade. "Start rough" means small scope, never low quality.
+- A spike is how a design is tried: a branch `spike/<name>` or a crate of
+  its own, rough on purpose, shown running, never merged. What lands is final.
+
+## Who decides
+
+- The session at work decides what can be undone, a shape, a seam, an order
+  of work: it logs the choice as its own and shows it running. Marlus
+  overturns it by seeing it.
+- Marlus's alone, and worth a stop: the name, a licence, money, what is
+  published, pushed or deleted, and what VISION says.
+- An idea better than a logged decision is said beside the number it rewrites.
 
 ## Working beside other agents
 
@@ -149,21 +143,25 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - Into the core, what a plugin can do. A hook waits for the plugin that asks.
 - Bevy or any engine. Digging below the build band, multi-shell logic, flat
   or torus world types, structural collapse physics, our own transcoding.
-- A feature nothing pulls. Add the wish to ROADMAP instead.
+- Code nothing pulls. The wish goes to ROADMAP, its drawing to a sketch.
 
 ## How it grows
 
-- The campaign in BRIEF.md pulls features, never speculation; each step ends
-  runnable. ROADMAP is intent, not contract: add wishes, reorder, strike with a number.
-- A feature is a plugin. A seam of the host is cut by the plugin that needs
-  it, by extracting what exists, never drawn ahead (DECISIONS 88).
+- Draw ahead, build when pulled. A design is drawn whole and far in a
+  sketch: where the host's seams lead, what a stranger's plugin needs. Code
+  enters when the campaign in BRIEF.md pulls it, each step runnable.
+  ROADMAP is intent, not contract: add wishes, reorder, strike with a number.
+- A feature is a plugin, and what the host offers plugins is the product:
+  drawn as one API, cut piece by piece by the plugin that needs it, by
+  extracting what exists (DECISIONS 88).
 - Every change ends runnable and visible: headless render to PNG with a fixed
   clock and seed, then read the PNG; `bun run shot --slice M` for what is
   behind the ground; `bun run webshot` for a `render` change, since WebGPU
   rejects what Metal lets by.
 - Each crate stays LLM-sized. Too big for one context: split by dependency.
-- Reusability is a byproduct, never a goal. A seam earns its existence with two
-  implementations, one of them real (DECISIONS 65).
+- Among the core's crates, reusability is a byproduct of sharp seams: a seam
+  in code earns its existence with two implementations, one of them real
+  (DECISIONS 65).
 - Dependency direction is law, held by `bun run docs` (`ALLOWED` in
   `scripts/docs.ts`). A new arrow is a decision before it is an edge.
 - A crate speaks only its own nouns: `scene` says mesh, never planet. A public
