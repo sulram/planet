@@ -67,7 +67,7 @@ pub struct Rename {
 /// A plugin's message, carried by the core and never read by it. The core
 /// routes it by the plugin's name and checks who may ask for `kind`; the
 /// payload is the plugin's own, encoded by its own schema under
-/// `proto/planet/<plugin>/` (DECISIONS 91, 93, 98).
+/// `plugins/<plugin>/wire/` (DECISIONS 91, 93, 98, 100).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Envelope {
     /// The plugin's name, as the world's statement says it.

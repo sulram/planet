@@ -1,4 +1,4 @@
-import type { WebPlugin } from '../plugin';
+import type { WebPlugin } from '$lib/plugins/plugin';
 import Layer from './Layer.svelte';
 
 /** Chat in the web front end: a bar at the foot of the world, and balloons over heads. */

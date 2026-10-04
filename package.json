@@ -3,7 +3,8 @@
 	"private": true,
 	"type": "module",
 	"workspaces": [
-		"apps/*"
+		"apps/*",
+		"plugins/*"
 	],
 	"scripts": {
 		"setup": "bun scripts/setup.ts",

@@ -17,6 +17,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@fontsource-variable/jetbrains-mono": "^5.3.0",
+        "@planet/plugin-chat": "workspace:*",
       },
       "devDependencies": {
         "@sveltejs/adapter-static": "^4.0.0",
@@ -27,6 +28,13 @@
         "svelte-check": "^4.7.6",
         "typescript": "^6.0.3",
         "vite": "^8.3.0",
+      },
+    },
+    "plugins/chat": {
+      "name": "@planet/plugin-chat",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "svelte": "*",
       },
     },
   },
@@ -116,6 +124,8 @@
     "@octokit/types": ["@octokit/types@18.0.0", "", { "dependencies": { "@octokit/openapi-types": "^29.0.1" } }, "sha512-l6bAF43PNxkJp6g+W4PjoUSSkxHomXw2nOum5CTftJz1NlV3vu93NImgOYtLf6CbBUb5j+fiuzW0PPQ5JTSvZA=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.150.0", "", {}, "sha512-rDS5/31E9HfPl/CIzGrn0DOlvBbXFseQ5URJ9sYMfstbKLD/c6Gm9vmRzRGDdAXyOIL4zmO37lc9RIwYqVruZw=="],
+
+    "@planet/plugin-chat": ["@planet/plugin-chat@workspace:plugins/chat"],
 
     "@planet/web": ["@planet/web@workspace:apps/web"],
 

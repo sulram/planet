@@ -56,6 +56,12 @@ end to end.
 
 ## Plugins: native
 
+### The folder of a plugin (100)
+
+- [ ] A plugin's strings in its own folder, merged into the web front end's catalogue
+- [ ] Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
+- [ ] The image built with `plugins/` in it: the `Dockerfile` copies the folder, and no machine here builds it
+
 ### Chat (69)
 
 - [ ] Its world half in Rust, in the module the server runs (99): the contract of a world half, the bridge over wazero with a bench of its own, `internal/chat` and `near.go` gone. `near` then reaches by the recipe's own `sector_bits` (49), where `near.go` measures every world at `2^16`

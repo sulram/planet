@@ -15,7 +15,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// The plugin's wire, generated from `proto/planet/chat` by `bun run proto`.
+/// The plugin's wire, generated from its `wire/` by `bun run proto`.
 pub mod wire {
     #![allow(clippy::all, clippy::pedantic)]
     include!("gen/planet/chat/v1/planet.chat.v1.rs");

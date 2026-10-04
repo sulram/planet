@@ -1,6 +1,6 @@
 /**
  * Chat's own part of the seam: the command `chat.say` and the event
- * `chat.said`, as `crates/chat` writes them. Pure: no WASM, no DOM.
+ * `chat.said`, as the plugin's crate writes them. Pure: no WASM, no DOM.
  */
 
 /** Who hears a line: within reach on the same body, or the whole world. Never another world. */

@@ -1,6 +1,6 @@
 [package]
 name = "chat"
-description = "The chat plugin's client half: a line said, a line heard. Its wire is generated from proto/planet/chat."
+description = "The chat plugin's client half: a line said, a line heard. Its wire is generated from the schema in its own `wire/`."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

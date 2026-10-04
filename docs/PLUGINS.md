@@ -1,8 +1,8 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 and 99; how much
-of it is built, and in what order, is in BRIEF.md.
+shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98 to 100; how
+much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
@@ -77,17 +77,24 @@ of it is built, and in what order, is in BRIEF.md.
 
 ## Where a plugin lives
 
-| Half | Where | What it holds |
-|---|---|---|
-| Wire | `proto/planet/<name>/v1/` | its ops and events, its own schema |
-| Client | `crates/<name>/` | a `client::Plugin`: commands in, messages from the server, events out |
-| World | the plugin's crate, compiled into the server's module | its ops and their levels, what each does, whom an event reaches, what is kept |
-| Web | `apps/web/src/lib/plugins/<name>/` | a `WebPlugin`: its layer over the world, its label |
+A plugin is one folder, `plugins/<name>/` (100):
 
+| Part | Where in the folder | What it holds |
+|---|---|---|
+| Wire | `wire/planet/<name>/v1/` | its ops and events, its own schema |
+| Client half | the crate, `Cargo.toml` and `src/` | a `client::Plugin`: commands in, messages from the server, events out |
+| World half | the crate, compiled into the server's module | its ops and their levels, what each does, whom an event reaches, what is kept |
+| Panel | `web/`, the package `@planet/plugin-<name>` | a `WebPlugin`: its layer over the world, its label |
+
+- Every folder under `plugins/` holds a `Cargo.toml`: Cargo takes each as a
+  member of the workspace. A panel imports the web front end's own `$lib`.
 - `plugins.json` at the root lists a version's plugins and whether each
-  starts on. `bun run plugins` writes the three registries from it
-  (`crates/plugins`, `server/internal/plugins`, `$lib/plugins/index.ts`), and
-  `bun run proto` generates each plugin's wire into its own halves.
+  starts on. `bun run plugins` writes from it the three registries
+  (`crates/plugins`, `server/internal/plugins`, `$lib/plugins/index.ts`) and
+  buf's list of schemas, `buf.yaml`. `bun run proto` generates each plugin's
+  wire into its own `src/gen`.
+- A new plugin with a panel adds its package to `apps/web/package.json`;
+  `bun run plugins` says so when it is missing.
 - A plugin's name is a to z and `_`: it is the word before the dot.
 - Chat's world half is a Go package, `server/internal/chat`, the one cut
   before the module (99, BRIEF.md).

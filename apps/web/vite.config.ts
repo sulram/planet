@@ -22,6 +22,9 @@ export default defineConfig({
 	server: {
 		// One origin in development too: Vite holds the page and hands the
 		// world's routes and its socket to the Go server.
-		proxy: { '/api': { target: WORLD, ws: true } }
+		proxy: { '/api': { target: WORLD, ws: true } },
+		// A plugin's panel lives in its own folder, outside this app
+		// (DECISIONS 100).
+		fs: { allow: ['../../plugins'] }
 	}
 });

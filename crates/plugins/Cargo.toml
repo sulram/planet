@@ -9,7 +9,7 @@ publish.workspace = true
 
 [dependencies]
 client.workspace = true
-chat = { path = "../chat" }
+chat = { path = "../../plugins/chat" }
 
 [lints]
 workspace = true

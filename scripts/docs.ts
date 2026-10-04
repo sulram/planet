@@ -73,7 +73,7 @@ const index = ['| # | Logged | Decision | Status |', '|---|---|---|---|', ...ent
 
 /* ------------------------------------------------- DECISIONS N names an entry */
 
-const sources = new Bun.Glob('{docs/**/*.md,CLAUDE.md,apps/web/CLAUDE.md,server/CLAUDE.md,README.md,crates/**/*.{rs,wgsl},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}');
+const sources = new Bun.Glob('{docs/**/*.md,CLAUDE.md,apps/web/CLAUDE.md,server/CLAUDE.md,README.md,crates/**/*.{rs,wgsl},plugins/**/*.{rs,ts,svelte,proto},proto/**/*.proto,server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}');
 const files = [...sources.scanSync(ROOT)].filter((f) => !f.includes('node_modules') && !f.includes('/target/'));
 for (const file of files) {
 	read(file)
@@ -122,24 +122,33 @@ const ALLOWED: Record<string, string[]> = {
 	// A plugin's row names crates of the core, never a plugin's (DECISIONS 93).
 	chat: ['client', 'protocol'],
 };
-const ours = readdirSync(`${ROOT}/crates`).filter((d) => existsSync(`${ROOT}/crates/${d}/Cargo.toml`));
+// A crate is a folder with a manifest: the core's under crates/, a plugin's
+// under plugins/ (DECISIONS 100).
+const cratesIn = (dir: string) => readdirSync(`${ROOT}/${dir}`).filter((d) => existsSync(`${ROOT}/${dir}/${d}/Cargo.toml`));
+const plugged = cratesIn('plugins');
+const ours = [...cratesIn('crates'), ...plugged];
+for (const plugin of plugged) {
+	if (!(plugin in ALLOWED)) problems.push(`plugins/${plugin}: no row in ALLOWED (scripts/docs.ts) says what it may import`);
+	for (const other of ALLOWED[plugin] ?? []) if (plugged.includes(other)) problems.push(`plugins/${plugin}: its row in ALLOWED names \`${other}\`, a plugin (DECISIONS 93)`);
+}
 for (const [crate, allowed] of Object.entries(ALLOWED)) {
 	if (!ours.includes(crate)) continue;
-	const toml = read(`crates/${crate}/Cargo.toml`);
+	const toml = read(`${plugged.includes(crate) ? 'plugins' : 'crates'}/${crate}/Cargo.toml`);
 	const deps = toml.slice(toml.indexOf('[dependencies]'), toml.indexOf('[dev-dependencies]') === -1 ? undefined : toml.indexOf('[dev-dependencies]'));
 	for (const m of deps.matchAll(/^([a-z-]+)(?:\.workspace| *=)/gm)) {
-		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`crates/${crate}: imports \`${m[1]}\`, which CLAUDE.md § How it grows forbids`);
+		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`${plugged.includes(crate) ? 'plugins' : 'crates'}/${crate}: imports \`${m[1]}\`, which CLAUDE.md § How it grows forbids`);
 	}
 }
 
 /* ------------------------------------------- crate bullets match crates/ */
 
 const layout = claude.slice(claude.indexOf('## Layout'), claude.indexOf('## Invariants'));
-const crates = readdirSync(`${ROOT}/crates`).filter((d) => existsSync(`${ROOT}/crates/${d}/Cargo.toml`));
+const crates = cratesIn('crates');
 for (const c of crates) if (!layout.includes(`\`${c}\``)) problems.push(`CLAUDE.md § Layout: crate \`${c}\` has no bullet`);
 for (const m of layout.matchAll(/^ {2}- `([a-z-]+)`/gm)) {
 	if (!crates.includes(m[1])) problems.push(`CLAUDE.md § Layout: \`${m[1]}\` is not a crate`);
 }
+for (const p of plugged) if (!layout.includes(`\`${p}\``)) problems.push(`CLAUDE.md § Layout: plugin \`${p}\` is not named`);
 
 /* -------------------------------------- bun run names match package.json */
 

@@ -1,7 +1,7 @@
 // The chat plugin's wire: what rides the core's envelope under the name
 // `chat` (DECISIONS 69, 93). `say` goes up as a Say, `said` comes down as a
-// Said. `bun run proto` generates Rust into crates/chat and Go into
-// server/internal/chat/wire.
+// Said. `bun run proto` generates Rust into the plugin's own src/gen and Go
+// into server/internal/chat/wire.
 syntax = "proto3";
 
 package planet.chat.v1;

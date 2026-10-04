@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91 and 93 to 99. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 100. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -46,18 +46,20 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
 6. [x] **The host of plugins, cut by chat** (98): the wire's envelope, the
    registry and its config, a panel's place. Chat is the first plugin, and a
    world runs with it on or off.
-7. [ ] **Chat's world half, and the module** (99): the world half's contract
+7. [x] **A plugin is one folder** (100): chat's crate, schema and panel in
+   `plugins/chat/`, a member of the Cargo workspace and a package of Bun's.
+8. [ ] **Chat's world half, and the module** (99): the world half's contract
    in Rust, the bridge between Go and the module over wazero, and chat's
    world half in place of `internal/chat` and `near.go`. A plugin then
    touches no Go.
-8. [ ] **Building as a plugin, and kept**: the turn in a frame, the solids and
+9. [ ] **Building as a plugin, and kept**: the turn in a frame, the solids and
    the picture through `scene`; then a stroke as an op on the socket, the
    permission hook, the store by volume and its world half in the module
    (93, 95).
-9. [ ] **Land**: permission to build by volume, to a person or an agent, the
-   second answer to the permission hook (95, 96).
-10. [ ] **Avatars**: the figure and the offer of avatars with its hook.
-11. [ ] **A second way of building**, a proof of concept: the second
+10. [ ] **Land**: permission to build by volume, to a person or an agent, the
+    second answer to the permission hook (95, 96).
+11. [ ] **Avatars**: the figure and the offer of avatars with its hook.
+12. [ ] **A second way of building**, a proof of concept: the second
     implementation that makes those seams real (65).
 
 Steps 2 to 4 were the gate: a world is deployed by mundos, and step 6 on

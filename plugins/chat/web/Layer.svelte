@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { who } from '$lib/engine/who';
 	import { t } from '$lib/i18n';
-	import type { LayerProps } from '../plugin';
+	import type { LayerProps } from '$lib/plugins/plugin';
 	import Balloons from './Balloons.svelte';
 	import Bar from './Bar.svelte';
 	import { parseSaid, type Line, type Scope } from './protocol';
