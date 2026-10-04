@@ -69,6 +69,9 @@ is in DECISIONS 88, 91, 93 and 94; the order they are made in is in BRIEF.md.
 - **Where**: the address. A box of it, or a plot, which is the address less
   six bits (77).
 - **What**: the name of the action, the plugin's before it: `build.create`.
+- A volume is the unit building and land share (95): cells and their history
+  are kept by volume, permission is given by volume, and a rollback restores
+  a volume.
 
 ## What the host offers
 

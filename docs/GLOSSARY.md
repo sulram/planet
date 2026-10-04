@@ -71,6 +71,7 @@ this file in the same change.
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |
 | Op | One permission-checked request to an owner to change what it holds. The only way world state changes. |
 | Op log | Append-only record of ops: who, when, address, before, after. |
+| Rollback | A volume restored to how it stood at an earlier moment, whoever built in it since. Undo is a person taking back their own strokes. |
 | World actor | The single goroutine that owns the world's state and writes. Started by the hub on the first session, gone after the last. |
 | Hub | Holds the world's actor. The socket route hands every connection to it. |
 | Session | One connection inside a world: a person or agent, from Hello to Left. Numbered by the actor, with one level for its life. |

@@ -125,8 +125,8 @@ m4-K7M42Q@40,180,-5
 - The build plugin's store holds only modified chunks and the op log.
 - Read path: stored chunk if present, else generate. One function, everywhere.
 - First edit to a chunk: generate it, apply the edit, store the whole chunk.
-- Op log: who, when, address, before, after. Gives undo, audit, per-user
-  rollback and the snapshot hash.
+- Op log: who, when, address, before, after: undo, audit, the snapshot hash.
+  A volume is the unit kept, permitted and rolled back to a moment (95).
 - The generator is written once in Rust: native in clients, WASM in the
   browser, the same WASM inside Go through wazero (pure Go, no CGO).
 - 3D noise sampled on the sphere: no seams, no projection distortion.

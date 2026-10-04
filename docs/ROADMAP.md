@@ -72,12 +72,12 @@ end to end.
 
 - [ ] Extracted: a turn in the frame, solids for the footing, the picture through `scene` (BRIEF.md)
 - [ ] A stroke as an op on the socket: the actor checks it against the level, keeps it and sends it to everyone in the world (76)
-- [ ] Kept: copy on first write, chunk versions, the plugin's store in the world folder (89)
-- [ ] Op log; undo; per-user rollback. It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
+- [ ] Kept by volume (95): copy on first write, chunk versions, the plugin's store in the world folder (89)
+- [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote
   - [ ] **The log is not the world.** Stored chunks are, by copy on first write, so the log is never replayed to rebuild anything: it exists for undo, audit and rollback, which is what makes it safe to compact
   - [ ] **Two tiers.** Inside the undo window an op is kept whole, with the chunk versions it bumped. Past the window it collapses to a digest: who, when, which chunks, how many cells
-  - [ ] **Chunk version retention is the real knob**: undo depth is bounded by how many versions of a chunk are kept, not by how many ops are
+  - [ ] **Chunk version retention is the real knob**: undo depth, and how far back a volume rolls, are bounded by how many versions of a chunk are kept, not by how many ops are
   - [ ] **Compaction runs in the world actor**, off the hot path, on a schedule
   - [ ] Measure before choosing the window: bytes per op, and bytes per stored chunk version after zstd
 - [ ] Delta sync on reconnect; client chunk cache (SQLite native, OPFS web)
