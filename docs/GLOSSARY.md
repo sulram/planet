@@ -19,7 +19,7 @@ this file in the same change.
 | Level | What a session may do, as mundos says it: `admin`, `builder`, `signed_in`, `anonymous`. |
 | Core | The sphere and the host of plugins: what a plugin stands on. Runs with every plugin off. |
 | Plugin | A layer over the core, ours and compiled in: a crate in the client, a package in the server, a payload on the wire, a panel. On or off for a world. |
-| Native plugin | A plugin every version carries: chat, avatars, building. |
+| Native plugin | A plugin every version carries: chat, building, land, avatars. |
 | Owner | The core or the one plugin that holds a piece of a world's state, and alone changes it. |
 | Question | What asks for an answer and changes nothing: a hook or a reading. |
 | Hook | A question the core asks its plugins, with a default answer a plugin may answer over: who may do what and where, which avatars are offered. |
@@ -83,6 +83,7 @@ this file in the same change.
 | Volume | An integer address box inside one sector, over one plot. The only place voxels exist. |
 | Stamp | A flatten and blend footprint, applied when the ground is sampled. How what is not a volume seats into terrain, at every level, without being an edit. The ground it holds is worked earth, where nothing grows. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
+| Land | The native plugin that gives permission to build by volume, to a person's account or an agent's. It answers the permission hook over the level. |
 | Landlord | A wish: the role on a volume that builds, subdivides and names builders inside, in the land plugin. |
 | Builder | The level `builder`: builds, anywhere in the world. |
 | Admin | The level `admin`: founds the world, chooses its plugins, builds. A superadmin of mundos, or an admin of this world there. |

@@ -60,18 +60,11 @@ end to end.
 - [ ] Extracted as the first plugin, cutting the host (BRIEF.md)
 - [ ] A mute, over the permission hook
 
-### Avatars (28)
-
-- [ ] Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
-- [ ] A person's own VRM, once files are uploaded
-- [ ] A swim clip (the fly clip stands in)
-- [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
-- [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
-
 ### Building (58, 75 to 86)
 
 - [ ] Extracted: a turn in the frame, solids for the footing, the picture through `scene` (BRIEF.md)
-- [ ] A stroke as an op on the socket: the actor checks it against the level, keeps it and sends it to everyone in the world (76)
+- [ ] A stroke as an op on the socket: the host asks the permission hook with who, what and where, the plugin applies its rule, keeps it and an event tells everyone in the world (76, 93)
+- [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
 - [ ] Kept by volume (95): copy on first write, chunk versions, the plugin's store in the world folder (89)
 - [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote
@@ -92,13 +85,27 @@ end to end.
 - [ ] Blocky is a cosmetic toggle inside a volume, one viewer's choice, never the world's
 - [ ] A second way of building, a proof of concept beside this one (BRIEF.md)
 
+### Land (14, 95)
+
+- [ ] Permission to build by volume, given to an account, a person's or an agent's: the second answer to the permission hook, and building never knows it (93)
+- [ ] A panel where an admin gives it, takes it and sees who holds what
+- [ ] Landlords (14): a holder who subdivides and names builders inside; drawn in world with a gizmo, translucent borders while building
+- [ ] The Atlas, the unfolded-cube 2D map
+
+### Avatars (28)
+
+- [ ] Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
+- [ ] A person's own VRM, once files are uploaded
+- [ ] A swim clip (the fly clip stands in)
+- [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
+- [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
+
 ## Plugins: wishes
 
 - [ ] Files: uploads through the world server into the bucket folder (89), what entities and media stand on
 - [ ] Entities: GLB with budgets, primitive parts, gizmos
 - [ ] Images: URL or upload, client-made thumbnail and low version, proximity LOD, texture budget
 - [ ] Video on the web (browser decoder), decoder budget, posters
-- [ ] Land (14): volumes with landlords and builders over the permission hook, drawn in world with a gizmo, translucent borders while building; the Atlas, the unfolded-cube 2D map
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
 - [ ] Vehicles: hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)

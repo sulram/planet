@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 96. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -15,6 +15,8 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
   admins and builders build.
 - The core is the sphere and the host of plugins. What is done on the sphere
   is a plugin, composed at build, switched on and off for a world.
+- Every state has one owner, and plugins meet in the core's words: an op, a
+  question, an event. A person and an agent do the same things the same way.
 - A world deployable and updatable by mundos comes first. planet's own
   development follows it.
 
@@ -39,13 +41,16 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    enter as anonymous and as a builder, upgrade it into a next generation and
    promote it. Then on the box.
 6. [ ] **The host of plugins, cut by chat**: the wire's envelope, the registry
-   and its config, a store, a panel's place. Chat is the first plugin, and a
-   world runs with it on or off.
-7. [ ] **Avatars, then building, as plugins**: the figure and the offer of
-   avatars with its hook; then the turn in a frame, the solids and the picture
-   through `scene`, which building needs.
-8. [ ] **A second way of building**, a proof of concept: the second
-   implementation that makes those seams real (65).
+   and its config, a panel's place. Chat is the first plugin, and a world
+   runs with it on or off.
+7. [ ] **Building as a plugin, and kept**: the turn in a frame, the solids and
+   the picture through `scene`; then a stroke as an op on the socket, the
+   permission hook, the store by volume and the rule the server runs (93, 95).
+8. [ ] **Land**: permission to build by volume, to a person or an agent, the
+   second answer to the permission hook (95, 96).
+9. [ ] **Avatars**: the figure and the offer of avatars with its hook.
+10. [ ] **A second way of building**, a proof of concept: the second
+    implementation that makes those seams real (65).
 
 Steps 2 to 5 are the gate. Step 6 on, and everything in ROADMAP, resumes when
 a world is deployable and updatable by mundos.

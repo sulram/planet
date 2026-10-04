@@ -11,8 +11,8 @@ is in DECISIONS 88, 91, 93 and 94; the order they are made in is in BRIEF.md.
   package in the server, a payload on the wire, a panel in each front end.
   Ours, compiled in: a config at the root lists them and the build bundles
   them, so a version is the core plus the plugins chosen for it.
-- Native plugins: chat, avatars, building. Each is extracted from where it
-  stands today, in that order (BRIEF.md).
+- Native plugins: chat, building, land, avatars, made in that order (96).
+  Chat, building and avatars are extracted from where they stand today.
 - Which plugins are on is the world's own (91). The config says whether each
   starts on; the admin switches any of them at the founding and after, in the
   world folder. A plugin switched off keeps its store untouched.
