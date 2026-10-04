@@ -1,6 +1,6 @@
 // The wire types, from the schemas into the tree. The core's, from proto/: Go
 // under server/internal/protocol, Rust under crates/protocol/src/gen. A
-// plugin's, from plugins/<name>/wire/: Rust under the plugin's own src/gen,
+// plugin's, from plugins/<name>/wire/: Rust under its world half's src/gen,
 // and Go under server/internal/<name>/wire where its server half is a Go
 // package (DECISIONS 99). All of it is committed, so building needs no
 // generator; changing a schema does. The generators are pinned by setup.ts.
@@ -29,7 +29,7 @@ const made = ['server/internal/protocol', 'crates/protocol/src/gen'];
 for (const { name } of plugins()) {
 	const wire = `plugins/${name}/wire`;
 	if (!existsSync(`${ROOT}/${wire}`)) continue;
-	const rust = `plugins/${name}/src/gen`;
+	const rust = `plugins/${name}/world/src/gen`;
 	const outs = [{ local: 'protoc-gen-prost', out: rust, opt: ['extern_path=.planet.v1=::protocol::v1'] }];
 	made.push(rust);
 	if (existsSync(`${ROOT}/server/internal/${name}`)) {

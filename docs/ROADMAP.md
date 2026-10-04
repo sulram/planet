@@ -64,7 +64,7 @@ end to end.
 
 ### Chat (69)
 
-- [ ] Its world half in Rust, in the module the server runs (99): the contract of a world half, the bridge over wazero with a bench of its own, `internal/chat` and `near.go` gone. `near` then reaches by the recipe's own `sector_bits` (49), where `near.go` measures every world at `2^16`
+- [ ] The module the server runs, with chat's world half in it (99): the bridge over wazero with a bench of its own, `internal/chat` and `near.go` gone. `near` then reaches by the recipe's own `sector_bits` (49), where `near.go` measures every world at `2^16`
 - [ ] A mute: an answer over the permission hook, which answers by level alone (98)
 
 ### Building (58, 75 to 86)

@@ -119,24 +119,45 @@ const ALLOWED: Record<string, string[]> = {
 	render: ['scene'],
 	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'protocol'],
 	'ui-native': ['client', 'scene'],
-	// A plugin's row names crates of the core, never a plugin's (DECISIONS 93).
-	chat: ['client', 'protocol'],
+	// What a plugin's world half stands on. It never imports `client`.
+	world: ['topology', 'protocol'],
+	// A plugin's rows name crates of the core and its own world half, never
+	// another plugin's (DECISIONS 93). A world half's names no `client`.
+	'chat-world': ['world', 'protocol'],
+	'chat-client': ['client', 'protocol', 'chat-world'],
 };
-// A crate is a folder with a manifest: the core's under crates/, a plugin's
-// under plugins/ (DECISIONS 100).
+// A crate is a folder with a manifest: the core's under crates/, and a
+// plugin's two under plugins/<name>/, `<name>-client` and `<name>-world`
+// (DECISIONS 100, 101).
 const cratesIn = (dir: string) => readdirSync(`${ROOT}/${dir}`).filter((d) => existsSync(`${ROOT}/${dir}/${d}/Cargo.toml`));
-const plugged = cratesIn('plugins');
-const ours = [...cratesIn('crates'), ...plugged];
-for (const plugin of plugged) {
-	if (!(plugin in ALLOWED)) problems.push(`plugins/${plugin}: no row in ALLOWED (scripts/docs.ts) says what it may import`);
-	for (const other of ALLOWED[plugin] ?? []) if (plugged.includes(other)) problems.push(`plugins/${plugin}: its row in ALLOWED names \`${other}\`, a plugin (DECISIONS 93)`);
+const HALVES = ['client', 'world'];
+const folders = readdirSync(`${ROOT}/plugins`).filter((d) => HALVES.some((half) => existsSync(`${ROOT}/plugins/${d}/${half}/Cargo.toml`)));
+// Where each plugin crate's manifest is, and which plugin it belongs to.
+const plugged = new Map<string, { path: string; plugin: string }>();
+for (const plugin of folders) {
+	for (const half of HALVES) {
+		const path = `plugins/${plugin}/${half}`;
+		if (!existsSync(`${ROOT}/${path}/Cargo.toml`)) continue;
+		const name = read(`${path}/Cargo.toml`).match(/^name = "([^"]+)"/m)?.[1];
+		if (name !== `${plugin}-${half}`) problems.push(`${path}/Cargo.toml: the crate is named \`${plugin}-${half}\``);
+		plugged.set(`${plugin}-${half}`, { path, plugin });
+	}
+}
+const ours = [...cratesIn('crates'), ...plugged.keys()];
+for (const [crate, { path, plugin }] of plugged) {
+	if (!(crate in ALLOWED)) problems.push(`${path}: no row in ALLOWED (scripts/docs.ts) says what it may import`);
+	for (const other of ALLOWED[crate] ?? []) {
+		if (plugged.has(other) && plugged.get(other)?.plugin !== plugin) problems.push(`${path}: its row in ALLOWED names \`${other}\`, another plugin's (DECISIONS 93)`);
+		if (crate.endsWith('-world') && other === 'client') problems.push(`${path}: a world half never imports \`client\` (DECISIONS 99)`);
+	}
 }
 for (const [crate, allowed] of Object.entries(ALLOWED)) {
 	if (!ours.includes(crate)) continue;
-	const toml = read(`${plugged.includes(crate) ? 'plugins' : 'crates'}/${crate}/Cargo.toml`);
+	const home = plugged.get(crate)?.path ?? `crates/${crate}`;
+	const toml = read(`${home}/Cargo.toml`);
 	const deps = toml.slice(toml.indexOf('[dependencies]'), toml.indexOf('[dev-dependencies]') === -1 ? undefined : toml.indexOf('[dev-dependencies]'));
 	for (const m of deps.matchAll(/^([a-z-]+)(?:\.workspace| *=)/gm)) {
-		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`${plugged.includes(crate) ? 'plugins' : 'crates'}/${crate}: imports \`${m[1]}\`, which CLAUDE.md § How it grows forbids`);
+		if (ours.includes(m[1]) && !allowed.includes(m[1])) problems.push(`${home}: imports \`${m[1]}\`, which CLAUDE.md § How it grows forbids`);
 	}
 }
 
@@ -148,7 +169,7 @@ for (const c of crates) if (!layout.includes(`\`${c}\``)) problems.push(`CLAUDE.
 for (const m of layout.matchAll(/^ {2}- `([a-z-]+)`/gm)) {
 	if (!crates.includes(m[1])) problems.push(`CLAUDE.md § Layout: \`${m[1]}\` is not a crate`);
 }
-for (const p of plugged) if (!layout.includes(`\`${p}\``)) problems.push(`CLAUDE.md § Layout: plugin \`${p}\` is not named`);
+for (const p of folders) if (!layout.includes(`\`${p}\``)) problems.push(`CLAUDE.md § Layout: plugin \`${p}\` is not named`);
 
 /* -------------------------------------- bun run names match package.json */
 

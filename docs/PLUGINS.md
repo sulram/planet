@@ -1,7 +1,7 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98 to 100; how
+shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98 to 101; how
 much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
@@ -82,22 +82,24 @@ A plugin is one folder, `plugins/<name>/` (100):
 | Part | Where in the folder | What it holds |
 |---|---|---|
 | Wire | `wire/planet/<name>/v1/` | its ops and events, its own schema |
-| Client half | the crate, `Cargo.toml` and `src/` | a `client::Plugin`: commands in, messages from the server, events out |
-| World half | the crate, compiled into the server's module | its ops and their levels, what each does, whom an event reaches, what is kept |
+| World half | `world/`, the crate `<name>-world` | a `world::Plugin`: its ops and their levels, what each does, whom an event reaches, what is kept. Also what both halves say once: name, version, kinds, wire, limits |
+| Client half | `client/`, the crate `<name>-client` | a `client::Plugin`: commands in, messages from the server, events out |
 | Panel | `web/`, the package `@planet/plugin-<name>` | a `WebPlugin`: its layer over the world, its label |
 
-- Every folder under `plugins/` holds a `Cargo.toml`: Cargo takes each as a
-  member of the workspace. A panel imports the web front end's own `$lib`.
+- The client half imports the world half, never the reverse (101). A world
+  half stands on the crate `world` and never imports `client`. A panel
+  imports the web front end's own `$lib`.
 - `plugins.json` at the root lists a version's plugins and whether each
   starts on. `bun run plugins` writes from it the three registries
   (`crates/plugins`, `server/internal/plugins`, `$lib/plugins/index.ts`) and
   buf's list of schemas, `buf.yaml`. `bun run proto` generates each plugin's
-  wire into its own `src/gen`.
+  wire into its world half's `src/gen`.
 - A new plugin with a panel adds its package to `apps/web/package.json`;
   `bun run plugins` says so when it is missing.
 - A plugin's name is a to z and `_`: it is the word before the dot.
-- Chat's world half is a Go package, `server/internal/chat`, the one cut
-  before the module (99, BRIEF.md).
+- The server runs chat from a Go package, `server/internal/chat`, cut before
+  the module: chat's world half is written and takes its place with the
+  module (99, BRIEF.md).
 
 ## What the host offers
 
@@ -118,10 +120,11 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **The switch**: `POST /api/plugins {name, on}`, an admin's. The choice is
   kept in the world folder's `plugins.json`, which holds what the admin set
   and nothing else.
-- **On the server**, services that carry no feature (99): who a session is,
-  whether it may, the moment, an event told to the sessions the plugin picks.
-  A store joins them with building. How near two sessions stand is the world
-  half's own measure, by `topology`.
+- **On the server**, services that carry no feature (99), a `world::Room`:
+  the moment, who is here, the body's measure, an event told to the sessions
+  the plugin picks. Whether a session may is asked before the plugin sees the
+  op. A store joins them with building. How near two sessions stand is the
+  world half's own sum, with the room's measure.
 - **On the client**, a host: `send` an op up, `emit` an event over the seam,
   read a stance as a place.
 - **On the web**, a layer over the world, mounted while the plugin is on, and

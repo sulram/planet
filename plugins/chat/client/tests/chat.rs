@@ -1,7 +1,7 @@
 //! A line goes out and comes back: the client's side of chat, driven by hand
 //! made server frames, the way a shell drives it with a socket.
 
-use chat::wire;
+use chat_client::wire;
 use client::{Client, Command, Event, Outbound, Recipe};
 use protocol::{Message, client_message, server_message};
 use serde_json::json;
@@ -25,8 +25,8 @@ fn welcome(client: &Client) -> Vec<u8> {
         peers: vec![],
         level: protocol::Level::Anonymous.into(),
         plugins: vec![protocol::Plugin {
-            name: chat::NAME.into(),
-            version: chat::VERSION,
+            name: chat_client::NAME.into(),
+            version: chat_client::VERSION,
         }],
     }))
 }
@@ -46,7 +46,7 @@ fn stance() -> protocol::Stance {
 
 fn said(stance: Option<protocol::Stance>) -> Vec<u8> {
     server(server_message::Message::Envelope(protocol::Envelope {
-        plugin: chat::NAME.into(),
+        plugin: chat_client::NAME.into(),
         kind: "said".into(),
         payload: wire::Said {
             session: 2,
@@ -92,7 +92,7 @@ fn place(client: &mut Client) -> String {
 #[test]
 fn a_line_goes_out_online_and_comes_back_with_a_place() {
     let mut client = Client::new(Recipe::new(1)).unwrap();
-    client.plug(chat::plugin());
+    client.plug(chat_client::plugin());
     client.command_json(r#"{"type":"chat.say","scope":"world","text":"anyone?"}"#);
     assert!(
         sent(&mut client).is_empty(),
@@ -152,7 +152,7 @@ fn a_line_goes_out_online_and_comes_back_with_a_place() {
 #[test]
 fn what_is_no_line_is_refused_and_nothing_goes_out() {
     let mut client = Client::new(Recipe::new(1)).unwrap();
-    client.plug(chat::plugin());
+    client.plug(chat_client::plugin());
     client.link_opened();
     client.receive(&welcome(&client));
     client.drain_events();

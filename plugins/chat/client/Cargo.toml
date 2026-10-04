@@ -1,12 +1,13 @@
 [package]
-name = "chat"
-description = "The chat plugin's client half: a line said, a line heard. Its wire is generated from the schema in its own `wire/`."
+name = "chat-client"
+description = "The chat plugin's client half: a line said, a line heard. Its wire and its names are its world half's."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+chat-world = { path = "../world" }
 client.workspace = true
 protocol.workspace = true
 prost.workspace = true

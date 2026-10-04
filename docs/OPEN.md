@@ -24,7 +24,6 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **How a plugin's two halves share its crate.** The world half goes into the server's module and cannot import `client`. One crate over a contract both hosts implement, or two crates side by side | chat's world half | DECISIONS 99 · `crates/client/src/plugin.rs` |
 | **A plugin's panel outside Svelte.** On the web it is a Svelte component. On a desktop or a headset it is written again for that front end, or a plugin says its panel as data (buttons, a palette, a slider) and each front end draws it. Said as data, it is also what an agent reads to know what it may ask | the second screen; the first agent | DECISIONS 88, 94 · ROADMAP § Other screens |
 | **A world with a plugin the client lacks.** Refuse to enter, or enter and leave that layer undrawn. Moot on the web, where a world serves its own client | an installed client | DECISIONS 91 |
 | **A plugin that needs a shader of its own.** A plugin hands the picture plain data and never touches wgpu. Volumes already have a pipeline of their own in `render`: it stays in the core as a shape any plugin may hand over, or the rule gets an exception | extracting building | DECISIONS 88 · RENDER.md § Volumes |

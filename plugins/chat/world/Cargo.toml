@@ -1,0 +1,18 @@
+[package]
+name = "chat-world"
+description = "The chat plugin's world half: who hears a line, and its limits. Its wire is generated from the schema in the plugin's `wire/`."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+world.workspace = true
+protocol.workspace = true
+prost.workspace = true
+
+[dev-dependencies]
+topology.workspace = true
+
+[lints]
+workspace = true

@@ -10,25 +10,15 @@
 //! {"type":"chat.said","session":2,"scope":"near","text":"hi","place":"4-K7M42Q"}
 //! ```
 
+use chat_world::{SAID, SAY};
 use client::{Host, Plugin};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// The plugin's wire, generated from its `wire/` by `bun run proto`.
-pub mod wire {
-    #![allow(clippy::all, clippy::pedantic)]
-    include!("gen/planet/chat/v1/planet.chat.v1.rs");
-}
-
-/// What the envelope and the world's statement call the plugin.
-pub const NAME: &str = "chat";
-/// The version of its wire and of its seam.
-pub const VERSION: u32 = 1;
-
-/// The op a line goes up as, and the event it comes back as.
-const SAY: &str = "say";
-const SAID: &str = "said";
+/// The plugin's name, its version and its wire are said once, by its world
+/// half (DECISIONS 101).
+pub use chat_world::{NAME, VERSION, wire};
 
 /// Who hears a line: everyone within reach of the speaker on the same body,
 /// or everyone in the world, on every body. Never another world.

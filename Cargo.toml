@@ -1,9 +1,9 @@
 # One workspace, crates cut by dependency, not by platform (CLAUDE.md, Layout).
-# A plugin's crate is its folder under plugins/ (DECISIONS 100): every folder
-# there holds a Cargo.toml.
+# A plugin's folder under plugins/ holds its two crates (DECISIONS 100, 101):
+# `client/`, its client half, and `world/`, its world half.
 [workspace]
 resolver = "3"
-members = ["crates/*", "plugins/*"]
+members = ["crates/*", "plugins/*/client", "plugins/*/world"]
 
 [workspace.package]
 version = "0.0.0" # the released version is the git tag (release.config.js)
@@ -22,6 +22,7 @@ client = { path = "crates/client" }
 render = { path = "crates/render" }
 protocol = { path = "crates/protocol" }
 voxel = { path = "crates/voxel" }
+world = { path = "crates/world" }
 plugins = { path = "crates/plugins" }
 ui-native = { path = "crates/ui-native" }
 

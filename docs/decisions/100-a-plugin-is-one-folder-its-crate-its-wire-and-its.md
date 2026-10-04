@@ -1,4 +1,4 @@
-# 100. A plugin is one folder: its crate, its wire and its panel together (decided)
+# 100. A plugin is one folder: its crate, its wire and its panel together (decided; where its Rust sits is 101's)
 
 Logged 2026-10-04.
 
