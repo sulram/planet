@@ -413,14 +413,15 @@ fn a_floating_platform_is_its_slab_alone() {
 fn a_platform_over_the_top_of_its_volume_is_refused() {
     let (mut client, point) = world();
     let mut build = Build::default();
-    let over = highest_under(&build, &mut client, point);
-    // A volume holds 64 cells over the highest ground of its plot, which
-    // is no lower than the highest under one platform on it.
-    let high = f64::from(over + 2 * 64) * BLOCK_M;
+    // A volume holds a tower's height of cells over the ground of its plot,
+    // and a slab is the cell under its top.
+    client.host(NAME).open(point).unwrap();
+    let top = client.cells().bounds_over(point).unwrap().max[2] + 1;
+    let high = f64::from(top + 1) * BLOCK_M;
     let asked = lay_from(&mut build, &mut client, point, high, Base::Floating);
     assert_eq!(asked, Err(Refusal::High));
     assert!(build.laying.is_none());
-    let near = f64::from(over + 64 - 1) * BLOCK_M;
+    let near = f64::from(top) * BLOCK_M;
     assert!(lay_from(&mut build, &mut client, point, near, Base::Floating).is_ok());
 }
 

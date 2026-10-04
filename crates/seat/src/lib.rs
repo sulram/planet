@@ -15,9 +15,13 @@ use worldgen::Generator;
 /// at the middle of a sector. The address of a column, less these bits, is
 /// the plot it is on.
 pub const PLOT_BITS: u32 = 6;
-/// Cells a volume rises over the highest ground of its plot: as many as the
-/// plot is wide.
-pub const HEIGHT: i32 = 1 << PLOT_BITS;
+/// Cells a volume rises over the highest ground of its plot: 512 metres, a
+/// tower's worth and more. A volume is stored by the chunk, so the air in it
+/// costs nothing.
+pub const HEIGHT: i32 = 1024;
+/// The most cells the box of one change holds: what is read of it to take
+/// it back, on both sides.
+pub const CHANGE_CELLS: u64 = 1 << 23;
 /// Blocks between the columns whose ground is read to find how low and how
 /// high the ground of a plot stands.
 const SURVEY: i32 = 8;
@@ -159,11 +163,29 @@ pub fn survey(generator: &Generator, point: SurfacePoint) -> Result<Stand, Unsea
     })
 }
 
-/// Where the middle of a volume is in the world, metres from the centre of
-/// the planet: what its distance from a body is measured to.
-pub fn centre(sphere: QuadSphere, sector: Sector, plot: [i32; 2], stand: Stand) -> [f64; 3] {
-    let mid = f64::from(stand.low) + f64::from(stand.height) / 2.0;
-    sphere.position(middle(sector, plot), mid * BLOCK_M)
+/// How far a place of the world is from the volume over a plot, metres:
+/// from the line up the middle of it, foot to top. A body beside a tower is
+/// near it, however tall it stands.
+pub fn away_m(
+    sphere: QuadSphere,
+    sector: Sector,
+    plot: [i32; 2],
+    stand: Stand,
+    from: [f64; 3],
+) -> f64 {
+    let column = middle(sector, plot);
+    let foot = sphere.position(column, f64::from(stand.low) * BLOCK_M);
+    let top = f64::from(stand.low) + f64::from(stand.height);
+    let head = sphere.position(column, top * BLOCK_M);
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let (up, to) = (
+        [0, 1, 2].map(|i| head[i] - foot[i]),
+        [0, 1, 2].map(|i| from[i] - foot[i]),
+    );
+    // The nearest of the line: where the place falls along it, kept on it.
+    let along = (dot(to, up) / dot(up, up).max(f64::MIN_POSITIVE)).clamp(0.0, 1.0);
+    let apart = [0, 1, 2].map(|i| to[i] - up[i] * along);
+    dot(apart, apart).sqrt()
 }
 
 /// A gesture as the wire says it.

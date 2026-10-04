@@ -26,7 +26,7 @@ pub const VERSION: u32 = 1;
 /// steepest ground is fewer.
 const GESTURES: usize = 8192;
 /// The most cells a gesture reaches along the ground, and up: a few plots,
-/// and more than any volume is tall.
+/// and as high as a volume rises over its ground.
 const REACH: [u32; 3] = [256, 256, 1024];
 /// Changes a session may take back, and the most bytes they are kept in.
 const HISTORY: usize = 100;
@@ -301,6 +301,9 @@ impl Cells {
         let Some(span) = reach.and_then(|reach| volumes.held(reach)) else {
             return room.refuse("volume");
         };
+        if span.size().iter().map(|&n| u64::from(n)).product::<u64>() > seat::CHANGE_CELLS {
+            return room.refuse("reach");
+        }
         let before = volumes.cells(span);
         let changed = gestures
             .iter()
@@ -542,8 +545,7 @@ impl Cells {
             .iter()
             .filter_map(|(&(seat, plot), &stood)| {
                 let sector = seat.sector()?;
-                let centre = seat::centre(measure.sphere, sector, plot, stood.stand);
-                let away_m = apart(from?, centre);
+                let away_m = seat::away_m(measure.sphere, sector, plot, stood.stand, from?);
                 let lacks = held.get(&(seat, plot)) != Some(&stood.version);
                 (away_m <= HOLD_M && lacks).then_some((away_m, sector, plot, stood))
             })
@@ -615,18 +617,14 @@ fn tell_opened(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to
     room.tell(wire::OPENED, opened.encode_to_vec(), to);
 }
 
-fn apart(a: [f64; 3], b: [f64; 3]) -> f64 {
-    let squared: f64 = (0..3).map(|i| (a[i] - b[i]) * (a[i] - b[i])).sum();
-    libm::sqrt(squared)
-}
-
 /// The sessions whose bodies are within reach of any of some volumes.
 fn near(room: &dyn Room, sector: Sector, volumes: &[([i32; 2], Stood)], reach_m: f64) -> Vec<u32> {
     let measure = room.measure();
-    let centres: Vec<[f64; 3]> = volumes
-        .iter()
-        .map(|(plot, stood)| seat::centre(measure.sphere, sector, *plot, stood.stand))
-        .collect();
+    let within = |at: [f64; 3]| {
+        volumes.iter().any(|(plot, stood)| {
+            seat::away_m(measure.sphere, sector, *plot, stood.stand, at) <= reach_m
+        })
+    };
     room.sessions()
         .iter()
         .filter(|who| {
@@ -634,7 +632,7 @@ fn near(room: &dyn Room, sector: Sector, volumes: &[([i32; 2], Stood)], reach_m:
                 .stance
                 .as_ref()
                 .and_then(|stance| measure.position(stance));
-            at.is_some_and(|at| centres.iter().any(|&centre| apart(at, centre) <= reach_m))
+            at.is_some_and(within)
         })
         .map(|who| who.session)
         .collect()

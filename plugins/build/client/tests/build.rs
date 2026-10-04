@@ -113,6 +113,7 @@ fn press(client: &mut Client, code: &str, chord: Chord) {
 }
 
 const TAKE_CREATE: &str = r#"{"type":"build.take","tool":"create"}"#;
+const TAKE_PLATFORM: &str = r#"{"type":"build.take","tool":"platform"}"#;
 const LAY: &str = r#"{"type":"build.lay"}"#;
 
 #[test]
@@ -123,7 +124,10 @@ fn a_tool_in_hand_builds_nothing() {
         said(&mut client),
         vec![(
             "hand".to_owned(),
-            json!({"type": "build.hand", "tool": "create", "paint": 0, "platform": 16})
+            json!({
+                "type": "build.hand", "tool": "create", "paint": 0,
+                "finish": "matte", "edge": "none", "platform": 16
+            })
         )]
     );
     client.update(1.0 / 60.0, &mut Input::default());
@@ -323,11 +327,19 @@ fn a_tool_in_hand_shows_where_cells_are() {
     let feet = client.host("build").feet();
     assert!(client.cells().guides().is_empty());
 
-    // Before anything is built, the slab a platform would lay, in the paint
-    // in hand, as wide as the side picked.
+    // A tool that makes strokes shows no platform: with nothing built
+    // there is nothing to show.
     client.command_json(r#"{"type":"build.paint","paint":4}"#);
     client.command_json(TAKE_CREATE);
     live(&mut client);
+    assert!(client.cells().guides().is_empty());
+
+    // The platform tool shows the slab one would lay, in the colour in
+    // hand, as wide as the side picked. Its pointer makes no stroke.
+    client.command_json(TAKE_PLATFORM);
+    live(&mut client);
+    assert!(client.pointing());
+    assert_eq!(client.cells().ghost(), None);
     let [slab] = client.cells().guides() else {
         panic!("one guide: {:?}", client.cells().guides());
     };
@@ -357,7 +369,8 @@ fn a_tool_in_hand_shows_where_cells_are() {
     let over = json!({"type": "build.over", "volume": true});
     assert!(said(&mut client).contains(&("over".to_owned(), over)));
 
-    // A hole in the slab is a cell a platform would make: the slab shows.
+    // A hole in the slab is a cell a platform would make: the slab shows,
+    // with the platform tool and with no other.
     let hole = voxel::Gesture::Delete {
         span: voxel::Span::cell(shown.min),
     };
@@ -367,6 +380,9 @@ fn a_tool_in_hand_shows_where_cells_are() {
     );
     live(&mut client);
     assert_eq!(client.cells().guides().len(), 2);
+    client.command_json(TAKE_CREATE);
+    live(&mut client);
+    assert_eq!(client.cells().guides().len(), 1);
 
     // With the tool put down nothing is shown.
     client.command_json(r#"{"type":"build.take","tool":null}"#);
@@ -422,4 +438,72 @@ fn a_volume_is_closed_with_all_built_in_it_and_stands_again() {
     client.drain_events();
     client.command_json(r#"{"type":"build.close"}"#);
     assert_eq!(refusals(&mut client), ["level"]);
+}
+
+#[test]
+fn what_is_laid_is_a_colour_in_a_finish_with_an_edge() {
+    let mut client = rehearsed();
+    let feet = client.host("build").feet();
+    // Building starts with the platform tool: a stroke starts on what is
+    // built. The fourth key takes it too.
+    press(&mut client, "KeyB", Chord::default());
+    assert_eq!(said(&mut client).last().unwrap().1["tool"], "platform");
+    press(&mut client, "Digit1", Chord::default());
+    press(&mut client, "Digit4", Chord::default());
+    assert_eq!(said(&mut client).last().unwrap().1["tool"], "platform");
+
+    // A platform of glass with a white edge, in the colour in hand.
+    client.command_json(r#"{"type":"build.paint","paint":11}"#);
+    client.command_json(r#"{"type":"build.finish","finish":"glass"}"#);
+    client.command_json(r#"{"type":"build.edge","edge":"white"}"#);
+    let hand = said(&mut client).last().unwrap().1.clone();
+    assert_eq!(
+        (&hand["finish"], &hand["edge"]),
+        (&json!("glass"), &json!("white"))
+    );
+    // A slab alone, with nothing under it.
+    client.command_json(r#"{"type":"build.lay","base":"floating"}"#);
+    laid(&mut client);
+    let slab = client.host("build").feet();
+    let under = [
+        slab.point.u as i32,
+        slab.point.v as i32,
+        (slab.height_m / topology::BLOCK_M).round() as i32 - 1,
+    ];
+    let paint = client.cells().cell(feet.point.sector, under).paint();
+    let paint = voxel::Paint::of(paint.expect("the slab"));
+    assert_eq!(
+        (paint.color, paint.finish, paint.edge),
+        (11, voxel::Finish::Glass, voxel::Edge::White)
+    );
+    // Glass is drawn apart from the cubes, over them, and holds the body.
+    let frame = client.settled_frame();
+    assert!(frame.volumes.is_empty() && !frame.glass.is_empty());
+    assert!(frame.lamps.is_empty());
+
+    // Repainted as a light, the same cells shine: a lamp where they are,
+    // in their colour, for whatever is near.
+    let held = client.cells().bounds_over(feet.point).unwrap();
+    let repaint = voxel::Gesture::Paint {
+        span: voxel::Span::between(
+            [held.min[0], held.min[1], under[2]],
+            [held.max[0], held.max[1], under[2]],
+        ),
+        paint: voxel::Paint {
+            color: 4,
+            finish: voxel::Finish::Light,
+            edge: voxel::Edge::None,
+        }
+        .byte(),
+    };
+    assert_eq!(
+        client.host("build").apply(feet.point.sector, &[repaint]),
+        Ok(true)
+    );
+    let frame = client.settled_frame();
+    assert!(frame.glass.is_empty() && !frame.volumes.is_empty());
+    assert!(!frame.lamps.is_empty());
+    let lamp = frame.lamps[0];
+    assert!(lamp.color.x > lamp.color.z, "a red light: {lamp:?}");
+    assert!(lamp.reach_m >= 8.0);
 }

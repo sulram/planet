@@ -17,11 +17,13 @@
 
 mod faces;
 mod gesture;
+mod paint;
 mod trace;
 mod volumes;
 
 pub use faces::Quad;
 pub use gesture::Gesture;
+pub use paint::{Edge, Finish, Paint};
 pub use trace::{Hit, crossing};
 pub use volumes::Volumes;
 
@@ -31,8 +33,8 @@ pub const CHUNK_BITS: u32 = 4;
 pub const CHUNK: u32 = 1 << CHUNK_BITS;
 const CHUNK_CELLS: usize = (CHUNK * CHUNK * CHUNK) as usize;
 
-/// What fills one cell: air, or a paint, which is an index into whatever
-/// palette the volume is shown with.
+/// What fills one cell: air, or a paint ([`Paint`]), whose colour is an index
+/// into whatever palette the volume is shown with.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct Cell(u8);
 
@@ -57,6 +59,14 @@ impl Cell {
         match self.0 {
             0 => None,
             n => Some(n - 1),
+        }
+    }
+
+    /// Whether the cell hides what stands behind it: solid, and no glass.
+    pub const fn opaque(self) -> bool {
+        match self.paint() {
+            None => false,
+            Some(paint) => !matches!(Paint::of(paint).finish, Finish::Glass),
         }
     }
 }
@@ -224,9 +234,15 @@ pub(crate) trait Cells {
     /// The cell at a place, air where there is none.
     fn get(&self, at: [i32; 3]) -> Cell;
 
-    /// Whether a place is solid to a ray, a body or the light.
+    /// Whether a place is solid to a ray and a body.
     fn solid(&self, at: [i32; 3]) -> bool {
         !self.get(at).is_air()
+    }
+
+    /// Whether a place hides what is behind it, and shuts light out of a
+    /// corner: solid, and no glass.
+    fn opaque(&self, at: [i32; 3]) -> bool {
+        self.get(at).opaque()
     }
 }
 

@@ -56,6 +56,8 @@ struct ViewUniform {
     clouds: [f32; 4],
     bloom: [f32; 4],
     grade: [f32; 4],
+    lamps_on: [f32; 4],
+    lamps: [[[f32; 4]; 2]; volumes::LAMPS],
 }
 
 /// GPU state owned by one view slot.
@@ -379,8 +381,6 @@ impl Renderer {
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
-        self.volumes
-            .draw_over(&mut pass, &resources.volumes, &volumes);
         drop(pass);
 
         // Then the sea and the clouds, the nearer last: a camera under the
@@ -420,6 +420,37 @@ impl Renderer {
             self.composer
                 .clouds(encoder, &resources.bind_group, targets, &mut at);
         }
+        // Glass, and what only a builder sees, go over the sea and the
+        // clouds, tested against the depth of what is solid: drawn before
+        // them, the sea behind a pane would be laid over it.
+        if volumes.over() {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("over"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: self.composer.picture(targets, &at),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &targets.depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &resources.bind_group, &[]);
+            self.volumes
+                .draw_over(&mut pass, &resources.volumes, &volumes);
+        }
         self.composer.finish(
             encoder,
             &resources.bind_group,
@@ -442,6 +473,7 @@ impl Renderer {
         let clip_from_relative = projection * view_from_relative;
         let radius = frame.planet_radius_m;
         let exposure = frame.effects.exposure;
+        let (lamps, lamps_on) = volumes::lamps(&frame.lamps, camera.position);
         ViewUniform {
             clip_from_relative: clip_from_relative.to_cols_array_2d(),
             relative_from_clip: clip_from_relative.inverse().to_cols_array_2d(),
@@ -479,6 +511,8 @@ impl Renderer {
                 frame.effects.water_clarity,
                 0.0,
             ],
+            lamps_on: [lamps_on, 0.0, 0.0, 0.0],
+            lamps,
             bloom: {
                 // The threshold is of exposed light, as in a lens.
                 let threshold = frame.effects.bloom_threshold / exposure;
@@ -556,10 +590,11 @@ fn relative(origin: DVec3, camera: DVec3) -> Vec3 {
 /// WGSL with the shared prelude in front.
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
     let source = format!(
-        "{}{}{}{}\n{}\n{source}",
+        "{}{}{}{}{}\n{}\n{source}",
         shadow::prelude(),
         clouds::prelude(),
         compose::prelude(),
+        volumes::prelude(),
         include_str!("shaders/common.wgsl"),
         include_str!("shaders/cloud_field.wgsl")
     );
@@ -578,8 +613,11 @@ enum Surface {
     Backdrop,
     /// Water: blended over what is there, seen from both sides.
     Translucent,
-    /// A preview over the world: blended, tested against depth and writing
-    /// none. Its fragment entry is `fs_ghost`.
+    /// Glass: blended over what is there, tested against depth and writing
+    /// none. Its fragment entry is `fs_glass`.
+    Glass,
+    /// The ghost of a stroke over the world: blended, tested against depth
+    /// and writing none.
     Ghost,
     /// A guide over the world: as a ghost is, and seen from both sides.
     Guide,
@@ -608,7 +646,7 @@ fn pipeline(
         format,
         blend: matches!(
             spec.surface,
-            Surface::Translucent | Surface::Ghost | Surface::Guide
+            Surface::Translucent | Surface::Glass | Surface::Ghost | Surface::Guide
         )
         .then_some(wgpu::BlendState::ALPHA_BLENDING),
         write_mask: wgpu::ColorWrites::ALL,
@@ -633,14 +671,17 @@ fn pipeline(
             module: &module,
             entry_point: Some(match spec.surface {
                 _ if shadow => "fs_shadow",
-                Surface::Ghost => "fs_ghost",
+                Surface::Glass => "fs_glass",
                 _ => "fs",
             }),
             targets: if shadow { &[] } else { &targets },
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            cull_mode: (matches!(spec.surface, Surface::Solid | Surface::Ghost) || shadow)
+            cull_mode: (matches!(
+                spec.surface,
+                Surface::Solid | Surface::Glass | Surface::Ghost
+            ) || shadow)
                 .then_some(wgpu::Face::Back),
             ..Default::default()
         },

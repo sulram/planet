@@ -3,14 +3,19 @@ import { parseHand, parseHistory, parseOver, parseRefused } from './protocol';
 
 describe('building at the seam', () => {
 	test('reads the hand, with a tool or without', () => {
-		expect(parseHand({ type: 'build.hand', tool: 'paint', paint: 4, platform: 16 })).toEqual({ tool: 'paint', paint: 4, platform: 16 });
-		expect(parseHand({ tool: null, paint: 0, platform: 8 })).toEqual({ tool: null, paint: 0, platform: 8 });
+		const look = { finish: 'glass', edge: 'white' };
+		expect(parseHand({ type: 'build.hand', tool: 'paint', paint: 4, platform: 16, ...look })).toEqual({ tool: 'paint', paint: 4, platform: 16, ...look });
+		expect(parseHand({ tool: null, paint: 0, platform: 8, ...look })).toEqual({ tool: null, paint: 0, platform: 8, ...look });
+		expect(parseHand({ tool: 'platform', paint: 0, platform: 8, ...look })?.tool).toBe('platform');
 	});
 
 	test('refuses what is no hand', () => {
-		expect(parseHand({ tool: 'hammer', paint: 0, platform: 8 })).toBeNull();
-		expect(parseHand({ tool: 'create', paint: '0', platform: 8 })).toBeNull();
-		expect(parseHand({ tool: 'create', paint: 0 })).toBeNull();
+		const look = { finish: 'matte', edge: 'none' };
+		expect(parseHand({ tool: 'hammer', paint: 0, platform: 8, ...look })).toBeNull();
+		expect(parseHand({ tool: 'create', paint: '0', platform: 8, ...look })).toBeNull();
+		expect(parseHand({ tool: 'create', paint: 0, ...look })).toBeNull();
+		expect(parseHand({ tool: 'create', paint: 0, platform: 8, finish: 'wood', edge: 'none' })).toBeNull();
+		expect(parseHand({ tool: 'create', paint: 0, platform: 8 })).toBeNull();
 	});
 
 	test('reads why a platform was refused, and what there is to take back', () => {

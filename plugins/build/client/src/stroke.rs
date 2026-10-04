@@ -9,6 +9,27 @@ use voxel::{Gesture, Hit, Span};
 
 use crate::{Build, Tool, key, refuse};
 
+/// What a stroke does to the cells it covers.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Mark {
+    Create,
+    Delete,
+    Paint,
+}
+
+impl Tool {
+    /// What a stroke of the tool does. None for the platform tool, which
+    /// makes no stroke.
+    pub(crate) fn mark(self) -> Option<Mark> {
+        match self {
+            Tool::Create => Some(Mark::Create),
+            Tool::Delete => Some(Mark::Delete),
+            Tool::Paint => Some(Mark::Paint),
+            Tool::Platform => None,
+        }
+    }
+}
+
 /// A stroke being drawn: from the cell it started on, across a layer of cells
 /// through it, to the cell the pointer is over, or to where it meets that
 /// layer when it is over nothing of it.
@@ -16,7 +37,7 @@ use crate::{Build, Tool, key, refuse};
 pub(crate) struct Stroke {
     /// What the cells it is drawn in are seated on.
     pub seat: Seat,
-    pub tool: Tool,
+    pub mark: Mark,
     pub start: [i32; 3],
     /// The side the stroke started on: the axis it faces, and where along it
     /// the surface is.
@@ -40,31 +61,31 @@ impl Stroke {
 
     /// The cell a tool takes where it aims: a new one goes in the air before
     /// the side hit, and what is taken away or repainted is the cell hit.
-    fn cell(tool: Tool, hit: Hit) -> [i32; 3] {
-        match tool {
-            Tool::Create => hit.before(),
-            Tool::Delete | Tool::Paint => hit.cell,
+    fn cell(mark: Mark, hit: Hit) -> [i32; 3] {
+        match mark {
+            Mark::Create => hit.before(),
+            Mark::Delete | Mark::Paint => hit.cell,
         }
     }
 
     fn gesture(self, paint: u8) -> Gesture {
         let span = self.span();
-        match self.tool {
-            Tool::Create => Gesture::Create { span, paint },
-            Tool::Delete => Gesture::Delete { span },
-            Tool::Paint => Gesture::Paint { span, paint },
+        match self.mark {
+            Mark::Create => Gesture::Create { span, paint },
+            Mark::Delete => Gesture::Delete { span },
+            Mark::Paint => Gesture::Paint { span, paint },
         }
     }
 
     /// The stroke a tool starts where it aims, if it can start there, lying
     /// on the side it aims at.
-    fn start(cells: &Cells, tool: Tool, aim: Aim) -> Option<Stroke> {
-        let cell = Stroke::cell(tool, aim.hit);
+    fn start(cells: &Cells, mark: Mark, aim: Aim) -> Option<Stroke> {
+        let cell = Stroke::cell(mark, aim.hit);
         let face = aim.hit.face;
         let surface = f64::from(aim.hit.cell[face.axis] + i32::from(face.positive));
         cells.holds(aim.seat, cell).then_some(Stroke {
             seat: aim.seat,
-            tool,
+            mark,
             start: cell,
             side: (face.axis, surface),
             turns: [0, 1, 2].map(|turn| (face.axis + turn) % 3),
@@ -83,8 +104,14 @@ impl Build {
         let turning = turn.held(key::TURN);
         let turned = turning && !self.turning;
         self.turning = turning;
-        let Some(tool) = self.tool else {
+        // A platform is asked for, never drawn: with its tool in hand the
+        // pointer makes no stroke.
+        let Some(mark) = self.tool.and_then(Tool::mark) else {
             self.using = turn.using;
+            self.aim = None;
+            if self.stroke.take().is_some() || self.tool.is_some() {
+                host.preview(None);
+            }
             return;
         };
         if turned {
@@ -99,7 +126,7 @@ impl Build {
         self.using = turn.using;
         if pressed {
             self.stroke = self.aim.and_then(|aim| {
-                let mut stroke = Stroke::start(host.cells(), tool, aim)?;
+                let mut stroke = Stroke::start(host.cells(), mark, aim)?;
                 stroke.turns = turns(host, eye, stroke.seat, stroke.start, stroke.side.0);
                 Some(stroke)
             });
@@ -120,7 +147,7 @@ impl Build {
             let (axis, at) = stroke.across;
             let over = self.aim.filter(|aim| aim.seat == stroke.seat);
             let led = over.and_then(|aim| {
-                let cell = Stroke::cell(tool, aim.hit);
+                let cell = Stroke::cell(mark, aim.hit);
                 let on = aim.hit.face.axis;
                 if cell[axis] == stroke.start[axis] {
                     Some((stroke.across, cell))
@@ -153,7 +180,7 @@ impl Build {
         if released {
             self.turned = 0;
             if let Some(stroke) = self.stroke.take()
-                && let Err(refusal) = host.apply(stroke.seat, &[stroke.gesture(self.paint)])
+                && let Err(refusal) = host.apply(stroke.seat, &[stroke.gesture(self.made_of())])
             {
                 refuse(host, refusal.into());
             }
@@ -161,10 +188,10 @@ impl Build {
 
         let preview = match (self.stroke, self.aim) {
             (Some(stroke), _) => Some(stroke),
-            (None, Some(aim)) => Stroke::start(host.cells(), tool, aim),
+            (None, Some(aim)) => Stroke::start(host.cells(), mark, aim),
             (None, None) => None,
         };
-        host.preview(preview.map(|stroke| (stroke.seat, stroke.gesture(self.paint))));
+        host.preview(preview.map(|stroke| (stroke.seat, stroke.gesture(self.made_of()))));
     }
 }
 

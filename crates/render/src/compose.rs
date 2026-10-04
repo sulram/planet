@@ -245,6 +245,11 @@ impl Composer {
         at.0 = write;
     }
 
+    /// The picture so far, to draw over.
+    pub fn picture<'a>(&self, targets: &'a Targets, at: &Cursor) -> &'a wgpu::TextureView {
+        &targets.color[at.0]
+    }
+
     /// Copies the picture so far aside and returns where the sea is to be
     /// drawn, over the original, and what it reads: the copy and the depth.
     pub fn behind<'a>(

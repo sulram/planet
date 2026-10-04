@@ -262,10 +262,14 @@ pub struct VolumeVertex {
     pub position: [f32; 3],
     /// Of the side this vertex is a corner of: a cube is lit flat.
     pub normal: [f32; 3],
-    /// `rgb`: sRGB albedo. `a`: gloss, 0 matte up to 255 for a mirror.
+    /// `rgb`: sRGB albedo. `a`: how much the side shines with its own
+    /// colour, 0 lit by what falls on it up to 255 for a light.
     pub color: [u8; 4],
-    /// How much of the sky the corner sees, `0..=1`: ambient light only.
-    pub open: f32,
+    /// The corner on its side. First how much of the sky it sees, 0 to 255:
+    /// ambient light only. Then where it is across the side and up it, 0 or
+    /// 255 each way. Last the edge drawn around the side: 0 none, 1 black,
+    /// 2 white.
+    pub side: [u8; 4],
 }
 
 /// Cubes of the build layer around an `f64` origin in planet space. Every
@@ -284,22 +288,36 @@ pub struct VolumeMesh {
 pub struct GuideVertex {
     /// Metres from [`GuideMesh::origin`].
     pub position: [f32; 3],
-    /// Where it is on its side of the box, in cells: a line is drawn
-    /// wherever either is whole.
+    /// Where it is on its side, in cells: a line is drawn wherever either is
+    /// whole.
     pub lattice: [f32; 2],
-    /// `rgb`: sRGB. `a`: how much of it shows between the lines, the lines
-    /// themselves a few times as much.
+    /// What shows between the lines. `rgb`: sRGB. `a`: how much of it.
     pub color: [u8; 4],
+    /// The lines. `rgb`: sRGB. `a`: how much of one shows where cells meet
+    /// in eights, and half as much between any two cells.
+    pub ink: [u8; 4],
 }
 
-/// A box of cells drawn as a faint grid, its sides seen from both sides: where
-/// cells are, before any is laid. Bent onto the body by the client, as a
-/// [`VolumeMesh`] is.
+/// Sides of cells drawn see-through with a line between each cell and the
+/// next: where cells are before any is laid, and what a stroke would change.
+/// Bent onto the body by the client, as a [`VolumeMesh`] is.
 #[derive(Clone, Debug)]
 pub struct GuideMesh {
     pub origin: DVec3,
     pub vertices: Vec<GuideVertex>,
     pub indices: Vec<u32>,
+}
+
+/// A light among the cells: the sides that shine in one chunk, taken as one
+/// where their middle is. It lights whatever is near, the ground and bodies
+/// as well as cells, and casts no shadow.
+#[derive(Clone, Copy, Debug)]
+pub struct Lamp {
+    pub position: DVec3,
+    /// Linear RGB: what it gives a side that faces it from a metre away.
+    pub color: Vec3,
+    /// How far its light goes, metres.
+    pub reach_m: f32,
 }
 
 /// A change to the set of volume meshes a renderer holds.
@@ -414,8 +432,13 @@ pub struct Frame {
     /// The cubes of every volume in reach. All were announced by a
     /// [`VolumeChange::Add`].
     pub volumes: Vec<VolumeMeshId>,
+    /// The cubes of glass in reach, drawn over what is solid and blended.
+    /// All were announced by a [`VolumeChange::Add`].
+    pub glass: Vec<VolumeMeshId>,
+    /// The lights among the cells in reach. A view is lit by the nearest.
+    pub lamps: Vec<Lamp>,
     /// The stroke a build tool would make: drawn see-through over the world,
-    /// cast by nothing.
+    /// cast by nothing. Announced by a [`VolumeChange::Guide`].
     pub ghost: Option<VolumeMeshId>,
     /// The guides to draw over the world. All were announced by a
     /// [`VolumeChange::Guide`].

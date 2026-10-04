@@ -1,11 +1,12 @@
-//! Volume meshes: the cubes of the build layer, the ghost of a stroke, and
-//! the guides that show where cells are. One vertex and index buffer each,
-//! placed by the same per view ring of offsets terrain uses.
+//! Volume meshes: the cubes of the build layer, solid and of glass, the
+//! ghost of a stroke, and the guides that show where cells are. One vertex
+//! and index buffer each, placed by the same per view ring of offsets
+//! terrain uses. And the lamps among the cells, which light every surface.
 
 use std::collections::HashMap;
 
 use glam::DVec3;
-use scene::{Frame, GuideVertex, VolumeChange, VolumeMeshId, VolumeVertex};
+use scene::{Frame, GuideVertex, Lamp, VolumeChange, VolumeMeshId, VolumeVertex};
 use wgpu::util::DeviceExt;
 
 use crate::terrain::PatchUniforms;
@@ -19,9 +20,36 @@ struct Mesh {
     radius_m: f32,
 }
 
+/// The most lamps one view is lit by: the nearest.
+pub const LAMPS: usize = 16;
+
+/// What the shaders must agree on, stated once: prepended to every module.
+pub fn prelude() -> String {
+    format!("const LAMPS: u32 = {LAMPS}u;\n")
+}
+
+/// The lamps that light a view, as its uniform holds them: the nearest to
+/// the camera, each where it is from there, and how many they are.
+pub fn lamps(lamps: &[Lamp], camera: DVec3) -> ([[[f32; 4]; 2]; LAMPS], f32) {
+    // How far the camera is past where a lamp's light ends.
+    let beyond = |lamp: &Lamp| lamp.position.distance(camera) - f64::from(lamp.reach_m);
+    let mut near: Vec<&Lamp> = lamps.iter().collect();
+    near.sort_by(|a, b| beyond(a).total_cmp(&beyond(b)));
+    let mut lit = [[[0.0; 4]; 2]; LAMPS];
+    for (slot, lamp) in lit.iter_mut().zip(&near) {
+        let at = (lamp.position - camera).as_vec3();
+        *slot = [
+            at.extend(lamp.reach_m).to_array(),
+            lamp.color.extend(0.0).to_array(),
+        ];
+    }
+    (lit, near.len().min(LAMPS) as f32)
+}
+
 pub struct Volumes {
     pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
+    glass_pipeline: wgpu::RenderPipeline,
     ghost_pipeline: wgpu::RenderPipeline,
     guide_pipeline: wgpu::RenderPipeline,
     /// Every mesh held, cubes and guides alike: a frame says which is drawn
@@ -41,7 +69,7 @@ impl Volumes {
             array_stride: size_of::<VolumeVertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &wgpu::vertex_attr_array![
-                0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32
+                0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Unorm8x4
             ],
         })];
         let make = |layout: &wgpu::BindGroupLayout, surface: Surface| {
@@ -57,28 +85,31 @@ impl Volumes {
                 },
             )
         };
-        let guide_pipeline = pipeline(
-            device,
-            format,
-            PipelineSpec {
-                label: "guide",
-                source: include_str!("shaders/guide.wgsl"),
-                layouts: &[view_layout, placement_layout],
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: size_of::<GuideVertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4
-                    ],
-                })],
-                surface: Surface::Guide,
-            },
-        );
+        let guide = |surface: Surface| {
+            pipeline(
+                device,
+                format,
+                PipelineSpec {
+                    label: "guide",
+                    source: include_str!("shaders/guide.wgsl"),
+                    layouts: &[view_layout, placement_layout],
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: size_of::<GuideVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x3, 1 => Float32x2, 2 => Unorm8x4, 3 => Unorm8x4
+                        ],
+                    })],
+                    surface,
+                },
+            )
+        };
         Volumes {
             pipeline: make(view_layout, Surface::Solid),
             shadow_pipeline: make(shadow_layout, Surface::Shadow),
-            ghost_pipeline: make(view_layout, Surface::Ghost),
-            guide_pipeline,
+            glass_pipeline: make(view_layout, Surface::Glass),
+            ghost_pipeline: guide(Surface::Ghost),
+            guide_pipeline: guide(Surface::Guide),
             meshes: HashMap::new(),
         }
     }
@@ -143,8 +174,9 @@ impl Volumes {
     }
 
     /// Places every mesh a frame names that this renderer holds, the cubes,
-    /// then the guides, then the ghost, and returns them in slot order. A
-    /// mesh named before it was applied is skipped, never a panic.
+    /// the glass from the farthest to the nearest, then the guides, then the
+    /// ghost, and returns them in slot order. A mesh named before it was
+    /// applied is skipped, never a panic.
     pub fn place(
         &self,
         device: &wgpu::Device,
@@ -158,11 +190,16 @@ impl Volumes {
             held.copied().collect()
         };
         let solid = held(&frame.volumes);
+        // Glass blends over glass: the far panes go first.
+        let mut glass = held(&frame.glass);
+        let away = |id: &VolumeMeshId| self.meshes[id].origin.distance_squared(camera);
+        glass.sort_by(|a, b| away(b).total_cmp(&away(a)));
         let guides = held(&frame.guides);
         let ghost = frame.ghost.filter(|id| self.meshes.contains_key(id));
         // Volumes stand on the planet, whose centre is the world origin.
         let origins: Vec<(DVec3, DVec3)> = solid
             .iter()
+            .chain(&glass)
             .chain(&guides)
             .chain(&ghost)
             .map(|id| (DVec3::ZERO, self.meshes[id].origin))
@@ -170,6 +207,7 @@ impl Volumes {
         uniforms.place(device, queue, &origins, camera);
         Placed {
             solid,
+            glass,
             guides,
             ghost,
         }
@@ -198,25 +236,29 @@ impl Volumes {
         }
     }
 
-    /// The guides and the ghost over them, after everything opaque and the
-    /// sky: they test depth and write none, so what stands in front of them
-    /// hides them and they hide nothing.
+    /// The glass, the guides and the ghost over them, after everything
+    /// opaque, the sea and the clouds: they test depth and write none, so
+    /// what stands in front of them hides them and they hide nothing.
     pub fn draw_over(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         uniforms: &PatchUniforms,
         placed: &Placed,
     ) {
-        let first = placed.solid.len();
-        if !placed.guides.is_empty() {
-            pass.set_pipeline(&self.guide_pipeline);
-        }
-        for (slot, id) in placed.guides.iter().enumerate() {
-            self.draw_one(pass, uniforms, first + slot, id);
-        }
-        if let Some(id) = &placed.ghost {
-            pass.set_pipeline(&self.ghost_pipeline);
-            self.draw_one(pass, uniforms, first + placed.guides.len(), id);
+        let mut slot = placed.solid.len();
+        let over = [
+            (&self.glass_pipeline, placed.glass.as_slice()),
+            (&self.guide_pipeline, placed.guides.as_slice()),
+            (&self.ghost_pipeline, placed.ghost.as_slice()),
+        ];
+        for (pipeline, meshes) in over {
+            if !meshes.is_empty() {
+                pass.set_pipeline(pipeline);
+            }
+            for id in meshes {
+                self.draw_one(pass, uniforms, slot, id);
+                slot += 1;
+            }
         }
     }
 
@@ -238,6 +280,15 @@ impl Volumes {
 /// What one view draws of the volumes this frame, in slot order.
 pub struct Placed {
     solid: Vec<VolumeMeshId>,
+    glass: Vec<VolumeMeshId>,
     guides: Vec<VolumeMeshId>,
     ghost: Option<VolumeMeshId>,
+}
+
+impl Placed {
+    /// Whether anything is drawn over the picture once the sea and the
+    /// clouds are in it.
+    pub fn over(&self) -> bool {
+        !self.glass.is_empty() || !self.guides.is_empty() || self.ghost.is_some()
+    }
 }

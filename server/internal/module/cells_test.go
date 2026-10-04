@@ -105,8 +105,8 @@ func TestAChangeIsKeptToldToWhoIsNearAndShownToWhoArrives(t *testing.T) {
 	if stood.Height < 64 || stood.Version != 0 {
 		t.Fatalf("it holds the ground of its plot and the air over it: %v", stood)
 	}
-	if middle := (float64(stood.Low) + float64(stood.Height)/2) / 2; middle < groundM-100 || middle > groundM+100 {
-		t.Fatalf("the tests stand where the ground is: the volume's middle is %v m up", middle)
+	if foot := float64(stood.Low) / 2; foot < groundM-100 || foot > groundM+100 {
+		t.Fatalf("the tests stand where the ground is: the volume's foot is %v m up", foot)
 	}
 
 	// A row of cells near the top of the volume.

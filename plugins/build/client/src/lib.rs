@@ -1,16 +1,19 @@
 //! The build plugin's client half (DECISIONS 106): how a hand arrives at
 //! gestures. A tool in hand, a stroke from a click and a drag, a platform
 //! where the body stands, the key that turns a stroke and the chord that
-//! takes one back. While it builds it shows where cells are: the volume the
-//! body is in, and the slab a platform would lay. The cells are the core's:
-//! this half reads them and asks for gestures through its host, and holds
-//! none.
+//! takes one back. What it lays is a paint: a colour in hand, in a finish,
+//! with an edge or none. While it builds it shows where cells are: the
+//! volume the body is in, and with the platform tool the slab one would
+//! lay. The cells are the core's: this half reads them and asks for
+//! gestures through its host, and holds none.
 //!
 //! Over the seam, JSON tagged by `type`. What a front end or an agent asks:
 //!
 //! ```json
 //! {"type":"build.take","tool":"create"}
 //! {"type":"build.paint","paint":4}
+//! {"type":"build.finish","finish":"glass"}
+//! {"type":"build.edge","edge":"black"}
 //! {"type":"build.platform","side":32}
 //! {"type":"build.lay","base":"deck"}
 //! {"type":"build.close"}
@@ -22,7 +25,7 @@
 //! And what it hears:
 //!
 //! ```json
-//! {"type":"build.hand","tool":"create","paint":4,"platform":32}
+//! {"type":"build.hand","tool":"create","paint":4,"finish":"glass","edge":"black","platform":32}
 //! {"type":"build.over","volume":true}
 //! {"type":"build.refused","reason":"sea"}
 //! {"type":"build.history","undo":true,"redo":false}
@@ -43,14 +46,38 @@ use stroke::Stroke;
 /// once, by its world half (DECISIONS 101).
 pub use build_world::{NAME, PLATFORMS, VERSION};
 
-/// What a stroke in a volume does: fill air with the paint, empty cells, or
-/// repaint what is solid. One drag is one stroke, however many cells it covers.
+/// What a hand does while building. Three make a stroke in a volume: fill
+/// air with the paint, empty cells, or repaint what is solid, and one drag
+/// is one stroke, however many cells it covers. The fourth shows the slab a
+/// platform would lay where the body stands, until a base is asked for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tool {
     Create,
     Delete,
     Paint,
+    Platform,
+}
+
+/// How what is laid takes the light: lit by what shines on it, see-through,
+/// or shining with its own colour and lighting what is near.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Finish {
+    #[default]
+    Matte,
+    Glass,
+    Light,
+}
+
+/// The line drawn around each side of what is laid.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Edge {
+    #[default]
+    None,
+    Black,
+    White,
 }
 
 /// What carries the slab of a platform down to the ground: a deck's pillars
@@ -114,9 +141,13 @@ impl From<client::Refusal> for Refusal {
 /// nothing: a stroke starts on what is built, and a platform is the first of
 /// it.
 pub const TAKE: &str = "take";
-/// `build.paint`: the paint the next stroke lays, an index into the world's
+/// `build.paint`: the colour the next stroke lays, an index into the world's
 /// palette.
 pub const PAINT: &str = "paint";
+/// `build.finish`: how what the next stroke lays takes the light.
+pub const FINISH: &str = "finish";
+/// `build.edge`: the line around each side of what the next stroke lays.
+pub const EDGE: &str = "edge";
 /// `build.platform`: the side of the platform laid next, in cells. The size
 /// on offer nearest to it is taken.
 pub const PLATFORM: &str = "platform";
@@ -136,8 +167,9 @@ pub const REDO: &str = "redo";
 /// [`OVER`] and [`HISTORY`].
 pub const STATE: &str = "state";
 
-/// `build.hand`: the tool in hand, `null` when not building, the paint it
-/// lays and the side of the platform laid next, whenever one changes.
+/// `build.hand`: the tool in hand, `null` when not building, the colour it
+/// lays, in which finish and with which edge, and the side of the platform
+/// laid next, whenever one changes.
 pub const HAND: &str = "hand";
 /// `build.over`: whether a volume stands under the body, whenever that
 /// changes while building.
@@ -160,6 +192,16 @@ struct Paint {
 }
 
 #[derive(Deserialize)]
+struct Finished {
+    finish: Finish,
+}
+
+#[derive(Deserialize)]
+struct Edged {
+    edge: Edge,
+}
+
+#[derive(Deserialize)]
 struct Side {
     side: u32,
 }
@@ -174,6 +216,8 @@ struct Lay {
 struct Hand {
     tool: Option<Tool>,
     paint: u8,
+    finish: Finish,
+    edge: Edge,
     platform: u32,
 }
 
@@ -201,6 +245,7 @@ mod key {
     pub const CREATE: &str = "create";
     pub const DELETE: &str = "delete";
     pub const PAINT: &str = "paint";
+    pub const PLATFORM: &str = "platform";
     /// Each time it goes down, the stroke turns to the next of the three
     /// layers through its start: on its side, then standing one way, then
     /// the other.
@@ -212,7 +257,7 @@ mod key {
     pub const REDO: &str = "redo";
 }
 
-/// The paints a hand can pick: as many as the world's palette holds.
+/// The colours a hand can pick: as many as the world's palette holds.
 const PAINTS: u8 = client::PALETTE.len() as u8;
 /// Rows of the ground under a platform read in one turn: a platform of 64
 /// reads 65 rows of 65 corners, each a sample of the ground in full detail.
@@ -326,9 +371,13 @@ struct Laying {
 /// The tool in hand and what it is drawing.
 pub struct Build {
     tool: Option<Tool>,
-    /// The tool taken last, which starting to build again takes.
+    /// The tool taken last, which starting to build again takes. A platform
+    /// the first time: a stroke starts on what is built.
     last_tool: Tool,
+    /// The colour in hand, its finish and its edge: the paint a stroke lays.
     paint: u8,
+    finish: Finish,
+    edge: Edge,
     /// The side of the next platform, in cells, as a power of two.
     platform_bits: u32,
     aim: Option<Aim>,
@@ -341,8 +390,8 @@ pub struct Build {
     turned: usize,
     /// The platform asked for whose ground is still being read.
     laying: Option<Laying>,
-    /// The ground under the square the body is over, read while a tool is
-    /// in hand: what the slab of the next platform is shown by.
+    /// The ground under the square the body is over, read while the
+    /// platform tool is in hand: what the slab of the next one is shown by.
     survey: Option<Survey>,
     /// Whether laying a slab would make a cell, as last worked out: the
     /// slab, and the count of the cells' changes it was read at.
@@ -358,8 +407,10 @@ impl Default for Build {
     fn default() -> Self {
         Build {
             tool: None,
-            last_tool: Tool::Create,
+            last_tool: Tool::Platform,
             paint: 0,
+            finish: Finish::Matte,
+            edge: Edge::None,
             platform_bits: 4,
             aim: None,
             stroke: None,
@@ -395,6 +446,25 @@ impl Build {
 
     fn set_paint(&mut self, paint: u8) {
         self.paint = paint.min(PAINTS - 1);
+    }
+
+    /// The paint a stroke lays, and a platform is made of: the colour in
+    /// hand, in its finish, with its edge.
+    fn made_of(&self) -> u8 {
+        let paint = voxel::Paint {
+            color: self.paint,
+            finish: match self.finish {
+                Finish::Matte => voxel::Finish::Matte,
+                Finish::Glass => voxel::Finish::Glass,
+                Finish::Light => voxel::Finish::Light,
+            },
+            edge: match self.edge {
+                Edge::None => voxel::Edge::None,
+                Edge::Black => voxel::Edge::Black,
+                Edge::White => voxel::Edge::White,
+            },
+        };
+        paint.byte()
     }
 
     /// Takes a tool or puts it down. A stroke half drawn is dropped. With a
@@ -450,6 +520,8 @@ impl Build {
             &Hand {
                 tool: self.tool,
                 paint: self.paint,
+                finish: self.finish,
+                edge: self.edge,
                 platform: self.platform(),
             },
         );
@@ -489,10 +561,10 @@ impl Build {
     }
 
     /// Shows where cells are while a tool is in hand: the volume the body is
-    /// in, as room to build in, and the slab a platform would lay where it
-    /// stands, in the paint in hand, wherever laying one would make a cell.
-    /// The ground under the slab is read `rows` rows a turn, and the slab
-    /// shows once all of it is.
+    /// in, as room to build in, and with the platform tool the slab one
+    /// would lay where the body stands, in the colour in hand, wherever
+    /// laying it would make a cell. The ground under the slab is read `rows`
+    /// rows a turn, and the slab shows once all of it is.
     fn guide(&mut self, host: &mut Host<'_>, rows: usize) {
         if self.tool.is_none() {
             return;
@@ -508,7 +580,14 @@ impl Build {
             span,
             paint: None,
         });
-        let slab = self.slab(feet, host, rows).map(|span| Guide {
+        let slab = match self.tool {
+            Some(Tool::Platform) => self.slab(feet, host, rows),
+            _ => {
+                self.survey = None;
+                None
+            }
+        };
+        let slab = slab.map(|span| Guide {
             seat,
             span,
             paint: Some(self.paint),
@@ -596,7 +675,7 @@ impl Build {
         self.laying = Some(Laying {
             survey,
             base,
-            paint: self.paint,
+            paint: self.made_of(),
             feet: level(feet),
         });
         Ok(())
@@ -657,6 +736,18 @@ impl Plugin for Build {
                     self.say_hand(host);
                 }
             }
+            FINISH => {
+                if let Some(Finished { finish }) = read(body, host) {
+                    self.finish = finish;
+                    self.say_hand(host);
+                }
+            }
+            EDGE => {
+                if let Some(Edged { edge }) = read(body, host) {
+                    self.edge = edge;
+                    self.say_hand(host);
+                }
+            }
             PLATFORM => {
                 if let Some(Side { side }) = read(body, host) {
                     self.set_platform(side);
@@ -695,6 +786,7 @@ impl Plugin for Build {
             KeyAsk::pressed(key::CREATE, "Digit1"),
             KeyAsk::pressed(key::DELETE, "Digit2"),
             KeyAsk::pressed(key::PAINT, "Digit3"),
+            KeyAsk::pressed(key::PLATFORM, "Digit4"),
             KeyAsk::pressed(key::CANCEL, "Escape"),
             KeyAsk::held(key::TURN, "AltLeft"),
             KeyAsk::held(key::TURN, "AltRight"),
@@ -716,6 +808,7 @@ impl Plugin for Build {
             key::CREATE => self.take(Some(Tool::Create), host),
             key::DELETE => self.take(Some(Tool::Delete), host),
             key::PAINT => self.take(Some(Tool::Paint), host),
+            key::PLATFORM => self.take(Some(Tool::Platform), host),
             // A stroke half drawn goes first, then the tool itself.
             key::CANCEL => {
                 if !self.cancel() && self.tool.is_some() {

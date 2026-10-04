@@ -30,10 +30,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use glam::{DVec3, Vec3};
 use protocol::Message;
 use protocol::cells as wire;
-use scene::{GuideMesh, GuideVertex, VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
+use scene::{GuideMesh, GuideVertex, Lamp, VolumeChange, VolumeMesh, VolumeMeshId, VolumeVertex};
 use seat::{DROP_M, PLOT_BITS, Stand, Unseated, plot_of};
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
-use voxel::{CHUNK, CHUNK_BITS, Cell, Gesture, Hit, Quad, Span, Volumes, crossing, unpack};
+use voxel::{
+    CHUNK, CHUNK_BITS, Cell, Edge, Finish, Gesture, Hit, Paint, Quad, Span, Volumes, crossing,
+    unpack,
+};
 use worldgen::{Generator, Source};
 
 pub use seat::Seat;
@@ -59,18 +62,33 @@ const GHOST_LIFT_M: f32 = 0.012;
 const GHOST: VolumeMeshId = VolumeMeshId(u64::MAX);
 /// The first guide's id: the next ones count down from it.
 const GUIDES: u64 = u64::MAX - 1;
+/// What marks the mesh of a chunk's glass, beside the mesh of its cubes.
+const GLASS: u64 = 1 << 62;
 /// Cells along a side of the quads a guide is made of, at most: few enough
 /// that its sides bend with the planet as the cells they show do.
 const GUIDE_STEP: i32 = 8;
 /// How far a guide stands off the box it shows, in cells: clear of the cubes
 /// that fill the box to its sides.
 const GUIDE_LIFT: f64 = 0.04;
-/// What a guide in no paint is drawn in.
+/// What a guide in no paint is drawn in: room to build in, barely there
+/// between its lines.
 const ROOM_COLOR: [u8; 3] = [255, 255, 255];
-/// How much of a guide shows between its lines, of 255: room to build in is
-/// barely there, and what a hand would lay is plain to see.
-const ROOM_FILL: u8 = 5;
-const LAY_FILL: u8 = 34;
+const ROOM_FILL: u8 = 3;
+const ROOM_INK: u8 = 56;
+/// How much shows of what a hand would make, of 255, between its lines and
+/// on them: plain to see, and the world still seen through it.
+const GHOST_FILL: u8 = 105;
+const GHOST_INK: u8 = 170;
+/// How brightly a lamp of one side shines on what faces it from a metre
+/// away, as a share of its colour: a lamp of more sides shines by the root
+/// of how many, up to [`LAMP_SIDES`].
+const LAMP_GAIN: f32 = 0.7;
+const LAMP_SIDES: f32 = 64.0;
+/// How far a lamp of one side reaches, metres, how much further for the root
+/// of each side more, and the furthest any does.
+const LAMP_REACH_M: f32 = 8.0;
+const LAMP_GROWS_M: f32 = 3.0;
+const LAMP_FAR_M: f32 = 32.0;
 /// Changes kept to take back.
 const HISTORY: usize = 100;
 /// Seconds between two looks at what the world holds near the body.
@@ -137,8 +155,9 @@ struct Seated {
     sector: Sector,
     volumes: Volumes,
     /// A ball around each volume, in the world, by its plot: what a line of
-    /// sight asks before it is bent into cells, and how far a body is from it.
-    balls: BTreeMap<[i32; 2], (DVec3, f64)>,
+    /// sight asks before it is bent into cells. Then how far its plot
+    /// reaches from its middle, along the ground.
+    balls: BTreeMap<[i32; 2], (DVec3, f64, f64)>,
 }
 
 impl Seated {
@@ -165,9 +184,12 @@ impl Seated {
             return;
         };
         let size = bounds.size().map(|n| n as i32);
-        let middle = self.corner(sphere, [0, 1, 2].map(|i| bounds.min[i] + size[i] / 2));
+        let half = [0, 1, 2].map(|i| bounds.min[i] + size[i] / 2);
+        let middle = self.corner(sphere, half);
         let radius_m = self.corner(sphere, bounds.min).distance(middle) * 1.5;
-        self.balls.insert(plot, (middle, radius_m));
+        let level = [bounds.min[0], bounds.min[1], half[2]];
+        let across_m = self.corner(sphere, level).distance(middle) * 1.5;
+        self.balls.insert(plot, (middle, radius_m, across_m));
     }
 
     /// A line of sight from `from` along `toward` (unit), as a path in this
@@ -176,7 +198,7 @@ impl Seated {
         let stretch = self
             .balls
             .values()
-            .filter_map(|&(middle, radius_m)| {
+            .filter_map(|&(middle, radius_m, _)| {
                 let along = (middle - from).dot(toward);
                 let miss2 = (middle - from).length_squared() - along * along;
                 let inside2 = radius_m * radius_m - miss2;
@@ -245,12 +267,13 @@ enum Change {
         before: Vec<Cell>,
         after: Vec<Cell>,
     },
-    /// A volume was closed: the cells it held, and all they were.
+    /// A volume was closed: the cells it held, and every chunk of them that
+    /// held something.
     Closed {
         seat: Seat,
         plot: [i32; 2],
         span: Span,
-        cells: Vec<Cell>,
+        chunks: Vec<([i32; 3], Vec<Cell>)>,
     },
 }
 
@@ -330,6 +353,10 @@ pub struct Cells {
     /// One more for every change to what the cells hold.
     revision: u64,
     drawn: BTreeSet<VolumeMeshId>,
+    /// The meshes of glass drawn, each beside the cubes of its chunk.
+    glazed: BTreeSet<VolumeMeshId>,
+    /// The light of each chunk that holds sides that shine, by its mesh.
+    lamps: BTreeMap<VolumeMeshId, Lamp>,
     /// Chunks owed a mesh since their cells changed, by site.
     stale: BTreeSet<(usize, [i32; 3])>,
     /// Whether a change of many gestures landed since the last update.
@@ -501,15 +528,18 @@ impl Cells {
                 link.ask(wire::CLOSE, &close, Some(Waiting::Close));
             }
             None => {
-                let held = self
-                    .site(seat)
-                    .map(|site| self.sites[site].volumes.cells(span));
-                let cells = held.unwrap_or_default();
+                let held = self.site(seat).map(|site| {
+                    let volumes = &self.sites[site].volumes;
+                    let stored = volumes.stored(plot).into_iter();
+                    stored
+                        .map(|chunk| (chunk, volumes.cells(Volumes::chunk_span(chunk))))
+                        .collect()
+                });
                 self.done.push(Change::Closed {
                     seat,
                     plot,
                     span,
-                    cells,
+                    chunks: held.unwrap_or_default(),
                 });
                 if self.done.len() > HISTORY {
                     self.done.remove(0);
@@ -526,23 +556,21 @@ impl Cells {
         let Some(site) = self.site(seat) else {
             return;
         };
-        let seated = &mut self.sites[site];
-        let Some(bounds) = seated.volumes.bounds(plot) else {
+        let Some(bounds) = self.sites[site].volumes.bounds(plot) else {
             return;
         };
-        for chunk in seated.volumes.chunks_in(bounds) {
-            let id = seated.mesh_id(chunk);
-            if self.drawn.remove(&id) {
-                self.changes.push(VolumeChange::Remove(id));
-            }
+        for chunk in self.sites[site].volumes.chunks_in(bounds) {
+            let id = self.sites[site].mesh_id(chunk);
+            self.undraw(id);
             self.stale.remove(&(site, chunk));
         }
+        let seated = &mut self.sites[site];
         seated.volumes.close(plot);
         // The grass under it grows again, and what stood against it shows
         // the sides it hid.
-        if let Some((middle, radius_m)) = seated.balls.remove(&plot) {
+        if let Some((middle, _, across_m)) = seated.balls.remove(&plot) {
             self.touched
-                .push((middle.normalize(), radius_m / middle.length()));
+                .push((middle.normalize(), across_m / middle.length()));
         }
         for chunk in seated.volumes.chunks_in(bounds.grown(1)) {
             self.stale.insert((site, chunk));
@@ -557,11 +585,25 @@ impl Cells {
         self.revision += 1;
     }
 
-    /// Forgets every volume: another world.
-    pub(crate) fn clear(&mut self) {
-        for id in core::mem::take(&mut self.drawn) {
+    /// Takes the picture of a chunk away: its cubes, its glass and its lamp.
+    fn undraw(&mut self, id: VolumeMeshId) {
+        let glass = VolumeMeshId(id.0 | GLASS);
+        if self.drawn.remove(&id) {
             self.changes.push(VolumeChange::Remove(id));
         }
+        if self.glazed.remove(&glass) {
+            self.changes.push(VolumeChange::Remove(glass));
+        }
+        self.lamps.remove(&id);
+    }
+
+    /// Forgets every volume: another world.
+    pub(crate) fn clear(&mut self) {
+        let drawn = core::mem::take(&mut self.drawn);
+        for id in drawn.into_iter().chain(core::mem::take(&mut self.glazed)) {
+            self.changes.push(VolumeChange::Remove(id));
+        }
+        self.lamps.clear();
         if self.ghost.take().is_some() {
             self.changes.push(VolumeChange::Remove(GHOST));
         }
@@ -613,7 +655,7 @@ impl Cells {
                     seat,
                     plot,
                     span,
-                    cells,
+                    chunks,
                 } => {
                     if let Some(sector) = seat.sector() {
                         let stand = Stand {
@@ -621,7 +663,9 @@ impl Cells {
                             height: span.size()[2],
                         };
                         let site = self.stand(generator.sphere(), sector, *plot, stand);
-                        self.put(generator, site, *span, cells);
+                        for (chunk, cells) in chunks {
+                            self.put(generator, site, Volumes::chunk_span(*chunk), cells);
+                        }
                     }
                 }
             }
@@ -743,6 +787,10 @@ impl Cells {
         let Some(span) = reach.and_then(|reach| volumes.held(reach)) else {
             return false;
         };
+        // A box the world would not take is not made here either.
+        if span.size().iter().map(|&n| u64::from(n)).product::<u64>() > seat::CHANGE_CELLS {
+            return false;
+        }
         let before = volumes.cells(span);
         let changed = gestures
             .iter()
@@ -827,7 +875,9 @@ impl Cells {
     }
 
     /// Meshes up to `budget` of the chunks owed one, the nearest to `eye`
-    /// first.
+    /// first: its cubes, its glass apart from them, and the lamp its sides
+    /// that shine come to. A chunk that holds nothing costs no mesh, and
+    /// none of the budget.
     fn mesh_owed(&mut self, sphere: QuadSphere, eye: DVec3, budget: usize) {
         if self.stale.is_empty() {
             return;
@@ -842,26 +892,48 @@ impl Cells {
             })
             .collect();
         owed.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, owed) in owed.into_iter().take(budget) {
+        let mut left = budget;
+        for (_, owed) in owed {
+            if left == 0 {
+                break;
+            }
             self.stale.remove(&owed);
             let (site, chunk) = owed;
-            let seated = &self.sites[site];
-            let id = seated.mesh_id(chunk);
-            let quads = seated.volumes.faces(chunk);
+            let id = self.sites[site].mesh_id(chunk);
+            let quads = self.sites[site].volumes.faces(chunk);
             if quads.is_empty() {
-                if self.drawn.remove(&id) {
-                    self.changes.push(VolumeChange::Remove(id));
-                }
+                self.undraw(id);
                 continue;
             }
-            let mesh = mesh(seated.sector, sphere, &quads, paint_color, 0.0);
-            self.drawn.insert(id);
-            self.changes.push(VolumeChange::Add(id, mesh));
+            left -= 1;
+            let sector = self.sites[site].sector;
+            let glass = |quad: &Quad| Paint::of(quad.paint).finish == Finish::Glass;
+            let (panes, cubes): (Vec<Quad>, Vec<Quad>) = quads.into_iter().partition(glass);
+            match lamp(sector, sphere, &cubes) {
+                Some(lamp) => self.lamps.insert(id, lamp),
+                None => self.lamps.remove(&id),
+            };
+            let meshes = [
+                (id, cubes, &mut self.drawn),
+                (VolumeMeshId(id.0 | GLASS), panes, &mut self.glazed),
+            ];
+            for (id, quads, drawn) in meshes {
+                if quads.is_empty() {
+                    if drawn.remove(&id) {
+                        self.changes.push(VolumeChange::Remove(id));
+                    }
+                    continue;
+                }
+                let mesh = mesh(sector, sphere, &quads, paint_look, 0.0);
+                drawn.insert(id);
+                self.changes.push(VolumeChange::Add(id, mesh));
+            }
         }
     }
 
     /// Shows the ghost of a gesture, or of none: exactly the cells it would
-    /// change, so a hand sees what it will do. It is meshed again only when
+    /// change, see-through, with a line between each cell and the next, so a
+    /// hand sees what it will do and counts it. It is meshed again only when
     /// what it shows is another gesture, or the cells under it changed.
     pub(crate) fn preview(&mut self, sphere: QuadSphere, gesture: Option<(Seat, Gesture)>) {
         let wanted = gesture.filter(|&(seat, _)| self.site(seat).is_some());
@@ -875,20 +947,35 @@ impl Cells {
             return;
         };
         let seated = &self.sites[site];
-        let color = match gesture {
-            Gesture::Create { paint, .. } | Gesture::Paint { paint, .. } => paint_color(paint),
-            Gesture::Delete { .. } => {
-                let [r, g, b] = DELETE_COLOR;
-                [r, g, b, 0]
-            }
+        let rgb = match gesture {
+            Gesture::Create { paint, .. } | Gesture::Paint { paint, .. } => paint_rgb(paint),
+            Gesture::Delete { .. } => DELETE_COLOR,
         };
+        let (color, ink) = ghost_look(rgb);
         let quads = seated.volumes.ghost(gesture);
-        let mut mesh = mesh(seated.sector, sphere, &quads, |_| color, GHOST_LIFT_M);
-        // A ghost is not shut in by itself.
-        for vertex in &mut mesh.vertices {
-            vertex.open = 1.0;
-        }
-        self.changes.push(VolumeChange::Add(GHOST, mesh));
+        let sides = mesh(seated.sector, sphere, &quads, paint_look, GHOST_LIFT_M);
+        // Each corner says where it is on its side, counted from a corner of
+        // the frame every plot has, as the lines of a guide are.
+        let plot = (1 << PLOT_BITS) - 1;
+        let lattice = quads.iter().flat_map(|quad| {
+            let (b, c) = ((quad.face.axis + 1) % 3, (quad.face.axis + 2) % 3);
+            let from = [quad.cell[b] & !plot, quad.cell[c] & !plot];
+            quad.corners()
+                .map(|p| [(p[b] - from[0]) as f32, (p[c] - from[1]) as f32])
+        });
+        let corners = lattice.zip(&sides.vertices);
+        let vertices = corners.map(|(lattice, corner)| GuideVertex {
+            position: corner.position,
+            lattice,
+            color,
+            ink,
+        });
+        let mesh = GuideMesh {
+            origin: sides.origin,
+            vertices: vertices.collect(),
+            indices: sides.indices,
+        };
+        self.changes.push(VolumeChange::Guide(GHOST, mesh));
     }
 
     /// Shows guides over the world, in place of those shown before: none,
@@ -954,9 +1041,19 @@ impl Cells {
         core::mem::take(&mut self.touched)
     }
 
-    /// Every volume mesh to draw.
+    /// Every mesh of cubes to draw.
     pub fn drawn(&self) -> Vec<VolumeMeshId> {
         self.drawn.iter().copied().collect()
+    }
+
+    /// Every mesh of glass to draw, over the cubes.
+    pub fn glazed(&self) -> Vec<VolumeMeshId> {
+        self.glazed.iter().copied().collect()
+    }
+
+    /// The lights among the cells held.
+    pub fn lamps(&self) -> Vec<Lamp> {
+        self.lamps.values().copied().collect()
     }
 
     /// The ghost of the gesture a hand would make, while there is one.
@@ -981,7 +1078,7 @@ impl Cells {
     /// of the volumes the body left behind and asks the world what it holds
     /// near the body that this client lacks. `body` is where the body is in
     /// the world, while it is on the planet.
-    pub(crate) fn look(&mut self, body: Option<DVec3>, dt: f64) {
+    pub(crate) fn look(&mut self, sphere: QuadSphere, body: Option<DVec3>, dt: f64) {
         let Some(link) = &mut self.link else {
             return;
         };
@@ -995,11 +1092,17 @@ impl Cells {
                 .sites
                 .iter()
                 .flat_map(|site| {
-                    let left = site
-                        .balls
-                        .iter()
-                        .filter(move |(_, (middle, _))| middle.distance(body) > DROP_M);
-                    left.map(|(plot, _)| (Seat::Sector(site.sector), *plot))
+                    let left = site.volumes.plots().filter(move |&plot| {
+                        site.volumes.bounds(plot).is_some_and(|held| {
+                            let stand = Stand {
+                                low: held.min[2],
+                                height: held.size()[2],
+                            };
+                            let from = body.to_array();
+                            seat::away_m(sphere, site.sector, plot, stand, from) > DROP_M
+                        })
+                    });
+                    left.map(|plot| (Seat::Sector(site.sector), plot))
                 })
                 .collect();
             for (seat, plot) in far {
@@ -1150,14 +1253,20 @@ impl Cells {
             if let Some(link) = &mut self.link {
                 link.versions.insert((seat, plot), stood.version);
             }
+            // What is drawn again is what the chunks shown changed: a volume
+            // is mostly air, and air owes no mesh.
             self.rebase(generator, site, Some(bounds), |volumes| {
+                let mut changed: Option<Span> = None;
                 for chunk in &volume.chunks {
                     if let Some(cells) = unpack(&chunk.cells, CHUNK_CELLS) {
                         let span = Volumes::chunk_span([chunk.x, chunk.y, chunk.z]);
-                        volumes.restore(span, &cells);
+                        if let Some(made) = volumes.restore(span, &cells) {
+                            let so_far = changed.unwrap_or(made);
+                            changed = Some(so_far.with(made.min).with(made.max));
+                        }
                     }
                 }
-                Some(bounds)
+                changed
             });
         }
         for gone in seen.gone {
@@ -1294,10 +1403,64 @@ impl Cells {
     }
 }
 
-/// The colour and gloss a paint is drawn with.
-fn paint_color(paint: u8) -> [u8; 4] {
-    let [r, g, b] = PALETTE[usize::from(paint).min(PALETTE.len() - 1)];
-    [r, g, b, 0]
+/// A colour of the palette for each a paint can be.
+const _: () = assert!(PALETTE.len() == Paint::COLORS as usize);
+
+/// The colour of a paint.
+fn paint_rgb(paint: u8) -> [u8; 3] {
+    PALETTE[usize::from(Paint::of(paint).color)]
+}
+
+/// How the sides of a paint are drawn: its colour and how much it shines
+/// with it, then its edge.
+fn paint_look(paint: u8) -> ([u8; 4], u8) {
+    let [r, g, b] = paint_rgb(paint);
+    let paint = Paint::of(paint);
+    let shine = match paint.finish {
+        Finish::Light => u8::MAX,
+        Finish::Matte | Finish::Glass => 0,
+    };
+    let edge = match paint.edge {
+        Edge::None => 0,
+        Edge::Black => 1,
+        Edge::White => 2,
+    };
+    ([r, g, b, shine], edge)
+}
+
+/// How what a hand would make is drawn in a colour: the colour between the
+/// lines, and lines that stand out of it, black over a pale colour and
+/// white over a dark one.
+fn ghost_look([r, g, b]: [u8; 3]) -> ([u8; 4], [u8; 4]) {
+    let pale = u32::from(r) * 3 + u32::from(g) * 6 + u32::from(b) > 1400;
+    let ink = if pale { 0 } else { u8::MAX };
+    ([r, g, b, GHOST_FILL], [ink, ink, ink, GHOST_INK])
+}
+
+/// The lamp the sides that shine among some come to: where their middle is,
+/// their colour, and brighter and further reaching the more they are.
+fn lamp(sector: Sector, sphere: QuadSphere, quads: &[Quad]) -> Option<Lamp> {
+    let (mut sides, mut middle, mut color) = (0.0_f32, DVec3::ZERO, Vec3::ZERO);
+    for quad in quads {
+        if Paint::of(quad.paint).finish != Finish::Light {
+            continue;
+        }
+        sides += 1.0;
+        let [p, _, q, _] = quad.corners();
+        middle += (DVec3::from(p.map(f64::from)) + DVec3::from(q.map(f64::from))) / 2.0;
+        color += Vec3::from(paint_rgb(quad.paint).map(|c| (f32::from(c) / 255.0).powf(2.2)));
+    }
+    if sides == 0.0 {
+        return None;
+    }
+    let middle = middle / f64::from(sides);
+    let point = SurfacePoint::new(sector, middle.x, middle.y);
+    let many = sides.min(LAMP_SIDES).sqrt();
+    Some(Lamp {
+        position: DVec3::from(sphere.position(point, middle.z * BLOCK_M)),
+        color: color / sides * LAMP_GAIN * many,
+        reach_m: (LAMP_REACH_M + LAMP_GROWS_M * (many - 1.0)).min(LAMP_FAR_M),
+    })
 }
 
 fn guide_id(slot: usize) -> VolumeMeshId {
@@ -1316,14 +1479,11 @@ fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
     let Some(sector) = guide.seat.sector() else {
         return mesh;
     };
-    let color = match guide.paint {
-        Some(paint) => {
-            let [r, g, b, _] = paint_color(paint);
-            [r, g, b, LAY_FILL]
-        }
+    let (color, ink) = match guide.paint {
+        Some(paint) => ghost_look(paint_rgb(paint)),
         None => {
             let [r, g, b] = ROOM_COLOR;
-            [r, g, b, ROOM_FILL]
+            ([r, g, b, ROOM_FILL], [r, g, b, ROOM_INK])
         }
     };
     let at = |p: [f64; 3]| {
@@ -1334,11 +1494,14 @@ fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
     // Lines are counted from a corner of the frame every plot has: those of
     // two guides side by side meet.
     let from = |n: i32| (n.rem_euclid(1 << PLOT_BITS)) as f32;
-    // Where the quads of a side are cut along an axis: every few cells.
+    // Where the quads of a side are cut along an axis: every few cells
+    // along the ground, which curves, and nowhere up, which is straight.
     let cuts = |axis: usize| -> Vec<i32> {
-        let mut cuts: Vec<i32> = (low[axis]..high[axis])
-            .step_by(GUIDE_STEP as usize)
-            .collect();
+        let step = match axis {
+            2 => usize::MAX,
+            _ => GUIDE_STEP as usize,
+        };
+        let mut cuts: Vec<i32> = (low[axis]..high[axis]).step_by(step).collect();
         cuts.push(high[axis]);
         cuts
     };
@@ -1367,6 +1530,7 @@ fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
                                 from(low[b]) + (pb - low[b]) as f32,
                             ],
                             color,
+                            ink,
                         });
                     }
                     mesh.indices
@@ -1381,12 +1545,14 @@ fn guide_mesh(sphere: QuadSphere, guide: Guide) -> GuideMesh {
 /// Bends the sides of a sector's cells onto the planet: every corner goes
 /// through the address it is, so neighbouring sides share their corners
 /// exactly, across two volumes as within one, and a volume on a small world
-/// curves with it. `lift_m` stands each side off along its own normal.
+/// curves with it. `lift_m` stands each side off along its own normal, and
+/// `look` says how the sides of a paint are drawn: their colour and shine,
+/// then their edge.
 fn mesh(
     sector: Sector,
     sphere: QuadSphere,
     quads: &[Quad],
-    color: impl Fn(u8) -> [u8; 4],
+    look: impl Fn(u8) -> ([u8; 4], u8),
     lift_m: f32,
 ) -> VolumeMesh {
     let Some(first) = quads.first() else {
@@ -1429,14 +1595,16 @@ fn mesh(
         let normal = (corners[1] - corners[0])
             .cross(corners[3] - corners[0])
             .normalize_or(Vec3::Z);
-        let color = color(quad.paint);
+        let (color, edge) = look(quad.paint);
         let base = vertices.len() as u32;
-        for (corner, open) in corners.into_iter().zip(quad.open) {
+        // Round the side from its first corner: across, then up, then back.
+        let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
+        for ((corner, open), [u, v]) in corners.into_iter().zip(quad.open).zip(across) {
             vertices.push(VolumeVertex {
                 position: (corner + normal * lift_m).to_array(),
                 normal: normal.to_array(),
                 color,
-                open: f32::from(open) / 3.0,
+                side: [open * (u8::MAX / 3), u, v, edge],
             });
         }
         let order = if quad.flipped() {
@@ -1534,12 +1702,13 @@ mod tests {
     }
 
     /// Every cell over the floor that is not air, in the volume the tests
-    /// open, counted from the first.
+    /// open, counted from the first: as high as the tests build.
     fn laid(cells: &Cells, origin: [i32; 3]) -> Vec<[i32; 3]> {
         let volumes = &cells.sites[0].volumes;
         let plot = volumes.plot_of(origin[0], origin[1]);
         let mut over = volumes.bounds(plot).expect("an open volume");
         over.min[2] = origin[2];
+        over.max[2] = over.max[2].min(origin[2] + 64);
         over.cells()
             .filter(|&cell| !volumes.get(cell).is_air())
             .map(|cell| [0, 1, 2].map(|i| cell[i] - origin[i]))
@@ -1840,7 +2009,7 @@ mod tests {
                 open: [3; 4],
             },
         ];
-        let mesh = mesh(site.sector, sphere, &quads, paint_color, 0.0);
+        let mesh = mesh(site.sector, sphere, &quads, paint_look, 0.0);
         let shared: Vec<DVec3> = mesh
             .vertices
             .iter()

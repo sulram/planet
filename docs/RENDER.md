@@ -35,8 +35,10 @@ compositor. What the world *is* lives in WORLD.md.
   it, squared, takes away ambient light only, and the sun is the shadow
   map's. Volumes cast into the cascades and receive.
 - The ghost is the cells a stroke would change, lifted 12 mm off what they
-  cover and drawn after the sky, blended, tested against depth and writing
-  none (`Surface::Ghost`). Red over what a delete takes (76).
+  cover, see-through with a line between each cell and the next
+  (`guide.wgsl`). It is drawn with glass and the guides after the sea and
+  the clouds, blended, tested against depth and writing none. Red over what
+  a delete takes (76).
 
 ## Sea, sky and light
 

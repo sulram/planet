@@ -2,7 +2,7 @@
 	import { builds } from '$lib/instance';
 	import type { LayerProps } from '$lib/plugins/plugin';
 	import Panel from './Panel.svelte';
-	import { parseHand, parseHistory, parseOver, parseRefused, type Base, type Refusal, type Tool } from './protocol';
+	import { parseHand, parseHistory, parseOver, parseRefused, type Base, type Edge, type Finish, type Refusal, type Tool } from './protocol';
 
 	// Building over the world: what the plugin says is in hand, whether a
 	// volume stands under the body, why it last refused, and what there is to
@@ -13,6 +13,8 @@
 
 	let tool = $state<Tool | null>(null);
 	let paint = $state(0);
+	let finish = $state<Finish>('matte');
+	let edge = $state<Edge>('none');
 	let platform = $state(16);
 	let volume = $state(false);
 	let refused = $state<Refusal | null>(null);
@@ -22,7 +24,7 @@
 		const stop = seam.listen((kind, event) => {
 			if (kind === 'hand') {
 				const hand = parseHand(event);
-				if (hand) ({ tool, paint, platform } = hand);
+				if (hand) ({ tool, paint, finish, edge, platform } = hand);
 			} else if (kind === 'over') volume = parseOver(event) ?? volume;
 			else if (kind === 'refused') refused = parseRefused(event);
 			else if (kind === 'history') history = parseHistory(event) ?? history;
@@ -52,6 +54,8 @@
 	<Panel
 		{tool}
 		{paint}
+		{finish}
+		{edge}
 		{platform}
 		{palette}
 		{volume}
@@ -59,6 +63,8 @@
 		{history}
 		onbuild={take}
 		onpaint={(next) => seam.command('paint', { paint: next })}
+		onfinish={(next) => seam.command('finish', { finish: next })}
+		onedge={(next) => seam.command('edge', { edge: next })}
 		onplatform={(side) => seam.command('platform', { side })}
 		onlay={lay}
 		onclosevolume={closeVolume}

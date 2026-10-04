@@ -1,13 +1,15 @@
 //! The sides of cells that show, and how shut in each of their corners is.
 //!
 //! Every side of a solid cell that looks at air is one quad; sides between
-//! two solids, across two volumes too, are never drawn. Sides
-//! are not merged into larger quads: whoever seats a volume on a curved body
+//! two solids, across two volumes too, are never drawn. Glass hides nothing:
+//! a side that looks into glass shows through it, and a side of glass shows
+//! where it looks at air. Sides are not merged into larger quads: whoever seats a volume on a curved body
 //! bends each corner onto it, and a merged quad would be a chord whose
 //! neighbours meet it in the middle of an edge, where the surface cracks.
 //!
 //! Occlusion is per corner, from the three cells that touch the corner in the
-//! layer the side looks into: two along the edges and one across. It is the
+//! layer the side looks into: two along the edges and one across. Glass
+//! shuts no light out. It is the
 //! cheap half of the light a volume is meant to bake, and what makes a corner
 //! of a room read as one.
 
@@ -104,20 +106,23 @@ impl Padded {
         let stride = [1, size[0], size[0] * size[1]];
         let step = |n: [i32; 3]| (0..3).map(|i| n[i] as isize * stride[i]).sum::<isize>();
         let solid = |i: isize| !self.cells[i as usize].is_air();
+        let opaque = |i: isize| self.cells[i as usize].opaque();
         let mut quads = Vec::new();
         for at in span.cells() {
             let i = self.span.index(at) as isize;
-            let Some(paint) = self.cells[i as usize].paint() else {
+            let cell = self.cells[i as usize];
+            let Some(paint) = cell.paint() else {
                 continue;
             };
+            let glass = !cell.opaque();
             for face in Face::ALL {
                 let out = i + step(face.normal());
-                if solid(out) {
+                if opaque(out) || (glass && solid(out)) {
                     continue;
                 }
                 let (_, b, c) = axes(face);
                 let open = openness(face, |sb, sc| {
-                    solid(out + sb as isize * stride[b] + sc as isize * stride[c])
+                    opaque(out + sb as isize * stride[b] + sc as isize * stride[c])
                 });
                 quads.push(Quad {
                     cell: at,
@@ -134,13 +139,15 @@ impl Padded {
 /// The visible sides of the cells in a box, into `quads`.
 pub(crate) fn faces_into(cells: &impl Cells, span: Span, quads: &mut Vec<Quad>) {
     for at in span.cells() {
-        let Some(paint) = cells.get(at).paint() else {
+        let cell = cells.get(at);
+        let Some(paint) = cell.paint() else {
             continue;
         };
+        let glass = !cell.opaque();
         for face in Face::ALL {
             let n = face.normal();
             let out = [0, 1, 2].map(|i| at[i] + n[i]);
-            if cells.solid(out) {
+            if cells.opaque(out) || (glass && cells.solid(out)) {
                 continue;
             }
             let (_, b, c) = axes(face);
@@ -148,7 +155,7 @@ pub(crate) fn faces_into(cells: &impl Cells, span: Span, quads: &mut Vec<Quad>) 
                 let mut p = out;
                 p[b] += sb;
                 p[c] += sc;
-                cells.solid(p)
+                cells.opaque(p)
             });
             quads.push(Quad {
                 cell: at,
@@ -226,6 +233,48 @@ mod tests {
         let quads = volume.faces([0, 0, 0]);
         assert_eq!(quads.len(), 6);
         assert!(quads.iter().all(|q| q.paint == 3));
+    }
+
+    #[test]
+    fn glass_hides_nothing_and_shuts_no_light_out() {
+        use crate::{Edge, Finish, Paint};
+        let glass = Paint {
+            color: 2,
+            finish: Finish::Glass,
+            edge: Edge::None,
+        }
+        .byte();
+        let cube = |volume: &mut Volume, at: [i32; 3], paint: u8| {
+            volume.apply(Gesture::Create {
+                span: Span::cell(at),
+                paint,
+            });
+        };
+        let mut volume = Volume::new([8, 8, 8]);
+        cube(&mut volume, [1, 1, 1], 0);
+        cube(&mut volume, [2, 1, 1], glass);
+        let sides = |volume: &Volume, paint: u8| {
+            let quads = volume.faces([0, 0, 0]);
+            quads.into_iter().filter(|q| q.paint == paint).count()
+        };
+        // The matte cube shows all six sides, one of them through the glass,
+        // and the glass the five that look at air.
+        assert_eq!(sides(&volume, 0), 6);
+        assert_eq!(sides(&volume, glass), 5);
+        // Between two cubes of glass nothing is drawn.
+        cube(&mut volume, [3, 1, 1], glass);
+        assert_eq!(sides(&volume, glass), 9);
+        // Glass over the foot of a wall leaves its corners open.
+        cube(&mut volume, [1, 2, 1], glass);
+        let quads = volume.faces([0, 0, 0]);
+        assert!(
+            quads
+                .iter()
+                .filter(|q| q.paint == 0)
+                .all(|q| q.open == [3; 4])
+        );
+        // To a body and to a hand it is as solid as any cell.
+        assert!(Cells::solid(&volume, [2, 1, 1]) && !Cells::opaque(&volume, [2, 1, 1]));
     }
 
     #[test]

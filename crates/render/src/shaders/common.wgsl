@@ -2,6 +2,14 @@
 // encoding. Positions named `relative` are metres from the camera; nothing on
 // the GPU is ever in planet space except the camera itself.
 
+// A light among the cells. `at.xyz`: where, relative to the camera. `at.w`:
+// how far it reaches, metres. `color.rgb`: what it gives a side that faces
+// it from a metre away.
+struct Lamp {
+    at: vec4<f32>,
+    color: vec4<f32>,
+}
+
 struct View {
     clip_from_relative: mat4x4<f32>,
     relative_from_clip: mat4x4<f32>,
@@ -31,6 +39,9 @@ struct View {
     // x: how thick the air is, as a factor. y: which tone map, by index.
     // z: how clear the sea is to a swimmer, as a factor.
     grade: vec4<f32>,
+    // x: how many of `lamps` are lit.
+    lamps_on: vec4<f32>,
+    lamps: array<Lamp, LAMPS>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -254,6 +265,30 @@ fn moonlight(up: vec3<f32>) -> vec3<f32> {
     return moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
 }
 
+// Metres from a lamp at which its light is half what it is beside it: a lamp
+// is a patch of cells, not a point, and fades gently near.
+const LAMP_M: f32 = 2.0;
+
+// What the lamps near give a side: each falls off with the square of the
+// distance, ends at its reach, and wraps a little round a side turned away,
+// as light from a patch does. No lamp casts a shadow.
+fn lamplight(relative: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    var light = vec3<f32>(0.0);
+    let count = u32(view.lamps_on.x);
+    for (var i = 0u; i < count; i++) {
+        let lamp = view.lamps[i];
+        let to = lamp.at.xyz - relative;
+        let d2 = dot(to, to);
+        let near = 1.0 - d2 / (lamp.at.w * lamp.at.w);
+        if near <= 0.0 {
+            continue;
+        }
+        let facing = clamp((dot(normal, to * inverseSqrt(max(d2, 1e-4))) + 0.5) / 1.5, 0.0, 1.0);
+        light += lamp.color.rgb * facing * near * near / (1.0 + d2 / (LAMP_M * LAMP_M));
+    }
+    return light;
+}
+
 // How far a side turns towards the sun, as the cosine of the angle, before
 // the sun reaches it whole: the width of the terminator. Narrow, so ground
 // under a low sun keeps its light.
@@ -300,6 +335,7 @@ fn lit_occluded(albedo: vec3<f32>, normal: vec3<f32>, gloss: f32, relative: vec3
     var color = albedo * (direct * vec3<f32>(1.75, 1.66, 1.5) + ambient);
 
     color += albedo * max(dot(normal, view.moon_light.xyz), 0.0) * moonlight(up);
+    color += albedo * lamplight(relative, normal);
 
     let half_vector = normalize(sun - dir);
     color += gloss * day * visibility * pow(max(dot(normal, half_vector), 0.0), 90.0) * 1.5;

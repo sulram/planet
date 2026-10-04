@@ -1,5 +1,7 @@
-// A guide: a box of cells drawn as a faint grid over the world, so a hand
-// sees where cells are before any is laid. Its own light, dimmed by night.
+// Guides and the ghost of a stroke: sides of cells drawn see-through over the
+// world with a line between each cell and the next, so a hand sees where
+// cells are and how many. Lit by nothing: a side is shaded by how it faces
+// the sky, so a box reads as one, and it stays plain to see by night.
 
 struct Placement {
     // xyz: mesh origin relative to the camera.
@@ -14,6 +16,7 @@ struct Vertex {
     @location(0) position: vec3<f32>,
     @location(1) lattice: vec2<f32>,
     @location(2) color: vec4<f32>,
+    @location(3) ink: vec4<f32>,
 }
 
 struct Varying {
@@ -21,11 +24,11 @@ struct Varying {
     @location(0) relative: vec3<f32>,
     @location(1) lattice: vec2<f32>,
     @location(2) color: vec4<f32>,
+    @location(3) ink: vec4<f32>,
 }
 
-// How many times as much of a guide shows on a line as between two.
-const LINE: f32 = 6.0;
-// Cells between two lines drawn stronger: a bay of a deck, and half a chunk.
+// Cells between two lines drawn whole: a bay of a deck, and half a chunk.
+// The lines between are drawn half as strong.
 const BAY: f32 = 8.0;
 
 @vertex
@@ -35,6 +38,7 @@ fn vs(in: Vertex) -> Varying {
     out.clip = view.clip_from_relative * vec4<f32>(out.relative, 1.0);
     out.lattice = in.lattice;
     out.color = in.color;
+    out.ink = in.ink;
     return out;
 }
 
@@ -53,11 +57,18 @@ fn lines(at: vec2<f32>, every: f32) -> f32 {
 
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
-    let line = max(lines(in.lattice, 1.0), lines(in.lattice, BAY) * 2.0);
-    let alpha = clamp(in.color.a * (1.0 + (LINE - 1.0) * min(line, 2.0)), 0.0, 0.9);
-    // Lit by nothing, and no brighter than the day around it.
+    // The ink over the fill, as much of each as its own share says.
+    let inked = in.ink.a * max(lines(in.lattice, 1.0) * 0.5, lines(in.lattice, BAY));
+    let filled = in.color.a * (1.0 - inked);
+    let alpha = inked + filled;
+    let paint = (pow(in.ink.rgb, vec3<f32>(2.2)) * inked + pow(in.color.rgb, vec3<f32>(2.2)) * filled)
+        / max(alpha, 1e-4);
+    // The side as it faces the eye, from how the picture changes across it.
+    let flat = normalize(cross(dpdx(in.relative), dpdy(in.relative)));
+    let normal = flat * -sign(dot(flat, in.relative));
+    let shade = 0.8 + 0.2 * dot(normal, surface_up(in.relative));
     let day = sunlight(in.relative) * daylight(surface_up(in.relative));
-    let color = pow(in.color.rgb, vec3<f32>(2.2)) * mix(0.12, 1.0, day);
+    let color = paint * shade * mix(0.35, 1.0, day);
     let distance = length(in.relative);
     return vec4<f32>(through_medium(color, in.relative / distance, distance), alpha);
 }

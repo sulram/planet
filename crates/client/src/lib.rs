@@ -957,7 +957,7 @@ impl Client {
         plugins.turn(&eye, input, taken.interrupted, lent);
         self.cells.update(self.generator.sphere(), eye.position);
         let body = (!self.controller.on_moon()).then(|| self.controller.position());
-        self.cells.look(body, dt);
+        self.cells.look(self.generator.sphere(), body, dt);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -1140,6 +1140,8 @@ impl Client {
             boxes,
             skinned,
             volumes: self.cells.drawn(),
+            glass: self.cells.glazed(),
+            lamps: self.cells.lamps(),
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
         }
