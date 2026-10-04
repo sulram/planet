@@ -15,7 +15,7 @@ const claude = read('CLAUDE.md');
 
 /* --------------------------------- the decisions log: files, and their index */
 
-type Entry = { n: number; file: string; title: string; status: string; date: string; retires: number[] };
+type Entry = { n: number; file: string; title: string; status: string; date: string; retires: number[]; removes: number[] };
 const entriesByFile: Entry[] = [];
 for (const f of readdirSync(`${ROOT}/docs/decisions`).filter((f) => f.endsWith('.md')).sort()) {
 	const text = read(`docs/decisions/${f}`);
@@ -26,6 +26,8 @@ for (const f of readdirSync(`${ROOT}/docs/decisions`).filter((f) => f.endsWith('
 	}
 	const struck = Boolean(head[1]);
 	const retires = [...text.matchAll(/\bretires (\d+)\b/g)].map((m) => Number(m[1]));
+	// `**Removes:** 11, 13.` names entries whose subject left the project: their files go.
+	const removes = (text.match(/^\*\*Removes:\*\* ([\d, ]+)\./m)?.[1] ?? '').split(',').map((s) => Number(s.trim())).filter(Boolean);
 	entriesByFile.push({
 		n: Number(head[2]),
 		file: f,
@@ -33,16 +35,21 @@ for (const f of readdirSync(`${ROOT}/docs/decisions`).filter((f) => f.endsWith('
 		status: struck ? `retired, ${head[5]}` : head[5],
 		date: text.match(/^Logged (\d{4}-\d{2}-\d{2})\./m)?.[1] ?? '',
 		retires,
+		removes,
 	});
 	if (!f.startsWith(head[2].padStart(3, '0') + '-')) problems.push(`docs/decisions/${f}: the file name does not start with ${head[2].padStart(3, '0')}-`);
 	if (!/^# .*\n\nLogged \d{4}-\d{2}-\d{2}\./.test(text)) problems.push(`docs/decisions/${f}: the second paragraph is not "Logged YYYY-MM-DD."`);
 }
 const entries = new Set(entriesByFile.map((e) => e.n));
+// A removed entry is gone, file and all, and its number stays taken: by the entry that removed it.
+const removed = new Map<number, number>();
+for (const e of entriesByFile) for (const r of e.removes) removed.set(r, e.n);
 entriesByFile.sort((a, b) => a.n - b.n);
 for (const [i, e] of entriesByFile.entries()) {
 	const dup = entriesByFile.filter((x) => x.n === e.n);
 	if (dup.length > 1 && dup[0] === e) problems.push(`docs/decisions: number ${e.n} is claimed by ${dup.map((x) => x.file).join(' and ')}`);
-	if (i > 0 && e.n > entriesByFile[i - 1].n + 1) problems.push(`docs/decisions: number ${entriesByFile[i - 1].n + 1} is skipped before ${e.file}`);
+	if (i > 0) for (let n = entriesByFile[i - 1].n + 1; n < e.n; n++) if (!removed.has(n)) problems.push(`docs/decisions: number ${n} is skipped before ${e.file}`);
+	if (removed.has(e.n)) problems.push(`docs/decisions/${e.file}: removed by ${removed.get(e.n)}, and the file is still here`);
 	for (const r of e.retires) {
 		const old = entriesByFile.find((x) => x.n === r);
 		if (old && !old.status.startsWith('retired')) problems.push(`docs/decisions/${old.file}: retired by ${e.n}, and its title is not struck`);
@@ -73,7 +80,11 @@ for (const file of files) {
 		.split('\n')
 		.forEach((line, i) => {
 			for (const m of line.matchAll(/DECISIONS ?(\d+)/g)) {
-				if (!entries.has(Number(m[1]))) problems.push(`${file}:${i + 1}: DECISIONS ${m[1]} does not exist`);
+				const n = Number(m[1]);
+				if (entries.has(n)) continue;
+				// An entry is written once, so it may still name one removed since.
+				if (removed.has(n) && file.startsWith('docs/decisions/')) continue;
+				problems.push(removed.has(n) ? `${file}:${i + 1}: DECISIONS ${n} was removed by ${removed.get(n)}` : `${file}:${i + 1}: DECISIONS ${n} does not exist`);
 			}
 		});
 }

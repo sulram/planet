@@ -1,7 +1,7 @@
 # WORLD
 
 What a world is made of: its grid, its layers, its recipe, how it
-streams, and which way is down. The seams and the planes are in
+streams, and which way is down. The core, its plugins and the server are in
 ARCHITECTURE.md; how the picture is made is in RENDER.md.
 
 ## Topology: quad sphere, single build band
@@ -90,8 +90,8 @@ m4-K7M42Q@40,180,-5
 - Nature is a surface (58): one ground per direction, no cave, no overhang,
   nothing to be inside of, and not editable by anyone in world. What is built
   leaves it as it is (78).
-- A volume is an integer address box where building is granted, with an
-  inside: cellars and overhangs. In the client alone, nothing sent or kept (76).
+- A volume is an integer address box with an inside: cellars and overhangs.
+  It lives in the client alone today, nothing sent or kept (76).
 - The address cuts volumes (77): plots of 64 blocks a side, `(u >> 6, v >> 6)`,
   a volume over each from its lowest ground to 64 cells over its highest.
   They touch and are read as one, so a build stands over two neighbours.
@@ -108,11 +108,11 @@ m4-K7M42Q@40,180,-5
 
 ## The world is a recipe
 
-- World = seed + params + generator version. "Create world" writes one row.
-- Wire shape, shared unmapped by Rust, Go, TypeScript and the `worlds`
-  collection: `{seed, generator_version, params}`. The seed is a u64 written
+- World = seed + params + generator version. Founding a world writes it once.
+- Wire shape, shared unmapped by Rust, Go, TypeScript and the world
+  folder: `{seed, generator_version, params}`. The seed is a u64 written
   as 16 lowercase hex digits (JSON numbers stop at 2^53).
-- The recipe of a stored world is frozen by a validate hook, superusers too.
+- A founded world's recipe is frozen: the server refuses a second founding.
 - Generator v3 (new worlds): the shape is a source, and the body below it is
   v2's. `params.source` is `generated` (tectonic plates over the seed) or
   `{field}` (a baked cube map of a real body, named by content id).
@@ -122,7 +122,7 @@ m4-K7M42Q@40,180,-5
 - Generator v1: continents, ridged mountains and detail as 3D simplex noise;
   materials water, sand, grass, forest, rock, snow. Params: `relief_m`,
   `ocean_depth_m`, `continent_scale`, `sea_share`.
-- `world.db` stores only modified chunks and the op log.
+- The build plugin's store holds only modified chunks and the op log.
 - Read path: stored chunk if present, else generate. One function, everywhere.
 - First edit to a chunk: generate it, apply the edit, store the whole chunk.
 - Op log: who, when, address, before, after. Gives undo, audit, per-user
@@ -161,8 +161,8 @@ m4-K7M42Q@40,180,-5
   with a sidecar naming its content id. Default: ETOPO 2022, public domain,
   1024 texels per face side (32 m of planet, 9.8 km of Earth), 25 MB.
 - Params are one table in `$lib/world.ts`: range, step, default and the shapes
-  each means anything for. They are sliders in `/play` and parameters of its
-  address; the server clamps again when a world is created. A knob at its
+  each means anything for. They are sliders on the founding screen and parameters
+  of its address, clamped there; the server checks a recipe's shape alone. A knob at its
   default is absent from both.
 - The sea takes an exaggeration of its own (`sea_curve`), because a depth in
   proportion to a real body leaves every strait a shoal, and `sea_level_m`

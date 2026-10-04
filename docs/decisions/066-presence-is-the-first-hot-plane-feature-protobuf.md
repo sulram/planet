@@ -1,4 +1,4 @@
-# 66. Presence is the first hot plane feature: protobuf on one socket, a world actor relaying stances, a ticket for identity (decided)
+# 66. Presence is the first hot plane feature: protobuf on one socket, a world actor relaying stances, a ticket for identity (decided; the ticket replaced by 87)
 
 Logged 2026-09-24.
 

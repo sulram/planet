@@ -14,7 +14,7 @@ shapes a choice goes to DECISIONS.
 | `cesium` | planet scale f64 as camera relative f32, quadtree LOD, skirts against cracks |
 | `playcanvas` | clustered lighting on WebGL2 |
 | `threejs` | API ergonomics, GLTF |
-| `godot` | M3 gizmos and editor UX |
+| `godot` | gizmos and editor UX |
 | `valence` | server authoritative voxel protocol |
 | `three-vrm`, `vrm-specification` | VRM, for `avatar` |
 | `fast-surface-nets-rs` | surface nets |
@@ -32,6 +32,12 @@ shapes a choice goes to DECISIONS.
 
 ## Models, not refs
 
-- `its-plataforma`: web app, auth, design system, scripts and docs rules. Its
+- `mundos` (`~/Dev/mundos`, a sibling and no ref): the host. Its
+  `docs/BRIEFING.md` holds the contract an instance type meets: the token,
+  the container, the generations (DECISIONS 87).
+- `hyperfy`, as our fork `sulram/hyperfy` runs it under mundos: the first
+  instance type. `packages/mundos` is the token's flow and `docs/plugins.md`
+  the plugins composed at build (DECISIONS 88). GPL-3.0: ideas only, as above.
+- `its-plataforma`: web app, design system, scripts and docs rules. Its
   `staging` branch is the current one.
 - `vybe`: wgpu and winit pins, so knowledge transfers.

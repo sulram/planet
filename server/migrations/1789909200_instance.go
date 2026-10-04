@@ -7,7 +7,7 @@ import (
 )
 
 // The instance: one record, what is the server's and not a world's. Its
-// first field is the front door (DECISIONS 70). The cold plane seeds the
+// first field is the front door. The cold plane seeds the
 // record on start and a hook refuses a second, so the row is read, never
 // created, by anyone else. Worlds are made by operators from here on.
 func init() {

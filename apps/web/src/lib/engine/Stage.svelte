@@ -101,7 +101,7 @@
 		}
 	}
 
-	// Signing in happens here, over the world (DECISIONS 70). Once the
+	// Signing in happens here, over the world. Once the
 	// session is set the page reloads: the socket then opens with a ticket
 	// and the name is the account's, and the address bar keeps the place.
 	let signingIn = $state(false);

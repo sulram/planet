@@ -4,7 +4,7 @@
 	import { t } from '$lib/i18n';
 
 	// Signing in without leaving the world: the same two actions the login
-	// pages post to, read here step by step (DECISIONS 70). The email step
+	// pages post to, read here step by step. The email step
 	// asks /login for a code; the code step hands it to /login/code. Both keep
 	// the pending request in the httpOnly cookie those pages use, so nothing
 	// about the flow is new, only where the person stands.

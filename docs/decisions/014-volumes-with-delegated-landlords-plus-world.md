@@ -1,4 +1,4 @@
-# 14. Volumes with delegated landlords, plus world admins (decided; rules proposed)
+# 14. Volumes with delegated landlords, plus world admins (a plugin wish since 88; rules proposed)
 
 Logged 2026-09-20.
 

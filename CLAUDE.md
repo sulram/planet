@@ -30,8 +30,8 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   VISION and DECISIONS keep prose: they carry the why.
 - A decision is the next file in `docs/decisions/`: `# NN. Title (status)`,
   `Logged <date>.`, the decision in one breath, the why, **Rejected**,
-  **Lives in**. Written once; retired by striking its title with the number
-  that replaced it. Then `bun run docs gen` rewrites the index.
+  **Lives in**. Written once; retired by a struck title with the number that
+  replaced it, or removed whole by a `**Removes:**` line. Then `bun run docs gen`.
 - OPEN is tables: question, what it unblocks, context. A question nothing
   waits on is a wish, and wishes live in ROADMAP.
 - GLOSSARY updates in the change that adds, renames or shifts a term.
@@ -67,14 +67,16 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 
 ## What this is
 
-- A finite, spherical voxel world that people and AI agents walk, fly, drive
-  and build in together. From scratch, free software end to end. Cryptovoxels
-  (voxels, building, land) + Hyperfy (GLB, entities, scripts).
+- A finite, spherical world that people and AI agents walk, fly, drive and
+  build in together: Cryptovoxels (voxels, building, land) + Hyperfy (GLB,
+  entities, scripts). From scratch, free software end to end.
+- One world per instance, hosted by mundos (`~/Dev/mundos`): it says who is
+  who and addresses, versions and upgrades the world (DECISIONS 87).
+- The core is the sphere; what is done on it is a plugin, composed at build
+  and switched on or off for a world (DECISIONS 88).
 - One Rust client (wgpu) on every screen: desktop, browser (WASM + WebGPU),
-  Raspberry Pi, Quest, Pico. One Go server.
-- The world is a recipe (seed + params + generator version); the database
-  holds only what someone changed. Offline mode is permanent: it is how a
-  world is previewed. Where we are: ROADMAP.
+  Raspberry Pi, Quest, Pico. One Go server. The world is a recipe; the world
+  folder holds only what someone changed. Offline mode is permanent.
 
 ## Layout
 
@@ -92,11 +94,11 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   - `ui-native`: the desktop settings panel. All of egui lives here.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
   - `bench`: what a frame costs in WASM, timed by `scripts/bench.ts`.
-- `server/`: Go. PocketBase as a library + the world server. Rules: `server/CLAUDE.md`.
-- `apps/web/`: Svelte + Bun. Builder and player UI; hosts the WASM client.
+- `server/`: Go, the world server. PocketBase is linked today and leaves (docs/BRIEF.md). Rules: `server/CLAUDE.md`.
+- `apps/web/`: Svelte + Bun. The web front end; hosts the WASM client.
   Rules: `apps/web/CLAUDE.md`.
 - `proto/`: the schema, single source for Rust and Go; `bun run proto` regenerates both, committed.
-- `assets/`: the instance's default set and its `manifest.json`.
+- `assets/`: a version's default set and its `manifest.json`.
   `assets/fields/`: baked fields from `bun run field`, gitignored.
 - `scripts/`: every repeated command. No tribal knowledge.
   `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | proto | docs | check | build | provision | deploy`.
@@ -117,15 +119,14 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - **Copy on first write**: the first edit stores the whole chunk. The op log is
   append-only and records every edit, admins included.
 - **Every edit is a permission-checked op.** Destruction is an edit.
-- **Hot plane never touches PocketBase.** Permissions are cached in memory and
-  invalidated by hooks. The world core never imports a PocketBase type.
-- **An agent is a client without a renderer.** Same protocol, same permissions.
-- **Asset file is global** (content hash). **Placement belongs to a world.**
-  Users are global, roles are per world.
+- **Who is who is mundos's.** The world checks a signature, keeps a level for
+  the session's life, and stores no account, e-mail or password.
+- **A plugin imports the core, never the reverse**, and never touches wgpu.
+  The core runs with every plugin off.
+- **An agent is a client without a renderer.** Same protocol, same levels.
+- **A heavy file is named by the hash of its content.** Records name it so.
 - **UI is a front-end.** Svelte and the native UI sit over one command/event
   seam. Tool logic (gizmos, brushes, selection) lives in Rust.
-- **Media is budgeted**: proximity-loaded, capped concurrent decoders, one
-  `VideoSource` seam with a backend per platform.
 - **Integrations enter through seams**, never through the core: one trait
   inside, library glue behind it in its own crate. No `cfg` sprawl.
 
@@ -141,19 +142,21 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   for every sample is computed once in `Generator::new`, never per sample.
 - A budget is raised only on purpose, with the why in DECISIONS.
 
-## Do NOT add (M1 discipline)
+## Do NOT add
 
-- Bevy or any engine. Scripting. Blockchain. XR. Vehicles. Destruction.
-- Video. Uploads. Anything in `server/` beyond the cold plane of the first
-  vertical (users, operators, worlds) and presence (DECISIONS 66).
-- Digging below the build band, multi-shell logic, flat or torus world types.
-- Structural collapse physics. Our own transcoding. Billing.
-- A feature with no milestone pulling it. Add the wish to ROADMAP instead.
+- Accounts, sign in, roles, a backoffice, a list of worlds, billing, a deploy
+  to a box: they are mundos's (DECISIONS 87).
+- Into the core, what could be a plugin. A hook no plugin asks for.
+- Bevy or any engine. Digging below the build band, multi-shell logic, flat
+  or torus world types. Structural collapse physics. Our own transcoding.
+- A feature nothing pulls. Add the wish to ROADMAP instead.
 
 ## How it grows
 
-- Milestones pull features, never speculation; each ends runnable end to end.
-  ROADMAP is intent, not contract: add wishes, reorder, strike with a number.
+- The campaign in BRIEF.md pulls features, never speculation; each step ends
+  runnable. ROADMAP is intent, not contract: add wishes, reorder, strike with a number.
+- A feature is a plugin. A seam of the host is cut by the plugin that needs
+  it, by extracting what exists, never drawn ahead (DECISIONS 88).
 - Every change ends runnable and visible: headless render to PNG with a fixed
   clock and seed, then read the PNG; `bun run shot --slice M` for what is
   behind the ground; `bun run webshot` for a `render` change, since WebGPU
@@ -166,12 +169,9 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - A crate speaks only its own nouns: `scene` says mesh, never planet. A public
   type naming a neighbour's noun means the seam is in the wrong place.
 - In `client`, the seam, input, assets and figure know no body; controller,
-  collision and streaming know one `Body`.
-- A volume knows no sphere: an integer box in its own frame, no `topology`
-  import. Seating it on a body is the client's job.
-- The generator, sky, sea and moon stay the planet's: kept out of the seams,
-  never made general.
-- A milestone ends with a reading pass over every public surface. Drift goes
+  collision and streaming know one `Body`. A volume knows no sphere and
+  imports no `topology`. The generator, sky, sea and moon stay the planet's.
+- A campaign ends with a reading pass over every public surface. Drift goes
   to OPEN; rewriting waits for the consumer that pays for it.
 
 ## Tests

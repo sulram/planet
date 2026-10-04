@@ -14,7 +14,7 @@ fn root() -> PathBuf {
 pub fn serve(client: &mut Client) {
     for request in client.drain_asset_requests() {
         // Absolute URLs (a user's own avatar) need an HTTP client, which
-        // arrives with login on native (ROADMAP M2).
+        // arrives when the desktop opens the socket (ROADMAP, Other screens).
         let bytes = if request.path.contains("://") {
             Err(format!(
                 "{}: remote assets are not supported on desktop yet",

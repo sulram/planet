@@ -6,7 +6,7 @@
 	import { t } from '$lib/i18n';
 
 	// Two areas, one component: the site (default) and the backoffice, each
-	// with its own navigation. The site is the world itself (DECISIONS 70), so
+	// with its own navigation. The site is the world itself, so
 	// its bar appears only off the planet: sign in pages, errors, a closed
 	// door. The wordmark leads back to it from the backoffice, so the bar
 	// carries no link of its own for that. An operator on the site reaches

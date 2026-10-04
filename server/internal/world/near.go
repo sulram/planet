@@ -16,8 +16,7 @@ const NearBlocks = 64.0
 // cannot drift unnoticed.
 const (
 	// Blocks per sector side, as a power of two. Every world is the reference
-	// size until size is a recipe part (ROADMAP M2), and then it is read
-	// from the recipe instead.
+	// size here until the server reads `sector_bits` from the recipe (OPEN.md).
 	sectorBits = 16
 	// Metres per block edge at a sector centre.
 	blockM = 0.5

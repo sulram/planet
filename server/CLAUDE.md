@@ -2,6 +2,9 @@
 
 The root `CLAUDE.md` applies here too.
 
+- The campaign in `docs/BRIEF.md` takes accounts and PocketBase out of here
+  (DECISIONS 87, 89): add nothing to `internal/cold` or
+  `migrations`. The lines below describe the tree until then.
 - PocketBase is pre-1.0: the exact version is pinned (0.40.4, which needs Go
   1.27; the toolchain fetches itself) and upgraded on purpose, the why in
   DECISIONS.

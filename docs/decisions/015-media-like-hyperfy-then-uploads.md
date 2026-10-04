@@ -1,4 +1,4 @@
-# 15. Media like Hyperfy, then uploads (decided; details proposed)
+# 15. Media like Hyperfy, then uploads (decided; where files live is 89)
 
 Logged 2026-09-20.
 

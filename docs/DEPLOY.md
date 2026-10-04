@@ -1,139 +1,88 @@
 # DEPLOY
 
-How an instance is hosted: the box, the region, the front door, the bucket,
-and what is on before the door opens. The planes and the seams are in
-ARCHITECTURE.md; the open rows this waits on are in OPEN.md.
+How a world is hosted: by mundos (87), from one image, with one folder. What
+mundos is and does lives in its own `docs/BRIEFING.md`; this is the instance
+type's side of that contract. A line marked (p) is proposed and not yet
+confirmed. What of it is built: BRIEF.md.
 
 ## What the server carries
 
 - Rendering, terrain generation and collision run in the browser. The server
   never generates a patch.
-- PocketBase is SQLite in one process; the world actor relays small protobuf
-  frames. Twenty people in one world is 20 x 19 x 15 frames a second, under
-  1 MB/s.
+- The world actor relays small protobuf frames. Twenty people in one world is
+  20 x 19 x 15 frames a second, under 1 MB/s.
 - The heavy bytes are static. The WASM engine (a few MB) and a field (25 MB,
   16 over the wire as brotli) are kept by the browser for good, since their
-  URLs carry a content hash (72); an avatar VRM is revalidated by ETag.
+  URLs carry a content hash (72); an avatar VRM is revalidated.
+- mundos caps each container's memory and CPU. Grow a cap only when a
+  measurement says so.
 
-## The box
+## The image
 
-| | |
+- One image for each version: `ghcr.io/sulram/planet:<version>`, the version
+  its git tag names (21). mundos lists what the registry publishes, pulls the
+  version a superadmin asks for, and a world runs only a version, never a
+  branch or a hash. The repository and its package are public, so the box
+  holds no registry key, as with the Hyperfy fork.
+- In it: the Go binary, the web front end's files, the engine's WASM, and the
+  default asset set with the baked fields. One process runs (90).
+- An `image` script builds it on this machine, for amd64 and arm64, with the
+  fields baked here, and pushes it (p). The fields are too large for the
+  repository, so the image is built where they are (OPEN.md).
+- The Go binary has no CGO, and the engine and the page are the same on every
+  architecture: only the last stage of the build differs.
+
+## What mundos sets
+
+| Variable | What |
 |---|---|
-| CPU | 2 vCPU. ARM is fine: the Go binary has no CGO, and the Pi is a target already |
-| RAM | 4 GB. The process sits under 200 MB today; the headroom is for world actors, the wazero generator and SQLite's page cache when chunks arrive (ROADMAP M3) |
-| Disk | 40 to 80 GB NVMe, local. SQLite in WAL mode wants local SSD, never network storage |
-| Traffic | 20 TB is the standard at this class and is far more than presence needs |
+| `PORT` | where the server listens inside the container |
+| `MUNDOS_PUBLIC_KEY` | the Ed25519 public key that checks tokens: PEM, its newlines escaped |
+| `PUBLIC_MUNDOS_URL` | mundos's origin, where the door is |
+| `PUBLIC_MUNDOS_WORLD` | the world's name, the token's audience |
+| `ASSETS_S3_URI`, `ASSETS_BASE_URL` | the generation's bucket folder, and the address browsers read it at |
 
-- Grow it only when a measurement says so.
+- The names are the ones the Hyperfy fork reads, so mundos says the same thing
+  to every instance type. The bucket's two are absent on a machine without
+  one, and the world then keeps its files in its folder (89).
+- The port is published on `127.0.0.1` alone. mundos's Caddy is the one thing
+  that reaches it, with the world's address and its certificate, and it
+  carries the socket with no extra setting.
 
-## The region
+## The world folder
 
-- The players' round trip is what presence feels; where the operator sits
-  matters nothing. The client draws a peer about 100 ms behind its newest
-  stance, and the round trip adds to that.
-- Players are mainly in Brazil: the world server goes to Sao Paulo. From
-  there Hetzner's nearest locations are Ashburn (120 to 140 ms) and
-  Falkenstein (over 200 ms): walking together is fine at either, anything you
-  chase wants the local box.
-- Sao Paulo at this class: Hostinger KVM 2 (2 vCPU, 8 GB, 100 GB NVMe) for
-  about R$ 45 to 80 a month on a prepaid term, which is where the first
-  instance runs; Vultr and Akamai (Linode) at US$18 to 24 with hourly billing;
-  Magalu Cloud bills in BRL. The hyperscalers have the region and cost more
-  than the whole bill for nothing this stack uses.
-- Hetzner keeps what does not care about latency: the asset bucket, backups
-  of `pb_data` and the `world.db` files, and a staging instance.
-- Decide with numbers: `mtr` from a Brazilian connection to a candidate IP,
-  then a second tab walked beside the first, from Brazil, once it is up.
+- A Docker volume, named by mundos after the generation's id and mounted at
+  `/world` (p). In it: the recipe and what the admin set, and each plugin's
+  SQLite file (89).
+- It is the whole world. Nothing of a world lives in the image, and deleting a
+  generation deletes its folder and its bucket folder.
 
-## The front door: Caddy
+## Health
 
-- Caddy is a web server in Go, used as a reverse proxy. It gets and renews
-  TLS certificates from Let's Encrypt by itself and proxies WebSockets with
-  no extra setting: one binary, a few lines, in the spirit of the stack.
-- One origin on 443. `PB_PUBLIC_URL` is then the site's own origin, cookies
-  are same site, and there is no cross origin socket to reason about. The
-  socket on 443 is also what survives a rough network between an operator
-  abroad and the box.
+- `GET /api/health` answers once the server listens. The image's
+  `HEALTHCHECK` asks it, and mundos reads the container's health to say a
+  generation is running.
 
-```text
-planet.example.org {
-    header /assets/fields/*.field Cache-Control "public, max-age=31536000, immutable"
-    handle /api/* {
-        reverse_proxy 127.0.0.1:8090
-    }
-    handle /_/* {
-        reverse_proxy 127.0.0.1:8090
-    }
-    handle {
-        reverse_proxy 127.0.0.1:3000
-    }
-}
-```
+## Updating a world
 
-- `/api` is the REST, the ticket and the world socket; `/_` is the PocketBase
-  panel; everything else is the SvelteKit node server (adapter-node, port
-  3000).
-- While another service holds 443 on the box (the first instance shares it
-  with a VPN), the site lives on `DEPLOY_<ENV>_HTTPS_PORT`: Caddy sets
-  `https_port`, gets the certificate by the HTTP challenge on 80, and the
-  origin carries the port. Moving to 443 is changing that one variable and
-  provisioning again.
+- Never in place. mundos makes the world's next generation on the chosen
+  version and fills its folder before it first starts, by running the
+  source's own image: `planet copy /from /to` copies the folder, each SQLite
+  file through its online backup while the source keeps running (p). Then
+  mundos copies the bucket folder, on the bucket's side.
+- The new version moves each plugin's store forward when it starts, on the
+  copy. The old generation is untouched and is the way back.
+- Never onto an older version: a store moved forward is not promised to open
+  on an older one.
+- Someone walks the copy at its own address, and a promotion gives it the
+  world's.
 
-## Provision and deploy
+## Development
 
-- Two scripts, both from this machine over the ssh key, both with
-  `--dry-run` that prints every command. Where they go is `DEPLOY_<ENV>_*`
-  in the local `.env` (`.env.example`); nothing per box is in git.
-- `bun run provision <env>`, once per box, as root, idempotent: the `planet`
-  system user and `/opt/planet`; Bun for it, the version this machine runs;
-  Caddy from its apt repository and the Caddyfile above; ufw rules for 80 and
-  the https port; the units `planet-server` and `planet-web`. It refuses to
-  run until `/etc/planet/<env>.env` exists.
-- `/etc/planet/<env>.env` is written by hand once, root only: the variables
-  of `.env.example` with the public origin, plus `ORIGIN`, `HOST=127.0.0.1`
-  and `PORT=3000` for adapter-node. Both units read it. A change there is
-  `systemctl restart planet-server planet-web`.
-- `bun run deploy <env>`, every release: builds here (the Go binary for the
-  box's arch with no CGO, the WASM engine, the web app, a brotli sibling
-  beside each field, once per bake), never on the box;
-  uploads a release to `/opt/planet/releases/<stamp>` and the asset set to
-  `/opt/planet/assets`, shared by every release and linked into each, so a
-  deploy moves only what changed of it; swaps `/opt/planet/current`, restarts
-  the server and checks `/api/health`, upserts the superuser from the env,
-  restarts the web app and checks it answers. A failed check swaps the
-  previous release back. The last five releases stay for a rollback by hand.
-- A release holds the binary, the web build and the one package its server
-  side imports at run time (`pocketbase`, from `apps/web/package.json`
-  dependencies). `pb_data` lives outside the releases and survives them.
-- Logs: `journalctl -u planet-server -f`, `journalctl -u planet-web -f`,
-  `journalctl -u caddy -f`. With `SMTP_HOST` empty the magic links are in the
-  first one.
-
-## The bucket: Hetzner Object Storage
-
-- PocketBase's file storage has an S3 mode and Hetzner Object Storage speaks
-  S3: endpoint `https://<location>.your-objectstorage.com`, bucket, region
-  (the location, `fsn1`), access key and secret, force path style on. Every
-  file field of every collection then lives in the bucket instead of
-  `pb_data/storage`.
-- Those settings belong in `server/internal/cold/settings.go` as `S3_*`
-  variables beside `SMTP_*`, applied from the environment on every start,
-  never set by hand in the panel. Not wired yet.
-- The same bucket serves what ARCHITECTURE already draws: PocketBase keeps
-  records and small files; heavy media goes straight to the bucket by
-  presigned URL and is read from the bucket's URL. The WASM engine, the
-  default avatars and the fields can live there too, a CDN in front of it
-  later being a flag and not a rewrite.
-
-## Before the door opens
-
-- The two rows in OPEN: PocketBase rate limits are off and the code request
-  creates accounts, so a bot could mint users; SMTP needs real credentials or
-  nobody signs in.
-- `APP_URL` is the public origin (magic links point there), `PB_URL` the
-  binary's local address, `PB_PUBLIC_URL` the public origin again.
-- `PLANET_OPERATOR_EMAIL` names the first operator; the superuser is the
-  panel login, never a person in a world.
+- `bun run dev` runs a world alone: the Go server and Vite on one origin, no
+  mundos, every session an `admin` through `PLANET_DEV_LEVEL` (p).
+- Against a local mundos: build the image here and mundos's worlds page lists
+  it among the versions this machine holds.
 
 ## What to measure once it is up
 

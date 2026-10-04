@@ -5,9 +5,26 @@ this file in the same change.
 
 | Term | Meaning |
 |---|---|
-| Instance | One server, its worlds and its people. One record in the `instance` collection says what is the instance's and not a world's, starting with its main world. A tenant, in the SaaS. |
-| Main world | The world an instance opens on: `/` on the web, the default on the desktop. Chosen by an operator. |
-| World | One recipe + one `world.db` + its records in PocketBase. An instance holds many. |
+| Instance | One world as mundos runs it: a container from one version, a world folder and a bucket folder. |
+| mundos | The studio's host of worlds (`~/Dev/mundos`): identity, roles, instances, addresses, versions. planet is one of its instance types. |
+| Generation | One copy of a world on one version, in mundos. An update makes the next one, and a promotion gives it the world's address. |
+| Version | A published image of planet: the core plus the plugins chosen for it, named by its git tag. |
+| World folder | Where a world keeps itself: the recipe, what its admin set, and one SQLite file for each plugin that keeps things. |
+| Bucket folder | Where a generation's heavy files live in mundos's bucket: a prefix of its own, copied on an update and deleted with the generation. |
+| Unfounded | A world with no recipe yet: what mundos creates. |
+| Founding | The first admin choosing a recipe for an unfounded world, from the offline preview. Done once: it freezes the recipe. |
+| Door | mundos's `/enter`: every load passes through it and comes back with a token, or as a guest. |
+| Token | What mundos signs for one entry into one world: the account's id, its name and its level, good for a minute. Traded once, on entering, for a key. |
+| Key | What the world gives a page that entered with a token: kept in the page's memory, shown on the socket and on a founding. It stands for the life of the page. |
+| Level | What a session may do, as mundos says it: `admin`, `builder`, `signed_in`, `anonymous`. |
+| Core | The sphere and the host of plugins: what a plugin stands on. Runs with every plugin off. |
+| Plugin | A layer over the core, ours and compiled in: a crate in the client, a package in the server, a payload on the wire, a panel. On or off for a world. |
+| Native plugin | A plugin every version carries: chat, avatars, building. |
+| Hook | Where the core keeps a rule a plugin may change: who may do what, which avatars are offered. |
+| Host (code) | The part of the core that plugins register with: the registry, the hooks, the stores, the wire's envelope. Distinct from mundos, which hosts worlds. |
+| Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. |
+| Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands, renders events, holds no rule. |
+| World | One recipe and one world folder. An instance is exactly one. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |
 | Generator | The deterministic function from recipe + address to terrain. Versioned, frozen per world. |
 | Source | Where a world's shape comes from: `generated` (plates over the seed) or a field. A recipe param. |
@@ -44,36 +61,29 @@ this file in the same change.
 | Tool | Create, delete or paint, in hand while building. |
 | Stroke | One click and drag of a tool: a slab on the side it started on, or with Alt a wall standing up from it. Lands as one gesture. |
 | Ghost | The see-through preview of exactly the cells a stroke would change. |
-| Brush | A terrain edit tool: dig, add, smooth, flatten, paint. |
-| Stored chunk | A chunk present in `world.db` because someone edited it. |
+| Brush | A tool that shapes cells inside a volume: dig, add, smooth, flatten. |
+| Stored chunk | A chunk present in the build plugin's store because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |
 | Op | One permission-checked edit request. The only way world state changes. |
 | Op log | Append-only record of ops: who, when, address, before, after. |
-| Hot plane | Chunks, ops, presence, streaming. Our code, `world.db`, WebSocket. |
-| Cold plane | Accounts, worlds, volumes, roles, records. PocketBase. |
-| World actor | The single goroutine that owns one active world's state and writes. Started by the hub on the first session, gone after the last. |
-| Hub | The registry of active worlds: one actor each. The socket route hands every connection to it. |
-| Session | One connection inside a world: a person or agent, from Hello to Left. Numbered by the actor. |
+| World actor | The single goroutine that owns the world's state and writes. Started by the hub on the first session, gone after the last. |
+| Hub | Holds the world's actor. The socket route hands every connection to it. |
+| Session | One connection inside a world: a person or agent, from Hello to Left. Numbered by the actor, with one level for its life. |
 | Peer | Another session in the same world, as a client sees it: a name, an avatar reference and a stance. |
 | Stance | Where a body is and how it moves, as presence carries it fifteen times a second: an address with fractional blocks, a height, a facing, a gait and a speed. A pose is what a link carries; a stance is what a peer sends. |
 | Line | One chat message: a scope, a text, the speaker's session and, when they said `@here`, the speaker's place as the actor saw it. Relayed, never stored. |
 | Scope | Who hears a line: `near`, within a radius on the same body, or `world`, every session in the world. Never another world. |
-| Ticket | A one-use, one-minute token the cold plane mints for a signed in person and the socket redeems. How an identity crosses to the hot plane without the session cookie. |
 | Link (code) | The socket between a client and a world server, as the platform shell holds it. The client owns the protocol, the shell owns the socket. |
-| Volume | An integer address box inside one sector where building is granted, over one plot. Nests. The only place voxels exist. |
+| Volume | An integer address box inside one sector, over one plot. The only place voxels exist. |
 | Stamp | A flatten and blend footprint, applied when the ground is sampled. How what is not a volume seats into terrain, at every level, without being an edit. The ground it holds is worked earth, where nothing grows. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
-| Landlord | Role on a volume: build, subdivide, grant roles inside. |
-| Builder | Role on a volume: build only. |
-| Admin | Role on a world: build anywhere. Still logged. |
-| Operator | Global user flag (`users.operator`). Runs the instance, may use the backoffice. Not the superuser, not a world admin. |
-| Superuser | The PocketBase panel login. Infrastructure, never a person in a world. |
-| Backoffice | The operator pages of the web app: worlds and users. |
-| Magic link | The sign in email: a one click link plus the same code to type on native. |
-| Visitor | Anyone without a role here, including anonymous. Looks, never builds. |
-| Agent | An AI client without a renderer, authenticated by an API token. |
-| Offline preview | The engine with no server: `/play` and the desktop explorer. Permanent. |
+| Landlord | A wish: the role on a volume that builds, subdivides and names builders inside, in the land plugin. |
+| Builder | The level `builder`: builds, anywhere in the world. |
+| Admin | The level `admin`: founds the world, chooses its plugins, builds. A superadmin of mundos, or an admin of this world there. |
+| Visitor | A session with no account, the level `anonymous`. Walks, under a name of their own choosing. |
+| Agent | An AI client without a renderer: the same protocol and the same levels as a person. |
+| Offline preview | The engine with no server: how a planet is looked at before a world is founded, and the desktop explorer. Permanent. |
 | Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |
 | Scene | The plain data a client hands a renderer each frame. Crate `scene`. |
 | Patch | One quadtree node of far terrain, meshed as 32x32 quads. |
@@ -92,7 +102,7 @@ this file in the same change.
 | Tangent warp | The quad sphere mapping: `tan(s * pi / 4)` on the cube face. |
 | Avatar | The VRM body a person wears. Named by an asset reference, never by index. |
 | Asset reference | A path under the asset root, or an absolute URL. How the client names any file it wants. |
-| Manifest | `assets/manifest.json`: the instance's default set. Default avatar, avatars on offer, clip per gait. |
+| Manifest | `assets/manifest.json`: a version's default asset set. Default avatar, avatars on offer, clip per gait. |
 | Gait | How a body moves right now: idle, walk, run, jump, fall, fly. One clip each. |
 | Clip | A humanoid animation, retargeted at load so every avatar shares it. |
 | Site | The body an avatar's position is stored relative to. Changes at a sphere of influence. |
@@ -101,10 +111,9 @@ this file in the same change.
 | Footprint | What one sample covers: the spacing of the mesh asking the generator, or what a pixel covers of the sea. Detail finer than it is faded out. |
 | Anchor | A patch origin wrapped to the detail period in f64: what fixes shader detail to the planet. |
 | Entity | A placed thing that is not a voxel: GLB, part, light, field, portal, media frame, script. |
-| Asset | A file, global, named by its content hash. |
-| Placement | The use of an asset by an entity in a world. Counts against budgets. |
+| Asset | A heavy file, named by the hash of its content, in the world's bucket folder. |
+| Placement | The use of an asset by an entity. Counts against budgets. |
 | Budget | Per-volume limit on triangles, texture size and bytes. |
-| Quota | Per-user storage allowance in bytes. |
 | Media LOD | Thumbnail far, low version mid, original near. |
 | Decoder budget | Max videos decoding at once on a platform. |
 | Gravity field | An entity defining "down" inside a shape, with range and priority. |

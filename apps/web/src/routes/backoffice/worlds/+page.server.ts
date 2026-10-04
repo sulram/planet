@@ -33,7 +33,7 @@ export const actions: Actions = {
 		return { done: translate(locals.locale, 'bo.worlds.renamed', { name }) };
 	},
 
-	// The front door (DECISIONS 70): the world `/` opens.
+	// The front door: the world `/` opens.
 	main: async ({ request, locals }) => {
 		const form = await request.formData();
 		const id = String(form.get('id') ?? '');

@@ -6,21 +6,21 @@ compositor. What the world *is* lives in WORLD.md.
 ## Avatars
 
 - An avatar is a VRM, named by an **asset reference**: a path under the asset
-  root (`avatars/Kyle.vrm`) or an absolute URL (a user's own upload, M5). The
+  root (`avatars/Kyle.vrm`) or an absolute URL (a person's own upload, ROADMAP). The
   client never tells them apart; nothing addresses an avatar by index.
-- `assets/manifest.json` is the config of the instance's default set:
+- `assets/manifest.json` is the config of a version's default set:
   `default_avatar`, `avatars` on offer, `clips` per gait. Edited by hand.
-- Which avatar a person wears: the user's default avatar (future
-  `users.avatar`), else the visitor's earlier choice (cookie), else a random
-  one from the offer, which becomes the choice. A failed load wears
-  `default_avatar`; the box figure covers the time nothing is loaded.
+- Which avatar a person wears: the choice this browser kept, else a random
+  one from the offer, which becomes the choice. What is offered is a hook
+  (88). A failed load wears `default_avatar`; the box figure covers the time
+  nothing is loaded.
 - Clips are authored once on a Mixamo rig and retargeted at load to the VRM
   humanoid (crate `avatar`), so every avatar shares every clip. Gaits: idle,
   walk, run, jump, fall, fly. VRM 0.x, one skin, PNG textures for now.
 - Asset seam: the client does no IO. It queues requests by reference, the
   platform shell fetches (disk on desktop, `fetch` in the browser) and answers.
-- `V` wears the next avatar on offer. The engine reports `avatar_changed`; the
-  web app keeps it as the visitor's choice (`POST /avatar`).
+- `V` wears the next avatar on offer. The engine reports `avatar_changed`, and
+  the front end keeps it as this browser's choice.
 
 ## Volumes
 

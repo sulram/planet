@@ -2,7 +2,7 @@ import type PocketBase from 'pocketbase';
 
 /**
  * The instance: one record, what is the server's and not a world's, starting
- * with the front door (DECISIONS 70). The server seeds the record; here it is
+ * with the front door. The server seeds the record; here it is
  * only read and, by an operator, pointed at a world.
  */
 export interface Instance {

@@ -158,7 +158,7 @@ impl Stage {
                 // A tool aims with a free pointer: taking one lets it go.
                 Event::ToolChanged { tool: Some(_), .. } => self.set_looking(false),
                 Event::BuildRefused { reason } => log::info!("no volume here: {reason:?}"),
-                // The desktop has no socket yet (ROADMAP M2): the link stays
+                // The desktop has no socket yet (ROADMAP, Other screens): the link stays
                 // offline and nobody else is ever here.
                 Event::RecipeChanged { .. }
                 | Event::Ready { .. }
