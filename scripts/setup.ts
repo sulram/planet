@@ -42,7 +42,4 @@ if (!prostGen.includes(PROTOC_GEN_PROST)) {
 	await $`cargo install protoc-gen-prost --version ${PROTOC_GEN_PROST} --locked`;
 }
 
-if (!Bun.which('mailpit')) {
-	console.warn('mailpit not found: dev emails print to the server log only (brew install mailpit)');
-}
 console.log('setup done');

@@ -1,5 +1,3 @@
-// Package world is the world core. It knows nothing about PocketBase: the cold
-// plane calls into it, never the other way round.
 package world
 
 import (

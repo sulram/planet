@@ -1,6 +1,6 @@
-// Package world is the world core: the hot plane. It knows nothing about
-// PocketBase; the cold plane hands it recipes and identities through small
-// interfaces of ours, never the other way round.
+// Package world is the world core. It knows nothing of HTTP, of mundos or of
+// the world folder: the recipe and who a session is are handed to it through
+// small types of its own, never the other way round.
 package world
 
 import (
@@ -26,35 +26,35 @@ const (
 	readTimeout  = 15 * time.Second
 )
 
-// ErrNoWorld is what a Catalog answers for an id it does not hold.
-var ErrNoWorld = errors.New("no such world")
+// ErrUnfounded is what a Catalog answers while the world has no recipe.
+var ErrUnfounded = errors.New("the world is not made yet")
 
 // ErrRefused wraps the reason a connection was turned away before it became
 // a session: the other side heard Refused and the socket is closed.
 var ErrRefused = errors.New("refused")
 
-// Catalog is where recipes come from: the cold plane, behind one method.
+// Catalog is where the recipe comes from: the world folder, behind one method.
 type Catalog interface {
-	Recipe(ctx context.Context, worldID string) (Recipe, error)
+	Recipe(ctx context.Context) (Recipe, error)
 }
 
-// Hub holds the active worlds: one actor each, started on the first join and
-// retired after the last leave.
+// Hub holds the world's actor: started on the first join and retired after
+// the last leave.
 type Hub struct {
 	catalog Catalog
 
-	mu     sync.Mutex
-	actors map[string]*actor
+	mu    sync.Mutex
+	actor *actor
 }
 
 func NewHub(catalog Catalog) *Hub {
-	return &Hub{catalog: catalog, actors: map[string]*actor{}}
+	return &Hub{catalog: catalog}
 }
 
-// Join runs one connection as a session of a world and returns when it
+// Join runs one connection as a session of the world and returns when it
 // ends, from either side. Who the connection is was settled by the caller,
-// from a ticket; a visitor is the empty identity.
-func (h *Hub) Join(ctx context.Context, worldID string, identity Identity, conn Conn) error {
+// from its key; a visitor is the empty identity.
+func (h *Hub) Join(ctx context.Context, identity Identity, conn Conn) error {
 	defer conn.Close("")
 
 	hello, err := readHello(ctx, conn)
@@ -65,7 +65,7 @@ func (h *Hub) Join(ctx context.Context, worldID string, identity Identity, conn 
 		return refuse(ctx, conn, fmt.Sprintf("protocol %d, this server speaks %d", hello.Protocol, Protocol))
 	}
 
-	a, err := h.actorFor(ctx, worldID)
+	a, err := h.actorFor(ctx)
 	if err != nil {
 		return refuse(ctx, conn, err.Error())
 	}
@@ -101,34 +101,32 @@ func refuse(ctx context.Context, conn Conn, reason string) error {
 	return fmt.Errorf("%w: %s", ErrRefused, reason)
 }
 
-// actorFor finds a world's actor or starts one. The join it is for is
+// actorFor finds the world's actor or starts it. The join it is for is
 // counted as pending under the lock, so an actor that is emptying cannot
 // retire between being found and hearing the join.
-func (h *Hub) actorFor(ctx context.Context, worldID string) (*actor, error) {
+func (h *Hub) actorFor(ctx context.Context) (*actor, error) {
 	h.mu.Lock()
-	if a, ok := h.actors[worldID]; ok {
+	if a := h.actor; a != nil {
 		a.pending++
 		h.mu.Unlock()
 		return a, nil
 	}
 	h.mu.Unlock()
 
-	// The catalog is a database: not under the lock.
-	recipe, err := h.catalog.Recipe(ctx, worldID)
+	// The catalog reads a disk: not under the lock.
+	recipe, err := h.catalog.Recipe(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	a, ok := h.actors[worldID]
-	if !ok {
-		a = newActor(h, worldID, recipe)
-		h.actors[worldID] = a
-		go a.run()
+	if h.actor == nil {
+		h.actor = newActor(h, recipe)
+		go h.actor.run()
 	}
-	a.pending++
-	return a, nil
+	h.actor.pending++
+	return h.actor, nil
 }
 
 // joined is the actor's side of the pending count.
@@ -146,13 +144,15 @@ func (h *Hub) retire(a *actor) bool {
 	if a.pending > 0 {
 		return false
 	}
-	delete(h.actors, a.id)
+	if h.actor == a {
+		h.actor = nil
+	}
 	return true
 }
 
-// Active is how many worlds have someone in them right now.
-func (h *Hub) Active() int {
+// Active is whether someone is in the world right now.
+func (h *Hub) Active() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return len(h.actors)
+	return h.actor != nil
 }

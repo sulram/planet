@@ -64,7 +64,6 @@ type inbound struct {
 // through its own outbox, so nothing here needs a lock.
 type actor struct {
 	hub    *Hub
-	id     string
 	recipe Recipe
 	inbox  chan inbound
 	// Joins counted by the hub and not yet heard here. Guarded by hub.mu.
@@ -77,10 +76,9 @@ type actor struct {
 	lastSent time.Time
 }
 
-func newActor(hub *Hub, id string, recipe Recipe) *actor {
+func newActor(hub *Hub, recipe Recipe) *actor {
 	return &actor{
 		hub:      hub,
-		id:       id,
 		recipe:   recipe,
 		inbox:    make(chan inbound, 256),
 		sessions: map[uint32]*session{},
@@ -125,6 +123,7 @@ func (a *actor) join(s *session) {
 		Session: s.id,
 		Recipe:  a.recipe.Wire(),
 		Peers:   peers,
+		Level:   s.identity.Level.wire(),
 	}}})
 	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Joined{Joined: &pb.Joined{Peer: s.peer()}}}, s)
 }
@@ -156,6 +155,10 @@ func (a *actor) handle(s *session, message *pb.ClientMessage) {
 	case *pb.ClientMessage_Say:
 		a.say(s, m.Say, time.Now())
 	case *pb.ClientMessage_Rename:
+		// An account is called what mundos signed: only a visitor takes a name here.
+		if !s.identity.Visitor() {
+			return
+		}
 		s.name = cleanName(m.Rename.Name)
 		a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Renamed{Renamed: &pb.Renamed{
 			Session: s.id,

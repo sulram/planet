@@ -66,24 +66,27 @@ type client struct {
 	done chan error
 }
 
-type fixedCatalog map[string]Recipe
+// founded is a Catalog over a world with this recipe; unfounded has none.
+type founded Recipe
 
-func (c fixedCatalog) Recipe(_ context.Context, id string) (Recipe, error) {
-	recipe, ok := c[id]
-	if !ok {
-		return Recipe{}, ErrNoWorld
-	}
-	return recipe, nil
+func (r founded) Recipe(context.Context) (Recipe, error) {
+	return Recipe(r), nil
 }
 
-func connect(t *testing.T, hub *Hub, worldID string, hello *pb.Hello) *client {
-	return connectAs(t, hub, worldID, Identity{}, hello)
+type unfounded struct{}
+
+func (unfounded) Recipe(context.Context) (Recipe, error) {
+	return Recipe{}, ErrUnfounded
 }
 
-func connectAs(t *testing.T, hub *Hub, worldID string, identity Identity, hello *pb.Hello) *client {
+func connect(t *testing.T, hub *Hub, hello *pb.Hello) *client {
+	return connectAs(t, hub, Identity{}, hello)
+}
+
+func connectAs(t *testing.T, hub *Hub, identity Identity, hello *pb.Hello) *client {
 	t.Helper()
 	c := &client{t: t, pipe: newPipe(), done: make(chan error, 1)}
-	go func() { c.done <- hub.Join(context.Background(), worldID, identity, c.pipe) }()
+	go func() { c.done <- hub.Join(context.Background(), identity, c.pipe) }()
 	c.say(&pb.ClientMessage{Message: &pb.ClientMessage_Hello{Hello: hello}})
 	return c
 }
@@ -151,9 +154,9 @@ func stance(u float32) *pb.Stance {
 }
 
 func TestTwoPeopleSeeEachOther(t *testing.T) {
-	hub := NewHub(fixedCatalog{"w1": recipe(t)})
+	hub := NewHub(founded(recipe(t)))
 
-	a := connect(t, hub, "w1", hello())
+	a := connect(t, hub, hello())
 	welcome := a.hear().GetWelcome()
 	if welcome == nil || welcome.Session == 0 || len(welcome.Peers) != 0 {
 		t.Fatalf("first in an empty world: %v", welcome)
@@ -166,7 +169,7 @@ func TestTwoPeopleSeeEachOther(t *testing.T) {
 	// before the second person arrives to be told it.
 	a.hearUntil(func(m *pb.ServerMessage) bool { return len(m.GetStances().GetMoved()) > 0 })
 
-	b := connect(t, hub, "w1", hello())
+	b := connect(t, hub, hello())
 	welcomeB := b.hear().GetWelcome()
 	if len(welcomeB.Peers) != 1 || welcomeB.Peers[0].Session != welcome.Session {
 		t.Fatalf("the second sees the first: %v", welcomeB)
@@ -212,46 +215,70 @@ func TestTwoPeopleSeeEachOther(t *testing.T) {
 
 	a.leave()
 	deadline := time.Now().Add(2 * time.Second)
-	for hub.Active() != 0 && time.Now().Before(deadline) {
+	for hub.Active() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if hub.Active() != 0 {
+	if hub.Active() {
 		t.Fatal("an empty world stays active")
 	}
 }
 
-func TestATicketNamesAPerson(t *testing.T) {
-	tickets := NewTickets()
-	ticket := tickets.Mint(Identity{UserID: "u1", Name: "Ada"})
-	who, ok := tickets.Redeem(ticket)
-	if !ok || who.Name != "Ada" || who.Visitor() {
-		t.Fatalf("a fresh ticket names its person: %v %v", who, ok)
+func TestAKeyNamesAPerson(t *testing.T) {
+	now := time.Unix(1790000000, 0)
+	keys := newKeys(func() time.Time { return now })
+	key := keys.Mint(Identity{UserID: "u1", Name: "Ada", Level: LevelBuilder})
+	who, ok := keys.Find(key)
+	if !ok || who.Name != "Ada" || who.Level != LevelBuilder || who.Visitor() {
+		t.Fatalf("a key names its person and their level: %v %v", who, ok)
 	}
-	if _, again := tickets.Redeem(ticket); again {
-		t.Fatal("a ticket works once")
+	if _, again := keys.Find(key); !again {
+		t.Fatal("a key stands for the next link too")
 	}
-	if _, stranger := tickets.Redeem("not-a-ticket"); stranger {
-		t.Fatal("an unknown ticket names nobody")
+	if _, stranger := keys.Find("not-a-key"); stranger {
+		t.Fatal("an unknown key names nobody")
+	}
+	now = now.Add(KeyLife)
+	if _, late := keys.Find(key); late {
+		t.Fatal("a key past its life names nobody")
 	}
 
-	hub := NewHub(fixedCatalog{"w1": recipe(t)})
-	a := connectAs(t, hub, "w1", who, hello())
-	if a.hear().GetWelcome() == nil {
-		t.Fatal("a person is welcome")
+	hub := NewHub(founded(recipe(t)))
+	a := connectAs(t, hub, who, hello())
+	if welcome := a.hear().GetWelcome(); welcome == nil || welcome.Level != pb.Level_LEVEL_BUILDER {
+		t.Fatalf("a person is welcome, and told their level: %v", welcome)
 	}
-	b := connect(t, hub, "w1", hello())
-	peer := b.hear().GetWelcome().Peers[0]
-	if peer.Name != "Ada" || peer.Visitor {
-		t.Fatalf("the ticket's identity is what others see: %v", peer)
+	b := connect(t, hub, hello())
+	welcome := b.hear().GetWelcome()
+	if peer := welcome.Peers[0]; peer.Name != "Ada" || peer.Visitor {
+		t.Fatalf("the key's identity is what others see: %v", peer)
+	}
+	if welcome.Level != pb.Level_LEVEL_ANONYMOUS {
+		t.Fatalf("a visitor is told it is anonymous: %v", welcome.Level)
 	}
 	a.leave()
 	b.leave()
 }
 
-func TestWhatIsRefused(t *testing.T) {
-	hub := NewHub(fixedCatalog{"w1": recipe(t)})
+// The wire counts levels as the core does: a level is cast, never mapped.
+func TestTheWireCountsLevelsAsTheCoreDoes(t *testing.T) {
+	for level, name := range levelNames {
+		wire := "LEVEL_" + strings.ToUpper(name)
+		if got := Level(level).wire().String(); got != wire {
+			t.Fatalf("level %d is %s on the wire, and %s in the core", level, got, wire)
+		}
+		if parsed, ok := ParseLevel(name); !ok || parsed != Level(level) {
+			t.Fatalf("%s reads back as %v", name, parsed)
+		}
+	}
+	if _, ok := ParseLevel("superadmin"); ok {
+		t.Fatal("a word mundos does not write is no level")
+	}
+}
 
-	old := connect(t, hub, "w1", &pb.Hello{Protocol: Protocol + 1})
+func TestWhatIsRefused(t *testing.T) {
+	hub := NewHub(founded(recipe(t)))
+
+	old := connect(t, hub, &pb.Hello{Protocol: Protocol + 1})
 	if old.hear().GetRefused() == nil {
 		t.Fatal("another protocol is refused")
 	}
@@ -259,22 +286,26 @@ func TestWhatIsRefused(t *testing.T) {
 		t.Fatalf("a refusal says so: %v", err)
 	}
 
-	nowhere := connect(t, hub, "nope", hello())
-	if refused := nowhere.hear().GetRefused(); refused == nil || refused.Reason != ErrNoWorld.Error() {
-		t.Fatalf("a world the catalog lacks is refused: %v", refused)
-	}
-	<-nowhere.done
-
-	if hub.Active() != 0 {
+	if hub.Active() {
 		t.Fatal("nothing refused leaves an actor behind")
+	}
+
+	empty := NewHub(unfounded{})
+	early := connect(t, empty, hello())
+	if refused := early.hear().GetRefused(); refused == nil || refused.Reason != ErrUnfounded.Error() {
+		t.Fatalf("a world with no recipe yet is refused: %v", refused)
+	}
+	<-early.done
+	if empty.Active() {
+		t.Fatal("an unfounded world starts no actor")
 	}
 }
 
 func TestANameIsGivenAndChanged(t *testing.T) {
-	hub := NewHub(fixedCatalog{"w1": recipe(t)})
-	a := connect(t, hub, "w1", &pb.Hello{Protocol: Protocol, Name: "  Zed   the  " + strings.Repeat("z", NameChars)})
+	hub := NewHub(founded(recipe(t)))
+	a := connect(t, hub, &pb.Hello{Protocol: Protocol, Name: "  Zed   the  " + strings.Repeat("z", NameChars)})
 	a.hear()
-	b := connect(t, hub, "w1", hello())
+	b := connect(t, hub, hello())
 	peer := b.hear().GetWelcome().Peers[0]
 	if peer.Name != "Zed the "+strings.Repeat("z", NameChars-8) || !peer.Visitor {
 		t.Fatalf("a visitor is called what it said, on one line and cut at NameChars: %q", peer.Name)
@@ -286,14 +317,19 @@ func TestANameIsGivenAndChanged(t *testing.T) {
 		t.Fatalf("a new name is relayed: %v", renamed)
 	}
 
-	// An account's name is the account's: the hello cannot override it.
-	tickets := NewTickets()
-	who, _ := tickets.Redeem(tickets.Mint(Identity{UserID: "u1", Name: "Grace"}))
-	c := connectAs(t, hub, "w1", who, &pb.Hello{Protocol: Protocol, Name: "Impostor"})
+	// An account's name is the one mundos signed: neither the hello nor a
+	// rename changes it.
+	c := connectAs(t, hub, Identity{UserID: "u1", Name: "Grace"}, &pb.Hello{Protocol: Protocol, Name: "Impostor"})
 	c.hear()
 	joined := b.hearUntil(func(m *pb.ServerMessage) bool { return m.GetJoined() != nil }).GetJoined()
 	if joined.Peer.Name != "Grace" {
-		t.Fatalf("the ticket names the person: %v", joined.Peer)
+		t.Fatalf("the account names the person: %v", joined.Peer)
+	}
+	c.say(&pb.ClientMessage{Message: &pb.ClientMessage_Rename{Rename: &pb.Rename{Name: "Impostor"}}})
+	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Rename{Rename: &pb.Rename{Name: "Bob"}}})
+	// The visitor's rename is heard next: the account's was dropped before it.
+	if next := b.hearUntil(func(m *pb.ServerMessage) bool { return m.GetRenamed() != nil }).GetRenamed(); next.Name != "Bob" {
+		t.Fatalf("an account is not renamed in the world: %v", next)
 	}
 	a.leave()
 	b.leave()
@@ -301,12 +337,12 @@ func TestANameIsGivenAndChanged(t *testing.T) {
 }
 
 func TestALineReachesItsScope(t *testing.T) {
-	hub := NewHub(fixedCatalog{"w1": recipe(t)})
-	a := connect(t, hub, "w1", hello())
+	hub := NewHub(founded(recipe(t)))
+	a := connect(t, hub, hello())
 	me := a.hear().GetWelcome().Session
-	b := connect(t, hub, "w1", hello())
+	b := connect(t, hub, hello())
 	b.hear()
-	far := connect(t, hub, "w1", hello())
+	far := connect(t, hub, hello())
 	far.hear()
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(100)}})
 	b.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(110)}})

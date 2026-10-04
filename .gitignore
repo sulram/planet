@@ -20,9 +20,9 @@ apps/web/build/
 apps/web/.svelte-kit/
 apps/web/src/lib/engine/pkg/
 
-# server binary and PocketBase data
+# server binary and the world folder of a development run
 server/bin/
-server/pb_data/
+server/world/
 
 # headless render output
 out/

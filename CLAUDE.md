@@ -94,7 +94,7 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   - `ui-native`: the desktop settings panel. All of egui lives here.
   - `shell-desktop` (winit), `shell-web` (wasm-bindgen), later `shell-xr`.
   - `bench`: what a frame costs in WASM, timed by `scripts/bench.ts`.
-- `server/`: Go, the world server. PocketBase is linked today and leaves (docs/BRIEF.md). Rules: `server/CLAUDE.md`.
+- `server/`: Go. The world server: one binary is an instance. Rules: `server/CLAUDE.md`.
 - `apps/web/`: Svelte + Bun. The web front end; hosts the WASM client.
   Rules: `apps/web/CLAUDE.md`.
 - `proto/`: the schema, single source for Rust and Go; `bun run proto` regenerates both, committed.

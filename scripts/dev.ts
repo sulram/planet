@@ -1,23 +1,17 @@
-// Everything at once: server (PocketBase inside) + Mailpit + web. Ctrl+C stops all.
+// Everything at once: the world server and the web front end. Ctrl+C stops both.
 // The engine is rebuilt first, every time: cargo is incremental, and a stale
 // WASM package silently shows an older world than the desktop does.
 import { ROOT } from './lib';
-import { build, ensureSuperuser, serve } from './server';
+import { build, serve } from './server';
 import { buildWasm } from './wasm';
 
 await buildWasm();
 
 await build();
-await ensureSuperuser();
 const server = serve();
 
-// Mailpit catches dev email (http://localhost:8025) when SMTP_HOST points at it.
-// Without it the server prints each magic link to this console instead.
-const mailpitBin = process.env.SMTP_HOST ? Bun.which('mailpit') : null;
-const mailpit = mailpitBin ? Bun.spawn([mailpitBin], { stdout: 'ignore', stderr: 'ignore' }) : null;
-if (mailpit) console.log('mail -> http://localhost:8025');
-else if (process.env.SMTP_HOST) console.warn('mailpit not found: emails will fail (brew install mailpit)');
-
+// Vite holds the page and hands the world's routes and socket to the server,
+// so the browser sees one origin, as it does under mundos.
 const web = Bun.spawn(['bun', 'run', 'dev'], {
 	cwd: `${ROOT}/apps/web`,
 	stdout: 'inherit',
@@ -26,13 +20,12 @@ const web = Bun.spawn(['bun', 'run', 'dev'], {
 
 const stop = () => {
 	server.kill();
-	mailpit?.kill();
 	web.kill();
 	process.exit(0);
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
-// The server and the web app take the set down; Mailpit dying does not.
+// Either one going takes the other down.
 await Promise.race([server.exited, web.exited]);
 stop();

@@ -23,16 +23,13 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
 The theme docs say the shape as decided. The tree still carries what follows,
 and step 2 takes it out:
 
-- `server/internal/cold`: accounts by magic link, the operator, the instance
-  record, mail, settings and the ticket route. `server/migrations`.
-  PocketBase in `go.mod`. `world.Tickets`.
 - `apps/web`: `/login`, `/logout`, `/backoffice`, `/w/[id]`, `SignIn.svelte`,
   `hooks.server.ts`, `$lib/server`, every `+page.server.ts`, the `pocketbase`
   package.
 - `scripts/provision.ts`, `scripts/deploy.ts`, `scripts/deploy.config.ts`,
   with their names in `package.json` and their variables in `.env.example`.
-- README.md § Run it, `server/CLAUDE.md` and `apps/web/CLAUDE.md` describe the
-  tree as it stands, and change with it.
+- README.md § Run it and `apps/web/CLAUDE.md` describe the tree as it stands,
+  and change with it.
 
 What stays as it is: every crate, `proto/`, the hub and the actor, the
 engine's panels, the design system, i18n.
