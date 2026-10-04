@@ -55,16 +55,16 @@ message Stance {
   bool sprint = 11;
 }
 
-// What a client says first. Who it is was settled before: a ticket from the
-// cold plane rides the socket URL and is redeemed on the way in.
+// What a client says first. Who it is was settled before: the key it was
+// given on entering rides the socket URL, and no key is a visitor.
 message Hello {
   // The protocol this client speaks. Refused when it is not the server's.
   uint32 protocol = 1;
   // The avatar worn, as an asset reference: a path under the asset root, or
   // a URL. A person's own avatar loads through the same reference.
   string avatar = 2;
-  // What to be called, at most `NameChars`. A signed in person's account
-  // name wins over it; a visitor is called this or nothing.
+  // What to be called, at most `NameChars`. An account's name, as mundos
+  // signed it, wins over it; a visitor is called this or nothing.
   string name = 3;
 }
 
@@ -108,7 +108,7 @@ message ClientMessage {
   }
 }
 
-// Seed + params + generator version, as the worlds collection holds it. The
+// Seed + params + generator version, as the world folder holds it. The
 // params are the JSON the generator version owns.
 message Recipe {
   // A u64 as 16 lowercase hex digits.
@@ -130,11 +130,22 @@ message Peer {
   Stance stance = 5;
 }
 
+// What a session may do, as mundos says it for one entry. The order is the
+// order of trust: a builder builds, an admin builds and founds the world.
+enum Level {
+  LEVEL_ANONYMOUS = 0;
+  LEVEL_SIGNED_IN = 1;
+  LEVEL_BUILDER = 2;
+  LEVEL_ADMIN = 3;
+}
+
 // The answer to Hello: who you are here, what world this is, who is here.
 message Welcome {
   uint32 session = 1;
   Recipe recipe = 2;
   repeated Peer peers = 3;
+  // What this session may do, for its life. A client offers its tools by it.
+  Level level = 4;
 }
 
 message Joined {

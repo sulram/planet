@@ -1,7 +1,10 @@
 //! Two people see each other: the client's side of the link, driven by hand
 //! made server frames, the way a shell drives it with a socket.
 
-use client::{Client, Command, Event, Input, Outbound, PeerInfo, Recipe, Scope, SessionStatus};
+use client::{
+    Base, BuildRefusal, Client, Command, Event, Input, Level, Outbound, PeerInfo, Recipe, Scope,
+    SessionStatus, Tool,
+};
 use protocol::{Message, client_message, server_message};
 
 fn server(message: server_message::Message) -> Vec<u8> {
@@ -42,11 +45,22 @@ fn peer(session: u32, name: &str) -> protocol::Peer {
     }
 }
 
+/// A welcome to a visitor: the least a world says a session may do.
 fn welcome(client: &Client, session: u32, peers: Vec<protocol::Peer>) -> Vec<u8> {
+    welcome_as(client, session, peers, protocol::Level::Anonymous)
+}
+
+fn welcome_as(
+    client: &Client,
+    session: u32,
+    peers: Vec<protocol::Peer>,
+    level: protocol::Level,
+) -> Vec<u8> {
     server(server_message::Message::Welcome(protocol::Welcome {
         session,
         recipe: Some(recipe_of(client)),
         peers,
+        level: level.into(),
     }))
 }
 
@@ -85,7 +99,8 @@ fn hello_goes_out_and_welcome_brings_the_peers() {
     let events = client.drain_events();
     assert!(events.contains(&Event::Session {
         status: SessionStatus::Online,
-        session: Some(7)
+        session: Some(7),
+        level: Some(Level::Anonymous),
     }));
     assert!(events.contains(&Event::Peers {
         peers: vec![
@@ -159,9 +174,11 @@ fn leaving_and_losing_the_link_take_the_bodies_away() {
 
     client.link_closed();
     let events = client.drain_events();
+    // The world's word on the level stands through a dropped link.
     assert!(events.contains(&Event::Session {
         status: SessionStatus::Offline,
-        session: None
+        session: None,
+        level: Some(Level::Anonymous),
     }));
     assert!(events.contains(&Event::Peers { peers: vec![] }));
     assert_eq!(client.settled_frame().boxes.len(), 6);
@@ -203,12 +220,15 @@ fn another_recipe_is_another_world() {
             session: 1,
             recipe: Some(recipe),
             peers: vec![],
+            level: protocol::Level::Admin.into(),
         },
     )));
     assert!(client.drain_outbound().contains(&Outbound::Close));
+    // A world this client never stood in says nothing of its level either.
     assert!(client.drain_events().contains(&Event::Session {
         status: SessionStatus::Offline,
-        session: None
+        session: None,
+        level: None,
     }));
 }
 
@@ -375,4 +395,48 @@ fn a_name_rides_in_hello_and_a_peer_renamed_is_listed_anew() {
         client.drain_events().last(),
         Some(Event::Peers { peers }) if peers.len() == 1 && peers[0].name == "Grace"
     ));
+}
+
+#[test]
+fn the_world_says_who_builds() {
+    let refused = Event::BuildRefused {
+        reason: BuildRefusal::Level,
+    };
+    let create = || Command::SetTool {
+        tool: Some(Tool::Create),
+    };
+
+    // With no world to ask, the offline preview builds freely.
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command(create());
+    assert!(client.building());
+
+    // A world that welcomes a visitor puts the tool down, and refuses the next.
+    client.link_opened();
+    client.receive(&welcome(&client, 7, vec![]));
+    assert!(!client.building());
+    client.drain_events();
+    client.command(create());
+    assert!(!client.building());
+    assert!(client.drain_events().contains(&refused));
+    client.command(Command::LayPlatform {
+        base: Base::Pillars,
+    });
+    assert!(client.drain_events().contains(&refused));
+
+    // Its word stands through a dropped link: offline is no way to a tool.
+    client.link_closed();
+    client.command(create());
+    assert!(!client.building());
+
+    // A builder's welcome hands the tools back.
+    client.link_opened();
+    client.receive(&welcome_as(&client, 8, vec![], protocol::Level::Builder));
+    assert!(client.drain_events().contains(&Event::Session {
+        status: SessionStatus::Online,
+        session: Some(8),
+        level: Some(Level::Builder),
+    }));
+    client.command(create());
+    assert!(client.building());
 }

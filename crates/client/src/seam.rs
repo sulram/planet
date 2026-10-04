@@ -72,6 +72,31 @@ pub enum BuildRefusal {
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
+    /// The world says who builds in it, and this session is not one of them.
+    Level,
+}
+
+/// What a session may do, as the world said it in its welcome. The order is
+/// the order of trust: a builder builds, an admin builds and founds the world.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Level {
+    Anonymous,
+    SignedIn,
+    Builder,
+    Admin,
+}
+
+impl Level {
+    /// A level the wire names that this client does not know is the least.
+    pub(crate) fn from_wire(level: i32) -> Level {
+        match protocol::Level::try_from(level) {
+            Ok(protocol::Level::SignedIn) => Level::SignedIn,
+            Ok(protocol::Level::Builder) => Level::Builder,
+            Ok(protocol::Level::Admin) => Level::Admin,
+            Ok(protocol::Level::Anonymous) | Err(_) => Level::Anonymous,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -199,6 +224,9 @@ pub enum Event {
         status: SessionStatus,
         /// This client's session in the world, while online.
         session: Option<u32>,
+        /// What the world said this session may do. `None` until a world
+        /// has spoken, and then the last word stands through a dropped link.
+        level: Option<Level>,
     },
     /// Who else is here, whenever that changes. Empty when offline.
     Peers {

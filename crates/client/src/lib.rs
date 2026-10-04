@@ -39,7 +39,7 @@ use peers::Peers;
 pub use place::Pose;
 pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{
-    Anchor, Base, BuildRefusal, Command, Event, Mode, PeerInfo, Scope, SessionStatus, Tool,
+    Anchor, Base, BuildRefusal, Command, Event, Level, Mode, PeerInfo, Scope, SessionStatus, Tool,
 };
 pub use session::Outbound;
 use session::Session;
@@ -64,6 +64,9 @@ pub struct Client {
     moon_terrain: Terrain,
     /// Volumes, and the tool that builds in them.
     build: Build,
+    /// What the last world to welcome this client said it may do. `None`
+    /// until one has: the offline preview builds freely.
+    level: Option<Level>,
     /// Whether there was a stroke to take back and one to put back, as last
     /// said: [`Event::History`] goes out when that changes.
     history: (bool, bool),
@@ -125,6 +128,7 @@ impl Client {
             terrain: Terrain::new(Body::new(terrain::Kind::Planet, sphere)),
             moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
             build: Build::default(),
+            level: None,
             history: (false, false),
             figure: Figure::default(),
             clips: Clips::new(),
@@ -170,6 +174,7 @@ impl Client {
         client.events.push(Event::Session {
             status: SessionStatus::Offline,
             session: None,
+            level: None,
         });
         client.tool_changed();
         Ok(client)
@@ -416,9 +421,22 @@ impl Client {
         self.build.tool().is_some()
     }
 
+    /// Whether this client may build. A world says so in its welcome, and
+    /// until one has spoken there is no world to ask: the offline preview
+    /// builds freely. A server checks the same level when a stroke is an op.
+    fn may_build(&self) -> bool {
+        self.level.is_none_or(|level| level >= Level::Builder)
+    }
+
     /// Takes a tool, or puts it down with `None`. It builds nothing: what a
     /// stroke starts on is laid by asking for a platform.
     fn take_tool(&mut self, tool: Option<Tool>) {
+        if tool.is_some() && !self.may_build() {
+            self.events.push(Event::BuildRefused {
+                reason: BuildRefusal::Level,
+            });
+            return;
+        }
         self.build.take(tool);
         self.tool_changed();
     }
@@ -426,7 +444,9 @@ impl Client {
     /// Asks for a platform where the body stands, laid over the next few
     /// updates. False where none can be laid, which is said.
     fn lay_platform(&mut self, base: Base) -> bool {
-        let asked = if self.controller.on_moon() {
+        let asked = if !self.may_build() {
+            Err(BuildRefusal::Level)
+        } else if self.controller.on_moon() {
             Err(BuildRefusal::Moon)
         } else {
             self.build
@@ -626,7 +646,7 @@ impl Client {
 
     /// The shell opened the link to the world server: the client says hello.
     /// Which world is in the socket's address; who this is was settled by
-    /// the ticket that rode along with it.
+    /// the key that rode along with it.
     pub fn link_opened(&mut self) {
         self.session.opened(
             self.wanted_avatar.as_deref().unwrap_or(""),
@@ -635,6 +655,7 @@ impl Client {
         self.events.push(Event::Session {
             status: SessionStatus::Connecting,
             session: None,
+            level: self.level,
         });
     }
 
@@ -668,12 +689,18 @@ impl Client {
                     return;
                 }
                 self.session.welcomed(welcome.session);
+                self.level = Some(Level::from_wire(welcome.level));
+                // A tool taken before the world spoke is put down by its word.
+                if !self.may_build() && self.build.tool().is_some() {
+                    self.take_tool(None);
+                }
                 for peer in &welcome.peers {
                     self.peers.add(peer, &self.generator);
                 }
                 self.events.push(Event::Session {
                     status: SessionStatus::Online,
                     session: Some(welcome.session),
+                    level: self.level,
                 });
                 self.peers_changed();
             }
@@ -765,6 +792,7 @@ impl Client {
         self.events.push(Event::Session {
             status: SessionStatus::Offline,
             session: None,
+            level: self.level,
         });
         self.events.push(Event::Peers { peers: Vec::new() });
     }

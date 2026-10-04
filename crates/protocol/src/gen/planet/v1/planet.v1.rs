@@ -36,8 +36,8 @@ pub struct Stance {
     #[prost(bool, tag="11")]
     pub sprint: bool,
 }
-/// What a client says first. Who it is was settled before: a ticket from the
-/// cold plane rides the socket URL and is redeemed on the way in.
+/// What a client says first. Who it is was settled before: the key it was
+/// given on entering rides the socket URL, and no key is a visitor.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Hello {
     /// The protocol this client speaks. Refused when it is not the server's.
@@ -47,8 +47,8 @@ pub struct Hello {
     /// a URL. A person's own avatar loads through the same reference.
     #[prost(string, tag="2")]
     pub avatar: ::prost::alloc::string::String,
-    /// What to be called, at most `NameChars`. A signed in person's account
-    /// name wins over it; a visitor is called this or nothing.
+    /// What to be called, at most `NameChars`. An account's name, as mundos
+    /// signed it, wins over it; a visitor is called this or nothing.
     #[prost(string, tag="3")]
     pub name: ::prost::alloc::string::String,
 }
@@ -100,7 +100,7 @@ pub mod client_message {
         Rename(super::Rename),
     }
 }
-/// Seed + params + generator version, as the worlds collection holds it. The
+/// Seed + params + generator version, as the world folder holds it. The
 /// params are the JSON the generator version owns.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Recipe {
@@ -139,6 +139,9 @@ pub struct Welcome {
     pub recipe: ::core::option::Option<Recipe>,
     #[prost(message, repeated, tag="3")]
     pub peers: ::prost::alloc::vec::Vec<Peer>,
+    /// What this session may do, for its life. A client offers its tools by it.
+    #[prost(enumeration="Level", tag="4")]
+    pub level: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Joined {
@@ -321,6 +324,40 @@ impl Scope {
         match value {
             "SCOPE_NEAR" => Some(Self::Near),
             "SCOPE_WORLD" => Some(Self::World),
+            _ => None,
+        }
+    }
+}
+/// What a session may do, as mundos says it for one entry. The order is the
+/// order of trust: a builder builds, an admin builds and founds the world.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum Level {
+    Anonymous = 0,
+    SignedIn = 1,
+    Builder = 2,
+    Admin = 3,
+}
+impl Level {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Anonymous => "LEVEL_ANONYMOUS",
+            Self::SignedIn => "LEVEL_SIGNED_IN",
+            Self::Builder => "LEVEL_BUILDER",
+            Self::Admin => "LEVEL_ADMIN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LEVEL_ANONYMOUS" => Some(Self::Anonymous),
+            "LEVEL_SIGNED_IN" => Some(Self::SignedIn),
+            "LEVEL_BUILDER" => Some(Self::Builder),
+            "LEVEL_ADMIN" => Some(Self::Admin),
             _ => None,
         }
     }

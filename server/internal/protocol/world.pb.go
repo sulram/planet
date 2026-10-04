@@ -189,6 +189,60 @@ func (Scope) EnumDescriptor() ([]byte, []int) {
 	return file_planet_v1_world_proto_rawDescGZIP(), []int{2}
 }
 
+// What a session may do, as mundos says it for one entry. The order is the
+// order of trust: a builder builds, an admin builds and founds the world.
+type Level int32
+
+const (
+	Level_LEVEL_ANONYMOUS Level = 0
+	Level_LEVEL_SIGNED_IN Level = 1
+	Level_LEVEL_BUILDER   Level = 2
+	Level_LEVEL_ADMIN     Level = 3
+)
+
+// Enum value maps for Level.
+var (
+	Level_name = map[int32]string{
+		0: "LEVEL_ANONYMOUS",
+		1: "LEVEL_SIGNED_IN",
+		2: "LEVEL_BUILDER",
+		3: "LEVEL_ADMIN",
+	}
+	Level_value = map[string]int32{
+		"LEVEL_ANONYMOUS": 0,
+		"LEVEL_SIGNED_IN": 1,
+		"LEVEL_BUILDER":   2,
+		"LEVEL_ADMIN":     3,
+	}
+)
+
+func (x Level) Enum() *Level {
+	p := new(Level)
+	*p = x
+	return p
+}
+
+func (x Level) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Level) Descriptor() protoreflect.EnumDescriptor {
+	return file_planet_v1_world_proto_enumTypes[3].Descriptor()
+}
+
+func (Level) Type() protoreflect.EnumType {
+	return &file_planet_v1_world_proto_enumTypes[3]
+}
+
+func (x Level) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Level.Descriptor instead.
+func (Level) EnumDescriptor() ([]byte, []int) {
+	return file_planet_v1_world_proto_rawDescGZIP(), []int{3}
+}
+
 // Where a body is and how it moves: what presence carries, many times a
 // second. A pose is what a link carries; a stance is what a peer sends.
 // The place is an address with fractional blocks, never a float position.
@@ -324,8 +378,8 @@ func (x *Stance) GetSprint() bool {
 	return false
 }
 
-// What a client says first. Who it is was settled before: a ticket from the
-// cold plane rides the socket URL and is redeemed on the way in.
+// What a client says first. Who it is was settled before: the key it was
+// given on entering rides the socket URL, and no key is a visitor.
 type Hello struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The protocol this client speaks. Refused when it is not the server's.
@@ -333,8 +387,8 @@ type Hello struct {
 	// The avatar worn, as an asset reference: a path under the asset root, or
 	// a URL. A person's own avatar loads through the same reference.
 	Avatar string `protobuf:"bytes,2,opt,name=avatar,proto3" json:"avatar,omitempty"`
-	// What to be called, at most `NameChars`. A signed in person's account
-	// name wins over it; a visitor is called this or nothing.
+	// What to be called, at most `NameChars`. An account's name, as mundos
+	// signed it, wins over it; a visitor is called this or nothing.
 	Name          string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -677,7 +731,7 @@ func (*ClientMessage_Say) isClientMessage_Message() {}
 
 func (*ClientMessage_Rename) isClientMessage_Message() {}
 
-// Seed + params + generator version, as the worlds collection holds it. The
+// Seed + params + generator version, as the world folder holds it. The
 // params are the JSON the generator version owns.
 type Recipe struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -823,10 +877,12 @@ func (x *Peer) GetStance() *Stance {
 
 // The answer to Hello: who you are here, what world this is, who is here.
 type Welcome struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Session       uint32                 `protobuf:"varint,1,opt,name=session,proto3" json:"session,omitempty"`
-	Recipe        *Recipe                `protobuf:"bytes,2,opt,name=recipe,proto3" json:"recipe,omitempty"`
-	Peers         []*Peer                `protobuf:"bytes,3,rep,name=peers,proto3" json:"peers,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session uint32                 `protobuf:"varint,1,opt,name=session,proto3" json:"session,omitempty"`
+	Recipe  *Recipe                `protobuf:"bytes,2,opt,name=recipe,proto3" json:"recipe,omitempty"`
+	Peers   []*Peer                `protobuf:"bytes,3,rep,name=peers,proto3" json:"peers,omitempty"`
+	// What this session may do, for its life. A client offers its tools by it.
+	Level         Level `protobuf:"varint,4,opt,name=level,proto3,enum=planet.v1.Level" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -880,6 +936,13 @@ func (x *Welcome) GetPeers() []*Peer {
 		return x.Peers
 	}
 	return nil
+}
+
+func (x *Welcome) GetLevel() Level {
+	if x != nil {
+		return x.Level
+	}
+	return Level_LEVEL_ANONYMOUS
 }
 
 type Joined struct {
@@ -1513,11 +1576,12 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\avisitor\x18\x03 \x01(\bR\avisitor\x12\x16\n" +
 	"\x06avatar\x18\x04 \x01(\tR\x06avatar\x12)\n" +
-	"\x06stance\x18\x05 \x01(\v2\x11.planet.v1.StanceR\x06stance\"u\n" +
+	"\x06stance\x18\x05 \x01(\v2\x11.planet.v1.StanceR\x06stance\"\x9d\x01\n" +
 	"\aWelcome\x12\x18\n" +
 	"\asession\x18\x01 \x01(\rR\asession\x12)\n" +
 	"\x06recipe\x18\x02 \x01(\v2\x11.planet.v1.RecipeR\x06recipe\x12%\n" +
-	"\x05peers\x18\x03 \x03(\v2\x0f.planet.v1.PeerR\x05peers\"-\n" +
+	"\x05peers\x18\x03 \x03(\v2\x0f.planet.v1.PeerR\x05peers\x12&\n" +
+	"\x05level\x18\x04 \x01(\x0e2\x10.planet.v1.LevelR\x05level\"-\n" +
 	"\x06Joined\x12#\n" +
 	"\x04peer\x18\x01 \x01(\v2\x0f.planet.v1.PeerR\x04peer\" \n" +
 	"\x04Left\x12\x18\n" +
@@ -1564,7 +1628,12 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\x05Scope\x12\x0e\n" +
 	"\n" +
 	"SCOPE_NEAR\x10\x00\x12\x0f\n" +
-	"\vSCOPE_WORLD\x10\x01B<Z:github.com/sulram/planet/server/internal/protocol;protocolb\x06proto3"
+	"\vSCOPE_WORLD\x10\x01*U\n" +
+	"\x05Level\x12\x13\n" +
+	"\x0fLEVEL_ANONYMOUS\x10\x00\x12\x13\n" +
+	"\x0fLEVEL_SIGNED_IN\x10\x01\x12\x11\n" +
+	"\rLEVEL_BUILDER\x10\x02\x12\x0f\n" +
+	"\vLEVEL_ADMIN\x10\x03B<Z:github.com/sulram/planet/server/internal/protocol;protocolb\x06proto3"
 
 var (
 	file_planet_v1_world_proto_rawDescOnce sync.Once
@@ -1578,61 +1647,63 @@ func file_planet_v1_world_proto_rawDescGZIP() []byte {
 	return file_planet_v1_world_proto_rawDescData
 }
 
-var file_planet_v1_world_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_planet_v1_world_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_planet_v1_world_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_planet_v1_world_proto_goTypes = []any{
 	(Body)(0),             // 0: planet.v1.Body
 	(Gait)(0),             // 1: planet.v1.Gait
 	(Scope)(0),            // 2: planet.v1.Scope
-	(*Stance)(nil),        // 3: planet.v1.Stance
-	(*Hello)(nil),         // 4: planet.v1.Hello
-	(*Wear)(nil),          // 5: planet.v1.Wear
-	(*Rename)(nil),        // 6: planet.v1.Rename
-	(*Say)(nil),           // 7: planet.v1.Say
-	(*ClientMessage)(nil), // 8: planet.v1.ClientMessage
-	(*Recipe)(nil),        // 9: planet.v1.Recipe
-	(*Peer)(nil),          // 10: planet.v1.Peer
-	(*Welcome)(nil),       // 11: planet.v1.Welcome
-	(*Joined)(nil),        // 12: planet.v1.Joined
-	(*Left)(nil),          // 13: planet.v1.Left
-	(*Wearing)(nil),       // 14: planet.v1.Wearing
-	(*Renamed)(nil),       // 15: planet.v1.Renamed
-	(*Moved)(nil),         // 16: planet.v1.Moved
-	(*Stances)(nil),       // 17: planet.v1.Stances
-	(*Said)(nil),          // 18: planet.v1.Said
-	(*Refused)(nil),       // 19: planet.v1.Refused
-	(*ServerMessage)(nil), // 20: planet.v1.ServerMessage
+	(Level)(0),            // 3: planet.v1.Level
+	(*Stance)(nil),        // 4: planet.v1.Stance
+	(*Hello)(nil),         // 5: planet.v1.Hello
+	(*Wear)(nil),          // 6: planet.v1.Wear
+	(*Rename)(nil),        // 7: planet.v1.Rename
+	(*Say)(nil),           // 8: planet.v1.Say
+	(*ClientMessage)(nil), // 9: planet.v1.ClientMessage
+	(*Recipe)(nil),        // 10: planet.v1.Recipe
+	(*Peer)(nil),          // 11: planet.v1.Peer
+	(*Welcome)(nil),       // 12: planet.v1.Welcome
+	(*Joined)(nil),        // 13: planet.v1.Joined
+	(*Left)(nil),          // 14: planet.v1.Left
+	(*Wearing)(nil),       // 15: planet.v1.Wearing
+	(*Renamed)(nil),       // 16: planet.v1.Renamed
+	(*Moved)(nil),         // 17: planet.v1.Moved
+	(*Stances)(nil),       // 18: planet.v1.Stances
+	(*Said)(nil),          // 19: planet.v1.Said
+	(*Refused)(nil),       // 20: planet.v1.Refused
+	(*ServerMessage)(nil), // 21: planet.v1.ServerMessage
 }
 var file_planet_v1_world_proto_depIdxs = []int32{
 	0,  // 0: planet.v1.Stance.body:type_name -> planet.v1.Body
 	1,  // 1: planet.v1.Stance.gait:type_name -> planet.v1.Gait
 	2,  // 2: planet.v1.Say.scope:type_name -> planet.v1.Scope
-	4,  // 3: planet.v1.ClientMessage.hello:type_name -> planet.v1.Hello
-	3,  // 4: planet.v1.ClientMessage.stance:type_name -> planet.v1.Stance
-	5,  // 5: planet.v1.ClientMessage.wear:type_name -> planet.v1.Wear
-	7,  // 6: planet.v1.ClientMessage.say:type_name -> planet.v1.Say
-	6,  // 7: planet.v1.ClientMessage.rename:type_name -> planet.v1.Rename
-	3,  // 8: planet.v1.Peer.stance:type_name -> planet.v1.Stance
-	9,  // 9: planet.v1.Welcome.recipe:type_name -> planet.v1.Recipe
-	10, // 10: planet.v1.Welcome.peers:type_name -> planet.v1.Peer
-	10, // 11: planet.v1.Joined.peer:type_name -> planet.v1.Peer
-	3,  // 12: planet.v1.Moved.stance:type_name -> planet.v1.Stance
-	16, // 13: planet.v1.Stances.moved:type_name -> planet.v1.Moved
-	2,  // 14: planet.v1.Said.scope:type_name -> planet.v1.Scope
-	3,  // 15: planet.v1.Said.stance:type_name -> planet.v1.Stance
-	11, // 16: planet.v1.ServerMessage.welcome:type_name -> planet.v1.Welcome
-	12, // 17: planet.v1.ServerMessage.joined:type_name -> planet.v1.Joined
-	13, // 18: planet.v1.ServerMessage.left:type_name -> planet.v1.Left
-	17, // 19: planet.v1.ServerMessage.stances:type_name -> planet.v1.Stances
-	14, // 20: planet.v1.ServerMessage.wearing:type_name -> planet.v1.Wearing
-	19, // 21: planet.v1.ServerMessage.refused:type_name -> planet.v1.Refused
-	18, // 22: planet.v1.ServerMessage.said:type_name -> planet.v1.Said
-	15, // 23: planet.v1.ServerMessage.renamed:type_name -> planet.v1.Renamed
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	5,  // 3: planet.v1.ClientMessage.hello:type_name -> planet.v1.Hello
+	4,  // 4: planet.v1.ClientMessage.stance:type_name -> planet.v1.Stance
+	6,  // 5: planet.v1.ClientMessage.wear:type_name -> planet.v1.Wear
+	8,  // 6: planet.v1.ClientMessage.say:type_name -> planet.v1.Say
+	7,  // 7: planet.v1.ClientMessage.rename:type_name -> planet.v1.Rename
+	4,  // 8: planet.v1.Peer.stance:type_name -> planet.v1.Stance
+	10, // 9: planet.v1.Welcome.recipe:type_name -> planet.v1.Recipe
+	11, // 10: planet.v1.Welcome.peers:type_name -> planet.v1.Peer
+	3,  // 11: planet.v1.Welcome.level:type_name -> planet.v1.Level
+	11, // 12: planet.v1.Joined.peer:type_name -> planet.v1.Peer
+	4,  // 13: planet.v1.Moved.stance:type_name -> planet.v1.Stance
+	17, // 14: planet.v1.Stances.moved:type_name -> planet.v1.Moved
+	2,  // 15: planet.v1.Said.scope:type_name -> planet.v1.Scope
+	4,  // 16: planet.v1.Said.stance:type_name -> planet.v1.Stance
+	12, // 17: planet.v1.ServerMessage.welcome:type_name -> planet.v1.Welcome
+	13, // 18: planet.v1.ServerMessage.joined:type_name -> planet.v1.Joined
+	14, // 19: planet.v1.ServerMessage.left:type_name -> planet.v1.Left
+	18, // 20: planet.v1.ServerMessage.stances:type_name -> planet.v1.Stances
+	15, // 21: planet.v1.ServerMessage.wearing:type_name -> planet.v1.Wearing
+	20, // 22: planet.v1.ServerMessage.refused:type_name -> planet.v1.Refused
+	19, // 23: planet.v1.ServerMessage.said:type_name -> planet.v1.Said
+	16, // 24: planet.v1.ServerMessage.renamed:type_name -> planet.v1.Renamed
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_planet_v1_world_proto_init() }
@@ -1662,7 +1733,7 @@ func file_planet_v1_world_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_planet_v1_world_proto_rawDesc), len(file_planet_v1_world_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
