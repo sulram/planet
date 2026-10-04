@@ -1,7 +1,8 @@
 # PLUGINS
 
-How the core and a plugin are cut, what each owns and how they speak. The why
-is in DECISIONS 88, 91, 93 and 94; the order they are made in is in BRIEF.md.
+How the core and a plugin are cut, what each owns and how they speak: the
+shape as decided. The why is in DECISIONS 88, 91, 93 and 94; how much of it is
+built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
