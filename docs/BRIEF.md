@@ -28,9 +28,9 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
    founds a world that awaits one. The door's token is traded for a key, the key
    opens the socket, and `Welcome` says the level the client offers its tools
    by. The page is static files the Go server sends.
-3. [ ] **The image**. Done: the `Dockerfile`, its `HEALTHCHECK`,
-   `planet copy`, and the release workflow that publishes a version. Left: its
-   first run, on `dev`.
+3. [x] **The image**: the `Dockerfile`, its `HEALTHCHECK`, `planet copy`, and
+   the release workflow, which published `1.0.0-dev.7` to
+   `ghcr.io/sulram/planet` on its first run.
 4. [x] **mundos learns the type**, in its own repository (branch
    `feat/planet-type` there). Each type has one adapter: the image's
    repository, the shape of a version, the container's spec, the copy into a
