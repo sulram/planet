@@ -1,4 +1,4 @@
-# 96. The native plugins come in this order: chat, building, land, avatars (decided; land's place proposed)
+# 96. The native plugins come in this order: chat, building, land, avatars (decided)
 
 Logged 2026-10-04.
 

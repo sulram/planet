@@ -37,7 +37,6 @@ The address is the save format: settled before the first volume is stored.
 | **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? A volume holds from the lowest ground of its plot up, and nature is not dug | where a volume may sit | DECISIONS 49, 78 |
 | **What a body collides with inside a GLB shell.** 47 says collision is the generator, always, and a shell is a mesh we cannot read. Either the volume is the truth and the GLB a skin over the same cells (one rule, a voxelizer at import), or mesh collision becomes a capability we build. The first is cheaper | the cave: a shell and a room | DECISIONS 47, 58 |
 | **Look**: terrain material style: flat colours, pixel textures, triplanar? | the material contract past procedural detail | RENDER.md |
-| **Whose the palette is.** A cell is an index into sixteen colours the client holds. Kept by the version, a stored cell changes colour when a version changes them; kept by the world, in the build plugin's store, a world shows what its builders saw | the first stored chunk | DECISIONS 75 · `client::build::PALETTE` |
 
 ## Later
 

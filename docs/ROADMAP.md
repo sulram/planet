@@ -78,6 +78,7 @@ end to end.
 - [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
 - [ ] Its world half in the module chat cut (97, 99): the rule the server runs, with the ground read by the generator there
 - [ ] Kept by volume (95): copy on first write, chunk versions, the plugin's store in the world folder (89)
+- [ ] The palette kept by the world (103): its sixteen colours in the plugin's store, the version's for a new world. Later, a world's admin changes them, as an op
 - [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
   - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote
   - [ ] **The log is not the world.** Stored chunks are, by copy on first write, so the log is never replayed to rebuild anything: it exists for undo, audit and rollback, which is what makes it safe to compact

@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91 and 93 to 102. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 103. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -78,5 +78,5 @@ plugin work, on Marlus's word.
 ## Open questions
 
 These are settled in OPEN.md, their one home: how a plugin's panel exists
-outside Svelte, what a client does in a world with a plugin it lacks, whose
-the palette is, and where fields are hosted.
+outside Svelte, what a client does in a world with a plugin it lacks, and
+where fields are hosted.
