@@ -1,6 +1,6 @@
 # BRIEF: a world mundos hosts, a core and its plugins
 
-The one current campaign, decided in DECISIONS 87 to 91 and 93 to 103. The build layer's
+The one current campaign, decided in DECISIONS 87 to 91 and 93 to 104. The build layer's
 shape is in WORLD.md, its why in DECISIONS 58, and what is left of it to
 build in ROADMAP § Plugins.
 
@@ -72,7 +72,8 @@ plugin work, on Marlus's word.
   worst 3.75 ms of 12, median 1.89. A plugin's turn in a frame is inside that
   budget.
 - What a person does today: walk, fly, swim, reach the moon, speak, take a
-  name, build in the client. Each survives every step.
+  name, build. Each survives every step, and building inside a world: with
+  no world, no plugin is on (104).
 - A world that runs alone on a laptop.
 
 ## Open questions

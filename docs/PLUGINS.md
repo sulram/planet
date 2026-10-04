@@ -1,8 +1,8 @@
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
-shape as decided. The why is in DECISIONS 88, 91, 93, 94 and 98 to 102; how
-much of it is built, and in what order, is in BRIEF.md.
+shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102 and 104;
+how much of it is built, and in what order, is in BRIEF.md.
 
 ## The core and a plugin
 
@@ -140,7 +140,7 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **The statement**: the plugins that are on, each with its version, at
   `GET /api/world`, in `Welcome` and in `Plugins` when the admin switches
   one. A client mounts a plugin when the world says its name at the version
-  it holds; offline, none is on.
+  it holds; with no world, none is on (104).
 - **The switch**: `POST /api/plugins {name, on}`, an admin's. The choice is
   kept in the world folder's `plugins.json`, which holds what the admin set
   and nothing else.

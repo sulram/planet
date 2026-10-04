@@ -136,7 +136,7 @@ end to end.
 
 ## Other screens
 
-- [ ] The desktop opens the socket: `bun run desktop <url>` and `bun run shot --world <url>`, a world by the address a browser shows
+- [ ] The desktop opens the socket: `bun run desktop <url>` and `bun run shot --world <url>`, a world by the address a browser shows. It builds again then: with no world, no plugin is on (104)
 - [ ] A door for a device, in mundos: a code or a QR on a screen pairs a headset or a desktop with an account
 - [ ] A client reads what a world speaks before it enters (91)
 - [ ] A plugin's panel outside Svelte (OPEN.md)
