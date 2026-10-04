@@ -33,3 +33,8 @@ bun run check      # everything CI runs
 - Work lands on `dev`: prereleases `0.0.1-dev.N`.
 - Merging `dev` into `main` publishes the plain version.
 - Conventional Commits decide the bump: [release.config.js](release.config.js).
+
+## License
+
+GPL-3.0: [LICENSE](LICENSE). Where each file of the default asset set came
+from, and its terms: [NOTICE](NOTICE).

@@ -1,0 +1,14 @@
+planet is free software under the GNU General Public License, version 3
+(GPL-3.0-only): LICENSE covers the code and the docs.
+
+Copyright (C) 2026 Marlus Araujo
+
+The default asset set in `assets/` came from elsewhere, each file with its own
+terms:
+
+- `assets/avatars/*.vrm`: CC0.
+- `assets/clips/idle.glb`, `walk.glb`, `run.glb`, `jump.glb`, `fall.glb` and
+  `fly.glb`: from Hyperfy (https://github.com/hyperfy-xyz/hyperfy),
+  GPL-3.0-only, the licence planet shares. Keyframes on a Mixamo rig, reduced
+  to the animation alone by `scripts/assets.ts`.
+- `assets/clips/swim.glb`: a Mixamo animation (Adobe), reduced the same way.

@@ -11,7 +11,6 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 | **The name.** `planet` is a codename | crate, repo, image and domain names | README |
 | **Confirm the proposed entries** 03 (raw wgpu), 05 (numbers), 06, 09, 19, 20, 25 (tangent warp) | code that depends on them; 25 is the address, and the address is the save format | DECISIONS |
 | **Which of entries 51 to 55 survive 58.** They came out of the voxel pyramid 58 retired: the frame budget counting chunks (51), the far field as the same grid coarsened (52), nothing coming down before its replacement is up (53), one level per piece of ground (54), coarse ground not casting (55). Some are still cited by ROADMAP; the rest get their titles struck | a reading pass over the decisions | DECISIONS 58 |
-| **License.** "Free software end to end" names none yet, and the repository opens to the public so mundos pulls its image with no key (DEPLOY.md). Code published with no licence is free to read and to nothing else | the repository going public; the default asset set: the locomotion clips come from Hyperfy (GPL-3.0-only, Mixamo rig) and are replaced, by Mixamo or our own, before a licence GPL does not fit | DECISIONS 01 · `assets/` |
 | **A fourth shadow cascade.** Three step tenfold (40 m, 400 m, 4 km): a texel is 7.8 cm near the eye and 78 cm from 35 m on, wider than a cube. Tried and put back: four at 16, 100, 630 and 4000 m, three constants in `render::shadow`. The shadow of an avatar gets its legs and meets its feet; a texel is 3.1 cm near the eye and 20 cm out to 100 m, and 1.2 m from there to 630 m against 78 cm with three. It costs one more pass of casters. The one reading of that cost, 0.2 ms a frame on the development machine, is taken beside a browser running the world and is no measure: measure alone first, and the numbers go in the commit | shadows of builds seen from further than 35 m; the contact shadow of an avatar | ROADMAP wishes · DECISIONS 34, 83 |
 
 ## Blocks hosting
@@ -53,7 +52,6 @@ The address is the save format: settled before the first volume is stored.
 | Chain for assets and deeds (leaning Tezos); when to anchor snapshots in Bitcoin | wallets | VISION |
 | Opening the map: which region first, how fast | land | VISION |
 | Meta store policy on crypto features; only matters if wallets ship on Quest | ROADMAP § Other screens | |
-| Hyperfy license: confirm GPL-3.0 | the license row above | REFS.md |
 | Terms of use for uploaded content | files | |
 
 ## Problems with no chosen fix
