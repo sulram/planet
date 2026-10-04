@@ -13,7 +13,7 @@ export interface Engine {
 	command(command: Command): void;
 	/** The ground a recipe names. Sent before the recipe that names it. */
 	set_field(bytes: Uint8Array): void;
-	/** Opens the link to a world server at a socket URL, ticket included. */
+	/** Opens the link to a world server at a socket URL, the key included. */
 	connect(url: string): void;
 	disconnect(): void;
 	free(): void;

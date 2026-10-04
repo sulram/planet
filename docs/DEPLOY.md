@@ -80,7 +80,7 @@ confirmed. What of it is built: BRIEF.md.
 ## Development
 
 - `bun run dev` runs a world alone: the Go server and Vite on one origin, no
-  mundos, every session an `admin` through `PLANET_DEV_LEVEL` (p).
+  mundos, every session an `admin` through `PLANET_DEV_LEVEL`.
 - Against a local mundos: build the image here and mundos's worlds page lists
   it among the versions this machine holds.
 

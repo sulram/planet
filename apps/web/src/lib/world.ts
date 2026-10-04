@@ -104,6 +104,16 @@ export function clampKnob(knob: Knob, value: unknown): number {
 	return Number(Math.min(knob.max, Math.max(knob.min, stepped)).toFixed(knob.places));
 }
 
+/** Every knob of a shape, clamped into its range. Absent is its default. */
+export function readKnobs(shape: Shape, get: (key: KnobKey) => string | null): Knobs {
+	const knobs: Knobs = {};
+	for (const knob of knobsFor(shape)) {
+		const asked = get(knob.key);
+		knobs[knob.key] = asked === null ? knob.fallback : clampKnob(knob, asked);
+	}
+	return knobs;
+}
+
 /** The params of a recipe: the knobs that this shape uses, and its source. */
 export function buildParams(
 	shape: Shape,
@@ -128,17 +138,6 @@ export interface Recipe {
 	generator_version: number;
 	params: Record<string, unknown>;
 }
-
-export interface World {
-	id: string;
-	name: string;
-	recipe: Recipe;
-	owner: string;
-	created: string;
-	updated: string;
-}
-
-export const WORLD_NAME_MAX = 80;
 
 const SEED = /^[0-9a-f]{16}$/;
 

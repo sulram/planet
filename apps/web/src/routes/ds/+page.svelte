@@ -355,8 +355,7 @@
 
 		<section>
 			<h2>Topbar</h2>
-			<p class="muted">The site bar is at the top of this page. The backoffice variant:</p>
-			<div class="frame"><Topbar area="backoffice" /></div>
+			<p class="muted">The bar of what is off the planet is at the top of this page.</p>
 		</section>
 	</div>
 </Page>
@@ -443,8 +442,5 @@
 		height: calc(5 * var(--sp-8));
 		border: var(--bw) solid var(--border-strong);
 		background: repeating-linear-gradient(45deg, var(--bg-inset) 0 var(--sp-3), var(--bg) var(--sp-3) var(--sp-5));
-	}
-	.frame {
-		border: var(--bw) solid var(--border);
 	}
 </style>

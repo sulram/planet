@@ -10,19 +10,21 @@ walk, fly, drive and build in together. Free software, built from scratch.
 
 ## Run it
 
-Needs Rust (stable), Go, Bun. Optional: `mailpit` to catch dev email.
+Needs Rust (stable), Go, Bun.
 
 ```sh
 bun run setup      # dependencies, git hooks, wasm target, wasm-bindgen-cli
-cp .env.example .env
-bun run dev        # server :8090 + web :5173 (builds the engine when missing)
+bun run dev        # the world server :8090 + the page :5173 (builds the engine first)
 bun run desktop    # the offline explorer in a native window
 bun run shot --out out/orbit.png --altitude 30000 --pitch -60 --boom 50
 bun run check      # everything CI runs
 ```
 
-- Sign in at `/login`. With `SMTP_HOST` empty the magic link prints in the
-  server log. `PLANET_OPERATOR_EMAIL` may open `/backoffice`.
+- Alone, with no mundos, whoever opens the page is an admin. The first visit
+  founds the world: a seed, Earth or generated, its knobs. It is kept in
+  `server/world`; delete that folder for an unfounded world again.
+- Hosted, a world is an image and three variables mundos sets:
+  [docs/DEPLOY.md](docs/DEPLOY.md). `.env.example` names them.
 - Keys: `W A S D` move, `Space` jump, rise or leap from the water, `C` descend or dive, `Shift` run,
   `F` walk or fly, `V` next avatar, `R` new seed (desktop), wheel zoom, `Esc` release the pointer.
 

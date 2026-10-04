@@ -3,7 +3,7 @@
 	import { Alert, Spinner } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import { fieldId, type Recipe } from '$lib/world';
-	import type { Link } from '$lib/server/session';
+	import type { Link } from '$lib/instance';
 	import { loadEngine, type Command, type Effects, type Engine, type EngineEvent, type Mode } from './index';
 
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
@@ -36,7 +36,7 @@
 		/**
 		 * The world's socket, when this is a world and not a preview. The
 		 * engine connects once it stands in the recipe, and connects again
-		 * with a fresh ticket whenever the link drops.
+		 * whenever the link drops.
 		 */
 		link?: Link;
 		onevent?: (event: EngineEvent) => void;
@@ -121,26 +121,21 @@
 	}
 
 	// The link: opened once the engine stands in the world the page wants,
-	// opened again after a drop, each time with a fresh ticket. The wait
-	// doubles from a second to half a minute, and a welcome resets it.
+	// opened again after a drop, once the page has said its key still stands.
+	// The wait doubles from a second to half a minute, and a welcome resets it.
 	let linked = false;
 	let retryMs = 1000;
 	let retry: ReturnType<typeof setTimeout> | undefined;
 
-	async function connect() {
+	async function connect(again = false) {
 		retry = undefined;
 		const here = engine;
 		if (!here || !link || !linked) return;
-		let url = link.url;
-		if (link.ticketPath) {
-			const ticket = await fetch(link.ticketPath, { method: 'POST' })
-				.then((response) => (response.ok ? response.json() : null))
-				.then((body: { ticket?: string } | null) => body?.ticket)
-				.catch(() => undefined);
+		if (again) {
+			await link.again?.();
 			if (here !== engine || !linked) return;
-			if (ticket) url += `?ticket=${encodeURIComponent(ticket)}`;
 		}
-		here.connect(url);
+		here.connect(link.url);
 	}
 
 	function receive(event: EngineEvent) {
@@ -173,7 +168,7 @@
 		if (event.type === 'session') {
 			if (event.status === 'online') retryMs = 1000;
 			if (event.status === 'offline' && linked && !retry) {
-				retry = setTimeout(connect, retryMs);
+				retry = setTimeout(() => connect(true), retryMs);
 				retryMs = Math.min(retryMs * 2, 30_000);
 			}
 		}

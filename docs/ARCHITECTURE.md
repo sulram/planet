@@ -1,8 +1,8 @@
 # ARCHITECTURE
 
 The shape as decided. The why lives in DECISIONS.md, open points in OPEN.md,
-and what the tree still carries from before 87 in BRIEF.md. A line marked (p)
-is proposed and not yet confirmed.
+and how much of it is built in BRIEF.md. A line marked (p) is proposed and
+not yet confirmed.
 
 ## A world, hosted
 

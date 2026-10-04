@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Badge, Button, Icon, IconButton, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Button, Icon, Input, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
+	import { builds, type Link } from '$lib/instance';
+	import { keep } from '$lib/kept';
 	import type { Recipe } from '$lib/world';
-	import type { Link } from '$lib/server/session';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import Balloons from './Balloons.svelte';
@@ -13,7 +14,6 @@
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
 	import Settings from './Settings.svelte';
-	import SignIn from './SignIn.svelte';
 	import {
 		modes,
 		NAME_CHARS,
@@ -21,6 +21,7 @@
 		type BuildRefusal,
 		type Effects,
 		type EngineEvent,
+		type Level,
 		type Mode,
 		type PeerInfo,
 		type Scope,
@@ -29,9 +30,9 @@
 	} from './index';
 	import { who } from './who';
 
-	// The full viewport engine with its floating panel: what `/play` and
-	// `/w/[id]` share. The page may supply the top of the panel; who is here,
-	// the mode and the stats line are the same everywhere. The keys live
+	// The full viewport engine with its floating panel: what a world and the
+	// founding screen share. The page may supply the top of the panel; who is
+	// here, the mode and the stats line are the same everywhere. The keys live
 	// behind the help button and the picture behind settings.
 	// The compass point a bearing lands on, and the angle beside it. A rose has
 	// sixteen points, so each is 22.5 degrees wide. `null` is a pole, where a
@@ -54,17 +55,22 @@
 		name?: string;
 		/** The world's socket, when this is a world other people can be in. */
 		link?: Link;
+		/** What the world said this person may do. Null in the offline preview, with no world to ask. */
+		level?: Level | null;
+		/** The name is an account's, as mundos signed it: shown, never edited here. */
+		account?: boolean;
+		/** Goes to mundos's door to sign in. Present for a visitor of a hosted world. */
+		onsignin?: () => void;
 		/** Called once the engine reports which generator version it runs. */
 		onready?: (generatorVersion: number) => void;
 		/** The page's own top of the panel, when it has one. */
 		children?: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, name = '', link, onready, children }: Props = $props();
+	let { title, recipe, fieldPath, avatar, name = '', link, level = null, account = false, onsignin, onready, children }: Props = $props();
 
-	// The name, edited where it is shown. The engine hears it at once, so the
-	// world does too, and the page keeps it for the next visit: on the account
-	// when signed in, in a cookie for a visitor. Best effort, like the avatar.
+	// A visitor's name, edited where it is shown. The engine hears it at once,
+	// so the world does too, and this browser keeps it for the next visit.
 	// The page's name is the starting point only: from here on it is edited.
 	// svelte-ignore state_referenced_locally
 	let myName = $state(name);
@@ -84,11 +90,7 @@
 		const next = [...draft.split(/\s+/).filter(Boolean).join(' ')].slice(0, NAME_CHARS).join('').trim();
 		if (next === myName) return;
 		myName = next;
-		fetch('/name', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name: next })
-		}).catch(() => {});
+		keep('name', next);
 	}
 
 	function onNameKey(event: KeyboardEvent) {
@@ -100,16 +102,6 @@
 			editing = false;
 		}
 	}
-
-	// Signing in happens here, over the world. Once the
-	// session is set the page reloads: the socket then opens with a ticket
-	// and the name is the account's, and the address bar keeps the place.
-	let signingIn = $state(false);
-	const user = $derived(page.data.user);
-	$effect(() => {
-		if (signingIn) view?.release();
-		else view?.take();
-	});
 
 	let view = $state<ReturnType<typeof EngineView>>();
 	let mode = $state<Mode>('walk');
@@ -239,14 +231,9 @@
 		else if (event.type === 'avatar_changed' && event.path !== avatar) remember(event.path);
 	}
 
-	// An avatar picked in the world becomes the visitor's choice. Best effort:
-	// a failure only means the next visit starts from the previous choice.
+	// An avatar picked in the world becomes this browser's choice.
 	function remember(path: string) {
-		fetch('/avatar', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ path })
-		}).catch(() => {});
+		keep('avatar', path);
 	}
 </script>
 
@@ -257,36 +244,30 @@
 		<Chat {lines} online={session === 'online'} onsay={say} ongo={go} onopen={() => view?.release()} onclose={() => view?.take()} />
 	{/if}
 	<Settings {effects} {defaults} onchange={choose} />
-	<Build
-		{tool}
-		{paint}
-		{platform}
-		{palette}
-		{refused}
-		{history}
-		onbuild={build}
-		onpaint={(next) => view?.command({ type: 'set_paint', paint: next })}
-		onplatform={(side) => view?.command({ type: 'set_platform', side })}
-		onlay={(base) => {
-			refused = null;
-			view?.command({ type: 'lay_platform', base });
-		}}
-		onundo={() => view?.command({ type: 'undo' })}
-		onredo={() => view?.command({ type: 'redo' })}
-	/>
+	{#if builds(level)}
+		<Build
+			{tool}
+			{paint}
+			{platform}
+			{palette}
+			{refused}
+			{history}
+			onbuild={build}
+			onpaint={(next) => view?.command({ type: 'set_paint', paint: next })}
+			onplatform={(side) => view?.command({ type: 'set_platform', side })}
+			onlay={(base) => {
+				refused = null;
+				view?.command({ type: 'lay_platform', base });
+			}}
+			onundo={() => view?.command({ type: 'undo' })}
+			onredo={() => view?.command({ type: 'redo' })}
+		/>
+	{/if}
 	<Help />
-	<SignIn bind:open={signingIn} ondone={() => location.reload()} />
 	<Panel {title}>
 		{#snippet aside()}
 			<span class="corner">
-				{#if user?.operator}<IconButton href="/backoffice" icon="layout-dashboard" label={t('nav.backoffice')} />{/if}
-				{#if user}
-					<form method="POST" action="/logout">
-						<IconButton type="submit" icon="log-out" label={t('auth.logout')} />
-					</form>
-				{:else}
-					<Button variant="ghost" onclick={() => (signingIn = true)}>{t('auth.login.title')}</Button>
-				{/if}
+				{#if onsignin}<Button variant="ghost" onclick={onsignin}>{t('door.signIn')}</Button>{/if}
 				<ThemeToggle />
 			</span>
 		{/snippet}
@@ -315,9 +296,11 @@
 							{:else}
 								<span>{myName || t('engine.here.you')}</span>
 								{#if myName}<span class="muted">{t('engine.here.you')}</span>{/if}
-								<button type="button" class="edit" title={t('engine.here.rename')} onclick={editName}>
-									<Icon name="pencil" label={t('engine.here.rename')} />
-								</button>
+								{#if !account}
+									<button type="button" class="edit" title={t('engine.here.rename')} onclick={editName}>
+										<Icon name="pencil" label={t('engine.here.rename')} />
+									</button>
+								{/if}
 							{/if}
 						</li>
 					{/if}
@@ -350,10 +333,6 @@
 		display: flex;
 		align-items: center;
 		gap: var(--sp-2);
-	}
-	/* the form around sign out would otherwise sit on the text baseline */
-	.corner form {
-		display: flex;
 	}
 	.here {
 		display: flex;

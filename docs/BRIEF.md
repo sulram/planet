@@ -18,39 +18,17 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
 - planet's own development waits until a world is deployable and updatable by
   mundos.
 
-## Where the docs lead the tree
-
-The theme docs say the shape as decided. The tree still carries what follows,
-and step 2 takes it out:
-
-- `apps/web`: `/login`, `/logout`, `/backoffice`, `/w/[id]`, `SignIn.svelte`,
-  `hooks.server.ts`, `$lib/server`, every `+page.server.ts`, the `pocketbase`
-  package.
-- README.md § Run it and `apps/web/CLAUDE.md` describe the tree as it stands,
-  and change with it.
-
-What stays as it is: every crate, `proto/`, the hub and the actor, the
-engine's panels, the design system, i18n.
-
 ## Order of work
 
 0. [x] **The docs, first**, because they enter every session: VISION,
    ARCHITECTURE, DEPLOY, ROADMAP, OPEN and GLOSSARY brought to 87 and 88, the
    entries that died with the platform removed, this brief.
 1. [x] **Marlus confirmed 89, 90 and 91**, which step 2 stands on.
-2. [ ] **A world alone.**
-   - The world folder holds the recipe; a world with none is unfounded, and an
-     admin's live session founds it.
-   - The token is traded on entering for a key, the key opens the socket and
-     the level rides `Welcome`; `PLANET_DEV_LEVEL` stands in where there is no
-     mundos.
-   - The client offers the build tools by the level.
-   - The page is static files: through the door with the pose kept, the
-     founding screen (today's explorer) for an admin, "not made yet" for
-     anyone else.
-   - The Go server sends the page, the asset set and the field's brotli
-     sibling.
-   - What the list above names leaves the tree.
+2. [x] **A world alone.** The world folder holds the recipe, and an admin
+   founds a world that has none. The door's token is traded for a key, the key
+   opens the socket, and `Welcome` says the level the client offers its tools
+   by. The page is static files the Go server sends. Accounts, the backoffice,
+   PocketBase and planet's own deploy are out of the tree.
 3. [ ] **The image**: the Dockerfile, the `image` script, the `HEALTHCHECK`,
    `planet copy`.
 4. [ ] **mundos learns the type**, in its own repository. What is Hyperfy's
