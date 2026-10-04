@@ -26,8 +26,6 @@ and step 2 takes it out:
 - `apps/web`: `/login`, `/logout`, `/backoffice`, `/w/[id]`, `SignIn.svelte`,
   `hooks.server.ts`, `$lib/server`, every `+page.server.ts`, the `pocketbase`
   package.
-- `scripts/provision.ts`, `scripts/deploy.ts`, `scripts/deploy.config.ts`,
-  with their names in `package.json` and their variables in `.env.example`.
 - README.md § Run it and `apps/web/CLAUDE.md` describe the tree as it stands,
   and change with it.
 

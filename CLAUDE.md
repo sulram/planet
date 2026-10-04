@@ -101,7 +101,7 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 - `assets/`: a version's default set and its `manifest.json`.
   `assets/fields/`: baked fields from `bun run field`, gitignored.
 - `scripts/`: every repeated command. No tribal knowledge.
-  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | proto | docs | check | build | provision | deploy`.
+  `bun run setup | dev | server | web | wasm | assets | field | desktop | shot | webshot | bench | proto | docs | check | build`.
 
 ## Invariants (expensive to get wrong)
 

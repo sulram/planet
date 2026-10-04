@@ -19,8 +19,6 @@
 		"bench": "bun scripts/bench.ts",
 		"proto": "bun scripts/proto.ts",
 		"docs": "bun scripts/docs.ts",
-		"provision": "bun scripts/provision.ts",
-		"deploy": "bun scripts/deploy.ts",
 		"check": "bun scripts/check.ts",
 		"build": "bun run wasm && bun run --cwd apps/web build"
 	},
