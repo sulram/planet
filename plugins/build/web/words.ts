@@ -1,0 +1,71 @@
+import { words } from '$lib/i18n';
+
+// Building's own words, in each language the front end speaks.
+// Copy rules: short, professional, no em dashes, no internal information.
+const en = {
+	name: 'Building',
+	title: 'Build',
+	tool: 'Tool',
+	'tool.create': 'Create',
+	'tool.delete': 'Delete',
+	'tool.paint': 'Paint',
+	paint: 'Colour',
+	'paint.pick': 'Colour {n}',
+	undo: 'Undo',
+	redo: 'Redo',
+	platform: 'Platform',
+	'lay.deck': 'Deck',
+	'lay.solid': 'Solid',
+	'lay.floating': 'Floating',
+	hint: 'Lay a platform where you stand, then click and drag on it. A stroke lies on the side you start on and follows what you point at. Alt turns it. Hold the right button to look around.',
+	'refused.moon': 'Building happens on the planet, not on the moon.',
+	'refused.sea': 'The ground here is under the sea. Lay a platform on dry land.',
+	'refused.seam': 'Too close to the edge of a sector. Walk a little further in.',
+	'refused.high': 'Too high. A platform is laid up to 32 m over the highest ground of its plot.',
+	'refused.level': 'Only builders of this world can build here.',
+	'refused.field': 'Building is not kept yet in a world shaped by a field.',
+	'hint.build': 'build, or stop',
+	'hint.tools': 'create, delete, paint',
+	'hint.look.keys': 'Right drag',
+	'hint.look': 'look around while building',
+	'hint.turn.keys': 'Alt',
+	'hint.turn': 'turn the stroke: on its side, standing one way, then the other',
+	'hint.undo.keys': 'Ctrl Z',
+	'hint.undo': 'undo; with Shift, redo',
+	'hint.cancel': 'drop the stroke, then the tool'
+};
+
+const pt: typeof en = {
+	name: 'Construção',
+	title: 'Construir',
+	tool: 'Ferramenta',
+	'tool.create': 'Criar',
+	'tool.delete': 'Apagar',
+	'tool.paint': 'Pintar',
+	paint: 'Cor',
+	'paint.pick': 'Cor {n}',
+	undo: 'Desfazer',
+	redo: 'Refazer',
+	platform: 'Plataforma',
+	'lay.deck': 'Deck',
+	'lay.solid': 'Sólida',
+	'lay.floating': 'Flutuante',
+	hint: 'Erga uma plataforma onde você está, depois clique e arraste sobre ela. O traço deita na face em que começa e segue o que você aponta. Alt vira o traço. Segure o botão direito para olhar ao redor.',
+	'refused.moon': 'Constrói-se no planeta, não na lua.',
+	'refused.sea': 'O chão aqui está sob o mar. Erga a plataforma em terra firme.',
+	'refused.seam': 'Perto demais da borda de um setor. Ande um pouco mais para dentro.',
+	'refused.high': 'Alto demais. Uma plataforma é erguida até 32 m acima do chão mais alto do lote.',
+	'refused.level': 'Só construtores deste mundo podem construir aqui.',
+	'refused.field': 'Em um mundo feito de um campo, o que se constrói ainda não fica guardado.',
+	'hint.build': 'construir, ou parar',
+	'hint.tools': 'criar, apagar, pintar',
+	'hint.look.keys': 'Arrastar com o direito',
+	'hint.look': 'olhar ao redor enquanto constrói',
+	'hint.turn.keys': 'Alt',
+	'hint.turn': 'vira o traço: deitado na face, em pé para um lado, depois para o outro',
+	'hint.undo.keys': 'Ctrl Z',
+	'hint.undo': 'desfazer; com Shift, refazer',
+	'hint.cancel': 'larga o traço, depois a ferramenta'
+};
+
+export const t = words({ en, pt });

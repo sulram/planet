@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { t } from '$lib/i18n';
+	import { t } from './words';
 	import type { Anchor } from '$lib/engine';
 	import type { Line } from './protocol';
 
@@ -48,7 +48,7 @@
 			>
 				{#key line.id}
 					<div class="balloon" style:animation-duration="{BALLOON_MS}ms">
-						{#if line.text}{line.text}{:else}{t('engine.chat.here')}{/if}
+						{#if line.text}{line.text}{:else}{t('here')}{/if}
 					</div>
 				{/key}
 			</div>

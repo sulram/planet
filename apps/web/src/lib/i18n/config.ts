@@ -27,13 +27,18 @@ export function resolveLocale(cookie?: string, acceptLanguage?: string | null): 
 	return defaultLocale;
 }
 
-/** Translates a key. Interpolation: `{name}` in the text, `{ name }` in params. */
-export function translate(locale: Locale, key: MessageKey, params?: Record<string, string | number>): string {
-	let msg: string = catalogs[locale][key];
+/** Fills a message in. Interpolation: `{name}` in the text, `{ name }` in params. */
+export function fill(message: string, params?: Record<string, string | number>): string {
+	let msg = message;
 	if (params) {
 		for (const k in params) msg = msg.replaceAll(`{${k}}`, String(params[k]));
 	}
 	return msg;
+}
+
+/** Translates a key. */
+export function translate(locale: Locale, key: MessageKey, params?: Record<string, string | number>): string {
+	return fill(catalogs[locale][key], params);
 }
 
 /** Day of a PocketBase timestamp, in the reader's locale. UTC, so SSR and browser agree. */

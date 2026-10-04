@@ -117,11 +117,11 @@
 	/** The paints a cell can take: the world's palette, which a plugin's layer shows. */
 	let palette = $state.raw<string[]>([]);
 
-	// Plugins (docs/PLUGINS.md): the world says which are on, and each one
-	// this version carries at that version gets a layer over the world and the
-	// seam under its own name.
+	// Plugins (docs/PLUGINS.md): the engine says which are on, the ones the
+	// world speaks at the version this build does, and each of them gets a
+	// layer over the world and the seam under its own name.
 	let spoken = $state.raw<PluginOn[]>([]);
-	const mounted = $derived(plugins.filter((plugin) => spoken.some((on) => on.name === plugin.name && on.version === plugin.version)));
+	const mounted = $derived(plugins.filter((plugin) => spoken.some((on) => on.name === plugin.name)));
 
 	type Hear = (kind: string, event: Record<string, unknown>) => void;
 	const hearing = new Map<string, Set<Hear>>();
@@ -311,7 +311,7 @@
 						disabled={session !== 'online' || switching !== null}
 						onchange={(on) => turn(plugin.name, on)}
 					>
-						{t(plugin.label)}
+						{plugin.label()}
 					</Checkbox>
 				{/each}
 			</section>

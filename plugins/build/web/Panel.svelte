@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Alert, Button, Panel, Segmented } from '$lib/ds';
-	import { t } from '$lib/i18n';
+	import { t as core } from '$lib/i18n';
 	import { bases, platforms, tools, type Base, type Refusal, type Tool } from './protocol';
+	import { t } from './words';
 
 	// Building: a button in the bottom right corner, and the panel it opens
 	// while a tool is in hand. It shows the tool, the paint and the platform
@@ -30,7 +31,7 @@
 
 	let { tool, paint, platform, palette, refused, history, onbuild, onpaint, onplatform, onlay, onundo, onredo }: Props = $props();
 
-	const toolOptions = $derived(tools.map((value) => ({ value, label: t(`engine.build.tool.${value}`) })));
+	const toolOptions = $derived(tools.map((value) => ({ value, label: t(`tool.${value}`) })));
 	const platformOptions = platforms.map((side) => ({ value: String(side), label: String(side) }));
 
 	// Building again takes the tool put down last, as B does in the engine.
@@ -41,49 +42,49 @@
 </script>
 
 {#if tool}
-	<Panel title={t('engine.build')} corner="bottom-right">
+	<Panel title={t('title')} corner="bottom-right">
 		{#snippet aside()}
-			<button class="close" type="button" onclick={() => onbuild(null)}>{t('common.close')}</button>
+			<button class="close" type="button" onclick={() => onbuild(null)}>{core('common.close')}</button>
 		{/snippet}
-		<Segmented options={toolOptions} value={tool} label={t('engine.build.tool')} onselect={(value) => onbuild(value)} />
+		<Segmented options={toolOptions} value={tool} label={t('tool')} onselect={(value) => onbuild(value)} />
 		<div class="platform">
-			<span>{t('engine.build.platform')}</span>
+			<span>{t('platform')}</span>
 			<Segmented
 				options={platformOptions}
 				value={String(platform)}
-				label={t('engine.build.platform')}
+				label={t('platform')}
 				onselect={(value) => onplatform(Number(value))}
 			/>
 		</div>
 		<div class="lay">
 			{#each bases as base (base)}
-				<Button variant="ghost" type="button" onclick={() => onlay(base)}>{t(`engine.build.lay.${base}`)}</Button>
+				<Button variant="ghost" type="button" onclick={() => onlay(base)}>{t(`lay.${base}`)}</Button>
 			{/each}
 		</div>
 		{#if refused}
-			<Alert variant="info">{t(`engine.build.refused.${refused}`)}</Alert>
+			<Alert variant="info">{t(`refused.${refused}`)}</Alert>
 		{/if}
-		<div class="palette" role="group" aria-label={t('engine.build.paint')}>
+		<div class="palette" role="group" aria-label={t('paint')}>
 			{#each palette as color, index (index)}
 				<button
 					type="button"
 					class="swatch"
 					style:background={color}
 					aria-pressed={index === paint}
-					aria-label={t('engine.build.paint.pick', { n: String(index + 1) })}
+					aria-label={t('paint.pick', { n: String(index + 1) })}
 					onclick={() => onpaint(index)}
 				></button>
 			{/each}
 		</div>
 		<div class="history">
-			<Button variant="ghost" type="button" disabled={!history.undo} onclick={onundo}>{t('engine.build.undo')}</Button>
-			<Button variant="ghost" type="button" disabled={!history.redo} onclick={onredo}>{t('engine.build.redo')}</Button>
+			<Button variant="ghost" type="button" disabled={!history.undo} onclick={onundo}>{t('undo')}</Button>
+			<Button variant="ghost" type="button" disabled={!history.redo} onclick={onredo}>{t('redo')}</Button>
 		</div>
-		<p class="hint">{t('engine.build.hint')}</p>
+		<p class="hint">{t('hint')}</p>
 	</Panel>
 {:else}
 	<div class="toggle">
-		<Button variant="ghost" type="button" onclick={() => onbuild(last)}>{t('engine.build')}</Button>
+		<Button variant="ghost" type="button" onclick={() => onbuild(last)}>{t('title')}</Button>
 	</div>
 {/if}
 

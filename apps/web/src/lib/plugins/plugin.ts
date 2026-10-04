@@ -5,7 +5,6 @@
  */
 import type { Component } from 'svelte';
 import type { Anchor, Command, Level, PeerInfo } from '$lib/engine';
-import type { MessageKey } from '$lib/i18n';
 
 /** The seam, as one plugin reaches it. */
 export interface Seam {
@@ -42,19 +41,18 @@ export interface LayerProps {
 
 /** A key of a plugin, as the help panel lists it while the plugin is on. */
 export interface Hint {
-	/** What is pressed: said as it is, `B`, or by a message where words name it. */
-	keys: string | { message: MessageKey };
-	does: MessageKey;
+	/** What is pressed: said as it is, `B`, or in the plugin's words where words name it. */
+	keys: string | (() => string);
+	/** What it does, in the plugin's words. */
+	does: () => string;
 }
 
-/** A plugin as the web front end holds it. */
+/** A plugin as the web front end holds it. Its words are its own (`words` in `$lib/i18n`). */
 export interface WebPlugin {
-	/** The name the world's statement says. */
+	/** The name the world's statement says. The engine says which are on, at the version it speaks. */
 	name: string;
-	/** The version of its seam. A world that speaks another leaves it unmounted. */
-	version: number;
 	/** What it is called where an admin switches it. */
-	label: MessageKey;
+	label: () => string;
 	/** What it draws over the world. A plugin with nothing to show has none. */
 	Layer?: Component<LayerProps>;
 	/** The keys it asks for, for the help panel. */

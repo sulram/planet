@@ -185,7 +185,8 @@ not yet confirmed.
   a spring, along up only; all else the camera follows with no play (81).
 - Design system: `apps/web/src/lib/ds`, planet's own (74); catalogue at `/ds`.
   Components reference semantic tokens only. i18n: flat dotted keys, `en.ts`
-  is the source, `pt.ts` must match it.
+  is the source, `pt.ts` must match it. A plugin's words are in its own
+  folder, read through `words`.
 - The renderer accepts N views (1 desktop, 2 XR) and writes reversed depth.
 
 ## Future shapes already accounted for

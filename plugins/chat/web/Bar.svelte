@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, Input } from '$lib/ds';
-	import { t } from '$lib/i18n';
+	import { t } from './words';
 	import { LINE_CHARS, type Line, type Scope } from './protocol';
 
 	// A bar at the foot of the world. Closed, it shows what was just said and
@@ -32,7 +32,7 @@
 	let log: HTMLElement | undefined = $state();
 	let now = $state(Date.now());
 
-	const here = $derived(t('engine.chat.here'));
+	const here = $derived(t('here'));
 	// The server's limit, held here so nobody meets it there. Counted as the
 	// server counts, in code points, so an accent is one. A draft is cut at
 	// the limit as it is typed or pasted, so the line is never too long;
@@ -113,13 +113,13 @@
 <svelte:window onkeydown={onkey} />
 
 <div class="chat" class:open>
-	<ol class="log" bind:this={log} aria-label={t('engine.chat.lines')}>
+	<ol class="log" bind:this={log} aria-label={t('lines')}>
 		{#each shown as line (line.id)}
 			<li class:own={line.own}>
 				<span class="who">{line.who}</span>
-				{#if line.scope === 'world'}<Icon name="globe" label={t('engine.chat.world')} />{/if}
+				{#if line.scope === 'world'}<Icon name="globe" label={t('world')} />{/if}
 				{#if line.place}
-					<button type="button" class="place" title={t('engine.chat.goto', { place: line.place })} onclick={() => ongo(line.place ?? '')}>
+					<button type="button" class="place" title={t('goto', { place: line.place })} onclick={() => ongo(line.place ?? '')}>
 						<Icon name="map-pin" />{line.place}
 					</button>
 				{/if}
@@ -127,31 +127,31 @@
 			</li>
 		{/each}
 	</ol>
-	<div class="bar" role="group" aria-label={t('engine.chat')}>
-		<div class="scopes" role="group" aria-label={t('engine.chat.scope')}>
-			<button type="button" class="toggle" aria-pressed={scope === 'near'} title={t('engine.chat.near')} onclick={() => (scope = 'near')}>
-				<Icon name="users" label={t('engine.chat.near')} />
+	<div class="bar" role="group" aria-label={t('title')}>
+		<div class="scopes" role="group" aria-label={t('scope')}>
+			<button type="button" class="toggle" aria-pressed={scope === 'near'} title={t('near')} onclick={() => (scope = 'near')}>
+				<Icon name="users" label={t('near')} />
 			</button>
-			<button type="button" class="toggle" aria-pressed={scope === 'world'} title={t('engine.chat.world')} onclick={() => (scope = 'world')}>
-				<Icon name="globe" label={t('engine.chat.world')} />
+			<button type="button" class="toggle" aria-pressed={scope === 'world'} title={t('world')} onclick={() => (scope = 'world')}>
+				<Icon name="globe" label={t('world')} />
 			</button>
 		</div>
 		<Input
 			bind:element={input}
 			bind:value={draft}
-			placeholder={!online ? t('engine.chat.offline') : open ? t('engine.chat.placeholder', { here }) : t('engine.chat.closed')}
+			placeholder={!online ? t('offline') : open ? t('placeholder', { here }) : t('closed')}
 			disabled={!online}
 			enterkeyhint="send"
 			autocomplete="off"
-			aria-label={t('engine.chat')}
+			aria-label={t('title')}
 			onfocus={show}
 			onkeydown={onkeyInput}
 		/>
 		{#if open}
-			<span class="count" class:scarce title={t('engine.chat.left', { n: left })}>{left}</span>
+			<span class="count" class:scarce title={t('left', { n: left })}>{left}</span>
 		{/if}
-		<button type="button" class="toggle" disabled={!online} title={t('engine.chat.send')} onclick={() => { send(); input?.focus(); }}>
-			<Icon name="send" label={t('engine.chat.send')} />
+		<button type="button" class="toggle" disabled={!online} title={t('send')} onclick={() => { send(); input?.focus(); }}>
+			<Icon name="send" label={t('send')} />
 		</button>
 	</div>
 </div>
