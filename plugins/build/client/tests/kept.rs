@@ -3,6 +3,8 @@
 //! server runs it. A change one makes is seen by who is near, kept for who
 //! arrives, and taken back by the one who made it.
 
+use std::sync::{Mutex, MutexGuard};
+
 use client::{Client, Input, Outbound, Recipe, Seat};
 use prost::Message;
 use protocol::module::{Call, Op, Reply, Start, Who, call, reply};
@@ -23,7 +25,12 @@ struct Here {
 struct World {
     recipe: protocol::Recipe,
     here: Vec<Here>,
+    /// The module is one per process, as on the server: one world at a time
+    /// holds it.
+    _alone: MutexGuard<'static, ()>,
 }
+
+static MODULE: Mutex<()> = Mutex::new(());
 
 fn serve(call: call::Call) -> Vec<reply::Reply> {
     let said = module::serve(&Call { call: Some(call) }.encode_to_vec());
@@ -40,6 +47,9 @@ fn frame(message: server_message::Message) -> Vec<u8> {
 
 impl World {
     fn found() -> World {
+        let alone = MODULE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let recipe = Recipe::new(1);
         let recipe = protocol::Recipe {
             seed: worldgen::format_seed(recipe.seed),
@@ -52,6 +62,7 @@ impl World {
         World {
             recipe,
             here: Vec::new(),
+            _alone: alone,
         }
     }
 
@@ -352,4 +363,57 @@ fn what_is_built_is_the_worlds() {
     assert!(!world.client(b).cells().covers(point.sector.into(), point));
     world.client(a).link_closed();
     assert!(!world.client(a).cells().covers(point.sector.into(), point));
+}
+
+#[test]
+fn a_volume_far_off_is_held_as_it_is_seen_from_afar() {
+    let mut world = World::found();
+    let a = world.enter(protocol::Level::Builder, "4-77AEYRG");
+    let far = world.enter(protocol::Level::Anonymous, "4-77AEYRG");
+    // Three plots along from where the other test of this module builds:
+    // the module is one per process, and keeps what that one left.
+    let start = world.client(a).host("build").feet().point;
+    let point = SurfacePoint::new(start.sector, start.u + 192.0, start.v);
+    world.client(a).teleport(point);
+    let seat = Seat::Sector(point.sector);
+    let along = |blocks: f64| SurfacePoint::new(point.sector, point.u + blocks, point.v);
+    // A kilometre off, along the sector.
+    world.client(far).teleport(along(2000.0));
+    world.live(0.5);
+    world
+        .client(a)
+        .command_json(r#"{"type":"build.platform","side":16}"#);
+    world
+        .client(a)
+        .command_json(r#"{"type":"build.lay","base":"deck"}"#);
+    world.live(1.5);
+
+    // The visitor holds none of its cells, and draws it as it is seen from
+    // afar.
+    assert!(!world.client(far).cells().covers(seat, point));
+    assert!(world.client(far).cells().afar_over(seat, point));
+    assert!(!world.client(far).settled_frame().volumes.is_empty());
+
+    // Walked over, it is held whole, and once it is drawn whole what was
+    // drawn afar goes.
+    world.client(far).teleport(point);
+    world.live(1.5);
+    assert_eq!(
+        same(&world.here[a].client, &world.here[far].client, point),
+        same(&world.here[a].client, &world.here[a].client, point)
+    );
+    assert!(!world.client(far).cells().afar_over(seat, point));
+
+    // Walked off past holding distance, it is held afar again, made from
+    // what was held of it, and nothing is asked of the world for it.
+    world.client(far).teleport(along(1000.0));
+    world.live(1.5);
+    assert!(!world.client(far).cells().covers(seat, point));
+    assert!(world.client(far).cells().afar_over(seat, point));
+
+    // Past seeing distance, it is let go.
+    world.client(far).teleport(along(6000.0));
+    world.live(1.5);
+    assert!(!world.client(far).cells().afar_over(seat, point));
+    assert!(world.client(far).settled_frame().volumes.is_empty());
 }

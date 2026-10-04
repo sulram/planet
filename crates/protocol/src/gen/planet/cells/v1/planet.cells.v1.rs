@@ -103,7 +103,8 @@ pub struct Look {
     #[prost(message, repeated, tag="1")]
     pub held: ::prost::alloc::vec::Vec<Held>,
 }
-/// A volume a client holds, at the version it holds it.
+/// A volume a client holds, at the version it holds it: whole, or as it is
+/// seen from afar.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Held {
     #[prost(message, optional, tag="1")]
@@ -114,6 +115,8 @@ pub struct Held {
     pub plot_y: i32,
     #[prost(uint64, tag="4")]
     pub version: u64,
+    #[prost(bool, tag="5")]
+    pub afar: bool,
 }
 /// `opened`: a volume was opened, to everyone near it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -175,7 +178,9 @@ pub struct Chunk {
     #[prost(bytes="vec", tag="4")]
     pub cells: ::prost::alloc::vec::Vec<u8>,
 }
-/// A volume whole: where it stands and every chunk that holds something.
+/// A volume whole: where it stands and every chunk that holds something. Or,
+/// with `afar`, as it is seen from afar: the cells of each chunk a cell for
+/// every 4 of them each way, 4 x 4 x 4 of them, solid where any is.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Volume {
     #[prost(message, optional, tag="1")]
@@ -184,11 +189,13 @@ pub struct Volume {
     pub stood: ::core::option::Option<Stood>,
     #[prost(message, repeated, tag="3")]
     pub chunks: ::prost::alloc::vec::Vec<Chunk>,
+    #[prost(bool, tag="4")]
+    pub afar: bool,
 }
-/// `seen`: volumes as they stand, whole, and those that stand no more. The
-/// answer to `look`, of the volumes near the asker that it lacks or holds at
-/// another version, and what everyone near is told when a volume is closed
-/// or stands again.
+/// `seen`: volumes as they stand, and those that stand no more. The answer to
+/// `look`, of the volumes near the asker that it lacks or holds at another
+/// version: whole, and further off as they are seen from afar. And what
+/// everyone near is told when a volume is closed or stands again.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Seen {
     #[prost(message, repeated, tag="1")]

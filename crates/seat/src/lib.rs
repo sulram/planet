@@ -45,6 +45,12 @@ const UNDER: i32 = 8;
 pub const HOLD_M: f64 = 256.0;
 /// How far a body goes from a volume before its client lets it go.
 pub const DROP_M: f64 = 320.0;
+/// How near a body a volume is for its client to hold it as it is seen from
+/// afar, metres: past [`HOLD_M`] and within this, the world answers a look
+/// with it so. Further than the horizon from a hill of the planet.
+pub const AFAR_M: f64 = 2048.0;
+/// How far a body goes from a volume held afar before its client lets it go.
+pub const AFAR_DROP_M: f64 = 2304.0;
 /// How near a body a change is told to its session: further than a client
 /// holds a volume, so a body at the edge of holding one hears of it though
 /// its stance is a moment old.

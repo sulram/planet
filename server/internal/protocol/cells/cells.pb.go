@@ -649,13 +649,15 @@ func (x *Look) GetHeld() []*Held {
 	return nil
 }
 
-// A volume a client holds, at the version it holds it.
+// A volume a client holds, at the version it holds it: whole, or as it is
+// seen from afar.
 type Held struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seat          *Seat                  `protobuf:"bytes,1,opt,name=seat,proto3" json:"seat,omitempty"`
 	PlotX         int32                  `protobuf:"zigzag32,2,opt,name=plot_x,json=plotX,proto3" json:"plot_x,omitempty"`
 	PlotY         int32                  `protobuf:"zigzag32,3,opt,name=plot_y,json=plotY,proto3" json:"plot_y,omitempty"`
 	Version       uint64                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
+	Afar          bool                   `protobuf:"varint,5,opt,name=afar,proto3" json:"afar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -716,6 +718,13 @@ func (x *Held) GetVersion() uint64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *Held) GetAfar() bool {
+	if x != nil {
+		return x.Afar
+	}
+	return false
 }
 
 // `opened`: a volume was opened, to everyone near it.
@@ -1030,12 +1039,15 @@ func (x *Chunk) GetCells() []byte {
 	return nil
 }
 
-// A volume whole: where it stands and every chunk that holds something.
+// A volume whole: where it stands and every chunk that holds something. Or,
+// with `afar`, as it is seen from afar: the cells of each chunk a cell for
+// every 4 of them each way, 4 x 4 x 4 of them, solid where any is.
 type Volume struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seat          *Seat                  `protobuf:"bytes,1,opt,name=seat,proto3" json:"seat,omitempty"`
 	Stood         *Stood                 `protobuf:"bytes,2,opt,name=stood,proto3" json:"stood,omitempty"`
 	Chunks        []*Chunk               `protobuf:"bytes,3,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	Afar          bool                   `protobuf:"varint,4,opt,name=afar,proto3" json:"afar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1091,10 +1103,17 @@ func (x *Volume) GetChunks() []*Chunk {
 	return nil
 }
 
-// `seen`: volumes as they stand, whole, and those that stand no more. The
-// answer to `look`, of the volumes near the asker that it lacks or holds at
-// another version, and what everyone near is told when a volume is closed
-// or stands again.
+func (x *Volume) GetAfar() bool {
+	if x != nil {
+		return x.Afar
+	}
+	return false
+}
+
+// `seen`: volumes as they stand, and those that stand no more. The answer to
+// `look`, of the volumes near the asker that it lacks or holds at another
+// version: whole, and further off as they are seen from afar. And what
+// everyone near is told when a volume is closed or stands again.
 type Seen struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Volumes       []*Volume              `protobuf:"bytes,1,rep,name=volumes,proto3" json:"volumes,omitempty"`
@@ -1186,12 +1205,13 @@ const file_planet_cells_v1_cells_proto_rawDesc = "" +
 	"\bTakeBack\"\t\n" +
 	"\aPutBack\"1\n" +
 	"\x04Look\x12)\n" +
-	"\x04held\x18\x01 \x03(\v2\x15.planet.cells.v1.HeldR\x04held\"y\n" +
+	"\x04held\x18\x01 \x03(\v2\x15.planet.cells.v1.HeldR\x04held\"\x8d\x01\n" +
 	"\x04Held\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12\x15\n" +
 	"\x06plot_x\x18\x02 \x01(\x11R\x05plotX\x12\x15\n" +
 	"\x06plot_y\x18\x03 \x01(\x11R\x05plotY\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\x04R\aversion\"a\n" +
+	"\aversion\x18\x04 \x01(\x04R\aversion\x12\x12\n" +
+	"\x04afar\x18\x05 \x01(\bR\x04afar\"a\n" +
 	"\x06Opened\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12,\n" +
 	"\x05stood\x18\x02 \x01(\v2\x16.planet.cells.v1.StoodR\x05stood\"\xb2\x01\n" +
@@ -1216,11 +1236,12 @@ const file_planet_cells_v1_cells_proto_rawDesc = "" +
 	"\x01x\x18\x01 \x01(\x11R\x01x\x12\f\n" +
 	"\x01y\x18\x02 \x01(\x11R\x01y\x12\f\n" +
 	"\x01z\x18\x03 \x01(\x11R\x01z\x12\x14\n" +
-	"\x05cells\x18\x04 \x01(\fR\x05cells\"\x91\x01\n" +
+	"\x05cells\x18\x04 \x01(\fR\x05cells\"\xa5\x01\n" +
 	"\x06Volume\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12,\n" +
 	"\x05stood\x18\x02 \x01(\v2\x16.planet.cells.v1.StoodR\x05stood\x12.\n" +
-	"\x06chunks\x18\x03 \x03(\v2\x16.planet.cells.v1.ChunkR\x06chunks\"d\n" +
+	"\x06chunks\x18\x03 \x03(\v2\x16.planet.cells.v1.ChunkR\x06chunks\x12\x12\n" +
+	"\x04afar\x18\x04 \x01(\bR\x04afar\"d\n" +
 	"\x04Seen\x121\n" +
 	"\avolumes\x18\x01 \x03(\v2\x17.planet.cells.v1.VolumeR\avolumes\x12)\n" +
 	"\x04gone\x18\x02 \x03(\v2\x15.planet.cells.v1.HeldR\x04gone*N\n" +

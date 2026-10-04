@@ -15,12 +15,14 @@
 //! ([`Volumes::faces`]), and what a body standing in a column has under and
 //! over it ([`Volumes::gap`]).
 
+mod afar;
 mod faces;
 mod gesture;
 mod paint;
 mod trace;
 mod volumes;
 
+pub use afar::{AFAR, CHUNK_AFAR, CHUNK_AFAR_CELLS, afar};
 pub use faces::Quad;
 pub use gesture::Gesture;
 pub use paint::{Edge, Finish, Paint};

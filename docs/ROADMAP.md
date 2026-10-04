@@ -68,7 +68,7 @@ end to end.
 - [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
 - [ ] First cut leftovers: the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
 - [ ] The light of a volume: flood fill sun baked at mesh time, so an interior is dark and a doorway a gradient; no leak where a volume meets the ground; a glow channel
-- [ ] A volume streamed by proximity, a silhouette from afar; one under the sea
+- [ ] A volume under the sea; a second step afar, a cell for every 16, past the horizon of a hill
 - [ ] The camera boom cut by a volume's cells, as it is by rock under the ground
 - [ ] Ramp, wedge and half slab beside the cube (75)
 - [ ] Blocky is a cosmetic toggle inside a volume, one viewer's choice, never the world's

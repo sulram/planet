@@ -964,7 +964,8 @@ impl Client {
         let (plugins, lent) = self.lend();
         plugins.turn(&eye, input, taken.interrupted, lent);
         self.cells.update(eye.position);
-        self.cells.look(self.controller.held_by(), dt);
+        self.cells
+            .look(&self.generator, self.controller.held_by(), dt);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.

@@ -255,10 +255,42 @@ fn a_change_is_kept_told_to_who_is_near_and_shown_to_who_arrives() {
     assert_eq!((changed.session, changed.stood[0].version), (1, 1));
     assert_eq!(seat::gesture_from_wire(&changed.gestures[0]), Some(made[0]));
 
-    // A new instance of the module reads it all back from the store, for
-    // whoever looks from near: the visitor, walked over.
+    // A new instance of the module reads it all back from the store. The
+    // visitor two kilometres off is shown it as it is seen from afar, a few
+    // bytes a chunk, and nothing more while it holds it so.
     let mut again = Cells::default();
+    let afar = seen(&mut again, &mut stage, 2, Vec::new());
+    let volume = afar
+        .iter()
+        .flat_map(|seen| &seen.volumes)
+        .next()
+        .expect("afar");
+    assert!(volume.afar);
+    // The row of 18 cells is in two chunks, and is a row of 5 afar.
+    let afar_cells: Vec<Cell> = volume
+        .chunks
+        .iter()
+        .flat_map(|chunk| unpack(&chunk.cells, voxel::CHUNK_AFAR_CELLS).expect("a chunk afar"))
+        .collect();
+    let solid = afar_cells.iter().filter(|cell| !cell.is_air());
+    assert!(solid.clone().all(|cell| cell.paint() == Some(5)));
+    assert!(solid.count() >= 5);
+    let [x, y] = seat::plot_of(point);
+    let held_afar = wire::Held {
+        seat: seat_of(point),
+        plot_x: x,
+        plot_y: y,
+        version: 1,
+        afar: true,
+    };
+    assert!(seen(&mut again, &mut stage, 2, vec![held_afar]).is_empty());
+    // Further still, it is not shown at all.
+    let mut further = stage.here[1].stance.unwrap();
+    further.u += 1000.0;
+    let walked = stage.here[1].stance.replace(further);
     assert!(seen(&mut again, &mut stage, 2, Vec::new()).is_empty());
+    stage.here[1].stance = walked;
+    // Whoever looks from near is shown it whole: the visitor, walked over.
     stage.here[1].stance = stage.here[0].stance;
     let kept = shown(&mut again, &mut stage, 2, span);
     assert!(kept.iter().all(|cell| cell.paint() == Some(5)));
@@ -270,6 +302,7 @@ fn a_change_is_kept_told_to_who_is_near_and_shown_to_who_arrives() {
         plot_x,
         plot_y: y,
         version,
+        afar: false,
     };
     assert!(seen(&mut again, &mut stage, 2, vec![held(x, 1)]).is_empty());
     assert_eq!(seen(&mut again, &mut stage, 2, vec![held(x, 0)]).len(), 1);

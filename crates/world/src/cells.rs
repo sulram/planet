@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use prost::Message;
 use protocol::cells as wire;
 use protocol::{Body, Stance};
-use seat::{HOLD_M, PLOT_BITS, Seat, Stand, TELL_M};
+use seat::{AFAR_M, HOLD_M, PLOT_BITS, Seat, Stand, TELL_M};
 use topology::SurfacePoint;
 use voxel::{CHUNK, Cell, Gesture, Span, Volumes, pack, unpack};
 
@@ -357,11 +357,13 @@ impl Cells {
             room.forget(key);
         }
         room.forget(&volume_key(seat, plot));
+        // Whoever holds it, whole or afar, lets it go.
         let gone = wire::Held {
             seat: Some(seat.wire()),
             plot_x: plot[0],
             plot_y: plot[1],
             version: stood.version,
+            afar: false,
         };
         let seen = wire::Seen {
             volumes: Vec::new(),
@@ -514,14 +516,15 @@ impl Cells {
             return room.refuse("message");
         };
         let measure = room.measure();
-        let held: BTreeMap<Plot, u64> = look
-            .held
-            .iter()
-            .filter_map(|held| {
-                let seat = Seat::from_wire(held.seat.as_ref())?;
-                Some(((seat, [held.plot_x, held.plot_y]), held.version))
-            })
-            .collect();
+        // What the client holds of each volume, whole and afar, and at which
+        // version.
+        let (mut whole, mut afar) = (BTreeMap::new(), BTreeMap::new());
+        for held in &look.held {
+            if let Some(seat) = Seat::from_wire(held.seat.as_ref()) {
+                let into = if held.afar { &mut afar } else { &mut whole };
+                into.insert((seat, [held.plot_x, held.plot_y]), held.version);
+            }
+        }
         let index = self.index(room);
         let gone: Vec<wire::Held> = look
             .held
@@ -536,12 +539,20 @@ impl Cells {
             .stance
             .as_ref()
             .and_then(|stance| place(&measure, stance));
-        let mut lacking: Vec<(f64, Seat, [i32; 2], Stood)> = index
+        // Near, a volume is shown whole. Further off, as it is seen from
+        // afar, unless the client holds it whole as it stands.
+        let mut lacking: Vec<(f64, Seat, [i32; 2], Stood, bool)> = index
             .iter()
             .filter_map(|(&(seat, plot), &stood)| {
                 let away_m = away_m(&measure, seat, plot, stood, from?)?;
-                let lacks = held.get(&(seat, plot)) != Some(&stood.version);
-                (away_m <= HOLD_M && lacks).then_some((away_m, seat, plot, stood))
+                let holds =
+                    |held: &BTreeMap<Plot, u64>| held.get(&(seat, plot)) == Some(&stood.version);
+                let shown = match away_m {
+                    m if m <= HOLD_M => (!holds(&whole)).then_some(false),
+                    m if m <= AFAR_M => (!holds(&whole) && !holds(&afar)).then_some(true),
+                    _ => None,
+                };
+                shown.map(|afar| (away_m, seat, plot, stood, afar))
             })
             .collect();
         lacking.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -554,8 +565,12 @@ impl Cells {
             room.tell(wire::SEEN, seen.encode_to_vec(), &to);
         }
         let mut budget = LOOK_BYTES;
-        for (_, seat, plot, stood) in lacking {
-            budget = budget.saturating_sub(show(room, seat, plot, stood, &to));
+        for (_, seat, plot, stood, afar) in lacking {
+            let shown = match afar {
+                true => show_afar(room, seat, plot, stood, &to),
+                false => show(room, seat, plot, stood, &to),
+            };
+            budget = budget.saturating_sub(shown);
             if budget == 0 {
                 break;
             }
@@ -570,6 +585,7 @@ fn show(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to: &[u32
         seat: Some(seat.wire()),
         stood: Some(stood.wire(plot)),
         chunks: Vec::new(),
+        afar: false,
     };
     let (mut bytes, mut sent, mut all) = (0, false, 0);
     for (key, cells) in room.scan(&chunks_key(seat, plot)) {
@@ -590,6 +606,35 @@ fn show(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to: &[u32
         tell_seen(room, &mut volume, to);
     }
     all
+}
+
+/// Shows a volume as it is seen from afar, in one message: each chunk's
+/// cells a cell for every few of them each way. How many bytes of chunks
+/// went.
+fn show_afar(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to: &[u32]) -> usize {
+    let chunks = room
+        .scan(&chunks_key(seat, plot))
+        .into_iter()
+        .filter_map(|(key, cells)| {
+            let at = |from: usize| number(key.get(from..from + 4)?);
+            let cells = voxel::afar(&unpack(&cells, CHUNK_CELLS)?);
+            let cells = pack(&cells);
+            Some(wire::Chunk {
+                x: at(10)?,
+                y: at(14)?,
+                z: at(18)?,
+                cells,
+            })
+        });
+    let mut volume = wire::Volume {
+        seat: Some(seat.wire()),
+        stood: Some(stood.wire(plot)),
+        chunks: chunks.collect(),
+        afar: true,
+    };
+    let bytes = volume.chunks.iter().map(|chunk| chunk.cells.len()).sum();
+    tell_seen(room, &mut volume, to);
+    bytes
 }
 
 /// Says a volume, or the part of it gathered so far, and starts the next

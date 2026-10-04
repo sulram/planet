@@ -91,12 +91,14 @@ message Look {
   repeated Held held = 1;
 }
 
-// A volume a client holds, at the version it holds it.
+// A volume a client holds, at the version it holds it: whole, or as it is
+// seen from afar.
 message Held {
   Seat seat = 1;
   sint32 plot_x = 2;
   sint32 plot_y = 3;
   uint64 version = 4;
+  bool afar = 5;
 }
 
 // `opened`: a volume was opened, to everyone near it.
@@ -139,17 +141,20 @@ message Chunk {
   bytes cells = 4;
 }
 
-// A volume whole: where it stands and every chunk that holds something.
+// A volume whole: where it stands and every chunk that holds something. Or,
+// with `afar`, as it is seen from afar: the cells of each chunk a cell for
+// every 4 of them each way, 4 x 4 x 4 of them, solid where any is.
 message Volume {
   Seat seat = 1;
   Stood stood = 2;
   repeated Chunk chunks = 3;
+  bool afar = 4;
 }
 
-// `seen`: volumes as they stand, whole, and those that stand no more. The
-// answer to `look`, of the volumes near the asker that it lacks or holds at
-// another version, and what everyone near is told when a volume is closed
-// or stands again.
+// `seen`: volumes as they stand, and those that stand no more. The answer to
+// `look`, of the volumes near the asker that it lacks or holds at another
+// version: whole, and further off as they are seen from afar. And what
+// everyone near is told when a volume is closed or stands again.
 message Seen {
   repeated Volume volumes = 1;
   repeated Held gone = 2;
