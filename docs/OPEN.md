@@ -33,7 +33,7 @@ The address is the save format: settled before the first volume is stored.
 
 | Question | Unblocks | Context |
 |---|---|---|
-| **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? A volume holds from the lowest ground of its plot up, and nature is not dug. And how high: it ends 512 m over the highest ground of its plot, and a platform asked for over that is refused (105); an admin's limit on some volumes is to come | where a volume may sit | DECISIONS 49, 78 |
+| **Build band depth**: the band is +-128 m at `2^16`; how deep may a volume dig? A volume holds from the lowest ground of its plot up, and nature is not dug. And how high: it ends 512 m over the highest ground of its plot, 128 m on the moon, and a platform asked for over that is refused (105); an admin's limit on some volumes is to come | where a volume may sit | DECISIONS 49, 78 |
 | **What a body collides with inside a GLB shell.** 47 says collision is the generator, always, and a shell is a mesh we cannot read. Either the volume is the truth and the GLB a skin over the same cells (one rule, a voxelizer at import), or mesh collision becomes a capability we build. The first is cheaper | the cave: a shell and a room | DECISIONS 47, 58 |
 | **Look**: terrain material style: flat colours, pixel textures, triplanar? | the material contract past procedural detail | RENDER.md |
 

@@ -16,10 +16,20 @@ use worldgen::Generator;
 /// at the middle of a sector. The address of a column, less these bits, is
 /// the plot it is on.
 pub const PLOT_BITS: u32 = 6;
-/// Cells a volume rises over the highest ground of its plot: 512 metres, a
-/// tower's worth and more. A volume is stored by the chunk, so the air in it
-/// costs nothing.
+/// Cells a volume of the planet rises over the highest ground of its plot:
+/// 512 metres, a tower's worth and more. A volume is stored by the chunk, so
+/// the air in it costs nothing.
 pub const HEIGHT: i32 = 1024;
+/// Cells a volume of the moon rises: 128 metres, low over a small body.
+pub const MOON_HEIGHT: i32 = 256;
+
+/// Cells a volume of a body rises over the highest ground of its plot.
+pub fn height(body: Body) -> i32 {
+    match body {
+        Body::Moon => MOON_HEIGHT,
+        Body::Planet => HEIGHT,
+    }
+}
 /// The most cells the box of one change holds: what is read of it to take
 /// it back, on both sides.
 pub const CHANGE_CELLS: u64 = 1 << 23;
@@ -192,7 +202,7 @@ pub struct Stand {
 
 /// Where a volume over the plot a column of a seat is on starts and ends.
 /// The ground stays as it is, and the volume holds the blocks from the
-/// lowest of it to [`HEIGHT`] over the highest. A plot on the edge of its
+/// lowest of it to [`height`] over the highest. A plot on the edge of its
 /// sector stays nature, and so does one of the planet whose column is under
 /// the sea.
 pub fn survey(generator: &Generator, seat: Seat, point: SurfacePoint) -> Result<Stand, Unseated> {
@@ -222,7 +232,7 @@ pub fn survey(generator: &Generator, seat: Seat, point: SurfacePoint) -> Result<
         (lo.min(blocks), hi.max(blocks))
     });
     let bottom = lowest.floor() as i32 - UNDER;
-    let top = highest.ceil() as i32 + HEIGHT;
+    let top = highest.ceil() as i32 + height(seat.body());
     Ok(Stand {
         low: bottom,
         height: (top - bottom) as u32,
@@ -358,7 +368,10 @@ mod tests {
         let feet = ground(&generator, seat, low);
         let stand = survey(&generator, seat, low).expect("the moon is all dry");
         assert!(f64::from(stand.low) < feet);
-        assert!(f64::from(stand.low) + f64::from(stand.height) >= feet + f64::from(HEIGHT));
+        let top = f64::from(stand.low) + f64::from(stand.height);
+        assert!(top >= feet + f64::from(MOON_HEIGHT));
+        // Lower than on the planet: 128 metres over its highest ground.
+        assert!(top < feet + f64::from(HEIGHT));
         // The edge of a sector of the moon is where its own grid ends.
         let edge = SurfacePoint::new(seat.sector(), side - 10.0, low.v);
         assert_eq!(survey(&generator, seat, edge), Err(Unseated::Seam));

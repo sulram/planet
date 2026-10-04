@@ -93,7 +93,7 @@ m4-K7M42Q@40,180,-5
 - A volume is an integer address box with an inside: cellars and overhangs.
   The world keeps it, and tells a change to whoever is near (107, 110).
 - The address cuts volumes (77): plots of 64 blocks a side, `(u >> 6, v >> 6)`,
-  a volume over each from its lowest ground to 1024 cells over its highest.
+  a volume from its lowest ground to 1024 cells over its highest (moon: 256).
   They touch and are read as one, so a build stands over two neighbours.
 - A build stands on a platform (78): a slab of cells, 8 to 64 a side as
   picked, cut by the address, its top the higher of the ground under it and
