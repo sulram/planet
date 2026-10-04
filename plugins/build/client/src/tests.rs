@@ -914,12 +914,17 @@ fn a_volume_opens_with_nothing_in_it_and_a_stroke_starts_on_its_ground() {
 }
 
 #[test]
-fn a_stroke_starts_on_a_side_of_the_volume_it_is_drawn_in() {
+fn a_stroke_starts_on_a_side_of_the_volume_the_body_is_in() {
     let (mut client, point) = world();
     let mut build = Build::default();
     let seat = Seat::Sector(point.sector);
+    client.teleport(point);
     client.host(NAME).open(seat, point).unwrap();
     let room = client.cells().bounds_over(seat, point).unwrap();
+    // A neighbour open beyond the side the tests look at: the side is a wall
+    // all the same, the one the guide of the body's volume shows.
+    let beside = SurfacePoint::new(point.sector, point.u + 64.0, point.v);
+    client.host(NAME).open(seat, beside).unwrap();
     // From the middle of the plot, over the highest of its ground, looking
     // level at the side where it ends along `u`.
     // A volume holds 1024 cells over the highest ground of its plot.

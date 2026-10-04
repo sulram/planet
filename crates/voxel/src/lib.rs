@@ -24,7 +24,7 @@ mod volumes;
 pub use faces::Quad;
 pub use gesture::Gesture;
 pub use paint::{Edge, Finish, Paint};
-pub use trace::{Hit, crossing};
+pub use trace::{Hit, crossing, leaves};
 pub use volumes::Volumes;
 
 /// Cells per chunk side, as a power of two.

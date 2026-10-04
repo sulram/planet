@@ -265,10 +265,13 @@ impl Host<'_> {
     }
 
     /// A line of sight from a point of the world along a direction, unit,
-    /// bent into the cells, and what it meets: a cell, or the ground of a
-    /// volume.
-    pub fn sight(&self, from: DVec3, toward: DVec3) -> Sight {
-        self.lent.cells.sight(self.lent.generator, from, toward)
+    /// bent into the cells, and what it meets first: a cell, the ground of a
+    /// volume, or a side of `room`, the box a hand builds in, where the line
+    /// leaves it.
+    pub fn sight(&self, from: DVec3, toward: DVec3, room: Option<(Seat, Span)>) -> Sight {
+        self.lent
+            .cells
+            .sight(self.lent.generator, from, toward, room)
     }
 
     /// Where a lattice point of a seat's cells is in the world.

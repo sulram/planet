@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 
 use crate::faces::{Padded, faces_into};
-use crate::trace::{trace, walk};
+use crate::trace::trace;
 use crate::{CHUNK, CHUNK_BITS, Cell, Cells, Gap, Gesture, Hit, Quad, Span, Volume};
 
 /// A volume over its plot, and where its first cell is in the frame: the
@@ -243,15 +243,6 @@ impl Volumes {
         trace(self, path)
     }
 
-    /// Where the path first leaves the cells volumes hold for one no volume
-    /// holds: the side of the room there is to build in, met from inside it,
-    /// as a wall. The cell it goes into and the side it went in through, so
-    /// the cell before that side is the last one held. Between two volumes
-    /// side by side the room goes on.
-    pub fn leaves(&self, path: &[[f64; 3]]) -> Option<Hit> {
-        walk(path, |from, to| self.holds(from) && !self.holds(to))
-    }
-
     /// Every chunk a box of cells reaches into, each named by its lowest
     /// corner in the frame.
     pub fn chunks_in(&self, span: Span) -> Vec<[i32; 3]> {
@@ -387,26 +378,6 @@ mod tests {
         assert!(!volumes.holds([64, 0, 16]));
     }
     use crate::Face;
-
-    #[test]
-    fn a_path_meets_the_side_of_the_room_where_it_leaves_every_volume() {
-        let volumes = pair(0);
-        // From inside the first, along x, through the second and out of it.
-        let along = [[3.5, 4.5, 6.5], [90.5, 4.5, 6.5]];
-        let wall = volumes.leaves(&along).expect("the far side");
-        assert_eq!(wall.cell, [64, 4, 6]);
-        assert_eq!(wall.face, Face::new(0, false));
-        assert_eq!(wall.before(), [63, 4, 6]);
-        assert!(volumes.holds(wall.before()));
-        // From outside, the side a path goes in through is no wall: it meets
-        // the one it leaves through.
-        let across = [[-20.5, 4.5, 6.5], [40.5, 4.5, 6.5], [40.5, -20.5, 6.5]];
-        let wall = volumes.leaves(&across).expect("the near side, from inside");
-        assert_eq!(wall.before(), [40, 0, 6]);
-        assert_eq!(wall.face, Face::new(1, true));
-        // A path that never leaves meets none.
-        assert_eq!(volumes.leaves(&[[3.5, 4.5, 6.5], [9.5, 4.5, 6.5]]), None);
-    }
 
     /// Two volumes side by side along `x`, 32 cells a side: the first from
     /// the bottom of the frame and 32 tall, the second from `low` and as

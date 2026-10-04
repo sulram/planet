@@ -119,7 +119,11 @@ impl Build {
             self.turned = (self.turned + 1) % 3;
         }
         let (from, toward) = eye.sight();
-        let sight = host.sight(from, toward);
+        // The sides that are walls are those of the volume the body is in,
+        // as its guide shows them: a side it shares with a neighbour too.
+        let feet = host.feet();
+        let room = host.cells().bounds_over(feet.seat, feet.point);
+        let sight = host.sight(from, toward, room.map(|span| (feet.seat, span)));
         // The ground and the sides of a volume are where a new cell stands,
         // and nothing to take away or repaint.
         self.aim = sight

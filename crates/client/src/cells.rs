@@ -292,8 +292,8 @@ pub enum Met {
     Cell,
     /// The ground of a volume: the cell before the side met holds it.
     Ground,
-    /// A side of the room there is to build in, seen from inside it: where
-    /// the line leaves every volume of its seat.
+    /// A side of the room a hand builds in, seen from inside it: where the
+    /// line leaves that box of cells.
     Side,
 }
 
@@ -816,9 +816,16 @@ impl Cells {
     }
 
     /// A line of sight from a point of the world along a direction, unit,
-    /// and what it meets: the nearest cell, or the ground of a volume when
-    /// that comes first. Ground no volume stands on hides what is behind it.
-    pub fn sight(&self, generator: &Generator, from: DVec3, toward: DVec3) -> Sight {
+    /// and what it meets first: a cell, the ground of a volume, or a side of
+    /// `room`, a box of a seat's cells, where the line leaves it. Ground no
+    /// volume stands on hides what is behind it.
+    pub fn sight(
+        &self,
+        generator: &Generator,
+        from: DVec3,
+        toward: DVec3,
+        room: Option<(Seat, Span)>,
+    ) -> Sight {
         let sights: Vec<(f64, Vec<[f64; 3]>)> = self
             .sites
             .iter()
@@ -834,20 +841,23 @@ impl Cells {
                 .map(|(_, (far_m, _))| *far_m)
                 .reduce(f64::max)?;
             let from = from - self.centre(body);
-            // A cell built, and else where the line leaves the room there is
-            // to build in, whichever comes first, over every seat.
+            // A cell built, and where the line leaves the room, whichever
+            // comes first, over every seat.
             let met = sites
-                .filter_map(|(site, (_, path))| {
-                    let (hit, met) = match site.volumes.trace(path) {
-                        Some(hit) => (hit, Met::Cell),
-                        None => (site.volumes.leaves(path)?, Met::Side),
-                    };
-                    let aim = Aim {
-                        seat: site.seat,
-                        hit,
-                        met,
-                    };
-                    Some(((site.side(hit) - from).dot(toward), aim))
+                .flat_map(|(site, (_, path))| {
+                    let cell = site.volumes.trace(path).map(|hit| (hit, Met::Cell));
+                    let side = room
+                        .filter(|&(seat, _)| seat == site.seat)
+                        .and_then(|(_, span)| voxel::leaves(span, path))
+                        .map(|hit| (hit, Met::Side));
+                    cell.into_iter().chain(side).map(|(hit, met)| {
+                        let aim = Aim {
+                            seat: site.seat,
+                            hit,
+                            met,
+                        };
+                        ((site.side(hit) - from).dot(toward), aim)
+                    })
                 })
                 .min_by(|a, b| a.0.total_cmp(&b.0));
             // The ground comes first where it is nearer than the side met,
@@ -2101,7 +2111,7 @@ mod tests {
         let over = top(&cells, [x, y, under + 20]);
         let down = (top(&cells, sunk) - over).normalize();
         let aim = cells
-            .sight(&generator, over, down)
+            .sight(&generator, over, down, None)
             .aim()
             .expect("the ground");
         assert_eq!(aim.met, Met::Ground);
@@ -2111,12 +2121,12 @@ mod tests {
         // what is behind it all the same.
         let seat = Seat::Sector(point.sector);
         cells.close(seat, along(point, 1));
-        assert_eq!(cells.sight(&generator, over, down).aim(), None);
+        assert_eq!(cells.sight(&generator, over, down, None).aim(), None);
         // The floor beside it is in plain sight.
         let seen = at(origin, [30, 20, -1]);
         let floor = top(&cells, seen);
         let over = floor + floor.normalize() * 5.0;
-        let sight = cells.sight(&generator, over, -floor.normalize());
+        let sight = cells.sight(&generator, over, -floor.normalize(), None);
         let aim = sight.aim().expect("the floor");
         assert_eq!((aim.seat, aim.hit.cell), (point.sector.into(), seen));
         assert_eq!(aim.met, Met::Cell);

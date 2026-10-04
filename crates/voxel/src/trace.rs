@@ -7,7 +7,7 @@
 //! piece is walked exactly, cell by cell (Amanatides and Woo), so no cell a
 //! piece passes through is ever skipped.
 
-use crate::{Cells, Face, Volume};
+use crate::{Cells, Face, Span, Volume};
 
 /// Where a line of sight stops: a solid cell, and the side of it the line
 /// came in through.
@@ -45,13 +45,18 @@ pub(crate) fn trace(cells: &impl Cells, path: &[[f64; 3]]) -> Option<Hit> {
     })
 }
 
+/// Where a path first leaves a box of cells, met from inside it as a wall:
+/// the cell it goes into and the side it went through, so the cell before
+/// that side is the last of the box. A path that comes in from outside
+/// meets nothing where it comes in.
+pub fn leaves(span: Span, path: &[[f64; 3]]) -> Option<Hit> {
+    walk(path, |from, to| span.contains(from) && !span.contains(to))
+}
+
 /// Walks a path cell by cell and stops at the first step `ends` says ends
 /// it, from one cell into the next: the cell stepped into, and the side it
 /// was entered through.
-pub(crate) fn walk(
-    path: &[[f64; 3]],
-    mut ends: impl FnMut([i32; 3], [i32; 3]) -> bool,
-) -> Option<Hit> {
+fn walk(path: &[[f64; 3]], mut ends: impl FnMut([i32; 3], [i32; 3]) -> bool) -> Option<Hit> {
     for piece in path.windows(2) {
         let (from, to) = (piece[0], piece[1]);
         let mut cell = cell_of(from);
@@ -184,6 +189,24 @@ mod tests {
             .trace(&[[2.5, 2.5, 2.5], [12.5, 2.5, 2.5]])
             .expect("hit");
         assert_eq!(hit.cell, [6, 2, 2]);
+    }
+
+    #[test]
+    fn a_path_meets_the_side_of_a_box_where_it_leaves_it() {
+        let room = Span::between([0, 0, 0], [31, 31, 63]);
+        // From inside, along x, out through the far side.
+        let wall = leaves(room, &[[3.5, 4.5, 6.5], [40.5, 4.5, 6.5]]).expect("the far side");
+        assert_eq!(wall.cell, [32, 4, 6]);
+        assert_eq!(wall.face, Face::new(0, false));
+        assert_eq!(wall.before(), [31, 4, 6]);
+        // From outside, the side a path comes in through is no wall: it
+        // meets the one it leaves through.
+        let across = [[-20.5, 4.5, 6.5], [20.5, 4.5, 6.5], [20.5, -20.5, 6.5]];
+        let wall = leaves(room, &across).expect("the near side, from inside");
+        assert_eq!(wall.before(), [20, 0, 6]);
+        assert_eq!(wall.face, Face::new(1, true));
+        // A path that never leaves meets none.
+        assert_eq!(leaves(room, &[[3.5, 4.5, 6.5], [9.5, 4.5, 6.5]]), None);
     }
 
     #[test]
