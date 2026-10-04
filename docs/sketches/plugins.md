@@ -116,11 +116,11 @@ by session, the first vehicle would reopen the wire, presence, and every
 plugin that reads who is where. The library, `hecs` or another, could still
 wait for the second kind (OPEN). The id is what is dear to undo.
 
-Physics the server decides would need a module that holds state and takes a
-turn, which the bridge of today does not give (102). The store of the cells
-is the first thing the module reads and writes between calls, so its shape
-is worth drawing with that day in sight: a store a system asks for by key
-serves a simulation too.
+Physics the server decides would be a simulation in the module: state held
+between calls, and a turn. The cells, once kept, would be the first system
+to hold state there and to read a store through the bridge, and a turn would
+be one more call when something that moves asks for it. A store a system
+asks for by key would serve a simulation too.
 
 ## An order, if a campaign pulled it
 
