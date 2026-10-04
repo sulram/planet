@@ -178,7 +178,14 @@
 		// that can be refused.
 		if (event.type === 'rejected' && recipe && !standing && !fetching) refused = true;
 		if (event.type === 'session') {
-			if (event.status === 'online') retryMs = 1000;
+			// Online, nothing is owed: a retry still waiting would close the
+			// link that just came up, and the close it makes would wait for
+			// the next, a drop a second for good.
+			if (event.status === 'online') {
+				retryMs = 1000;
+				clearTimeout(retry);
+				retry = undefined;
+			}
 			if (event.status === 'offline' && linked && !retry) {
 				retry = setTimeout(() => connect(true), retryMs);
 				retryMs = Math.min(retryMs * 2, 30_000);
