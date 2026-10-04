@@ -6,8 +6,8 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 
 - Why: [VISION.md](docs/VISION.md)
 - Shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md); per theme,
-  [WORLD.md](docs/WORLD.md), [RENDER.md](docs/RENDER.md) and
-  [DEPLOY.md](docs/DEPLOY.md) (how an instance is hosted)
+  [WORLD.md](docs/WORLD.md), [RENDER.md](docs/RENDER.md), [PLUGINS.md](docs/PLUGINS.md)
+  (how plugins speak) and [DEPLOY.md](docs/DEPLOY.md) (how an instance is hosted)
 - The one current campaign: [BRIEF.md](docs/BRIEF.md); it dissolves when it ships
 - Decisions and what was rejected: [DECISIONS.md](docs/DECISIONS.md), the index of `docs/decisions/`
 - Next: [ROADMAP.md](docs/ROADMAP.md). Unsettled, only there: [OPEN.md](docs/OPEN.md)
@@ -18,7 +18,7 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
 
 | Information | Home |
 |---|---|
-| Current state | the theme doc: ARCHITECTURE, WORLD, RENDER, DEPLOY |
+| Current state | the theme doc: ARCHITECTURE, WORLD, RENDER, PLUGINS, DEPLOY |
 | Why, and what was rejected | DECISIONS |
 | What comes next, in what order | ROADMAP |
 | A question with no answer, a problem with no chosen fix | OPEN |
@@ -72,8 +72,7 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   entities, scripts). From scratch, free software end to end.
 - One world per instance, hosted by mundos (`~/Dev/mundos`): it says who is
   who and addresses, versions and upgrades the world (DECISIONS 87).
-- The core is the sphere; what is done on it is a plugin, composed at build
-  and switched on or off for a world (DECISIONS 88).
+- The core is the sphere; what is done on it is a plugin (DECISIONS 88).
 - One Rust client (wgpu) on every screen: desktop, browser (WASM + WebGPU),
   Raspberry Pi, Quest, Pico. One Go server. The world is a recipe; the world
   folder holds only what someone changed. Offline mode is permanent.
@@ -118,11 +117,12 @@ in `apps/web` and `server`, has an `AGENTS.md` symlink beside it: edit only
   Callers never know which.
 - **Copy on first write**: the first edit stores the whole chunk. The op log is
   append-only and records every edit, admins included.
-- **Every edit is a permission-checked op.** Destruction is an edit.
+- **Every edit is a permission-checked op** to the owner of what it changes,
+  the core or one plugin (DECISIONS 93). Destruction is an edit.
 - **Who is who is mundos's.** Accounts live there; the world checks a
   signature and keeps a level for the session's life.
-- **A plugin imports the core** and draws through `scene`. The core runs
-  alone, with every plugin off.
+- **A plugin imports the core**, never another plugin, and draws through
+  `scene`. The core runs alone, with every plugin off.
 - **An agent is a client without a renderer.** Same protocol, same levels.
 - **A heavy file is named by the hash of its content.** Records name it so.
 - **UI is a front-end.** Svelte and the native UI sit over one command/event

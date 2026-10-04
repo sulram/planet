@@ -20,7 +20,11 @@ this file in the same change.
 | Core | The sphere and the host of plugins: what a plugin stands on. Runs with every plugin off. |
 | Plugin | A layer over the core, ours and compiled in: a crate in the client, a package in the server, a payload on the wire, a panel. On or off for a world. |
 | Native plugin | A plugin every version carries: chat, avatars, building. |
-| Hook | Where the core keeps a rule a plugin may change: who may do what, which avatars are offered. |
+| Owner | The core or the one plugin that holds a piece of a world's state, and alone changes it. |
+| Question | What asks for an answer and changes nothing: a hook or a reading. |
+| Hook | A question the core asks its plugins, with a default answer a plugin may answer over: who may do what and where, which avatars are offered. |
+| Reading | A question anyone asks an owner about what it holds: the cells in a box, who is near. |
+| Event | What an owner says happened, to whoever listens. |
 | Host (code) | The part of the core that plugins register with: the registry, the hooks, the stores, the wire's envelope. Distinct from mundos, which hosts worlds. |
 | Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. |
 | Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands and renders events; the rules are the core's. |
@@ -65,7 +69,7 @@ this file in the same change.
 | Stored chunk | A chunk present in the build plugin's store because someone edited it. |
 | Generated chunk | A chunk produced on demand from the recipe. Never stored. |
 | Copy on first write | The first edit to a chunk generates it, applies the edit and stores it whole. |
-| Op | One permission-checked edit request. The only way world state changes. |
+| Op | One permission-checked request to an owner to change what it holds. The only way world state changes. |
 | Op log | Append-only record of ops: who, when, address, before, after. |
 | World actor | The single goroutine that owns the world's state and writes. Started by the hub on the first session, gone after the last. |
 | Hub | Holds the world's actor. The socket route hands every connection to it. |

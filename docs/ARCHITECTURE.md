@@ -57,23 +57,11 @@ not yet confirmed.
   the recipe), the picture (`render`, `scene`), a body walking it (controller,
   footing on the ground, camera), the link (socket, session, level, a stance
   for each session) and the host of plugins. It runs with every plugin off.
-- A plugin is a slice through up to four places: a crate in the client, a
-  package in the server, a payload on the wire, a panel in each front end.
-  Ours, compiled in: a config at the root lists them and the build bundles
-  them, so a version is the core plus the plugins chosen for it.
-- Native plugins: chat, avatars, building. Each is extracted from where it
-  stands today, in that order (BRIEF.md).
-- What the host offers, cut as each extraction asks for it: commands and
-  events on the seam; a turn in each frame; solids for the footing; plain data
-  for the picture through `scene`; an envelope on the wire, the plugin's name
-  beside its payload; a store in the world folder; files; a place for a panel.
-- A hook is where the core keeps a rule a plugin may change, written when a
-  plugin asks: who may do what and where (the default is the level), which
-  avatars are offered.
-- A plugin imports the core, and draws through `scene` as the client does.
-- Which plugins are on is the world's own (91). The config says whether each
-  starts on; the admin switches any of them at the founding and after, in the
-  world folder. A plugin switched off keeps its store untouched.
+- What is done on the sphere is a plugin: a slice through the client, the
+  server, the wire and a front end, compiled in and on or off for a world.
+- Every state has one owner, the core or one plugin, and what crosses a seam
+  is an op, a question or an event (93). How a plugin is cut, what it owns
+  and how it speaks: PLUGINS.md.
 
 ## The server
 

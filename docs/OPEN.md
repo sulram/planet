@@ -26,7 +26,6 @@ to DECISIONS, the state to its theme doc, and the row leaves here.
 |---|---|---|
 | **A plugin's server half: Go, or its own Rust as WASM.** A Go package compiled in is the short path and writes every rule twice, once for the client to predict and once for the server to check. The plugin's Rust compiled to WASM and run by the server through wazero writes it once, and is what 09 proposes for the generator | the first plugin that checks an op: building | DECISIONS 09, 88 |
 | **A plugin's panel outside Svelte.** On the web it is a Svelte component. On a desktop or a headset it is written again for that front end, or a plugin says its panel as data (buttons, a palette, a slider) and each front end draws it | the second screen | DECISIONS 88 · ROADMAP § Other screens |
-| **May a plugin stand on another.** A wallet's avatars change what the avatars plugin offers: through a hook the core holds, or by importing the avatars plugin | the first plugin that changes another | DECISIONS 88 |
 | **A world with a plugin the client lacks.** Refuse to enter, or enter and leave that layer undrawn. Moot on the web, where a world serves its own client | an installed client | DECISIONS 91 |
 | **A plugin that needs a shader of its own.** A plugin hands the picture plain data and never touches wgpu. Volumes already have a pipeline of their own in `render`: it stays in the core as a shape any plugin may hand over, or the rule gets an exception | extracting building | DECISIONS 88 · RENDER.md § Volumes |
 

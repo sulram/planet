@@ -63,5 +63,5 @@ a world is deployable and updatable by mundos.
 
 These are settled in OPEN.md, their one home: whether a plugin's server half is Go
 or its own Rust run as WASM, how a plugin's panel exists outside Svelte,
-whether a plugin may stand on another, what a client does in a world with a
-plugin it lacks, and where fields are hosted.
+what a client does in a world with a plugin it lacks, and where fields are
+hosted.
