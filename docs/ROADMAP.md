@@ -61,6 +61,8 @@ end to end.
 - [ ] A plugin's strings in its own folder, merged into the web front end's catalogue
 - [ ] Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
 - [ ] The image built with `plugins/` and the module in it: the `Dockerfile` copies the folder and embeds the module, and no machine here builds it
+- [ ] A plugin whose world half faults again and again is switched off by the host: each fault costs the room up to a deadline, 250 ms, and nothing stops the next (102)
+- [ ] An op has a rate for each session, asked before the module is: chat counts its lines inside its world half, after the call is paid
 - [ ] The room kept in the module, told who joins, moves and leaves, when a world's size makes a room sent whole with each op too much (102)
 - [ ] The memory ceiling and the deadline of the module measured against building: a platform of 64 a side reads its ground in 8 ms (97), and a world of a field holds 25 MB
 

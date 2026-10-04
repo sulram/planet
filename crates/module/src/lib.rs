@@ -25,16 +25,13 @@ pub fn serve(call: &[u8]) -> Vec<Vec<u8>> {
         .serve(call)
 }
 
-/// The size of the bodies a recipe makes, read as the generator reads it.
-/// `None` for a recipe the generator cannot read.
-fn measure_of(recipe: &protocol::Recipe) -> Option<Measure> {
-    let mut own = worldgen::Recipe::new(worldgen::parse_seed(&recipe.seed).ok()?);
-    own.generator_version = recipe.generator_version;
-    if !recipe.params_json.trim().is_empty() {
-        own.params = serde_json::from_str(&recipe.params_json).ok()?;
-    }
+/// The size of the bodies a recipe makes. The recipe on the wire carries no
+/// size of its own (OPEN.md), so a hosted world has the generator's, whatever
+/// else its recipe says: a seed or params the generator cannot read found a
+/// world no client draws, and its plugins are hosted all the same.
+fn measure_of(_recipe: &protocol::Recipe) -> Option<Measure> {
     Some(Measure {
-        sphere: own.sphere()?,
+        sphere: worldgen::Recipe::new(0).sphere()?,
         moon_radius_m: worldgen::MOON_RADIUS_M,
     })
 }

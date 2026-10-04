@@ -114,10 +114,14 @@ A plugin is one folder, `plugins/<name>/` (100):
   plugin asks for is one more message.
 - An op carries its room whole: who asks, the moment, everyone here. The
   module holds nothing of the core between two calls.
-- A call has a deadline of 250 ms and the module a ceiling of 64 MB. After a
-  fault, a trap or a deadline, the instance is replaced, the op is dropped
-  and the world starts in the new instance. What a world half held in memory
-  goes with it: what a world keeps is in its folder.
+- A call has a deadline of 250 ms, the module a ceiling of 64 MB, and a call
+  is answered with at most 1024 replies of 1 MB each. After a fault, a trap,
+  a deadline or a reply that cannot be taken, the instance is replaced, the
+  op is dropped and the world starts in the new instance. What a world half
+  held in memory goes with it: what a world keeps is in its folder.
+- A world half answers bytes that are no call, and an op of any shape, with
+  nothing: it never panics. `internal/module` holds it with hostile modules
+  written by hand and two fuzz targets, `crates/module` with property tests.
 - `unsafe` is written in `crates/module/src/abi.rs` alone, three times, to
   say the three names. `bun run docs` holds it.
 

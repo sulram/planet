@@ -14,10 +14,11 @@ world.workspace = true
 plugins-world.workspace = true
 protocol.workspace = true
 worldgen.workspace = true
-serde_json.workspace = true
 
 [dev-dependencies]
+chat-world = { path = "../../plugins/chat/world" }
 prost.workspace = true
+proptest.workspace = true
 
 # The workspace forbids `unsafe`. Here it is denied, and allowed on the three
 # declarations of `src/abi.rs` alone (DECISIONS 102); `bun run docs` holds it.

@@ -83,11 +83,13 @@ type room struct {
 	now   time.Time
 	here  []world.Who
 	heard map[uint32][]string
+	// The recipe's params, as JSON. Empty is every default.
+	params string
 }
 
 func (r *room) Now() time.Time { return r.now }
 func (r *room) Recipe() world.Recipe {
-	recipe, _ := world.NewRecipe("00000000deadbeef", 3, nil)
+	recipe, _ := world.NewRecipe("00000000deadbeef", 3, []byte(r.params))
 	return recipe
 }
 func (r *room) Here() []world.Who { return r.here }
@@ -149,6 +151,19 @@ func TestALineCrossesTheBridgeAndReachesItsScope(t *testing.T) {
 	}
 	if m.born != 1 {
 		t.Fatalf("and all of it in one instance: %d", m.born)
+	}
+}
+
+func TestARecipeTheGeneratorCannotReadStillHostsItsPlugins(t *testing.T) {
+	// The server takes any object as a recipe's params. One the generator has
+	// no shape for founds a world no client can draw, and its plugins are
+	// hosted all the same: a line is still heard.
+	plugin := chat(t, loaded(t))
+	r, who := three()
+	r.params = `{"source":"nowhere","sea":[1,2,3]}`
+	plugin.Do(r, who, "say", say(scopeWorld, "anyone?"))
+	if len(r.heard[far]) != 1 {
+		t.Fatalf("a line in a world of a recipe nobody reads: %v", r.heard)
 	}
 }
 

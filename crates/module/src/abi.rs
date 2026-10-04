@@ -29,12 +29,14 @@ pub extern "C" fn reserve(len: usize) -> *mut u8 {
     inbox.as_mut_ptr()
 }
 
-/// Serves the call in the inbox, and hands back every reply to it.
+/// Serves the call in the inbox, and hands back every reply to it. The call
+/// is taken out of the inbox first: run again with nothing written, it
+/// serves nothing.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn call() {
-    let inbox = INBOX.lock().expect("the server calls one call at a time");
-    for said in crate::serve(&inbox) {
+    let call = std::mem::take(&mut *INBOX.lock().expect("the server calls one call at a time"));
+    for said in crate::serve(&call) {
         reply(said.as_ptr(), said.len());
     }
 }

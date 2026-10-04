@@ -1356,10 +1356,11 @@ dependencies = [
 name = "module"
 version = "0.0.0"
 dependencies = [
+ "chat-world",
  "plugins-world",
+ "proptest",
  "prost",
  "protocol",
- "serde_json",
  "world",
  "worldgen",
 ]

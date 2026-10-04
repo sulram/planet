@@ -45,13 +45,17 @@ reads within the module's memory or refuses. The three declarations are
 crate inherits the workspace's lints. The engine crosses to the browser the
 same way: `wasm-bindgen` writes exported `unsafe` functions behind its macro.
 
-**What guards a world from a plugin.** A deadline of 250 ms a call: a module
-written by hand to loop without end stops at it. A trap: one written to panic
-gives Go an error, and the server lives. Both are tests of `internal/module`.
-A ceiling of 64 MB of memory: tried apart with one of 16 MB, where a module
-that takes memory without end stopped in 9 ms. After a panic the instance is
-no use, so each of these replaces it, and the world is started in the new one
-before its next op. What a world half held in memory goes with the old
+**What guards a world from a plugin.** A deadline of 250 ms a call, a
+ceiling of 64 MB of memory, and a limit on what a call is answered with: a
+thousand replies of a megabyte each, since what the module says is kept on
+the server's side, outside its ceiling. A module is refused when it is opened
+unless it exports the two names as the bridge calls them. `internal/module`
+attacks each with modules written by hand: one that panics, one that loops,
+one that takes memory without end, one that replies without end, ones that
+point outside their memory, one that speaks under another plugin's name. And
+it fuzzes the real module with calls and ops of any shape, which never trap
+it. After a panic the instance is no use, so a fault replaces it, and the
+world is started in the new one before its next op. What a world half held in memory goes with the old
 instance: for chat, how often each session spoke. What a world keeps is in
 its folder, never in the module's memory.
 

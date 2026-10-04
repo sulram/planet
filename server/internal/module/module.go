@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sync"
 	"time"
 
@@ -35,6 +36,11 @@ const (
 	deadline = 250 * time.Millisecond
 	// The most a module holds, in pages of 64 KiB: 64 MB.
 	memoryPages = 1024
+	// The most a call is answered with: this many replies, each this long.
+	// The ceiling of memory is the module's; these are the server's, for what
+	// it keeps of what the module says.
+	maxReplies   = 1024
+	maxReplySize = 1 << 20
 )
 
 // Module is the world halves of a version, running. One call at a time.
@@ -92,6 +98,19 @@ func open(ctx context.Context, wasm []byte) (*Module, error) {
 	if err != nil {
 		return nil, fmt.Errorf("module: %w", err)
 	}
+	// The two names the server calls, as it calls them, and a memory to
+	// write a call in: a file without them is no module.
+	exports := compiled.ExportedFunctions()
+	i32 := []api.ValueType{api.ValueTypeI32}
+	for name, want := range map[string][2][]api.ValueType{"reserve": {i32, i32}, "call": {nil, nil}} {
+		got, there := exports[name]
+		if !there || !slices.Equal(got.ParamTypes(), want[0]) || !slices.Equal(got.ResultTypes(), want[1]) {
+			return nil, fmt.Errorf("module: it does not export `%s` as the bridge calls it", name)
+		}
+	}
+	if len(compiled.ExportedMemories()) == 0 {
+		return nil, errors.New("module: it exports no memory")
+	}
 	m.compiled = compiled
 	if err := m.replace(ctx); err != nil {
 		return nil, err
@@ -126,19 +145,35 @@ func (m *Module) replace(ctx context.Context) error {
 
 // reply is what the module calls to hand over one reply, whole. The bytes
 // are read within the module's memory or refused, and copied before the
-// module runs again.
-func (m *Module) reply(_ context.Context, instance api.Module, at, size uint32) {
+// module runs again. The first reply that cannot be taken ends the call: the
+// instance is closed where it stands, so a module that goes on saying is not
+// heard until its deadline.
+func (m *Module) reply(ctx context.Context, instance api.Module, at, size uint32) {
+	if m.fault != nil {
+		return
+	}
+	if m.fault = m.take(instance, at, size); m.fault != nil {
+		_ = instance.CloseWithExitCode(ctx, 1)
+	}
+}
+
+func (m *Module) take(instance api.Module, at, size uint32) error {
+	if len(m.replies) == maxReplies {
+		return fmt.Errorf("more than %d replies to one call", maxReplies)
+	}
+	if size > maxReplySize {
+		return fmt.Errorf("a reply of %d bytes", size)
+	}
 	view, ok := instance.Memory().Read(at, size)
 	if !ok {
-		m.fault = errors.New("a reply outside the module's memory")
-		return
+		return errors.New("a reply outside the module's memory")
 	}
 	reply := &bridge.Reply{}
 	if err := proto.Unmarshal(bytes.Clone(view), reply); err != nil {
-		m.fault = fmt.Errorf("a reply that is no message: %w", err)
-		return
+		return fmt.Errorf("a reply that is no message: %w", err)
 	}
 	m.replies = append(m.replies, reply)
+	return nil
 }
 
 // call asks the module one thing and gathers what it says back. After any
@@ -175,10 +210,12 @@ func (m *Module) ask(ctx context.Context, frame []byte) error {
 	if !m.instance.Memory().Write(uint32(at[0]), frame) {
 		return errors.New("an inbox outside the module's memory")
 	}
-	if _, err := m.instance.ExportedFunction("call").Call(ctx); err != nil {
-		return err
+	_, err = m.instance.ExportedFunction("call").Call(ctx)
+	// What went wrong hearing a reply says more than the exit it caused.
+	if m.fault != nil {
+		return m.fault
 	}
-	return m.fault
+	return err
 }
 
 // start tells the instance which world this is, once for each instance and
@@ -255,7 +292,7 @@ func (h *hosted) Do(room world.Room, who world.Who, kind string, payload []byte)
 	}
 	replies, err := m.call(ctx, &bridge.Call{Call: &bridge.Call_Op{Op: op}})
 	if err != nil {
-		log.Printf("module: %s.%s is dropped and the module replaced: %v", h.name, kind, err)
+		log.Printf("module: %s.%s is dropped: %v", h.name, kind, err)
 		return
 	}
 	for _, reply := range replies {
@@ -279,6 +316,6 @@ func (h *hosted) Gone(session uint32) {
 	defer m.mu.Unlock()
 	gone := &bridge.Gone{Plugin: h.name, Session: session}
 	if _, err := m.call(context.Background(), &bridge.Call{Call: &bridge.Call_Gone{Gone: gone}}); err != nil {
-		log.Printf("module: %s is not told who left and the module is replaced: %v", h.name, err)
+		log.Printf("module: %s is not told who left: %v", h.name, err)
 	}
 }
