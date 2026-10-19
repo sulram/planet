@@ -24,7 +24,7 @@ use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
 use crate::collision;
 use crate::controller::Controller;
 use crate::input::{Chord, Input, Key, KeyAsk};
-use crate::parts::Parts;
+use crate::parts::{PartRefusal, Parts};
 use crate::place::Pose;
 use crate::seam::{Event, Level, PluginOn};
 use crate::session::Session;
@@ -411,26 +411,34 @@ impl Host<'_> {
         self.lent.parts.pick(self.lent.generator, from, toward)
     }
 
+    /// Whether this session may change the parts, in the parts' words.
+    fn may_place(&self) -> Result<(), PartRefusal> {
+        match self.may_change() {
+            true => Ok(()),
+            false => Err(PartRefusal::Level),
+        }
+    }
+
     /// Places a part on a seat, where its pose says: a change like any
     /// other. The name it is given.
-    pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, Refusal> {
-        self.permitted()?;
+    pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, PartRefusal> {
+        self.may_place()?;
         if !part.pose.is_sound() {
-            return Err(Refusal::Pose);
+            return Err(PartRefusal::Pose);
         }
         Ok(self.lent.parts.place(seat, part))
     }
 
     /// Sets a part by its name: moved, turned, stretched, repainted, made
     /// solid or not, or seated elsewhere.
-    pub fn set_part(&mut self, id: PartId, seat: Seat, part: Part) -> Result<(), Refusal> {
-        self.permitted()?;
+    pub fn set_part(&mut self, id: PartId, seat: Seat, part: Part) -> Result<(), PartRefusal> {
+        self.may_place()?;
         if !part.pose.is_sound() {
-            return Err(Refusal::Pose);
+            return Err(PartRefusal::Pose);
         }
         match self.lent.parts.set(id, seat, part) {
             true => Ok(()),
-            false => Err(Refusal::Gone),
+            false => Err(PartRefusal::Gone),
         }
     }
 
@@ -447,11 +455,11 @@ impl Host<'_> {
     }
 
     /// Removes a part by its name.
-    pub fn remove_part(&mut self, id: PartId) -> Result<(), Refusal> {
-        self.permitted()?;
+    pub fn remove_part(&mut self, id: PartId) -> Result<(), PartRefusal> {
+        self.may_place()?;
         match self.lent.parts.remove(id) {
             true => Ok(()),
-            false => Err(Refusal::Gone),
+            false => Err(PartRefusal::Gone),
         }
     }
 

@@ -9,12 +9,14 @@
 	interface Common {
 		icon: IconName;
 		label: string;
+		/** A count or a mark in the corner of the icon, for what the button opens. */
+		badge?: string;
 	}
 	type AsButton = Common & Omit<HTMLButtonAttributes, 'children'> & { href?: undefined };
 	type AsLink = Common & Omit<HTMLAnchorAttributes, 'children'> & { href: string };
 	type Props = AsButton | AsLink;
 
-	let { icon, label, ...rest }: Props = $props();
+	let { icon, label, badge, ...rest }: Props = $props();
 </script>
 
 {#if rest.href !== undefined}
@@ -25,11 +27,13 @@
 	<!-- `type="button"` before the spread: a caller that submits says so -->
 	<button class="icon-button" type="button" aria-label={label} title={label} {...rest as HTMLButtonAttributes}>
 		<Icon name={icon} />
+		{#if badge}<span class="badge" aria-hidden="true">{badge}</span>{/if}
 	</button>
 {/if}
 
 <style>
 	.icon-button {
+		position: relative;
 		display: inline-grid;
 		place-items: center;
 		width: var(--control-h);
@@ -46,5 +50,19 @@
 	.icon-button:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+	.icon-button[aria-expanded='true'] {
+		background: var(--action);
+		color: var(--action-text);
+	}
+	.badge {
+		position: absolute;
+		top: calc(-1 * var(--bw));
+		right: calc(-1 * var(--bw));
+		min-width: var(--sp-4);
+		padding-inline: var(--sp-1);
+		line-height: var(--sp-4);
+		background: var(--action);
+		color: var(--action-text);
 	}
 </style>

@@ -1,43 +1,37 @@
-//! Placing a part: a click puts a cube where the pointer meets the world,
-//! on a side of a cell, on a part or on the ground, standing up, a metre a
-//! side, in the paint in hand (DECISIONS 111). With a picture in hand it
-//! puts the picture there instead, a metre tall in its own aspect, its face
-//! turned to the eye.
+//! Placing an item: a click puts it where the pointer meets the world, on a
+//! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
+//! A picture stands a metre tall in its own aspect, its face turned to the
+//! eye, as a pane nobody collides with.
 
-use client::{CUBE, Feet, Host, PartPose, REACH_M, Shape, Turn};
+use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
 use glam::{DQuat, DVec3};
 use topology::BLOCK_M;
+
+use crate::{Item, Items, refuse};
 
 /// How thick a picture's pane is, in blocks: enough to pick, nothing to see.
 const PANE: f64 = 0.1;
 
-use crate::{Build, refuse};
-
-impl Build {
-    /// One turn of the part tool.
-    pub(crate) fn place(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        let pressed = turn.using && !self.using;
-        self.using = turn.using;
-        self.aim = None;
-        if self.stroke.take().is_some() {
-            host.preview(None);
-        }
-        if !pressed {
-            return;
-        }
-        let (from, toward) = turn.eye.sight();
+impl Items {
+    /// Places the item in hand where the eye's pointer meets the world.
+    pub(crate) fn place(&mut self, item: Item, eye: &Eye, host: &mut Host<'_>) {
+        let (from, toward) = eye.sight();
         let Some(feet) = met(host, from, toward) else {
             return;
         };
         let at = [feet.point.u, feet.point.v, feet.height_m / BLOCK_M];
-        let part = match self.picture {
-            None => client::Part {
+        let part = match item {
+            Item::Cube => client::Part {
                 shape: Shape::Cube,
                 pose: PartPose::upright(at, CUBE),
                 paint: self.made_of(),
                 solid: true,
             },
-            Some(media) => {
+            Item::Picture => {
+                // Nothing chosen yet: the panel asks for a file.
+                let Some(media) = self.picture else {
+                    return;
+                };
                 // The picture's front, its box's `-y` side, turned to face
                 // where the eye stands, by the eye's column of the seat.
                 let eye = host.feet_at(from);

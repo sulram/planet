@@ -123,6 +123,7 @@
 		name={me.name || (kept('name') ?? '')}
 		{link}
 		level={me.level}
+		key={me.key}
 		account={me.key !== ''}
 		onsignin={signIn}
 		onswitch={switchIt}

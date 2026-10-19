@@ -34,15 +34,17 @@
 //! {"type":"build.history","undo":true,"redo":false}
 //! ```
 
-mod place;
 mod stroke;
 
 use build_world::Platform;
-use client::{Aim, Feet, Guide, Host, KeyAsk, Media, Plugin, Seat, Turn};
+use client::{Aim, Feet, Guide, Host, KeyAsk, Plugin, Seat, Turn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use topology::{BLOCK_M, SurfacePoint};
 use voxel::Span;
+/// How what is laid takes the light, and the line drawn around each of its
+/// sides: a cell's own words, said at the seam as the cells say them.
+pub use voxel::{Edge, Finish};
 
 use stroke::Stroke;
 
@@ -55,8 +57,7 @@ pub use build_world::{NAME, PLATFORMS, VERSION};
 /// cells, or repaint what is solid, and one drag is one stroke, however many
 /// cells it covers. The fourth works with the volume where the body stands:
 /// it opens it, closes it, or shows the slab a platform would lay there
-/// until a base is asked for. The fifth places a part: a click puts a cube
-/// where the pointer meets the world.
+/// until a base is asked for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tool {
@@ -64,28 +65,6 @@ pub enum Tool {
     Delete,
     Paint,
     Volume,
-    Part,
-}
-
-/// How what is laid takes the light: lit by what shines on it, see-through,
-/// or shining with its own colour and lighting what is near.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Finish {
-    #[default]
-    Matte,
-    Glass,
-    Light,
-}
-
-/// The line drawn around each side of what is laid.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Edge {
-    #[default]
-    None,
-    Black,
-    White,
 }
 
 /// What carries the slab of a platform down to the ground: a deck's pillars
@@ -130,10 +109,6 @@ pub enum Refusal {
     Field,
     /// No volume stands under the body: there is none to close.
     Empty,
-    /// A part's pose is no pose: not finite, not a turn, or flat.
-    Pose,
-    /// The part asked about is gone.
-    Gone,
 }
 
 impl From<client::Refusal> for Refusal {
@@ -143,8 +118,6 @@ impl From<client::Refusal> for Refusal {
             client::Refusal::Field => Refusal::Field,
             client::Refusal::Sea => Refusal::Sea,
             client::Refusal::Seam => Refusal::Seam,
-            client::Refusal::Pose => Refusal::Pose,
-            client::Refusal::Gone => Refusal::Gone,
         }
     }
 }
@@ -177,12 +150,6 @@ pub const CLOSE: &str = "close";
 pub const UNDO: &str = "undo";
 /// `build.redo`: puts back the last change taken back.
 pub const REDO: &str = "redo";
-/// `build.picture`: puts a picture in hand for the part tool, or takes it
-/// out with `null`: the next click places it, a metre tall in its own
-/// aspect, facing the eye, as a pane nobody collides with. `media` is what
-/// the owner's client made of the file: its size in texels and three asset
-/// names, `asset://<hash>.<ext>`, the original, a low version and a thumb.
-pub const PICTURE: &str = "picture";
 /// `build.state`: asks what is in hand, what the body is over and what there
 /// is to take back. It changes nothing, and is answered with [`HAND`],
 /// [`OVER`] and [`HISTORY`].
@@ -237,27 +204,6 @@ struct Lay {
     base: Base,
 }
 
-#[derive(Deserialize)]
-struct Picture {
-    media: Option<MediaBody>,
-}
-
-/// A picture's record as the seam says it.
-#[derive(Deserialize)]
-struct MediaBody {
-    width: u32,
-    height: u32,
-    thumb: String,
-    low: String,
-    full: String,
-}
-
-impl MediaBody {
-    fn media(&self) -> Option<Media> {
-        Media::parse(self.width, self.height, &self.thumb, &self.low, &self.full)
-    }
-}
-
 #[derive(Serialize)]
 struct Hand {
     tool: Option<Tool>,
@@ -297,7 +243,6 @@ mod key {
     pub const DELETE: &str = "delete";
     pub const PAINT: &str = "paint";
     pub const VOLUME: &str = "volume";
-    pub const PART: &str = "part";
     /// Each time it goes down, the stroke turns to the next of the three
     /// layers through its start: on its side, then standing one way, then
     /// the other.
@@ -456,8 +401,6 @@ pub struct Build {
     /// Whether there was a change to take back and one to put back, as last
     /// said.
     history: (bool, bool),
-    /// The picture the part tool places next, while one is in hand.
-    picture: Option<Media>,
 }
 
 impl Default for Build {
@@ -480,7 +423,6 @@ impl Default for Build {
             over: false,
             drawn: None,
             history: (false, false),
-            picture: None,
         }
     }
 }
@@ -512,16 +454,8 @@ impl Build {
     fn made_of(&self) -> u8 {
         let paint = voxel::Paint {
             color: self.paint,
-            finish: match self.finish {
-                Finish::Matte => voxel::Finish::Matte,
-                Finish::Glass => voxel::Finish::Glass,
-                Finish::Light => voxel::Finish::Light,
-            },
-            edge: match self.edge {
-                Edge::None => voxel::Edge::None,
-                Edge::Black => voxel::Edge::Black,
-                Edge::White => voxel::Edge::White,
-            },
+            finish: self.finish,
+            edge: self.edge,
         };
         paint.byte()
     }
@@ -839,17 +773,6 @@ impl Plugin for Build {
                     refuse(host, reason);
                 }
             }
-            PICTURE => {
-                if let Some(Picture { media }) = read::<Picture>(body, host) {
-                    match media {
-                        None => self.picture = None,
-                        Some(body) => match body.media() {
-                            Some(media) => self.picture = Some(media),
-                            None => host.reject("a picture names three asset:// files".into()),
-                        },
-                    }
-                }
-            }
             UNDO => self.undo(host),
             REDO => self.redo(host),
             STATE => {
@@ -871,7 +794,6 @@ impl Plugin for Build {
             KeyAsk::pressed(key::DELETE, "Digit2"),
             KeyAsk::pressed(key::PAINT, "Digit3"),
             KeyAsk::pressed(key::VOLUME, "Digit4"),
-            KeyAsk::pressed(key::PART, "Digit5"),
             KeyAsk::pressed(key::CANCEL, "Escape"),
             KeyAsk::held(key::TURN, "AltLeft"),
             KeyAsk::held(key::TURN, "AltRight"),
@@ -894,7 +816,6 @@ impl Plugin for Build {
             key::DELETE => self.take(Some(Tool::Delete), host),
             key::PAINT => self.take(Some(Tool::Paint), host),
             key::VOLUME => self.take(Some(Tool::Volume), host),
-            key::PART => self.take(Some(Tool::Part), host),
             // A stroke half drawn goes first, then the tool itself.
             key::CANCEL => {
                 if !self.cancel() && self.tool.is_some() {

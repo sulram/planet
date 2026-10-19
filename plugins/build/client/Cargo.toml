@@ -10,9 +10,8 @@ publish.workspace = true
 build-world = { path = "../world" }
 client.workspace = true
 topology.workspace = true
-voxel.workspace = true
+voxel = { workspace = true, features = ["serde"] }
 glam.workspace = true
-libm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

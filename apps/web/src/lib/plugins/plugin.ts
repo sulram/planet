@@ -32,6 +32,8 @@ export interface LayerProps {
 	me: number | null;
 	/** What the world said this person may do. */
 	level: Level | null;
+	/** The session's key, for what a plugin asks of the world's routes beside the socket: a file sent up. Empty for a visitor. */
+	key: string;
 	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. */
 	palette: string[];
 	peers: PeerInfo[];

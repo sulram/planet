@@ -89,6 +89,8 @@ export const zh: Messages = {
 	'engine.session.connecting': '连接中',
 	'engine.session.online': '在线',
 	'engine.plugins': '插件',
+	'engine.location': '位置',
+	'engine.bar': '世界菜单',
 
 	'play.seed.hint': '16 位十六进制数字。同一个种子总是生成同一颗星球。分享地址即可分享它。',
 	'play.seed.invalid': '最多 16 位十六进制数字：0 到 9，a 到 f。',

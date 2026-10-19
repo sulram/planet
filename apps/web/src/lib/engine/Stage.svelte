@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Badge, Button, Checkbox, Icon, Input, LangSwitch, Panel, Segmented, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Stat, ThemeToggle } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import type { Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
@@ -15,7 +15,6 @@
 	import Settings from './Settings.svelte';
 	import {
 		isPluginEvent,
-		modes,
 		NAME_CHARS,
 		type Anchor,
 		type Effects,
@@ -29,10 +28,13 @@
 	} from './index';
 	import { who } from './who';
 
-	// The full viewport engine with its floating panel: what a world and the
-	// founding screen share. The page may supply the top of the panel; who is
-	// here, the mode and the stats line are the same everywhere. The keys live
-	// behind the help button and the picture behind settings.
+	// The full viewport engine and what floats over it: what a world and the
+	// founding screen share. In the top right corner a bar of icons, one a
+	// panel: where you are, who is here, the language, the plugins and the
+	// settings, which hold the mode and the picture. One panel is open at a
+	// time, under the bar. The keys live behind the help button. The page may
+	// bring a panel of its own, in the top left corner, where a plugin's menu
+	// otherwise sits.
 	// The compass point a bearing lands on, and the angle beside it. A rose has
 	// sixteen points, so each is 22.5 degrees wide. `null` is a pole, where a
 	// bearing is not a thing that exists.
@@ -56,6 +58,8 @@
 		link?: Link;
 		/** What the world said this person may do. Null in the offline preview, with no world to ask. */
 		level?: Level | null;
+		/** The session's key, handed to a plugin's layer for what it asks of the world's routes. Empty for a visitor. */
+		key?: string;
 		/** The name is an account's, as mundos signed it: shown, never edited here. */
 		account?: boolean;
 		/** Goes to mundos's door to sign in. Present for a visitor of a hosted world. */
@@ -68,7 +72,7 @@
 		children?: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, name = '', link, level = null, account = false, onsignin, onswitch, onready, children }: Props =
+	let { title, recipe, fieldPath, avatar, name = '', link, level = null, key = '', account = false, onsignin, onswitch, onready, children }: Props =
 		$props();
 
 	// A visitor's name, edited where it is shown. The engine hears it at once,
@@ -215,7 +219,13 @@
 		}
 	}
 
-	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`engine.mode.${value}`) })));
+	/** The panel open under the bar, if any. */
+	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings';
+	let opened = $state<Opened | null>(null);
+
+	function toggle(panel: Opened) {
+		opened = opened === panel ? null : panel;
+	}
 
 	function receive(event: EngineEvent | PluginEvent) {
 		if (isPluginEvent(event)) return heard(event);
@@ -249,85 +259,112 @@
 	{/if}
 	{#each mounted as plugin (plugin.name)}
 		{#if plugin.Layer}
-			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {palette} {peers} {anchors} />
+			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {key} {palette} {peers} {anchors} />
 		{/if}
 	{/each}
-	<Settings {effects} {defaults} onchange={choose} />
+	{#if children}
+		<Panel {title}>
+			{@render children()}
+		</Panel>
+	{/if}
 	<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} />
-	<Panel {title}>
-		{#snippet aside()}
-			<span class="corner">
-				{#if onsignin}<Button variant="ghost" onclick={onsignin}>{t('door.signIn')}</Button>{/if}
-				<LangSwitch />
-				<ThemeToggle />
-			</span>
-		{/snippet}
-		{@render children?.()}
+	<nav class="bar" aria-label={t('engine.bar')}>
+		<IconButton icon="map-pin" label={t('engine.location')} aria-expanded={opened === 'location'} onclick={() => toggle('location')} />
 		{#if link}
-			<section class="here">
-				<header>
-					<h3>{t('engine.here')}</h3>
-					<Badge variant={session === 'online' ? 'solid' : 'outline'}>{t(`engine.session.${session}`)}</Badge>
-				</header>
-				<ul>
-					{#if session === 'online'}
-						<li class="you">
-							{#if editing}
-								<Input
-									bind:element={nameInput}
-									bind:value={draft}
-									maxlength={NAME_CHARS * 2}
-									placeholder={t('engine.here.name')}
-									aria-label={t('engine.here.name')}
-									autocomplete="off"
-									spellcheck="false"
-									onkeydown={onNameKey}
-									onblur={keepName}
-								/>
-							{:else}
-								<span>{myName || t('engine.here.you')}</span>
-								{#if myName}<span class="muted">{t('engine.here.you')}</span>{/if}
-								{#if !account}
-									<button type="button" class="edit" title={t('engine.here.rename')} onclick={editName}>
-										<Icon name="pencil" label={t('engine.here.rename')} />
-									</button>
-								{/if}
-							{/if}
-						</li>
-					{/if}
-					{#each peers as peer (peer.session)}
-						<li>{who(peer)}</li>
-					{/each}
-				</ul>
-			</section>
+			<IconButton
+				icon="users"
+				label={t('engine.here')}
+				badge={session === 'online' ? String(peers.length + 1) : undefined}
+				aria-expanded={opened === 'here'}
+				onclick={() => toggle('here')}
+			/>
 		{/if}
+		<IconButton icon="languages" label={t('common.language')} aria-expanded={opened === 'language'} onclick={() => toggle('language')} />
 		{#if onswitch && link}
-			<section class="here">
-				<header>
-					<h3>{t('engine.plugins')}</h3>
-				</header>
-				{#each plugins as plugin (plugin.name)}
-					<Checkbox
-						checked={spoken.some((on) => on.name === plugin.name)}
-						disabled={session !== 'online' || switching !== null}
-						onchange={(on) => turn(plugin.name, on)}
-					>
-						{plugin.label()}
-					</Checkbox>
+			<IconButton icon="puzzle" label={t('engine.plugins')} aria-expanded={opened === 'plugins'} onclick={() => toggle('plugins')} />
+		{/if}
+		<IconButton icon="settings" label={t('engine.settings')} aria-expanded={opened === 'settings'} onclick={() => toggle('settings')} />
+		<ThemeToggle />
+	</nav>
+	{#if opened === 'location'}
+		<Panel {title} corner="top-right" under>
+			{#snippet aside()}
+				<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+			{/snippet}
+			{#if stats}
+				<dl>
+					<Stat label={t('engine.stats.place')} value={stats.place} />
+					<Stat label={t('engine.stats.facing')} value={facing(stats.bearing_deg)} />
+					<Stat label={t('engine.stats.altitude')} value={t('engine.stats.metres', { n: stats.altitude_m.toFixed(1) })} />
+					<Stat label={t('engine.stats.speed')} value={t('engine.stats.metresPerSecond', { n: stats.speed_mps.toFixed(1) })} />
+				</dl>
+			{/if}
+		</Panel>
+	{:else if opened === 'here' && link}
+		<Panel title={t('engine.here')} corner="top-right" under>
+			{#snippet aside()}
+				<span class="corner">
+					<Badge variant={session === 'online' ? 'solid' : 'outline'}>{t(`engine.session.${session}`)}</Badge>
+					<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+				</span>
+			{/snippet}
+			{#if onsignin}<Button variant="ghost" onclick={onsignin}>{t('door.signIn')}</Button>{/if}
+			<ul class="here">
+				{#if session === 'online'}
+					<li class="you">
+						{#if editing}
+							<Input
+								bind:element={nameInput}
+								bind:value={draft}
+								maxlength={NAME_CHARS * 2}
+								placeholder={t('engine.here.name')}
+								aria-label={t('engine.here.name')}
+								autocomplete="off"
+								spellcheck="false"
+								onkeydown={onNameKey}
+								onblur={keepName}
+							/>
+						{:else}
+							<span>{myName || t('engine.here.you')}</span>
+							{#if myName}<span class="muted">{t('engine.here.you')}</span>{/if}
+							{#if !account}
+								<button type="button" class="edit" title={t('engine.here.rename')} onclick={editName}>
+									<Icon name="pencil" label={t('engine.here.rename')} />
+								</button>
+							{/if}
+						{/if}
+					</li>
+				{/if}
+				{#each peers as peer (peer.session)}
+					<li>{who(peer)}</li>
 				{/each}
-			</section>
-		{/if}
-		<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={(value) => (mode = value)} />
-		{#if stats}
-			<dl>
-				<Stat label={t('engine.stats.place')} value={stats.place} />
-				<Stat label={t('engine.stats.facing')} value={facing(stats.bearing_deg)} />
-				<Stat label={t('engine.stats.altitude')} value={t('engine.stats.metres', { n: stats.altitude_m.toFixed(1) })} />
-				<Stat label={t('engine.stats.speed')} value={t('engine.stats.metresPerSecond', { n: stats.speed_mps.toFixed(1) })} />
-				<Stat label={t('engine.stats.fps')} value={stats.fps.toFixed(0)} />
-			</dl>
-		{/if}
-	</Panel>
+			</ul>
+		</Panel>
+	{:else if opened === 'language'}
+		<Panel title={t('common.language')} corner="top-right" under>
+			{#snippet aside()}
+				<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+			{/snippet}
+			<LangSwitch />
+		</Panel>
+	{:else if opened === 'plugins' && onswitch && link}
+		<Panel title={t('engine.plugins')} corner="top-right" under>
+			{#snippet aside()}
+				<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+			{/snippet}
+			{#each plugins as plugin (plugin.name)}
+				<Checkbox
+					checked={spoken.some((on) => on.name === plugin.name)}
+					disabled={session !== 'online' || switching !== null}
+					onchange={(on) => turn(plugin.name, on)}
+				>
+					{plugin.label()}
+				</Checkbox>
+			{/each}
+		</Panel>
+	{:else if opened === 'settings'}
+		<Settings {mode} onmode={(value) => (mode = value)} {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => (opened = null)} />
+	{/if}
 </div>
 
 <style>
@@ -336,27 +373,25 @@
 		inset: 0;
 		overflow: hidden;
 	}
+	.bar {
+		position: absolute;
+		top: var(--sp-4);
+		right: var(--sp-4);
+		z-index: var(--z-panel);
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+	}
+	.bar :global(.icon-button),
+	.bar :global(.toggle) {
+		background: var(--bg-overlay);
+	}
 	.corner {
 		display: flex;
 		align-items: center;
 		gap: var(--sp-2);
 	}
 	.here {
-		display: flex;
-		flex-direction: column;
-		gap: var(--sp-2);
-	}
-	.here header {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--sp-3);
-	}
-	.here h3 {
-		letter-spacing: var(--ls-caps);
-		text-transform: uppercase;
-		color: var(--text-muted);
-	}
-	.here ul {
 		display: flex;
 		flex-direction: column;
 		gap: var(--sp-1);

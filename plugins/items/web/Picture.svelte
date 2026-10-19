@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { Button } from '$lib/ds';
 	import { upload } from '$lib/files';
-	import type { Seam } from '$lib/plugins/plugin';
 	import { KINDS, prepareImage, type Media } from './image';
+	import type { KindProps } from './kinds';
 	import { t } from './words';
 
-	// A picture for the part tool: a file picked here is made into its three
-	// versions, sent up, and put in hand. The next click places it. What a
-	// placed picture is at every distance is the engine's (`image.ts`).
-	let { seam, key }: { seam: Seam; key: string } = $props();
+	// The picture kind's own controls: a file picked here is made into its
+	// three versions, sent up, and taken in hand with the item. The next
+	// click places it. What a placed picture is at every distance is the
+	// engine's (`image.ts`).
+	let { seam, key }: KindProps = $props();
 
 	let picture = $state<Media | null>(null);
 	let busy = $state(false);
@@ -22,7 +23,7 @@
 		error = '';
 		try {
 			picture = await prepareImage(file, (blob) => upload(blob, key));
-			seam.command('picture', { media: picture });
+			seam.command('take', { item: 'picture', media: picture });
 		} catch (refused) {
 			error = refused instanceof Error ? refused.message : 'kind';
 		} finally {
@@ -33,7 +34,7 @@
 
 	function drop() {
 		picture = null;
-		seam.command('picture', { media: null });
+		seam.command('take', { item: 'picture', media: null });
 	}
 </script>
 
@@ -41,7 +42,7 @@
 	<input bind:this={input} type="file" accept={KINDS.join(',')} onchange={picked} hidden />
 	{#if picture}
 		<span class="held">{t('picture.held', { w: String(picture.width), h: String(picture.height) })}</span>
-		<Button variant="ghost" onclick={drop}>{t('picture.drop')}</Button>
+		<Button variant="ghost" onclick={drop}>{t('picture.another')}</Button>
 	{:else}
 		<Button variant="ghost" loading={busy} onclick={() => input?.click()}>
 			{busy ? t('picture.sending') : t('picture.pick')}

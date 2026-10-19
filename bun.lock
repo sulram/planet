@@ -19,6 +19,7 @@
         "@fontsource-variable/jetbrains-mono": "^5.3.0",
         "@planet/plugin-build": "workspace:*",
         "@planet/plugin-chat": "workspace:*",
+        "@planet/plugin-items": "workspace:*",
       },
       "devDependencies": {
         "@sveltejs/adapter-static": "^4.0.0",
@@ -40,6 +41,13 @@
     },
     "plugins/chat": {
       "name": "@planet/plugin-chat",
+      "version": "0.0.0",
+      "peerDependencies": {
+        "svelte": "*",
+      },
+    },
+    "plugins/items": {
+      "name": "@planet/plugin-items",
       "version": "0.0.0",
       "peerDependencies": {
         "svelte": "*",
@@ -136,6 +144,8 @@
     "@planet/plugin-build": ["@planet/plugin-build@workspace:plugins/build"],
 
     "@planet/plugin-chat": ["@planet/plugin-chat@workspace:plugins/chat"],
+
+    "@planet/plugin-items": ["@planet/plugin-items@workspace:plugins/items"],
 
     "@planet/web": ["@planet/web@workspace:apps/web"],
 

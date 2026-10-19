@@ -94,6 +94,8 @@ export const pt: Messages = {
 	'engine.session.connecting': 'Conectando',
 	'engine.session.online': 'Conectado',
 	'engine.plugins': 'Plugins',
+	'engine.location': 'Localização',
+	'engine.bar': 'Menu do mundo',
 	'engine.settings.defaults': 'Padrões',
 
 	'play.seed.hint': '16 dígitos hexadecimais. A mesma semente sempre gera o mesmo planeta. Compartilhe o endereço para compartilhar o planeta.',

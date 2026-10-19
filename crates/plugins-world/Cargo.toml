@@ -11,6 +11,7 @@ publish.workspace = true
 world.workspace = true
 chat-world = { path = "../../plugins/chat/world" }
 build-world = { path = "../../plugins/build/world" }
+items-world = { path = "../../plugins/items/world" }
 
 [lints]
 workspace = true

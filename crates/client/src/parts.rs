@@ -45,6 +45,19 @@ pub const CUBE: [f64; 3] = [2.0, 2.0, 2.0];
 /// (docs/sketches/entities.md § The pose).
 pub const VOXEL: f64 = 1.0 / 8.0;
 
+/// Why the parts refuse what was asked of them. A plugin says it at the
+/// seam under its own name, and a front end in its own words.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PartRefusal {
+    /// Placing is a builder's and an admin's, and the world named this
+    /// session a lower level, or no world has spoken (DECISIONS 104).
+    Level,
+    /// The pose is no pose: not finite, not a turn, or flat.
+    Pose,
+    /// No part of that name stands.
+    Gone,
+}
+
 /// The models of the core's own shapes have ids under this; a model of a
 /// file is named by the hash of its content, over it.
 const SHAPES: u64 = 1 << 16;

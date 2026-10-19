@@ -4,6 +4,8 @@
 
 /// How a paint takes the light.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Finish {
     /// Solid colour, lit by what shines on it.
     #[default]
@@ -18,6 +20,8 @@ pub enum Finish {
 
 /// The line drawn around each side of a cell.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Edge {
     #[default]
     None,

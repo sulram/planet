@@ -21,8 +21,8 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   the wire and a panel in each front end.
 - Ours, compiled in: a config at the root lists them and the build bundles
   them, so a version is the core plus the plugins chosen for it.
-- Native plugins: chat, building, land, avatars, in that order (96). Chat and
-  building stand as plugins; avatars are extracted from where they stand.
+- Native plugins: chat, building, items, land, avatars (96). Chat, building
+  and items stand as plugins; avatars are extracted from where they stand.
 - Which plugins are on is the world's own (91). The config says whether each
   starts on; the admin switches any of them at the founding and after, in the
   world folder. A plugin switched off keeps its store untouched.
@@ -87,8 +87,9 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   modifiers, keys, a panel. With building off, what stands, stands.
 - The parts are the core's (111): a placed thing that is no cell, kept by its
   seat with a pose, a shape, a paint and a solid flag; placed, set and removed
-  as ops, moved in the world and read back. Building holds its hand, gizmo
-  and panel for every shape, and a file kind is a shape.
+  as ops, moved in the world and read back. Items is the plugin of the hand:
+  the menu of items, one gizmo and one panel for every kind, a picture taken
+  with the record of its file. Building is the cells alone.
 
 ## Where a plugin lives
 

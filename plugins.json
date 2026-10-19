@@ -1,4 +1,5 @@
 [
 	{ "name": "chat", "on": true },
-	{ "name": "build", "on": true }
+	{ "name": "build", "on": true },
+	{ "name": "items", "on": true }
 ]
