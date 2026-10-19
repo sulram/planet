@@ -87,6 +87,15 @@ export interface Anchor {
 	distance_m: number;
 }
 
+/** A named part on the screen, a landmark: its name, the point over its star as fractions of the viewport from the top left, and how far. */
+export interface Label {
+	id: number;
+	text: string;
+	x: number;
+	y: number;
+	distance_m: number;
+}
+
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }
 	/** The link to the world server, whenever it changes. */
@@ -98,6 +107,8 @@ export type EngineEvent =
 	| { type: 'statement'; plugins: PluginOn[] }
 	/** Every head in view, yours included, every frame while there is one and once empty after. */
 	| { type: 'anchors'; anchors: Anchor[] }
+	/** Every landmark in view within a nametag's reach, every frame while there is one and once empty after. */
+	| { type: 'labels'; labels: Label[] }
 	| { type: 'recipe_changed'; recipe: Recipe }
 	/** A command was refused. The message is for logs, not for people. */
 	| { type: 'rejected'; message: string }
@@ -141,6 +152,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'peers',
 	'statement',
 	'anchors',
+	'labels',
 	'palette'
 ]);
 

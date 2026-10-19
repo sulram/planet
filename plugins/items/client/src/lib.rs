@@ -18,7 +18,7 @@
 mod gizmo;
 mod place;
 
-use client::{Host, KeyAsk, Media, Part, PartId, Plugin, Shape, Turn};
+use client::{Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Shape, Turn};
 use glam::{DQuat, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -44,6 +44,11 @@ pub enum Item {
     /// file: its size in texels and three asset names, the original, a low
     /// version and a thumb.
     Picture,
+    /// A landmark: a star a metre across lying where it is placed, bearing
+    /// the name in hand, in the colour in hand and always lit with its own
+    /// light, a lamp; nobody collides with it. A place one travels to: the
+    /// chart lists every landmark of the world with its place code.
+    Landmark,
 }
 
 /// Why an item was not handed over, or a part not placed or set. A front
@@ -60,6 +65,9 @@ pub enum Refusal {
     Gone,
     /// The model in hand is still on its way: its size is not known yet.
     Unread,
+    /// The name given is no name: empty, over sixty four bytes, or with a
+    /// control character in it; or the part picked bears no name.
+    Name,
 }
 
 impl From<client::PartRefusal> for Refusal {
@@ -102,6 +110,9 @@ pub const EDGE: &str = "edge";
 pub const STATE: &str = "state";
 /// `items.list`: say the parts near the body, nearest first, with `near`.
 pub const LIST: &str = "list";
+/// `items.chart`: say the landmarks of the world, wherever they stand, with
+/// `landmarks`, once the world has answered. At any level.
+pub const CHART: &str = "chart";
 /// `items.hand`: whether the menu is open, the item in hand, `null` when
 /// none, the mode, the paint in hand, and the model's asset when one is in
 /// hand, `null` otherwise.
@@ -114,6 +125,25 @@ pub const REFUSED: &str = "refused";
 /// first: each by its name, what kind of item it is, how far, its paint and
 /// whether it is solid.
 pub const NEAR: &str = "near";
+/// `items.landmarks`: the landmarks of the world, the nearest first: each
+/// by its name in the world, what it is called, its paint, how far it is
+/// and the place code that takes a body to it.
+pub const LANDMARKS: &str = "landmarks";
+
+#[derive(Serialize)]
+struct LandmarkOne {
+    id: u64,
+    name: String,
+    paint: u8,
+    /// Infinite on another body.
+    away_m: f64,
+    place: String,
+}
+
+#[derive(Serialize)]
+struct Landmarks {
+    landmarks: Vec<LandmarkOne>,
+}
 
 /// How far from the body a part is listed, metres: a plot's width.
 const LIST_M: f64 = 32.0;
@@ -150,6 +180,9 @@ struct Take {
     /// is placed where it was given, as soon as it is ready.
     #[serde(default)]
     ahead: bool,
+    /// The name the next landmark bears.
+    #[serde(default)]
+    name: Option<String>,
 }
 
 /// A picture's record as the seam says it.
@@ -192,6 +225,9 @@ struct Set {
     /// the new aspect, its height stays.
     #[serde(default)]
     media: Option<MediaBody>,
+    /// What the landmark picked is called.
+    #[serde(default)]
+    name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -221,6 +257,8 @@ struct Hand {
     /// Whether the model in hand is still on its way: its file has not
     /// arrived, so what it places is a glass box until it does.
     loading: bool,
+    /// The name the next landmark bears, when one was given.
+    name: Option<String>,
 }
 
 /// A part as the panel shows it.
@@ -242,9 +280,12 @@ struct Picked {
     shine: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reach_m: Option<f32>,
-    /// Whether it is a lamp: a cube in the light finish.
+    /// Whether it is a lamp: a cube in the light finish, or a landmark.
     #[serde(skip_serializing_if = "Option::is_none")]
     lamp: Option<bool>,
+    /// What a landmark is called.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -287,6 +328,8 @@ pub struct Items {
     model: Option<[u8; 32]>,
     /// Whether the model in hand was still on its way, as last said.
     loading: bool,
+    /// The name the next landmark bears. None until one is given.
+    name: Option<Name>,
     /// The item in hand is to be placed in front of the body as soon as it
     /// is ready, with no click.
     ahead: bool,
@@ -307,6 +350,7 @@ impl Default for Items {
             picture: None,
             model: None,
             loading: false,
+            name: None,
             ahead: false,
             using: false,
         }
@@ -338,6 +382,27 @@ impl Items {
             edge: self.edge,
         }
         .byte()
+    }
+
+    /// The paint a shape is made of in the colour in hand: a landmark is
+    /// always in the light finish with no edge, lit with its own light, so
+    /// only its colour is the hand's.
+    pub(crate) fn paint_of(&self, shape: Shape) -> u8 {
+        match shape {
+            Shape::Landmark(_) => Paint {
+                color: self.paint,
+                finish: Finish::Light,
+                edge: Edge::None,
+            }
+            .byte(),
+            Shape::Cube | Shape::Vox(_) | Shape::Image(_) => self.made_of(),
+        }
+    }
+
+    /// The name the next landmark bears: the one given, or the plain word.
+    pub(crate) fn name_in_hand(&self) -> Name {
+        self.name
+            .unwrap_or_else(|| Name::new("Landmark").expect("a plain word is a name"))
     }
 
     /// Opens the menu or closes it. Open, the pointer is this plugin's.
@@ -434,6 +499,15 @@ impl Items {
             part.shape = Shape::Image(media);
             part.pose.scale[0] = part.pose.scale[2] * media.aspect();
         }
+        if let Some(text) = &set.name {
+            let Shape::Landmark(_) = part.shape else {
+                return refuse(host, Refusal::Name);
+            };
+            let Some(name) = Name::new(text) else {
+                return refuse(host, Refusal::Name);
+            };
+            part.shape = Shape::Landmark(name);
+        }
         let (id, seat) = (gizmo.id, gizmo.seat);
         self.apply(id, seat, part, host);
     }
@@ -453,7 +527,7 @@ impl Items {
     fn repaint(&mut self, host: &mut Host<'_>) {
         if let Some(gizmo) = &self.picked {
             let (id, seat, mut part) = (gizmo.id, gizmo.seat, gizmo.part);
-            part.paint = self.made_of();
+            part.paint = self.paint_of(part.shape);
             self.apply(id, seat, part, host);
         }
     }
@@ -481,6 +555,7 @@ impl Items {
                 edge: self.edge,
                 model: self.model.and_then(|hash| Shape::Vox(hash).asset()),
                 loading: self.loading,
+                name: self.name.map(|name| name.to_string()),
             },
         );
     }
@@ -504,11 +579,7 @@ impl Items {
                     * BLOCK_M;
                 NearOne {
                     id: id.0,
-                    item: match part.shape {
-                        Shape::Cube => Item::Cube,
-                        Shape::Vox(_) => Item::Model,
-                        Shape::Image(_) => Item::Picture,
-                    },
+                    item: item_of(part.shape),
                     away_m,
                     paint: part.paint,
                     solid: part.solid,
@@ -519,6 +590,27 @@ impl Items {
         near.sort_by(|a, b| a.away_m.total_cmp(&b.away_m));
         near.truncate(LISTED);
         host.emit(NEAR, &Near { near });
+    }
+
+    /// Says the landmarks of the world as the chart answered: the nearest
+    /// first, each with the place code that takes a body to it.
+    fn say_landmarks(&self, charted: &[Landmarked], host: &mut Host<'_>) {
+        let landmarks = charted
+            .iter()
+            .filter_map(|landmark| {
+                let Shape::Landmark(name) = landmark.part.shape else {
+                    return None;
+                };
+                Some(LandmarkOne {
+                    id: landmark.id,
+                    name: name.to_string(),
+                    paint: landmark.part.paint,
+                    away_m: landmark.away_m,
+                    place: host.place_at(landmark.seat, landmark.part.pose.at),
+                })
+            })
+            .collect();
+        host.emit(LANDMARKS, &Landmarks { landmarks });
     }
 
     /// Places the item in hand in front of the body, when it is to be and
@@ -543,11 +635,7 @@ impl Items {
         let picked = match &self.picked {
             Some(gizmo) => Picked {
                 id: Some(gizmo.id.0),
-                item: Some(match gizmo.part.shape {
-                    Shape::Cube => Item::Cube,
-                    Shape::Vox(_) => Item::Model,
-                    Shape::Image(_) => Item::Picture,
-                }),
+                item: Some(item_of(gizmo.part.shape)),
                 at: Some(gizmo.part.pose.at),
                 rotation: Some(degrees(gizmo.part.pose.rotation)),
                 scale: Some(gizmo.part.pose.scale),
@@ -555,6 +643,10 @@ impl Items {
                 shine: Some(gizmo.part.shine),
                 reach_m: Some(gizmo.part.reach_m),
                 lamp: Some(client::is_lamp(&gizmo.part)),
+                name: match gizmo.part.shape {
+                    Shape::Landmark(name) => Some(name.to_string()),
+                    _ => None,
+                },
             },
             None => Picked {
                 id: None,
@@ -566,6 +658,7 @@ impl Items {
                 shine: None,
                 reach_m: None,
                 lamp: None,
+                name: None,
             },
         };
         host.emit(PICKED, &picked);
@@ -632,6 +725,16 @@ fn refuse(host: &mut Host<'_>, reason: Refusal) {
     host.emit(REFUSED, &Refused { reason });
 }
 
+/// What kind of item a shape is.
+fn item_of(shape: Shape) -> Item {
+    match shape {
+        Shape::Cube => Item::Cube,
+        Shape::Vox(_) => Item::Model,
+        Shape::Image(_) => Item::Picture,
+        Shape::Landmark(_) => Item::Landmark,
+    }
+}
+
 impl Plugin for Items {
     fn name(&self) -> &'static str {
         NAME
@@ -659,8 +762,15 @@ impl Plugin for Items {
                     asset,
                     media,
                     ahead,
+                    name,
                 }) = read(body, host)
                 {
+                    if let Some(text) = name {
+                        let Some(name) = Name::new(&text) else {
+                            return refuse(host, Refusal::Name);
+                        };
+                        self.name = Some(name);
+                    }
                     if item == Some(Item::Picture) {
                         match media.as_ref().map(MediaBody::media) {
                             Some(None) => {
@@ -717,6 +827,7 @@ impl Plugin for Items {
                 self.say_picked(host);
             }
             LIST => self.say_near(host),
+            CHART => host.chart(),
             _ => host.reject(format!("`{kind}` is no command of items")),
         }
     }
@@ -768,6 +879,10 @@ impl Plugin for Items {
     /// anywhere, and opens the menu on it; with an item in hand a click
     /// places it; with the menu open the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
+        // The chart answered: the landmarks are said.
+        if let Some(charted) = host.take_charted() {
+            self.say_landmarks(&charted, host);
+        }
         // The model in hand arrived, or a new one is on its way: the hand
         // says so.
         let loading = self.is_loading(host);
@@ -1184,6 +1299,101 @@ mod tests {
             "{} on {under_top}",
             over.pose.at[2]
         );
+    }
+
+    #[test]
+    fn a_landmark_bears_the_name_in_hand_is_a_lamp_and_is_renamed() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.paint","paint":11}"#);
+        client.command_json(r#"{"type":"items.finish","finish":"glass"}"#);
+        client.command_json(
+            r#"{"type":"items.take","item":"landmark","name":" Praça ","ahead":true}"#,
+        );
+        let (_, _, part) = *client.parts().all().collect::<Vec<_>>().first().unwrap();
+        assert!(matches!(part.shape, Shape::Landmark(name) if name.as_str() == "Praça"));
+        assert!(!part.solid);
+        let paint = Paint::of(part.paint);
+        assert_eq!(
+            (paint.color, paint.finish, paint.edge),
+            (11, Finish::Light, Edge::None),
+            "always lit, whatever finish is in hand"
+        );
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["item"], "landmark");
+        assert_eq!(picked["name"], "Praça");
+        assert_eq!(picked["lamp"], true);
+        // Renamed by the panel; a name that is no name is refused.
+        client.command_json(r#"{"type":"items.set","name":"Sé"}"#);
+        let (_, _, part) = client.parts().all().next().unwrap();
+        assert!(matches!(part.shape, Shape::Landmark(name) if name.as_str() == "Sé"));
+        client.command_json(r#"{"type":"items.set","name":"   "}"#);
+        assert_eq!(events(&mut client).last().unwrap()["reason"], "name");
+        // Repainted, it stays lit.
+        client.command_json(r#"{"type":"items.paint","paint":2}"#);
+        let (_, _, part) = client.parts().all().next().unwrap();
+        assert_eq!(Paint::of(part.paint).finish, Finish::Light);
+        // With no name given, the plain word.
+        client.command_json(r#"{"type":"items.take","item":"landmark","ahead":true}"#);
+        assert!(
+            client
+                .parts()
+                .all()
+                .any(|(_, _, part)| matches!(part.shape, Shape::Landmark(name) if name.as_str() == "Praça")),
+            "the name in hand stays in hand"
+        );
+    }
+
+    #[test]
+    fn the_chart_lists_every_landmark_with_a_place_at_any_level() {
+        let mut client = client();
+        for name in ["Far", "Near"] {
+            client.command_json(&format!(
+                r#"{{"type":"items.take","item":"landmark","name":"{name}","ahead":true}}"#
+            ));
+        }
+        // The first placed is set further along than the second.
+        let (id, _, part) = client.parts().all().next().unwrap();
+        let mut far = *part;
+        far.pose.at[0] += 40.0;
+        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, id.0));
+        client.command_json(&format!(
+            r#"{{"type":"items.set","at":[{},{},{}]}}"#,
+            far.pose.at[0], far.pose.at[1], far.pose.at[2]
+        ));
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        events(&mut client);
+        client.command_json(r#"{"type":"items.chart"}"#);
+        let mut input = Input::default();
+        client.update(1.0 / 60.0, &mut input);
+        let said = events(&mut client);
+        let landmarks = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.landmarks")
+            .expect("the chart is answered in the turn");
+        let rows = landmarks["landmarks"].as_array().unwrap();
+        let names: Vec<&str> = rows
+            .iter()
+            .map(|row| row["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["Near", "Far"], "the landmarks alone, nearest first");
+        assert!(rows[0]["away_m"].as_f64().unwrap() < rows[1]["away_m"].as_f64().unwrap());
+        let place = rows[1]["place"].as_str().unwrap();
+        assert!(client.go_to(place).is_ok(), "{place} takes a body there");
+        // A visitor asks the chart too.
+        let mut visitor = Client::new(Recipe::new(1)).unwrap();
+        visitor.plug(plugin());
+        visitor.rehearse(Level::SignedIn);
+        visitor.command_json(r#"{"type":"items.chart"}"#);
+        visitor.update(1.0 / 60.0, &mut input);
+        let said = events(&mut visitor);
+        assert!(said.iter().any(|e| e["type"] == "items.landmarks"));
+        assert!(said.iter().all(|e| e["type"] != "items.refused"));
     }
 
     #[test]

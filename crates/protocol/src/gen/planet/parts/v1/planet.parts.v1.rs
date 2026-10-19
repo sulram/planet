@@ -4,7 +4,7 @@
 /// a variant beside the cube.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Shape {
-    #[prost(oneof="shape::Shape", tags="1, 2, 3")]
+    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4")]
     pub shape: ::core::option::Option<shape::Shape>,
 }
 /// Nested message and enum types in `Shape`.
@@ -19,11 +19,21 @@ pub mod shape {
         Vox(::prost::alloc::vec::Vec<u8>),
         #[prost(message, tag="3")]
         Image(super::Media),
+        #[prost(message, tag="4")]
+        Landmark(super::Landmark),
     }
 }
 /// The unit box, in one paint.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Cube {
+}
+/// A landmark: a star lying in the box, bearing a name: trimmed, never
+/// empty, no control character, at most 64 bytes of UTF-8. Lit with its own
+/// light whatever its paint's finish; a place one travels to.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Landmark {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
 }
 /// A picture: its size in texels and the three files its owner's client made
 /// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
@@ -186,6 +196,19 @@ pub struct Seen {
     pub records: ::prost::alloc::vec::Vec<Record>,
     #[prost(uint64, repeated, tag="2")]
     pub gone: ::prost::alloc::vec::Vec<u64>,
+}
+/// `chart`: the landmarks of the world, wherever they stand. The world
+/// answers the asker with `charted`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Chart {
+}
+/// `charted`: the landmarks of the world as they stand, the nearest the
+/// asker first, at most 256. The answer to `chart`, always given, empty when
+/// the world has none.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Charted {
+    #[prost(message, repeated, tag="1")]
+    pub records: ::prost::alloc::vec::Vec<Record>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

@@ -79,7 +79,7 @@ end to end.
 - [ ] The gizmo's handles sized by the view, so a part far off is still taken by its handle; a drag snapped to blocks and to right angles with a key held
 - [ ] A part picked by one hand shown picked to the others near
 - [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
-- [ ] A light part lights what is near, as a lamp among the cells does
+- [ ] A light part lights what is near, as a lamp among the cells does; a cube in the light finish and a landmark do already
 - [ ] Items beside the cube: a `.vox` model (its session: `crates/vox`, the upload route), a shape of part, a draw of its own and a row in the items menu. A picture stands (`Shape::Image`): its knobs, one side or both, a screen or a print, are read off its paint's finish until the panel offers them
 
 ### Bodies (108)
@@ -137,7 +137,7 @@ end to end.
 - [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
-- [ ] Portals between places, scales and worlds; magic as a capability
+- [ ] Portals between places, scales and worlds, each leading to a landmark (sketches/portals.md): the view through it, the crossing, the wobble; magic as a capability
 - [ ] Gravity fields as placeable entities (19)
 - [ ] Scripts, server side
 - [ ] Agents (94): headless clients with a door of their own in mundos, permitted by volume as a person is

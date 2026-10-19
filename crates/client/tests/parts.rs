@@ -3,7 +3,8 @@
 //! others place arrives; a place refused is taken back.
 
 use client::{
-    CUBE, Client, ContentId, ImageKind, Media, Outbound, Part, PartPose, Recipe, Seat, Shape,
+    CUBE, Client, ContentId, Event, ImageKind, Media, Name, Outbound, Part, PartPose, Recipe, Seat,
+    Shape,
 };
 use protocol::parts as wire;
 use protocol::{Message, client_message, server_message};
@@ -291,4 +292,78 @@ fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
             ),
         "a level of it is asked for"
     );
+}
+
+/// A landmark placed by someone else arrives as a star: drawn as a solid
+/// model whatever its paint, a lamp, its name hung over it when it is in
+/// view, and said by the chart with the place that takes a body to it.
+#[test]
+fn a_landmark_another_placed_is_a_lit_star_with_its_name_over_it() {
+    let mut client = welcomed();
+    client.set_view([1600, 900]);
+    let feet = client.host("test").feet();
+    let seat = Seat::Sector(feet.point.sector);
+    let name = Name::new("Praça da Sé").unwrap();
+    let part = Part {
+        shape: Shape::Landmark(name),
+        pose: PartPose::upright(
+            [
+                feet.point.u,
+                feet.point.v + 6.0,
+                feet.height_m / topology::BLOCK_M,
+            ],
+            [2.0, 2.0, 0.16],
+        ),
+        // A glass paint: a landmark is solid to the eye all the same.
+        paint: voxel::Paint {
+            color: 3,
+            finish: voxel::Finish::Glass,
+            edge: voxel::Edge::None,
+        }
+        .byte(),
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+    };
+    let placed = wire::Placed {
+        session: 2,
+        record: Some(record(9, 0, seat, &part)),
+    };
+    client.receive(&said(wire::PLACED, placed.encode_to_vec()));
+    let frame = client.settled_frame();
+    assert_eq!(frame.models.len(), 1);
+    assert_eq!(frame.models[0].pass, scene::ModelPass::Solid);
+    assert_eq!(frame.lamps.len(), 1, "a landmark lights what is near");
+    // Facing it, its name is on the screen; turned away, the labels empty
+    // once and then say nothing.
+    let mut input = client::Input::default();
+    client.update(1.0 / 60.0, &mut input);
+    let labels: Vec<Vec<client::Label>> = client
+        .drain_events()
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::Labels { labels } => Some(labels),
+            _ => None,
+        })
+        .collect();
+    let seen = labels.iter().flatten().find(|label| label.id == 1);
+    let seen = seen.expect("the star is in view of a body facing along v");
+    assert_eq!(seen.text, "Praça da Sé");
+    assert!((0.0..=1.0).contains(&seen.x) && (0.0..=1.0).contains(&seen.y));
+    assert!(seen.distance_m < 10.0);
+    // The chart, in a world, is asked of the world and its answer taken.
+    client.host("test").chart();
+    assert!(asked(&mut client).iter().any(|ask| ask.kind == wire::CHART));
+    let charted = wire::Charted {
+        records: vec![record(9, 0, seat, &part)],
+    };
+    client.receive(&said(wire::CHARTED, charted.encode_to_vec()));
+    let charted = client.host("test").take_charted().unwrap();
+    assert_eq!((charted.len(), charted[0].id), (1, 9));
+    assert!(charted[0].away_m < 10.0);
+    let place = client
+        .host("test")
+        .place_at(charted[0].seat, charted[0].part.pose.at);
+    assert!(client.go_to(&place).is_ok(), "{place} takes a body there");
+    assert!(client.host("test").take_charted().is_none(), "taken once");
 }

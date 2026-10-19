@@ -120,6 +120,18 @@ fn cube(point: SurfacePoint, h: f64) -> wire::Part {
     seat::part_wire(Seat::Sector(point.sector), &part)
 }
 
+fn landmark(point: SurfacePoint, name: &str) -> wire::Part {
+    let part = part::Part {
+        shape: part::Shape::Landmark(part::Name::new(name).unwrap()),
+        pose: part::Pose::upright([point.u, point.v, 0.0], [2.0, 2.0, 0.16]),
+        paint: 11,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+    };
+    seat::part_wire(Seat::Sector(point.sector), &part)
+}
+
 /// Takes back or puts back a session's last change through the owner's op.
 /// Whether it landed.
 fn restore(parts: &mut Parts, stage: &mut Stage, who: &Who, back: bool) -> bool {
@@ -339,4 +351,59 @@ fn a_look_is_answered_with_what_is_lacking_near_and_what_is_gone() {
     let seen = told::<wire::Seen>(&mut stage, wire::SEEN);
     let ids: Vec<u64> = seen[0].0.records.iter().map(|record| record.id).collect();
     assert_eq!(ids, vec![3]);
+}
+
+#[test]
+fn a_chart_says_every_landmark_nearest_first_to_whoever_asks() {
+    let (mut stage, point) = stage();
+    let mut parts = Parts::default();
+    let who = stage.here[0].clone();
+    // A cube, a landmark where the visitor stands, 8000 blocks along the
+    // sector, and one here: the chart says the landmarks alone, wherever
+    // they stand, the nearer the asker first.
+    let far = SurfacePoint::new(point.sector, point.u + 8000.0, point.v);
+    for part in [
+        cube(point, 4.0),
+        landmark(far, "Far"),
+        landmark(point, "Near"),
+    ] {
+        let place = wire::Place { part: Some(part) };
+        parts.op(wire::PLACE, &place.encode_to_vec(), &who, &mut stage);
+    }
+    stage.told.clear();
+    // The visitor asks: anyone may.
+    let visitor = stage.here[1].clone();
+    parts.op(
+        wire::CHART,
+        &wire::Chart {}.encode_to_vec(),
+        &visitor,
+        &mut stage,
+    );
+    assert_eq!(stage.refused, None);
+    let charted = told::<wire::Charted>(&mut stage, wire::CHARTED);
+    let (charted, to) = &charted[0];
+    assert_eq!(to, &[2]);
+    let names: Vec<String> = charted
+        .records
+        .iter()
+        .filter_map(|record| seat::part_from_wire(record.part.as_ref()?))
+        .map(|(_, part)| match part.shape {
+            part::Shape::Landmark(name) => name.to_string(),
+            _ => panic!("a chart is landmarks alone"),
+        })
+        .collect();
+    assert_eq!(names, ["Far", "Near"]);
+    // With none, the chart is answered empty.
+    let mut empty = Parts::default();
+    let mut bare = stage;
+    bare.store.clear();
+    bare.told.clear();
+    empty.op(
+        wire::CHART,
+        &wire::Chart {}.encode_to_vec(),
+        &who,
+        &mut bare,
+    );
+    let charted = told::<wire::Charted>(&mut bare, wire::CHARTED);
+    assert!(charted[0].0.records.is_empty());
 }

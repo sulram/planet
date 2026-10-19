@@ -19,6 +19,8 @@ use crate::{Item, Items, Refusal, refuse};
 
 /// How thick a picture's pane is, in blocks: enough to pick, nothing to see.
 const PANE: f64 = 0.1;
+/// A landmark's star, in blocks: a metre across, eight centimetres thick.
+const STAR: [f64; 3] = [2.0, 2.0, 0.16];
 
 impl Items {
     /// Places the item in hand where the eye's pointer meets the world.
@@ -87,6 +89,17 @@ impl Items {
                         scale: [CUBE[2] * media.aspect(), PANE, CUBE[2]],
                     },
                     paint: self.made_of(),
+                    solid: false,
+                    shine: 0.0,
+                    reach_m: 0.0,
+                }
+            }
+            Item::Landmark => {
+                let shape = Shape::Landmark(self.name_in_hand());
+                client::Part {
+                    shape,
+                    pose: PartPose::upright(at, STAR),
+                    paint: self.paint_of(shape),
                     solid: false,
                     shine: 0.0,
                     reach_m: 0.0,

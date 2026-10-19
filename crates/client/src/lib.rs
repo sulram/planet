@@ -25,7 +25,7 @@ mod session;
 mod terrain;
 mod wardrobe;
 
-use glam::DVec3;
+use glam::{DQuat, DVec3};
 use scene::{ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
@@ -38,9 +38,12 @@ pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use history::{History, Owner};
 pub use input::{Chord, Input, Key, KeyAsk};
-pub use part::{ContentId, ImageKind, Media, Part, PartId, PictureLevel, Pose as PartPose, Shape};
+pub use part::{
+    ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel, Pose as PartPose,
+    Shape,
+};
 pub use parts::is_lamp;
-pub use parts::{CUBE, Mark, PartRefusal, Parts, VOXEL};
+pub use parts::{CUBE, Landmarked, Mark, PartRefusal, Parts, VOXEL};
 use peers::Peers;
 use pictures::Pictures;
 pub use pictures::{FULL_SIDE, LOW_SIDE, Screen, THUMB_SIDE};
@@ -48,7 +51,7 @@ pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, PartHit, Plugin, Standing, Turn};
 use plugin::{Lent, Plugins};
 pub use scene::{Effects, Frame, ToneMap};
-pub use seam::{Anchor, Command, Event, Level, Mode, PeerInfo, PluginOn, SessionStatus};
+pub use seam::{Anchor, Command, Event, Label, Level, Mode, PeerInfo, PluginOn, SessionStatus};
 pub use session::Outbound;
 use session::Session;
 use terrain::{Body, Cover, Terrain};
@@ -122,6 +125,7 @@ pub struct Client {
     /// Whether the last frame hung anchors, so the first empty frame after
     /// them still says so.
     had_anchors: bool,
+    had_labels: bool,
     /// Whether the last frame's streaming found nothing to build.
     settled: bool,
     entropy: u64,
@@ -187,6 +191,7 @@ impl Client {
             stats_timer_s: 0.0,
             frames_since_stats: 0,
             had_anchors: false,
+            had_labels: false,
             settled: false,
             entropy: 0,
         };
@@ -1088,6 +1093,7 @@ impl Client {
 
         let camera = self.controller.camera(&self.generator);
         self.anchors(&camera);
+        self.labels(&camera);
         let eye = Eye {
             position: camera.position,
             rotation: camera.rotation,
@@ -1136,10 +1142,7 @@ impl Client {
                 self.controller.position() + up * self.figure.label_m(),
             )
         });
-        let inverse = camera.rotation.inverse();
-        let focal = 1.0 / (f64::from(camera.fov_y) / 2.0).tan();
-        let aspect = f64::from(self.aspect);
-        let near = f64::from(camera.near);
+        let projection = Projection::of(camera, self.aspect);
         let anchors: Vec<Anchor> = own_head
             .into_iter()
             .chain(
@@ -1149,22 +1152,12 @@ impl Client {
                     .flatten(),
             )
             .filter_map(|(session, head)| {
-                let local = inverse * (head - camera.position);
-                if local.z >= -near {
-                    return None;
-                }
-                let x = focal / aspect * local.x / -local.z;
-                let y = focal * local.y / -local.z;
-                // A little past the edge, so a label slides off instead of
-                // popping.
-                if x.abs() > 1.2 || y.abs() > 1.2 {
-                    return None;
-                }
+                let (x, y, distance_m) = projection.project(head)?;
                 Some(Anchor {
                     session,
-                    x: ((x + 1.0) / 2.0) as f32,
-                    y: ((1.0 - y) / 2.0) as f32,
-                    distance_m: local.length() as f32,
+                    x,
+                    y,
+                    distance_m,
                 })
             })
             .collect();
@@ -1173,6 +1166,40 @@ impl Client {
         }
         self.had_anchors = !anchors.is_empty();
         self.events.push(Event::Anchors { anchors });
+    }
+
+    /// Where every landmark in view and within reach of a label lands on
+    /// the screen, the point over its star, as heads do.
+    fn labels(&mut self, camera: &scene::Camera) {
+        let projection = Projection::of(camera, self.aspect);
+        let body = self.controller.held_by();
+        let labels: Vec<Label> = self
+            .parts
+            .all()
+            .filter_map(|(id, seat, part)| {
+                let Shape::Landmark(name) = part.shape else {
+                    return None;
+                };
+                if parts::away_m(&self.generator, seat, &part.pose, body) > LABEL_M {
+                    return None;
+                }
+                let world = self.parts.transform(&self.generator, id)?;
+                let top = world.transform_point3(DVec3::new(0.0, 0.0, 1.0));
+                let (x, y, distance_m) = projection.project(top)?;
+                Some(Label {
+                    id: id.0,
+                    text: name.to_string(),
+                    x,
+                    y,
+                    distance_m,
+                })
+            })
+            .collect();
+        if labels.is_empty() && !self.had_labels {
+            return;
+        }
+        self.had_labels = !labels.is_empty();
+        self.events.push(Event::Labels { labels });
     }
 
     /// The frame as it would look once streaming caught up. Blocks until every
@@ -1509,5 +1536,52 @@ fn dress(
             wardrobe.want(wanted, requests);
             false
         }
+    }
+}
+
+/// How far from the body a landmark's name is hung over it, metres: as far
+/// as a nametag is read.
+const LABEL_M: f64 = 120.0;
+
+/// The renderer's own projection of a point of the world onto the screen:
+/// reversed infinite depth has no far plane, so only what is behind the
+/// camera or off the sides is left out.
+struct Projection {
+    inverse: DQuat,
+    position: DVec3,
+    focal: f64,
+    aspect: f64,
+    near: f64,
+}
+
+impl Projection {
+    fn of(camera: &scene::Camera, aspect: f32) -> Projection {
+        Projection {
+            inverse: camera.rotation.inverse(),
+            position: camera.position,
+            focal: 1.0 / (f64::from(camera.fov_y) / 2.0).tan(),
+            aspect: f64::from(aspect),
+            near: f64::from(camera.near),
+        }
+    }
+
+    /// Where a point lands: fractions of the viewport from the top left,
+    /// and how far the point is. `None` behind the camera or off the sides,
+    /// a little past the edge, so a label slides off instead of popping.
+    fn project(&self, point: DVec3) -> Option<(f32, f32, f32)> {
+        let local = self.inverse * (point - self.position);
+        if local.z >= -self.near {
+            return None;
+        }
+        let x = self.focal / self.aspect * local.x / -local.z;
+        let y = self.focal * local.y / -local.z;
+        if x.abs() > 1.2 || y.abs() > 1.2 {
+            return None;
+        }
+        Some((
+            ((x + 1.0) / 2.0) as f32,
+            ((1.0 - y) / 2.0) as f32,
+            local.length() as f32,
+        ))
     }
 }

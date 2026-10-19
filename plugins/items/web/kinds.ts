@@ -10,6 +10,7 @@ import type { IconName } from '$lib/ds';
 import type { Seam } from '$lib/plugins/plugin';
 import Picture from './Picture.svelte';
 import Model from './Model.svelte';
+import Landmark from './Landmark.svelte';
 import type { Item, Picked } from './protocol';
 import { t } from './words';
 
@@ -31,5 +32,6 @@ export interface Kind {
 export const kinds: readonly Kind[] = [
 	{ name: 'cube', icon: 'box', label: () => t('kind.cube') },
 	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture },
-	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model }
+	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model },
+	{ name: 'landmark', icon: 'star', label: () => t('kind.landmark'), Extra: Landmark }
 ];

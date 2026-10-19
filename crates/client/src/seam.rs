@@ -152,6 +152,12 @@ pub enum Event {
     Anchors {
         anchors: Vec<Anchor>,
     },
+    /// Where every named part in view, a landmark, is on the screen: sent
+    /// every frame while there is one, and once empty after the last. A
+    /// front end hangs the name there.
+    Labels {
+        labels: Vec<Label>,
+    },
     /// The plugins that are on in the world this client is in, whenever
     /// that changes: what a front end mounts. Empty when offline, where no
     /// world has spoken.
@@ -212,6 +218,17 @@ pub struct PluginOn {
 #[derive(Clone, Copy, PartialEq, Debug, Serialize)]
 pub struct Anchor {
     pub session: u32,
+    pub x: f32,
+    pub y: f32,
+    pub distance_m: f32,
+}
+
+/// A named part on the screen: its name here, the point over it as
+/// fractions of the viewport from the top left, and how far it is.
+#[derive(Clone, PartialEq, Debug, Serialize)]
+pub struct Label {
+    pub id: u64,
+    pub text: String,
     pub x: f32,
     pub y: f32,
     pub distance_m: f32,

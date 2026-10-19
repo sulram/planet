@@ -1,5 +1,5 @@
 //! A part: a placed thing that is no cell (DECISIONS 111). A cube first; a
-//! model, a picture, a light are shapes of the same thing.
+//! model, a picture, a landmark, a light are shapes of the same thing.
 //!
 //! A part knows no sphere (CLAUDE.md, How it grows). It stands in a flat
 //! frame, blocks along `x` and `y` and up `z`, the frame of the seat it is
@@ -33,6 +33,57 @@ pub enum Shape {
     /// and seen from both sides. Wide as the box is along `x`, tall as it is
     /// along `z`; a hand places it in the picture's own aspect.
     Image(Media),
+    /// A landmark: a five pointed star lying in the box, its points at the
+    /// box's sides along `x` and `y`, as tall as the box along `z`, bearing
+    /// a name. It is lit with its own light whatever its paint's finish, so
+    /// it is seen at night, and it is a place one travels to: arriving at
+    /// it is standing on it.
+    Landmark(Name),
+}
+
+/// The most bytes a name is, UTF-8.
+pub const NAME_BYTES: usize = 64;
+
+/// What a landmark is called: trimmed, never empty, no control character,
+/// at most [`NAME_BYTES`] bytes of UTF-8, kept inline so a part stays plain
+/// data. Read back with [`Name::as_str`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Name {
+    len: u8,
+    bytes: [u8; NAME_BYTES],
+}
+
+impl Name {
+    /// A name from text, trimmed. `None` for one that is empty, over the
+    /// bound or holds a control character: what the world refuses.
+    pub fn new(text: &str) -> Option<Name> {
+        let text = text.trim();
+        if text.is_empty() || text.len() > NAME_BYTES || text.chars().any(char::is_control) {
+            return None;
+        }
+        let mut bytes = [0; NAME_BYTES];
+        bytes[..text.len()].copy_from_slice(text.as_bytes());
+        Some(Name {
+            len: text.len() as u8,
+            bytes,
+        })
+    }
+
+    pub fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.bytes[..usize::from(self.len)]).expect("made from a str")
+    }
+}
+
+impl core::fmt::Display for Name {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl core::fmt::Debug for Name {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Name({:?})", self.as_str())
+    }
 }
 
 impl Shape {
@@ -57,7 +108,7 @@ impl Shape {
                 let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
                 Some(format!("asset://{hex}.vox"))
             }
-            Shape::Cube | Shape::Image(_) => None,
+            Shape::Cube | Shape::Image(_) | Shape::Landmark(_) => None,
         }
     }
 }
@@ -448,6 +499,28 @@ mod tests {
         assert_eq!(side, -DVec3::X, "the low x side from the left");
         let (_, _, side) = slab(DVec3::new(0.0, 2.0, 0.5), -DVec3::Y).unwrap();
         assert_eq!(side, DVec3::Y, "the high y side from beyond it");
+    }
+
+    #[test]
+    fn a_name_is_trimmed_bounded_and_plain() {
+        let name = Name::new("  Praça da Sé ").unwrap();
+        assert_eq!(name.as_str(), "Praça da Sé");
+        assert_eq!(name.to_string(), "Praça da Sé");
+        assert_eq!(Name::new("   "), None, "empty");
+        assert_eq!(Name::new("a\tb"), None, "a control character");
+        assert_eq!(
+            Name::new(&"x".repeat(NAME_BYTES)).map(|n| n.as_str().len()),
+            Some(NAME_BYTES)
+        );
+        assert_eq!(
+            Name::new(&"x".repeat(NAME_BYTES + 1)),
+            None,
+            "over the bound"
+        );
+        // Bytes, not characters: sixteen of a four byte character fill it.
+        assert!(Name::new(&"\u{1F30D}".repeat(16)).is_some());
+        assert!(Name::new(&"\u{1F30D}".repeat(17)).is_none());
+        assert_eq!(Shape::Landmark(name).asset(), None);
     }
 
     #[test]
