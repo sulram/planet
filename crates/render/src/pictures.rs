@@ -1,6 +1,8 @@
 //! Pictures: a textured quad each, one draw a picture with its own texture.
 //! An image arrives as its one full level and gets its mip chain here, on the
-//! GPU, so a picture seen small or aslant does not shimmer.
+//! GPU, so a picture seen small or aslant does not shimmer. A picture that
+//! moves is a texture the shell writes a frame at a time, its mip chain
+//! redrawn with every frame.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -35,6 +37,35 @@ const BOTH: u32 = 12;
 /// The format every picture is kept in: sRGB bytes, read as linear light.
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
+/// The light grey of the card a picture is before its first byte lands.
+const CARD: [u8; 4] = [200, 200, 200, 255];
+
+/// One frame of a picture that moves, as the shell hands it: pixels, or on
+/// the web an image the browser holds, copied into the texture without
+/// passing through the engine.
+pub enum PictureFrame<'a> {
+    Pixels(&'a Image),
+    #[cfg(target_arch = "wasm32")]
+    External(wgpu::CopyExternalImageSourceInfo),
+}
+
+impl PictureFrame<'_> {
+    fn size(&self) -> (u32, u32) {
+        match self {
+            PictureFrame::Pixels(image) => (image.width, image.height),
+            #[cfg(target_arch = "wasm32")]
+            PictureFrame::External(info) => (info.source.width(), info.source.height()),
+        }
+    }
+}
+
+/// A picture resident on the GPU: its texture, kept for the frames a moving
+/// one takes, and the bind group that draws it.
+struct Held {
+    texture: wgpu::Texture,
+    group: wgpu::BindGroup,
+}
+
 pub struct Pictures {
     pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
@@ -44,7 +75,7 @@ pub struct Pictures {
     indices: wgpu::Buffer,
     /// The card a picture is before its first byte lands.
     blank: wgpu::BindGroup,
-    held: HashMap<PictureId, wgpu::BindGroup>,
+    held: HashMap<PictureId, Held>,
     mips: Mips,
     /// The widest texture the device takes on a side.
     max_side: u32,
@@ -158,7 +189,8 @@ impl Pictures {
         }
     }
 
-    /// Uploads a picture with its mip chain, or drops one.
+    /// Uploads a picture with its mip chain, makes the texture of one that
+    /// moves, or drops one.
     pub fn apply(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, change: PictureChange) {
         match change {
             PictureChange::Remove(id) => {
@@ -166,13 +198,79 @@ impl Pictures {
             }
             PictureChange::Add(id, image) => {
                 let image = fit(&image, self.max_side);
-                let texture = self.mips.upload(device, queue, &image);
-                let group =
-                    self.mips
-                        .bind_group(device, &self.texture_layout, &self.sampler, &texture);
-                self.held.insert(id, group);
+                let texture = self.mips.create(device, image.width, image.height);
+                self.mips.write(queue, &texture, &image);
+                self.mips.generate(device, queue, &texture);
+                self.hold(device, id, texture);
+            }
+            PictureChange::Live { id, width, height } => {
+                let (width, height) = (width.max(1), height.max(1));
+                if width.max(height) > self.max_side {
+                    log::warn!("picture {id:?}: {width}x{height} is wider than the device takes");
+                    return;
+                }
+                let texture = self.mips.create(device, width, height);
+                let card = Image {
+                    width,
+                    height,
+                    rgba: CARD.repeat((width * height) as usize),
+                };
+                self.mips.write(queue, &texture, &card);
+                self.mips.generate(device, queue, &texture);
+                self.hold(device, id, texture);
             }
         }
+    }
+
+    fn hold(&mut self, device: &wgpu::Device, id: PictureId, texture: wgpu::Texture) {
+        let group = self
+            .mips
+            .bind_group(device, &self.texture_layout, &self.sampler, &texture);
+        self.held.insert(id, Held { texture, group });
+    }
+
+    /// One frame of a picture that moves, written over the last and its mip
+    /// chain redrawn. A frame of another size than the texture is dropped: a
+    /// source says its size when it opens and keeps it.
+    pub fn write(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        id: PictureId,
+        frame: PictureFrame<'_>,
+    ) {
+        let Some(held) = self.held.get(&id) else {
+            return;
+        };
+        let size = (held.texture.width(), held.texture.height());
+        if frame.size() != size {
+            log::warn!(
+                "picture {id:?}: a frame of {:?} for a texture of {size:?}",
+                frame.size()
+            );
+            return;
+        }
+        match frame {
+            PictureFrame::Pixels(image) => self.mips.write(queue, &held.texture, image),
+            #[cfg(target_arch = "wasm32")]
+            PictureFrame::External(source) => queue.copy_external_image_to_texture(
+                &source,
+                wgpu::CopyExternalImageDestInfo {
+                    texture: &held.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                    color_space: wgpu::PredefinedColorSpace::Srgb,
+                    premultiplied_alpha: false,
+                },
+                wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+            ),
+        }
+        self.mips.generate(device, queue, &held.texture);
     }
 
     pub fn draw(
@@ -211,7 +309,7 @@ impl Pictures {
             let group = picture
                 .picture
                 .and_then(|id| self.held.get(&id))
-                .unwrap_or(&self.blank);
+                .map_or(&self.blank, |held| &held.group);
             pass.set_bind_group(1, group, &[]);
             let sides = if picture.both_sides { BOTH } else { FRONT };
             let index = index as u32;
@@ -352,15 +450,15 @@ impl Mips {
         }
     }
 
-    /// A texture of the image with every level down to one texel, the first
-    /// written from the image and each other drawn from the one above it.
-    fn upload(&self, device: &wgpu::Device, queue: &wgpu::Queue, image: &Image) -> wgpu::Texture {
-        let levels = 32 - image.width.max(image.height).max(1).leading_zeros();
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+    /// A texture of this size with every level down to one texel, nothing
+    /// written yet.
+    fn create(&self, device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+        let levels = 32 - width.max(height).max(1).leading_zeros();
+        device.create_texture(&wgpu::TextureDescriptor {
             label: Some("picture"),
             size: wgpu::Extent3d {
-                width: image.width,
-                height: image.height,
+                width,
+                height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: levels,
@@ -371,10 +469,14 @@ impl Mips {
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
-        });
+        })
+    }
+
+    /// The image into the texture's first level, which is its size.
+    fn write(&self, queue: &wgpu::Queue, texture: &wgpu::Texture, image: &Image) {
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &texture,
+                texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -391,6 +493,11 @@ impl Mips {
                 depth_or_array_layers: 1,
             },
         );
+    }
+
+    /// Every level under the first drawn from the one above it.
+    fn generate(&self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
+        let levels = texture.mip_level_count();
         let level = |level: u32| {
             texture.create_view(&wgpu::TextureViewDescriptor {
                 base_mip_level: level,
@@ -439,7 +546,6 @@ impl Mips {
             pass.draw(0..3, 0..1);
         }
         queue.submit([encoder.finish()]);
-        texture
     }
 
     fn bind_group(
@@ -486,7 +592,7 @@ fn blank_texture(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Texture {
             view_formats: &[],
         },
         wgpu::util::TextureDataOrder::LayerMajor,
-        &[200, 200, 200, 255],
+        &CARD,
     )
 }
 

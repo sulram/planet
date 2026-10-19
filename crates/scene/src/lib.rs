@@ -525,6 +525,13 @@ pub struct PictureId(pub u64);
 #[derive(Clone, Debug)]
 pub enum PictureChange {
     Add(PictureId, Arc<Image>),
+    /// A picture that moves: a texture of this size the shell writes frame
+    /// by frame, a card until the first frame lands.
+    Live {
+        id: PictureId,
+        width: u32,
+        height: u32,
+    },
     Remove(PictureId),
 }
 

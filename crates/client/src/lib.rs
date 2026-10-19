@@ -46,7 +46,7 @@ pub use parts::is_lamp;
 pub use parts::{CUBE, Landmarked, Mark, PartRefusal, Parts, VOXEL};
 use peers::Peers;
 use pictures::Pictures;
-pub use pictures::{FULL_SIDE, LOW_SIDE, Screen, THUMB_SIDE};
+pub use pictures::{FULL_SIDE, LOW_SIDE, Moving, PLAYING_AT_ONCE, Screen, THUMB_SIDE};
 pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, PartHit, Plugin, Standing, Turn};
 use plugin::{Lent, Plugins};
@@ -750,6 +750,23 @@ impl Client {
     /// Pictures to upload or drop, in the order the client produced them.
     pub fn drain_picture_changes(&mut self) -> Vec<PictureChange> {
         self.pictures.drain_changes()
+    }
+
+    /// Pictures that move, for the shell to open and close, in the order the
+    /// client decided. The shell answers an open with
+    /// [`Client::moving_opened`] and writes every frame into the renderer.
+    pub fn drain_moving(&mut self) -> Vec<Moving> {
+        self.pictures.drain_moving()
+    }
+
+    /// The shell's answer to a [`Moving::Open`]: the size of its frames, or
+    /// why it does not play, which is logged; its poster shows meanwhile.
+    pub fn moving_opened(&mut self, picture: scene::PictureId, size: Result<(u32, u32), String>) {
+        if let Err(message) = self.pictures.opened(picture, size) {
+            self.events.push(Event::Rejected {
+                message: format!("picture {picture:?}: {message}"),
+            });
+        }
     }
 
     /// The shell opened the link to the world server: the client says hello.

@@ -10,6 +10,13 @@
 //! replacement is up (DECISIONS 53): until the wanted level lands, the quad
 //! shows the finest coarser level that has, or the card of a picture not yet
 //! landed.
+//!
+//! A picture that moves (`Media::moves`) is a poster far and mid, and near
+//! and in view it plays: its original is not fetched as pixels but opened by
+//! the shell ([`Moving`]), which decodes it and writes every frame into a
+//! texture the renderer holds, so the engine never sees a frame. A few play
+//! at once, the nearest first; one unseen for a second is closed, and its
+//! poster stays.
 
 use std::collections::HashMap;
 
@@ -37,9 +44,37 @@ pub const RESIDENT_BYTES: usize = 96 << 20;
 /// the nearest first, not for everything.
 const IN_FLIGHT: usize = 4;
 
+/// How many pictures that move play at once, a decoder each, the nearest
+/// first: a phone's browser allows few, and each costs a frame of decoding
+/// every frame.
+pub const PLAYING_AT_ONCE: usize = 4;
+
 /// Frames a level stays resident unseen before it is dropped whatever the
 /// budget: ten seconds at sixty.
 const UNSEEN_FRAMES: u64 = 600;
+
+/// Frames a playing picture stays open unseen: a second at sixty. A look
+/// away and back costs no reopening; a walk away frees its decoder soon.
+const PLAYING_UNSEEN_FRAMES: u64 = 60;
+
+/// Frames a level that failed to land or to open waits before it is asked
+/// for again: ten seconds at sixty, so a missing file is not fetched every
+/// frame.
+const RETRY_FRAMES: u64 = 600;
+
+/// A picture that moves, as the shell plays it: opened when the client wants
+/// it playing, closed when it stops wanting it. The shell decodes the file
+/// and writes every frame into the renderer's texture under `picture`; the
+/// client never sees a frame.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Moving {
+    /// Play this file into `picture`. The shell answers with the frame's size
+    /// ([`crate::Client::moving_opened`]), and the renderer gets a texture of
+    /// it.
+    Open { picture: PictureId, path: String },
+    /// Stop playing it and forget it. Also for one not yet answered.
+    Close(PictureId),
+}
 
 /// A step to a finer level is taken when the quad has outgrown the level it
 /// shows by this much, and a step to a coarser one when the coarser level
@@ -109,6 +144,19 @@ struct Resident {
     bytes: usize,
     /// The frame it was last wanted or shown in.
     seen: u64,
+    /// Whether the shell is playing into it.
+    playing: bool,
+}
+
+impl Resident {
+    /// Frames unseen before it is dropped whatever the budget.
+    fn patience(&self) -> u64 {
+        if self.playing {
+            PLAYING_UNSEEN_FRAMES
+        } else {
+            UNSEEN_FRAMES
+        }
+    }
 }
 
 /// One picture as it is being shown: the level it last showed, so a step is
@@ -125,12 +173,20 @@ pub struct Pictures {
     resident: HashMap<ContentId, Resident>,
     /// Asked for and not yet answered, in the order asked.
     loading: Vec<ContentId>,
+    /// Opened by the shell and not yet answered, by the original's id.
+    opening: HashMap<ContentId, PictureId>,
+    /// Wanted playing this frame and not open: how tall on the screen, the
+    /// original's id and its path. Opened at the frame's end, tallest first.
+    wanting: Vec<(f64, ContentId, String)>,
+    /// Levels that failed to land or to open, by the frame they failed in.
+    failed: HashMap<ContentId, u64>,
     /// What each picture shows, by the id of its original.
     shown: HashMap<ContentId, Shown>,
     next_id: u64,
     frame: u64,
     resident_bytes: usize,
     changes: Vec<PictureChange>,
+    moving: Vec<Moving>,
 }
 
 impl Pictures {
@@ -161,7 +217,7 @@ impl Pictures {
         } else {
             Level::Thumb
         };
-        let (level, picture) = self.show(media, wanted, requests);
+        let (level, picture) = self.show(media, wanted, px, requests);
         if let Some(level) = level {
             self.shown
                 .get_mut(&media.full)
@@ -183,6 +239,7 @@ impl Pictures {
         &mut self,
         media: &Media,
         wanted: Level,
+        px: f64,
         requests: &mut Requests,
     ) -> (Option<Level>, Option<PictureId>) {
         let frame = self.frame;
@@ -207,7 +264,7 @@ impl Pictures {
             }
         }
         if found.is_none_or(|(at, _)| at != wanted) {
-            self.want(media, wanted, requests);
+            self.want(media, wanted, px, requests);
         }
         match found {
             Some((at, id)) => (Some(at), Some(id)),
@@ -216,9 +273,26 @@ impl Pictures {
     }
 
     /// Asks for a level nobody has asked for yet, while there is room in
-    /// flight. A level wanted and not asked for is asked for next frame.
-    fn want(&mut self, media: &Media, level: Level, requests: &mut Requests) {
+    /// flight. A level wanted and not asked for is asked for next frame. The
+    /// original of a picture that moves is not fetched but opened, at the
+    /// frame's end, the tallest on the screen first.
+    fn want(&mut self, media: &Media, level: Level, px: f64, requests: &mut Requests) {
         let id = media.id(level);
+        if self
+            .failed
+            .get(&id)
+            .is_some_and(|&failed| self.frame.saturating_sub(failed) < RETRY_FRAMES)
+        {
+            return;
+        }
+        if media.moves() && level == Level::Full {
+            if self.opening.contains_key(&id) || self.wanting.iter().any(|(_, want, _)| *want == id)
+            {
+                return;
+            }
+            self.wanting.push((px, id, media.name(level)));
+            return;
+        }
         if self.loading.len() >= IN_FLIGHT || self.loading.contains(&id) {
             return;
         }
@@ -230,13 +304,60 @@ impl Pictures {
     /// failed is forgotten, so asking again asks again.
     pub fn arrived(&mut self, id: ContentId, image: Result<Image, String>) -> Result<(), String> {
         self.loading.retain(|loading| *loading != id);
-        let image = image?;
-        // Four bytes a texel, and a third again for the mip chain.
-        let bytes = (image.width as usize * image.height as usize * 4) * 4 / 3;
+        let image = match image {
+            Ok(image) => image,
+            Err(message) => {
+                self.failed.insert(id, self.frame);
+                return Err(message);
+            }
+        };
         self.next_id += 1;
         let picture = PictureId(self.next_id);
+        let (width, height) = (image.width, image.height);
         self.changes
             .push(PictureChange::Add(picture, std::sync::Arc::new(image)));
+        self.keep(id, picture, width, height, false);
+        Ok(())
+    }
+
+    /// The shell's answer to an [`Moving::Open`]: the size of its frames, or
+    /// why it does not play. One that failed is asked for again after a
+    /// while, and its poster shows meanwhile.
+    pub fn opened(
+        &mut self,
+        picture: PictureId,
+        size: Result<(u32, u32), String>,
+    ) -> Result<(), String> {
+        let Some(id) = self
+            .opening
+            .iter()
+            .find_map(|(id, opened)| (*opened == picture).then_some(*id))
+        else {
+            // Closed before it answered: the shell heard the close.
+            return Ok(());
+        };
+        self.opening.remove(&id);
+        match size {
+            Ok((width, height)) => {
+                self.changes.push(PictureChange::Live {
+                    id: picture,
+                    width,
+                    height,
+                });
+                self.keep(id, picture, width, height, true);
+                Ok(())
+            }
+            Err(message) => {
+                self.failed.insert(id, self.frame);
+                Err(message)
+            }
+        }
+    }
+
+    /// A level resident from now on, counted against the budget: four bytes
+    /// a texel, and a third again for the mip chain.
+    fn keep(&mut self, id: ContentId, picture: PictureId, width: u32, height: u32, playing: bool) {
+        let bytes = (width as usize * height as usize * 4) * 4 / 3;
         self.resident_bytes += bytes;
         self.resident.insert(
             id,
@@ -244,14 +365,26 @@ impl Pictures {
                 id: picture,
                 bytes,
                 seen: self.frame,
+                playing,
             },
         );
-        Ok(())
+    }
+
+    /// Drops a resident level, and stops the shell playing into it.
+    fn drop_level(&mut self, id: ContentId) {
+        if let Some(resident) = self.resident.remove(&id) {
+            self.resident_bytes -= resident.bytes;
+            self.changes.push(PictureChange::Remove(resident.id));
+            if resident.playing {
+                self.moving.push(Moving::Close(resident.id));
+            }
+        }
     }
 
     /// Closes a frame: what went unseen too long is dropped, and the least
-    /// recently seen beyond that while the budget is blown. Called once every
-    /// frame after every draw.
+    /// recently seen beyond that while the budget is blown; the pictures
+    /// wanted playing are opened, the tallest on the screen first, while a
+    /// decoder is free. Called once every frame after every draw.
     pub fn end_frame(&mut self) {
         let frame = self.frame;
         let mut unseen: Vec<(u64, ContentId)> = self
@@ -261,15 +394,33 @@ impl Pictures {
             .map(|(id, resident)| (resident.seen, *id))
             .collect();
         unseen.sort();
-        for (seen, id) in unseen {
-            let stale = frame.saturating_sub(seen) > UNSEEN_FRAMES;
-            if !stale && self.resident_bytes <= RESIDENT_BYTES {
+        for &(seen, id) in &unseen {
+            if frame.saturating_sub(seen) > self.resident[&id].patience() {
+                self.drop_level(id);
+            }
+        }
+        for (_, id) in unseen {
+            if self.resident_bytes <= RESIDENT_BYTES {
                 break;
             }
-            if let Some(resident) = self.resident.remove(&id) {
-                self.resident_bytes -= resident.bytes;
-                self.changes.push(PictureChange::Remove(resident.id));
+            self.drop_level(id);
+        }
+        self.wanting
+            .sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(core::cmp::Ordering::Equal));
+        let playing = self.resident.values().filter(|r| r.playing).count() + self.opening.len();
+        let mut free = PLAYING_AT_ONCE.saturating_sub(playing);
+        for (_, id, path) in self.wanting.drain(..) {
+            if free == 0 {
+                break;
             }
+            if self.resident.contains_key(&id) {
+                continue;
+            }
+            self.next_id += 1;
+            let picture = PictureId(self.next_id);
+            self.opening.insert(id, picture);
+            self.moving.push(Moving::Open { picture, path });
+            free -= 1;
         }
         self.shown
             .retain(|_, shown| frame.saturating_sub(shown.seen) <= UNSEEN_FRAMES);
@@ -278,16 +429,26 @@ impl Pictures {
 
     /// Drops every picture: the world they stood in is gone.
     pub fn clear(&mut self) {
-        for (_, resident) in self.resident.drain() {
-            self.changes.push(PictureChange::Remove(resident.id));
+        let ids: Vec<ContentId> = self.resident.keys().copied().collect();
+        for id in ids {
+            self.drop_level(id);
         }
-        self.resident_bytes = 0;
+        for (_, picture) in self.opening.drain() {
+            self.moving.push(Moving::Close(picture));
+        }
+        self.wanting.clear();
         self.loading.clear();
+        self.failed.clear();
         self.shown.clear();
     }
 
     pub fn drain_changes(&mut self) -> Vec<PictureChange> {
         core::mem::take(&mut self.changes)
+    }
+
+    /// What the shell opens and closes, in the order the client decided.
+    pub fn drain_moving(&mut self) -> Vec<Moving> {
+        core::mem::take(&mut self.moving)
     }
 }
 
@@ -507,6 +668,164 @@ mod tests {
             pictures.resident.contains_key(&id(9)),
             "what was seen this frame stays"
         );
+    }
+
+    #[test]
+    fn a_level_that_failed_waits_before_it_is_asked_again() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        let m = media();
+        pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        assert_eq!(requests.drain().len(), 1);
+        pictures.arrived(m.low, Err("HTTP 404".into())).unwrap_err();
+        pictures.end_frame();
+        pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        assert!(requests.drain().is_empty(), "not asked again at once");
+        for _ in 0..RETRY_FRAMES {
+            pictures.end_frame();
+        }
+        pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        assert_eq!(requests.drain().len(), 1, "asked again after a while");
+    }
+
+    fn moving() -> Media {
+        Media {
+            millis: 3000,
+            kind: ImageKind::Gif,
+            ..media()
+        }
+    }
+
+    #[test]
+    fn a_moving_picture_plays_near_and_is_a_poster_far() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        let m = moving();
+        // Far: the thumb, a poster, fetched as pixels like any level.
+        pictures.draw(&m, ahead(100.0), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.end_frame();
+        assert_eq!(requests.drain()[0].path, m.name(Level::Thumb));
+        assert!(pictures.drain_moving().is_empty());
+        // Near: the original is opened, not fetched.
+        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        assert!(
+            requests.drain().is_empty(),
+            "the original is never asked as pixels"
+        );
+        assert!(
+            pictures.drain_moving().is_empty(),
+            "opened at the frame's end"
+        );
+        pictures.end_frame();
+        let opened = pictures.drain_moving();
+        let [Moving::Open { picture, path }] = opened.as_slice() else {
+            panic!("one open");
+        };
+        assert_eq!(*path, m.name(Level::Full));
+        let picture = *picture;
+        // Open: the renderer gets a live texture of the frame's size, and
+        // the quad shows it.
+        pictures.opened(picture, Ok((640, 480))).unwrap();
+        assert!(matches!(
+            pictures.drain_changes().as_slice(),
+            [PictureChange::Live { id, width: 640, height: 480 }] if *id == picture
+        ));
+        let draw = pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        assert_eq!(draw.picture, Some(picture));
+        pictures.end_frame();
+        // Walked away, the poster up: a second unseen and it is closed. Until
+        // the poster lands it stands in for it, as any finer level does.
+        pictures.arrived(m.thumb, Ok(pixels(128, 85))).unwrap();
+        pictures.drain_changes();
+        for _ in 0..PLAYING_UNSEEN_FRAMES {
+            pictures.draw(&m, ahead(100.0), 0.0, false, &screen(1000.0), &mut requests);
+            pictures.end_frame();
+        }
+        assert!(pictures.drain_moving().is_empty(), "kept to the edge");
+        pictures.draw(&m, ahead(100.0), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.end_frame();
+        assert_eq!(pictures.drain_moving(), [Moving::Close(picture)]);
+        assert!(matches!(
+            pictures.drain_changes().as_slice(),
+            [PictureChange::Remove(id)] if *id == picture
+        ));
+    }
+
+    #[test]
+    fn a_picture_that_does_not_open_is_tried_again_later() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        let m = moving();
+        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.end_frame();
+        let opened = pictures.drain_moving();
+        let [Moving::Open { picture, .. }] = opened.as_slice() else {
+            panic!("one open");
+        };
+        pictures
+            .opened(*picture, Err("no decoder".into()))
+            .unwrap_err();
+        for _ in 0..RETRY_FRAMES {
+            pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+            pictures.end_frame();
+        }
+        assert!(pictures.drain_moving().is_empty());
+        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.end_frame();
+        assert_eq!(pictures.drain_moving().len(), 1);
+    }
+
+    #[test]
+    fn a_few_play_at_once_the_nearest_first() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        let near = |i: u8| Media {
+            thumb: id(10 + i),
+            low: id(30 + i),
+            full: id(50 + i),
+            ..moving()
+        };
+        // Drawn farthest first, so the order of opening is the screen's, not the draw's.
+        for i in (0..8u8).rev() {
+            pictures.draw(
+                &near(i),
+                ahead(1.0 + f64::from(i) * 0.15),
+                0.0,
+                false,
+                &screen(3000.0),
+                &mut requests,
+            );
+        }
+        pictures.end_frame();
+        let opened: Vec<String> = pictures
+            .drain_moving()
+            .into_iter()
+            .map(|moving| match moving {
+                Moving::Open { path, .. } => path,
+                Moving::Close(_) => panic!("nothing to close"),
+            })
+            .collect();
+        assert_eq!(opened.len(), PLAYING_AT_ONCE);
+        assert_eq!(
+            opened,
+            (0..4u8)
+                .map(|i| near(i).name(Level::Full))
+                .collect::<Vec<_>>()
+        );
+        // Nothing more opens while they play, or wait to be answered.
+        pictures.draw(
+            &near(7),
+            ahead(0.5),
+            0.0,
+            false,
+            &screen(1000.0),
+            &mut requests,
+        );
+        pictures.end_frame();
+        assert!(pictures.drain_moving().is_empty());
+        // Gone: a close for each, answered or not.
+        pictures.clear();
+        assert_eq!(pictures.drain_moving().len(), PLAYING_AT_ONCE);
     }
 
     #[test]

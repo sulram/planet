@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use glam::{DAffine3, DQuat, DVec3, Vec3};
-use render::{Headless, write_png};
+use render::{Headless, PictureFrame, write_png};
 use scene::{
     Camera, Effects, Frame, Image, InteractionCapsule, Moon, PictureChange, PictureDraw, PictureId,
 };
@@ -49,6 +49,25 @@ fn pictures_are_drawn() {
     headless
         .renderer
         .apply_pictures(vec![PictureChange::Add(id, Arc::new(checker(256, 128)))]);
+    // A picture that moves: a texture the shell writes a frame at a time. The
+    // first frame is solid green; a frame of another size is dropped.
+    let live = PictureId(2);
+    headless.renderer.apply_pictures(vec![PictureChange::Live {
+        id: live,
+        width: 64,
+        height: 32,
+    }]);
+    let green = Image {
+        width: 64,
+        height: 32,
+        rgba: [20, 200, 40, 255].repeat(64 * 32),
+    };
+    headless
+        .renderer
+        .write_picture(live, PictureFrame::Pixels(&green));
+    headless
+        .renderer
+        .write_picture(live, PictureFrame::Pixels(&checker(256, 128)));
 
     // A small planet, the eye standing on it at its north pole, looking along -Z.
     let radius_m = 1000.0;
@@ -120,6 +139,13 @@ fn pictures_are_drawn() {
                 shine: 0.0,
                 both_sides: false,
             },
+            // A picture that moves, showing the frame last written, as a screen.
+            PictureDraw {
+                picture: Some(live),
+                transform: at(1.0, -1.5) * DAffine3::from_scale(DVec3::new(1.0, 0.5, 1.0)),
+                shine: 1.0,
+                both_sides: false,
+            },
         ],
     };
     let pixels = headless.render(&frame);
@@ -144,4 +170,11 @@ fn pictures_are_drawn() {
     let band = texel(320 + 40, 180);
     let above = texel(320 + 40, 180 - 20);
     assert_ne!(band, above, "the see-through band shows what is behind");
+    // The moving picture, a metre and a half away, a metre to the right: its
+    // centre is 208 px right of the middle, and it is the green frame.
+    let screen = texel(320 + 208, 180);
+    assert!(
+        screen[1] > screen[0] + 80 && screen[1] > screen[2] + 80,
+        "the frame written last of the right size shows: {screen:?}"
+    );
 }

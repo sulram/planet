@@ -30,6 +30,7 @@ use scene::{
 pub use gpu::{Gpu, surface_configuration};
 #[cfg(not(target_arch = "wasm32"))]
 pub use headless::{HEADLESS_FORMAT, Headless, Over, write_png};
+pub use pictures::PictureFrame;
 pub use wgpu;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -234,6 +235,12 @@ impl Renderer {
         for change in changes {
             self.pictures.apply(&self.device, &self.queue, change);
         }
+    }
+
+    /// One frame of a picture that moves, into the texture a `Live` change
+    /// made. Unknown pictures and frames of another size are dropped.
+    pub fn write_picture(&self, id: scene::PictureId, frame: PictureFrame<'_>) {
+        self.pictures.write(&self.device, &self.queue, id, frame);
     }
 
     /// Uploads and drops the meshes of models (parts).
