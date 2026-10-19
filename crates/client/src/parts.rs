@@ -58,7 +58,8 @@ const LOOK_S: f64 = 1.0;
 /// How far a body goes from a part before its client lets it go, metres:
 /// past where the world shows it (`world::parts::HOLD_M`) by the same
 /// margin the cells keep for a volume seen afar (`seat::AFAR`). How far
-/// one is drawn within that is the eye's own, `Effects::parts_reach_m`.
+/// one is drawn within that is the eye's own: `Effects::model_reach_m` a
+/// block of its longest side, `Effects::picture_reach_m` for a picture.
 const DROP_M: f64 = 8448.0;
 /// What a part whose file is still on its way is drawn as: its box in white
 /// glass with a white edge, and over it a white light turning once a
@@ -427,7 +428,7 @@ impl Parts {
         &self,
         generator: &Generator,
         body: (Body, DVec3),
-        reach_m: f64,
+        reach_per_block_m: f64,
         seen: &BTreeMap<PartId, f32>,
     ) -> Vec<PaneDraw> {
         // The quad's `x` along the box's, its `y` up the box, its front out
@@ -446,7 +447,10 @@ impl Parts {
                 Shape::Portal(portal) => Some((id, seat, part, portal)),
                 _ => None,
             })
-            .filter(|(_, seat, part, _)| away_m(generator, *seat, &part.pose, body) <= reach_m)
+            .filter(|(_, seat, part, _)| {
+                away_m(generator, *seat, &part.pose, body)
+                    <= reach_of(reach_per_block_m, &part.pose)
+            })
             .map(|(id, seat, part, portal)| PaneDraw {
                 transform: self.place_of(generator, seat, &part.pose) * quad_in_box(portal),
                 seen: seen.get(&id).copied().unwrap_or(0.0),
@@ -967,12 +971,12 @@ impl Parts {
         &self,
         generator: &Generator,
         body: (Body, DVec3),
-        reach_m: f64,
+        reach_per_block_m: f64,
         clock_s: f64,
     ) -> Vec<ModelDraw> {
         let mut drawn = Vec::new();
         for (_, seat, part) in self.all() {
-            if away_m(generator, seat, &part.pose, body) > reach_m {
+            if away_m(generator, seat, &part.pose, body) > reach_of(reach_per_block_m, &part.pose) {
                 continue;
             }
             let transform = self.place_of(generator, seat, &part.pose);
@@ -1230,6 +1234,14 @@ fn waiting_mark(world: &DAffine3, clock_s: f64) -> DAffine3 {
 
 /// How far a body at `body`, from the centre of the body it is on, is from
 /// a part's anchor, metres: infinite from another body.
+/// How far a part of this pose is drawn, metres: the reach a block of its
+/// longest side gets, times that side. A cube is seen from near, a giant
+/// sculpture from space.
+fn reach_of(reach_per_block_m: f64, pose: &Pose) -> f64 {
+    let [x, y, z] = pose.scale;
+    reach_per_block_m * x.max(y).max(z).max(1.0)
+}
+
 pub(crate) fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -> f64 {
     if seat.body() != body.0 {
         return f64::INFINITY;

@@ -30,7 +30,12 @@ export interface Effects {
 	bloom_threshold: number;
 	haze: number;
 	water_clarity: number;
-	parts_reach_m: number;
+	/** How far a picture that moves plays, metres; past it, a still. */
+	video_play_m: number;
+	/** How far a picture is drawn, metres. */
+	picture_reach_m: number;
+	/** How far a model, cube, landmark or portal is drawn, metres a block of its longest side. */
+	model_reach_m: number;
 	tone_map: ToneMap;
 }
 

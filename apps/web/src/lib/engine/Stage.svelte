@@ -392,7 +392,7 @@
 			{/each}
 		</Panel>
 	{:else if opened === 'settings'}
-		<Settings {mode} onmode={(value) => (mode = value)} {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => show(null)} />
+		<Settings {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => show(null)} />
 	{/if}
 </div>
 

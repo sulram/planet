@@ -149,7 +149,7 @@ this file in the same change.
 | Budget | Per-volume limit on triangles, texture size and bytes. |
 | Picture | A part whose shape is an image: the front of its box, drawn with a texture, seen from both sides, a screen in a light finish. Its record is a `Media`: its size in texels, how long it plays, and three content ids. |
 | Moving picture | A picture whose original plays: a GIF, an animated WebP or a video, its record saying how long. A poster out of view; in view the shell plays it into a live texture, under the decoder budget. |
-| Media LOD | Thumb far, low version mid, original near and in view: picked by the quad's height on the screen, with hysteresis, under a budget of resident texels. A moving picture has two levels: its poster, and playing. |
+| Media LOD | Thumb far, low version mid, original near and in view: picked by the quad's height on the screen, with hysteresis, under a budget of resident texels. A moving picture has two levels: its poster, and playing, within the play distance. |
 | Decoder budget | How many moving pictures play at once, a decoder each: four, the tallest on the screen first. |
 | Sound | A part that is a file played where it stands, looping, heard within its reach and seen only by its gizmo. |
 | Name | What a builder calls a part, for the list of what is near; a landmark's name is its shape's and the star's label. |

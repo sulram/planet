@@ -152,9 +152,15 @@ pub struct Effects {
     pub haze: f32,
     /// How far a swimmer sees under the sea, as a factor of plain sea water.
     pub water_clarity: f32,
-    /// How far from the body a part is drawn, metres. Past it, it is not
-    /// there to see.
-    pub parts_reach_m: f32,
+    /// How far from the body a picture that moves plays, metres: past it,
+    /// it is a still, its poster, and makes no sound.
+    pub video_play_m: f32,
+    /// How far from the body a picture is drawn, metres.
+    pub picture_reach_m: f32,
+    /// How far from the body a model, a cube, a landmark or a portal is
+    /// drawn, metres for each block of its longest side: a giant sculpture
+    /// is seen from far, a cube from near.
+    pub model_reach_m: f32,
     pub tone_map: ToneMap,
 }
 
@@ -173,7 +179,9 @@ impl Default for Effects {
             bloom_threshold: 0.3,
             haze: 0.8,
             water_clarity: 3.0,
-            parts_reach_m: 5000.0,
+            video_play_m: 128.0,
+            picture_reach_m: 256.0,
+            model_reach_m: 128.0,
             tone_map: ToneMap::Aces,
         }
     }

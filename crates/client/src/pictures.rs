@@ -142,6 +142,8 @@ pub struct Screen {
     pub aspect: f64,
     /// The view's height in pixels.
     pub height_px: f64,
+    /// How far a picture that moves plays, metres: past it, a still.
+    pub play_m: f64,
 }
 
 impl Screen {
@@ -243,9 +245,11 @@ impl Pictures {
         } else {
             height_m * HEARD_BY_SIZE
         };
-        let audible = media.sounds()
-            && volume > 0.0
-            && (transform.translation - screen.camera.position).length() <= heard_m;
+        // Past the play distance a moving picture is a still: its poster,
+        // and no sound.
+        let away = (transform.translation - screen.camera.position).length();
+        let moving = media.moves() && away <= screen.play_m;
+        let audible = moving && media.sounds() && volume > 0.0 && away <= heard_m;
 
         let frame = self.frame;
         let shown = self.shown.entry(media.full).or_default();
@@ -254,10 +258,13 @@ impl Pictures {
         // A picture that moves plays whenever it is in view, or heard, the
         // budget allowing: its thumb is its poster, for out of view and over
         // budget.
-        let wanted = if media.moves() && (in_view || audible) {
+        let wanted = if moving && (in_view || audible) {
             Level::Full
         } else if !in_view {
             Level::Thumb
+        } else if media.moves() {
+            // A still of what moves: its posters alone, never the file.
+            pick(media, showing, px).min(Level::Low)
         } else {
             pick(media, showing, px)
         };
@@ -269,8 +276,7 @@ impl Pictures {
                 .level = Some(level);
         }
         if level == Some(Level::Full)
-            && media.sounds()
-            && volume > 0.0
+            && audible
             && let Some(picture) = picture
         {
             self.heard.push(Sound {
@@ -592,6 +598,7 @@ mod tests {
             },
             aspect: 16.0 / 9.0,
             height_px,
+            play_m: 128.0,
         }
     }
 
@@ -897,6 +904,37 @@ mod tests {
         pictures.begin_frame();
         pictures.draw(&video, half, &screen(2000.0), &mut requests);
         assert_eq!(pictures.heard()[0].volume, 0.5);
+    }
+
+    #[test]
+    fn past_the_play_distance_a_moving_picture_is_a_still() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        // In view, two hundred metres off: its poster is asked for, nothing opens.
+        pictures.draw(
+            &moving(),
+            placed(ahead(200.0), 0.0),
+            &screen(1000.0),
+            &mut requests,
+        );
+        pictures.end_frame();
+        assert!(pictures.drain_moving().is_empty());
+        assert_eq!(requests.drain()[0].path, moving().name(Level::Thumb));
+        // A video with a long reach, past the play distance: not heard either.
+        let video = Media {
+            kind: ImageKind::Mp4,
+            ..moving()
+        };
+        let mut far = Pictures::default();
+        far.draw(
+            &video,
+            placed(ahead(200.0), 1000.0),
+            &screen(1000.0),
+            &mut requests,
+        );
+        far.end_frame();
+        assert!(far.drain_moving().is_empty());
+        assert!(far.heard().is_empty());
     }
 
     #[test]

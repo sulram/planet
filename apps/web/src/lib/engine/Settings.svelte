@@ -1,15 +1,14 @@
 <script lang="ts">
 	import { Button, Checkbox, IconButton, Panel, Segmented, Select, Slider, Stack, Stat } from '$lib/ds';
 	import { t } from '$lib/i18n';
-	import { modes, toneMaps, type Effects, type Mode } from './index';
+	import { toneMaps, type Effects } from './index';
 
-	// Settings: how the body moves and how the picture is made, in the panel
-	// the gear in the top right corner opens. A front end only: it shows what
-	// the engine said is in force and asks for changes; the engine clamps and
-	// answers.
+	// Settings: how the picture is made, in the panel the gear in the top
+	// right corner opens, in two tabs: how far each kind of thing is drawn
+	// (LOD) and the effects (VFX). A front end only: it shows what the
+	// engine said is in force and asks for changes; the engine clamps and
+	// answers. How the body moves is the keys' alone.
 	interface Props {
-		mode: Mode;
-		onmode: (mode: Mode) => void;
 		/** What the engine last reported. Undefined until it has. */
 		effects: Effects | undefined;
 		/** What the engine starts with, to offer a way back. */
@@ -20,9 +19,14 @@
 		onclose: () => void;
 	}
 
-	let { mode, onmode, effects, defaults, onchange, fps, onclose }: Props = $props();
+	let { effects, defaults, onchange, fps, onclose }: Props = $props();
 
-	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`engine.mode.${value}`) })));
+	type Tab = 'lod' | 'vfx';
+	let tab = $state<Tab>('lod');
+	const tabs: { value: Tab; label: string }[] = [
+		{ value: 'lod', label: 'LOD' },
+		{ value: 'vfx', label: 'VFX' }
+	];
 	const toneMapOptions = $derived(toneMaps.map((value) => ({ value, label: t(`engine.settings.toneMap.${value}`) })));
 
 	function set<K extends keyof Effects>(key: K, value: Effects[K]) {
@@ -34,8 +38,8 @@
 	{#snippet aside()}
 		<IconButton icon="x" label={t('common.close')} onclick={onclose} />
 	{/snippet}
-	<Segmented options={modeOptions} value={mode} label={t('engine.mode')} onselect={onmode} />
-	{#if effects}
+	<Segmented options={tabs} value={tab} label={t('engine.settings.tabs')} onselect={(value) => (tab = value)} />
+	{#if effects && tab === 'vfx'}
 		<Stack>
 			<Checkbox checked={effects.shadows} onchange={(value) => set('shadows', value)}>{t('engine.settings.shadows')}</Checkbox>
 			<Checkbox checked={effects.grass} onchange={(value) => set('grass', value)}>{t('engine.settings.grass')}</Checkbox>
@@ -72,17 +76,39 @@
 			<Slider label={t('engine.settings.exposure')} value={effects.exposure} min={0.1} max={4} oninput={(value) => set('exposure', value)} />
 			<Select label={t('engine.settings.toneMap')} options={toneMapOptions} value={effects.tone_map} onselect={(value) => set('tone_map', value)} />
 		</Stack>
+	{/if}
+	{#if effects && tab === 'lod'}
 		<Stack>
 			<Slider
-				label={t('engine.settings.partsReach')}
-				value={effects.parts_reach_m}
-				min={256}
-				max={8192}
-				step={64}
+				label={t('engine.settings.videoPlay')}
+				value={effects.video_play_m}
+				min={16}
+				max={1024}
+				step={16}
 				format={(n) => t('engine.stats.metres', { n: n.toFixed(0) })}
-				oninput={(value) => set('parts_reach_m', value)}
+				oninput={(value) => set('video_play_m', value)}
+			/>
+			<Slider
+				label={t('engine.settings.pictureReach')}
+				value={effects.picture_reach_m}
+				min={32}
+				max={2048}
+				step={32}
+				format={(n) => t('engine.stats.metres', { n: n.toFixed(0) })}
+				oninput={(value) => set('picture_reach_m', value)}
+			/>
+			<Slider
+				label={t('engine.settings.modelReach')}
+				value={effects.model_reach_m}
+				min={16}
+				max={1024}
+				step={16}
+				format={(n) => t('engine.settings.metresABlock', { n: n.toFixed(0) })}
+				oninput={(value) => set('model_reach_m', value)}
 			/>
 		</Stack>
+	{/if}
+	{#if effects}
 		{#if defaults}
 			<Button variant="ghost" type="button" onclick={() => defaults && onchange(defaults)}>{t('engine.settings.defaults')}</Button>
 		{/if}

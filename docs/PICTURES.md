@@ -52,3 +52,9 @@ texture, lit or shining, a still or one that moves.
 - A video is heard: SOUND.md.
 - A moving picture is placed as a screen, in the light finish, until its
   shine says otherwise.
+- How far each kind is drawn is the eye's own, the LOD tab of the settings
+  (`scene::Effects`): a picture that moves plays within `video_play_m`,
+  128 m, and is its poster past it, silent; a picture is drawn within
+  `picture_reach_m`, 256 m; a model, a cube, a landmark or a portal within
+  `model_reach_m` a block of its longest side, 128 m a block, so a giant
+  sculpture is seen from far and a cube from near.

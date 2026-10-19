@@ -276,7 +276,9 @@ impl Client {
             bloom_threshold: sane(effects.bloom_threshold, 0.2, 8.0, usual.bloom_threshold),
             haze: sane(effects.haze, 0.0, 6.0, usual.haze),
             water_clarity: sane(effects.water_clarity, 0.25, 12.0, usual.water_clarity),
-            parts_reach_m: sane(effects.parts_reach_m, 256.0, 8192.0, usual.parts_reach_m),
+            video_play_m: sane(effects.video_play_m, 16.0, 1024.0, usual.video_play_m),
+            picture_reach_m: sane(effects.picture_reach_m, 32.0, 2048.0, usual.picture_reach_m),
+            model_reach_m: sane(effects.model_reach_m, 16.0, 1024.0, usual.model_reach_m),
             ..effects
         };
         self.events.push(Event::EffectsChanged {
@@ -1520,12 +1522,13 @@ impl Client {
             camera: *camera,
             aspect: f64::from(self.aspect),
             height_px: f64::from(self.view_height_px),
+            play_m: f64::from(self.effects.video_play_m),
         };
         self.pictures.begin_frame();
         let drawn = self.parts.pictures(
             &self.generator,
             self.controller.held_by(),
-            f64::from(self.effects.parts_reach_m),
+            f64::from(self.effects.picture_reach_m),
             &mut self.pictures,
             &screen,
             &mut self.requests,
@@ -1617,7 +1620,7 @@ impl Client {
             models: self.parts.drawn(
                 &self.generator,
                 self.controller.held_by(),
-                f64::from(self.effects.parts_reach_m),
+                f64::from(self.effects.model_reach_m),
                 self.clock_s,
             ),
             ghost: self.cells.ghost(),
@@ -1626,7 +1629,7 @@ impl Client {
             panes: self.parts.panes(
                 &self.generator,
                 self.controller.held_by(),
-                f64::from(self.effects.parts_reach_m),
+                f64::from(self.effects.model_reach_m),
                 &self.seen,
             ),
             through: through.map(|(seen, patches)| scene::Through {

@@ -234,7 +234,16 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
             );
             ui.add(egui::Slider::new(&mut effects.exposure, 0.1..=4.0).text("Exposure"));
             ui.add(
-                egui::Slider::new(&mut effects.parts_reach_m, 256.0..=8192.0).text("Items reach m"),
+                egui::Slider::new(&mut effects.video_play_m, 16.0..=1024.0)
+                    .text("Video plays to m"),
+            );
+            ui.add(
+                egui::Slider::new(&mut effects.picture_reach_m, 32.0..=2048.0)
+                    .text("Pictures to m"),
+            );
+            ui.add(
+                egui::Slider::new(&mut effects.model_reach_m, 16.0..=1024.0)
+                    .text("Models to m a block"),
             );
             egui::ComboBox::from_label("Tone map")
                 .selected_text(tone_map_name(effects.tone_map))
