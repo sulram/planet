@@ -5,6 +5,7 @@
 //! proximity, is the next, over the same list.
 
 use glam::DVec3;
+use part::PartId;
 use scene::PictureId;
 
 /// Who makes a sound.
@@ -12,6 +13,8 @@ use scene::PictureId;
 pub enum SoundSource {
     /// A playing picture: the shell holds its video, and the sound is its.
     Picture(PictureId),
+    /// A sound placed in the world: the shell plays its file.
+    Clip(PartId),
 }
 
 /// One source of sound this frame.

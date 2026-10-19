@@ -23,6 +23,7 @@ mod plugin;
 mod seam;
 mod session;
 mod sound;
+mod speakers;
 mod terrain;
 mod wardrobe;
 
@@ -40,8 +41,8 @@ use figure::{Clips, Figure, Gait, Motion};
 pub use history::{History, Owner};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{
-    ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel, Pose as PartPose,
-    Shape,
+    Clip, ClipKind, ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel,
+    Pose as PartPose, Shape,
 };
 pub use parts::is_lamp;
 pub use parts::{CUBE, Landmarked, Mark, PartRefusal, Parts, VOXEL};
@@ -56,6 +57,8 @@ pub use seam::{Anchor, Command, Event, Label, Level, Mode, PeerInfo, PluginOn, S
 pub use session::Outbound;
 use session::Session;
 pub use sound::{Sound, SoundSource};
+use speakers::Speakers;
+pub use speakers::{CLIPS_AT_ONCE, Sounding};
 use terrain::{Body, Cover, Terrain};
 use wardrobe::Wardrobe;
 
@@ -96,6 +99,10 @@ pub struct Client {
     /// Every avatar loaded, by asset reference, worn by any number of bodies.
     wardrobe: Wardrobe,
     pictures: Pictures,
+    speakers: Speakers,
+    /// Every source of sound this frame: the playing pictures that carry
+    /// sound, and the clips within reach.
+    heard: Vec<Sound>,
     session: Session,
     peers: Peers,
     /// What a shell plugged in, and which of it the world has on.
@@ -169,6 +176,8 @@ impl Client {
             clips: Clips::new(),
             wardrobe: Wardrobe::default(),
             pictures: Pictures::default(),
+            speakers: Speakers::default(),
+            heard: Vec::new(),
             session: Session::default(),
             peers: Peers::default(),
             plugins: Plugins::default(),
@@ -755,9 +764,18 @@ impl Client {
     }
 
     /// Every source of sound this frame, for the shell to mix at the eye:
-    /// the pictures playing that carry sound. Read after [`Client::update`].
+    /// the pictures playing that carry sound, and the clips within reach.
+    /// Read after [`Client::update`].
     pub fn sounds(&self) -> &[Sound] {
-        self.pictures.heard()
+        &self.heard
+    }
+
+    /// Clips for the shell to open and close, in the order the client
+    /// decided: a sound placed in the world comes within reach of the eye
+    /// or leaves it. The shell plays an open clip where
+    /// [`Client::sounds`] says each frame.
+    pub fn drain_sounding(&mut self) -> Vec<Sounding> {
+        self.speakers.drain()
     }
 
     /// Pictures that move, for the shell to open and close, in the order the
@@ -1335,6 +1353,13 @@ impl Client {
             &mut self.requests,
         );
         self.pictures.end_frame();
+        self.speakers.begin_frame();
+        self.parts
+            .speakers(&self.generator, camera.position, &mut self.speakers);
+        self.speakers.end_frame();
+        self.heard.clear();
+        self.heard.extend_from_slice(self.pictures.heard());
+        self.heard.extend_from_slice(self.speakers.heard());
         drawn
     }
 
@@ -1445,6 +1470,7 @@ impl Client {
         plugins.rest(lent);
         self.cells.clear();
         self.pictures.clear();
+        self.speakers.clear();
         if keep {
             // A flyer keeps its altitude, which `stand_at` lifts if the new
             // ground rose through it; a walker lands on whatever is there now.

@@ -50,6 +50,7 @@ use crate::cells::{
 };
 use crate::collision::{BODY_HALF, Footing, STEP_M};
 use crate::pictures::{Pictures, Placed, Screen};
+use crate::speakers::Speakers;
 
 /// Seconds between two looks at what the world holds near the body.
 const LOOK_S: f64 = 1.0;
@@ -978,6 +979,18 @@ impl Parts {
             .collect()
     }
 
+    /// Every sound part, where it stands, told to `speakers` against where
+    /// the eye is: what is within reach plays.
+    pub(crate) fn speakers(&self, generator: &Generator, eye: DVec3, speakers: &mut Speakers) {
+        for (id, seat, part) in self.all() {
+            let Shape::Sound(clip) = part.shape else {
+                continue;
+            };
+            let at = self.place_of(generator, seat, &part.pose).translation;
+            speakers.hear(id, &clip, at, part.reach_m, eye);
+        }
+    }
+
     /// The lamps among the parts: a cube in the light finish and a landmark
     /// light what is near, as a cell of that finish does, by their colour,
     /// as many sides as their box has and as much as they shine. A model
@@ -1044,8 +1057,9 @@ impl Parts {
                     self.ensure(Shape::Cube, WAITING_PAINT);
                     self.want(hash);
                 }
-                // A picture is no model: drawn by `pictures`.
-                Shape::Image(_) => {}
+                // A picture is no model: drawn by `pictures`. A sound is
+                // nothing to the eye.
+                Shape::Image(_) | Shape::Sound(_) => {}
             }
         }
         Some(id)
@@ -1142,7 +1156,7 @@ pub fn is_lamp(part: &Part) -> bool {
     match part.shape {
         Shape::Cube => Paint::of(part.paint).finish == Finish::Light,
         Shape::Landmark(_) => true,
-        Shape::Vox(_) | Shape::Image(_) => false,
+        Shape::Vox(_) | Shape::Image(_) | Shape::Sound(_) => false,
     }
 }
 
@@ -1161,7 +1175,7 @@ fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
         Shape::Cube => 0,
         Shape::Landmark(_) => 1,
         Shape::Vox(hash) => return Some(model_of_file(hash)),
-        Shape::Image(_) => return None,
+        Shape::Image(_) | Shape::Sound(_) => return None,
     };
     debug_assert!(shape < SHAPES >> 8);
     Some(ModelId((shape << 8) | u64::from(paint)))
