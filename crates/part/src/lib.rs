@@ -71,13 +71,18 @@ impl Pose {
         finite
             && self.rotation.is_finite()
             && self.rotation.is_normalized()
-            && self.scale.iter().all(|&n| n >= MIN_SCALE)
+            && self
+                .scale
+                .iter()
+                .all(|&n| (MIN_SCALE..=MAX_SCALE).contains(&n))
     }
 }
 
 /// The least a part is along any axis, in blocks: thin as a pane, never
 /// nothing.
 pub const MIN_SCALE: f64 = 0.01;
+/// The most, in blocks: half a kilometre, a plot's worth eight times over.
+pub const MAX_SCALE: f64 = 1024.0;
 
 /// A part as it is kept and told.
 #[derive(Clone, Copy, PartialEq, Debug)]

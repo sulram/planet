@@ -203,7 +203,11 @@ fn the_stance_goes_out_when_it_changes_and_as_a_heartbeat() {
     for _ in 0..60 {
         client.update(1.0 / 60.0, &mut input);
     }
-    let stances = sent(&mut client).len();
+    // Beside them go the looks of the cells and the parts, once a second.
+    let stances = sent(&mut client)
+        .into_iter()
+        .filter(|m| matches!(m, client_message::Message::Stance(_)))
+        .count();
     assert!((10..=16).contains(&stances), "{stances}");
 }
 
