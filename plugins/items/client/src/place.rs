@@ -1,35 +1,27 @@
-//! Placing a part: a click puts a cube where the pointer meets the world,
-//! on a side of a cell, on a part or on the ground, standing up, a metre a
-//! side, in the paint in hand (DECISIONS 111).
+//! Placing an item: a click puts it where the pointer meets the world, on a
+//! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
 
-use client::{CUBE, Feet, Host, PartPose, REACH_M, Shape, Turn};
+use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
 use glam::DVec3;
 use topology::BLOCK_M;
 
-use crate::{Build, refuse};
+use crate::{Item, Items, refuse};
 
-impl Build {
-    /// One turn of the part tool.
-    pub(crate) fn place(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        let pressed = turn.using && !self.using;
-        self.using = turn.using;
-        self.aim = None;
-        if self.stroke.take().is_some() {
-            host.preview(None);
-        }
-        if !pressed {
-            return;
-        }
-        let (from, toward) = turn.eye.sight();
+impl Items {
+    /// Places the item in hand where the eye's pointer meets the world.
+    pub(crate) fn place(&mut self, item: Item, eye: &Eye, host: &mut Host<'_>) {
+        let (from, toward) = eye.sight();
         let Some(feet) = met(host, from, toward) else {
             return;
         };
         let at = [feet.point.u, feet.point.v, feet.height_m / BLOCK_M];
-        let part = client::Part {
-            shape: Shape::Cube,
-            pose: PartPose::upright(at, CUBE),
-            paint: self.made_of(),
-            solid: true,
+        let part = match item {
+            Item::Cube => client::Part {
+                shape: Shape::Cube,
+                pose: PartPose::upright(at, CUBE),
+                paint: self.made_of(),
+                solid: true,
+            },
         };
         if let Err(refusal) = host.place_part(feet.seat, part) {
             refuse(host, refusal.into());

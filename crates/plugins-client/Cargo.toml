@@ -11,6 +11,7 @@ publish.workspace = true
 client.workspace = true
 chat-client = { path = "../../plugins/chat/client" }
 build-client = { path = "../../plugins/build/client" }
+items-client = { path = "../../plugins/items/client" }
 
 [lints]
 workspace = true

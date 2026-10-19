@@ -1109,6 +1109,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "items-client"
+version = "0.0.0"
+dependencies = [
+ "client",
+ "glam",
+ "items-world",
+ "serde",
+ "serde_json",
+ "topology",
+ "voxel",
+]
+
+[[package]]
+name = "items-world"
+version = "0.0.0"
+dependencies = [
+ "world",
+]
+
+[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1935,6 +1955,7 @@ dependencies = [
  "build-client",
  "chat-client",
  "client",
+ "items-client",
 ]
 
 [[package]]
@@ -1943,6 +1964,7 @@ version = "0.0.0"
 dependencies = [
  "build-world",
  "chat-world",
+ "items-world",
  "world",
 ]
 
@@ -2851,6 +2873,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "voxel"
 version = "0.0.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "wait-timeout"

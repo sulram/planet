@@ -142,8 +142,8 @@ pub const PALETTE: [[u8; 3]; 16] = [
 /// What a gesture that deletes shows over what it takes away.
 const DELETE_COLOR: [u8; 3] = [230, 70, 60];
 
-/// Why the cells, or the parts, refuse what was asked of them. A plugin
-/// says it at the seam under its own name, and a front end in its own words.
+/// Why the cells refuse what was asked of them. A plugin says it at the
+/// seam under its own name, and a front end in its own words.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Refusal {
     /// Changing the cells is a builder's and an admin's, and the world named
@@ -156,10 +156,6 @@ pub enum Refusal {
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
-    /// A part's pose is no pose: not finite, not a turn, or flat.
-    Pose,
-    /// No part of that name stands.
-    Gone,
 }
 
 /// A box of a seat's cells shown as a faint grid, a line between each cell

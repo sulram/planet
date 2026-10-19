@@ -10,17 +10,20 @@ is an address of its seat with fractional blocks and a height over the
 datum, a rotation in the flat frame of that point, and a scale in blocks. It
 is rigid in that frame. A part is moved in the world, and its pose is read
 back from where it came to, so one crossing from a sector to the next is the
-same part at the same place with nothing folded. Building's plugin holds the
-hand that places it; `plugins/build` is where the one gizmo, keys and panel
-live, for every shape of part.
+same part at the same place with nothing folded. The hand that places it is
+a plugin of its own, items: `plugins/items` holds the menu of items, the one
+gizmo, keys and panel, for every kind, and building stays the cells alone.
 
-**Why the core's.** Marlus: a cube to add, turn, scale, make solid or not and
-paint as the voxels are, the way Cryptovoxels features work. By 108's two
-tests it is the core's: with building off, a cube with collision still stands
-and still holds a body up; and models of files, pictures and vehicles are
-placed things too, so several plugins touch it. The three sessions building
-cubes, `.vox` models and images agreed on one record and one gizmo, and each
-file kind is a shape of the same part.
+**Why the core's, and why items is not building.** Marlus: a cube to add,
+turn, scale, make solid or not and paint as the voxels are, the way
+Cryptovoxels features work; and placing is not building, which is volumes
+and voxels alone, so items has a construction menu of its own, on the left,
+where pictures and `.vox` models enter beside the cube. By 108's two tests
+the part is the core's: with every plugin off, a cube with collision still
+stands and still holds a body up; and models of files, pictures and vehicles
+are placed things too, so several plugins touch it. The three sessions
+building cubes, `.vox` models and images agreed on one record, one menu and
+one gizmo, and each file kind is a shape of the same part.
 
 **Why not inside a volume.** Marlus: a part must sit between one volume and
 another and move from one to the other with no seam. A volume is one plot
@@ -58,9 +61,10 @@ hand flies through parts as through cells.
 scale; a plugin of parts other plugins import (93); a frame that matches the
 grid's shrinking blocks, which no rotation survives across a seam; folding a
 pose over a seam with `wrapped`, which keeps the address distance and loses
-the place; one gizmo and panel per shape, written three times.
+the place; one gizmo and panel per shape, written three times; the part tool
+as a fifth tool of building, which it was for one commit.
 
 **Lives in:** PLUGINS.md § The core's words; ARCHITECTURE.md § The core and
 its plugins; GLOSSARY.md; ROADMAP.md § The parts; `crates/part`,
 `crates/seat/src/frame.rs`, `crates/client/src/parts.rs`,
-`crates/render/src/models.rs`, `plugins/build/client/src/place.rs`.
+`crates/render/src/models.rs`, `plugins/items`.

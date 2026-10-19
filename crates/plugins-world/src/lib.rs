@@ -18,5 +18,9 @@ pub fn all() -> Vec<Installed> {
             plugin: build_world::plugin(),
             on: true,
         },
+        Installed {
+            plugin: items_world::plugin(),
+            on: true,
+        },
     ]
 }

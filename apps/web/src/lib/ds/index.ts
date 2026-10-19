@@ -22,6 +22,7 @@ export { default as Page } from './Page.svelte';
 export { default as PageHeader } from './PageHeader.svelte';
 export type { Crumb } from './PageHeader.svelte';
 export { default as Pager } from './Pager.svelte';
+export { default as Palette } from './Palette.svelte';
 export { default as Panel } from './Panel.svelte';
 export { default as Segmented } from './Segmented.svelte';
 export { default as Select } from './Select.svelte';

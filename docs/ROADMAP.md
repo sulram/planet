@@ -76,11 +76,11 @@ end to end.
 ### The parts (111)
 
 - [ ] The gizmo: handles to move, turn and scale a part in the world, drawn as guides, picked by the lent pointer; a nudge along an axis of the frame is a move in the world, read back
-- [ ] The panel: the part picked, its position, rotation and scale as x/y/z fields scrubbed by dragging (`VectorInput`, after tatil-tim-platform, in `$lib/ds`), its paint from the palette, solid or not, remove
+- [ ] The items panel grows: the part picked, its position, rotation and scale as x/y/z fields scrubbed by dragging (`VectorInput`, after tatil-tim-platform, in `$lib/ds`), solid or not, remove
 - [ ] One history: a change of the cells and a change of the parts taken back in the order they landed
 - [ ] The op on the wire and the owner in the module: a part placed in one browser stands in another, kept by the seat, told to whoever is near (110); permission asked for every plot its box covers
 - [ ] A light part lights what is near, as a lamp among the cells does
-- [ ] Shapes beside the cube: a `.vox` model (its session: `crates/vox`, the upload route) and a picture (its session), each a variant and a draw of its own
+- [ ] Items beside the cube: a `.vox` model (its session: `crates/vox`, the upload route) and a picture (its session), each a shape of part, a draw of its own and a row in the items menu
 - [ ] Measure: parts in a frame against the budget, `bun run bench`
 
 ### Bodies (108)

@@ -1,0 +1,19 @@
+[package]
+name = "items-client"
+description = "The items plugin's client half: the menu of things to place, an item in hand, and the click that places it as a part."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+items-world = { path = "../world" }
+client.workspace = true
+topology.workspace = true
+voxel = { workspace = true, features = ["serde"] }
+glam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

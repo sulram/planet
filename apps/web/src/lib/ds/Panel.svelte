@@ -8,13 +8,15 @@
 		/** Sits opposite the title, for example a way out. */
 		aside?: Snippet;
 		corner?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+		/** Placed under the row of buttons in its top corner, which opened it. */
+		under?: boolean;
 		children: Snippet;
 	}
 
-	let { title, aside, corner = 'top-left', children }: Props = $props();
+	let { title, aside, corner = 'top-left', under = false, children }: Props = $props();
 </script>
 
-<section class="panel panel--{corner}">
+<section class="panel panel--{corner}" class:panel--under={under}>
 	<header>
 		<h2>{title}</h2>
 		{#if aside}{@render aside()}{/if}
@@ -50,6 +52,10 @@
 	   top corners, so a tall one never covers the button above it. */
 	.panel--bottom-left,
 	.panel--bottom-right {
+		max-height: calc(100% - 3 * var(--sp-4) - var(--control-h) - 2 * var(--bw));
+	}
+	.panel--under {
+		top: calc(2 * var(--sp-4) + var(--control-h) + 2 * var(--bw));
 		max-height: calc(100% - 3 * var(--sp-4) - var(--control-h) - 2 * var(--bw));
 	}
 	.panel--bottom-left {

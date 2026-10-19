@@ -36,7 +36,7 @@ pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{Part, PartId, Pose as PartPose, Shape};
-pub use parts::{CUBE, Parts};
+pub use parts::{CUBE, PartRefusal, Parts};
 use peers::Peers;
 pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, Plugin, Turn};
@@ -884,6 +884,11 @@ impl Client {
     /// The meshes of models to upload and drop, in order.
     pub fn drain_model_changes(&mut self) -> Vec<ModelChange> {
         self.parts.drain_changes()
+    }
+
+    /// The parts of the world, to read: what stands where.
+    pub fn parts(&self) -> &Parts {
+        &self.parts
     }
 
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {

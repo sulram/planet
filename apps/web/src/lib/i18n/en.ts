@@ -94,6 +94,8 @@ export const en = {
 	'engine.session.connecting': 'Connecting',
 	'engine.session.online': 'Online',
 	'engine.plugins': 'Plugins',
+	'engine.location': 'Location',
+	'engine.bar': 'World menu',
 
 	'play.seed.hint': '16 hex digits. The same seed always gives the same planet. Share the address to share it.',
 	'play.seed.invalid': 'Use up to 16 hex digits: 0 to 9 and a to f.',

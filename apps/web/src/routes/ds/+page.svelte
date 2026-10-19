@@ -9,6 +9,7 @@
 		Field,
 		Icon,
 		IconButton,
+		Palette,
 		Input,
 		LangSwitch,
 		Page,
@@ -250,6 +251,10 @@
 				<Icon name="pencil" label="Edit" />
 				<Icon name="log-out" label="Sign out" />
 				<Icon name="layout-dashboard" label="Backoffice" />
+				<Icon name="settings" label="Settings" />
+				<Icon name="puzzle" label="Plugins" />
+				<Icon name="languages" label="Language" />
+				<Icon name="box" label="Cube" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
 			</div>
 			<p class="muted">IconButton: an action said by its icon alone, square, for a corner where words do not fit. The label is required; it is the accessible name and the tooltip.</p>
@@ -258,6 +263,12 @@
 				<IconButton href="/ds" icon="layout-dashboard" label="Backoffice" />
 				<IconButton icon="pencil" label="Edit" disabled />
 			</div>
+		</section>
+		<section>
+			<h2>Palette</h2>
+			<p>The paints of a world as they will be laid: the colour in a finish and with an edge, the one in hand pressed.</p>
+			<Palette colors={['#f2f0eb', '#b8b8b3', '#5c5c5a', '#1e1e1f', '#9c3b2e', '#c8693f', '#d9c08c', '#7a5230']} paint={4} finish="matte" edge="none" label="Colour" pick={(n) => `Colour ${n}`} onpick={() => {}} />
+			<Palette colors={['#f2f0eb', '#b8b8b3', '#5c5c5a', '#1e1e1f', '#9c3b2e', '#c8693f', '#d9c08c', '#7a5230']} paint={1} finish="glass" edge="black" label="Colour, glass" pick={(n) => `Colour ${n}`} onpick={() => {}} />
 		</section>
 
 		<section>

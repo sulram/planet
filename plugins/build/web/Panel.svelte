@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Alert, Button, IconButton, Panel, Segmented } from '$lib/ds';
+	import { Alert, Button, IconButton, Palette, Panel, Segmented } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import { bases, edges, finishes, platforms, tools, type Base, type Edge, type Finish, type Refusal, type Tool } from './protocol';
 	import { t } from './words';
@@ -127,18 +127,7 @@
 		{#if tool !== 'delete'}
 			<section>
 				<h3>{t('material')}</h3>
-				<div class="palette {finish} edge-{edge}" role="group" aria-label={t('paint')}>
-					{#each palette as color, index (index)}
-						<button
-							type="button"
-							class="swatch"
-							style:--paint={color}
-							aria-pressed={index === paint}
-							aria-label={t('paint.pick', { n: String(index + 1) })}
-							onclick={() => onpaint(index)}
-						></button>
-					{/each}
-				</div>
+				<Palette colors={palette} {paint} {finish} {edge} label={t('paint')} pick={(n) => t('paint.pick', { n: String(n) })} onpick={onpaint} />
 				<div class="row">
 					<span>{t('finish')}</span>
 					<Segmented options={finishOptions} value={finish} label={t('finish')} onselect={onfinish} />
@@ -222,45 +211,6 @@
 	/* The volume under the body: one thing to do with it, as wide as the panel. */
 	.volume {
 		display: grid;
-	}
-	.palette {
-		display: grid;
-		grid-template-columns: repeat(8, 1fr);
-		gap: var(--sp-2);
-	}
-	/* A swatch is its paint as it will be laid: the colour in the finish and
-	   with the edge picked. */
-	.swatch {
-		aspect-ratio: 1;
-		border: none;
-		background: var(--paint);
-		cursor: pointer;
-	}
-	.glass .swatch {
-		background: linear-gradient(135deg, color-mix(in srgb, var(--paint) 30%, transparent) 50%, color-mix(in srgb, var(--paint) 60%, transparent) 50%);
-	}
-	.light .swatch {
-		box-shadow: 0 0 var(--sp-3) var(--paint);
-	}
-	.edge-black .swatch {
-		box-shadow: inset 0 0 0 calc(2 * var(--bw)) black;
-	}
-	.edge-white .swatch {
-		box-shadow: inset 0 0 0 calc(2 * var(--bw)) white;
-	}
-	.light.edge-black .swatch {
-		box-shadow:
-			inset 0 0 0 calc(2 * var(--bw)) black,
-			0 0 var(--sp-3) var(--paint);
-	}
-	.light.edge-white .swatch {
-		box-shadow:
-			inset 0 0 0 calc(2 * var(--bw)) white,
-			0 0 var(--sp-3) var(--paint);
-	}
-	.swatch[aria-pressed='true'] {
-		outline: calc(2 * var(--bw)) solid var(--text);
-		outline-offset: var(--bw);
 	}
 	.foot {
 		padding-top: var(--sp-3);
