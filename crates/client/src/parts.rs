@@ -43,12 +43,23 @@ use voxel::{Finish, Paint};
 use worldgen::Generator;
 
 use crate::assets::Requests;
-use crate::cells::{Ask, paint_look};
+use crate::cells::{Ask, PALETTE, paint_look};
 use crate::collision::{BODY_HALF, Footing, STEP_M};
 use crate::pictures::{Pictures, Screen};
 
 /// Seconds between two looks at what the world holds near the body.
 const LOOK_S: f64 = 1.0;
+/// How far a body goes from a part before its client lets it go, metres:
+/// past where the world shows it (`world::parts::HOLD_M`) by the same
+/// margin the cells keep for a volume seen afar (`seat::AFAR`).
+const DROP_M: f64 = 2304.0;
+/// How far off a part is drawn as its box in one paint instead of its
+/// model, metres: where a volume is seen whole, a part is seen whole.
+pub const AFAR_M: f64 = seat::HOLD_M;
+/// Blocks along the side of a bucket of a seat's grid: a part is in every
+/// bucket its box and a body's width reach, so a body's column asks the
+/// parts of its own bucket and no other.
+const BUCKET: f64 = 16.0;
 /// Seconds between two sets of one part sent to the world: a drag sets a
 /// part every frame, and the world hears the latest ten times a second.
 const SET_S: f64 = 0.1;
@@ -151,6 +162,16 @@ pub struct Parts {
     /// With no world: the changes made here to take back and put back.
     done: Vec<Change>,
     undone: Vec<Change>,
+    /// The paint each model of a file is drawn in from afar.
+    afar: HashMap<[u8; 32], u8>,
+    /// Every part by the buckets of its seat's grid its box reaches, and
+    /// which buckets each is in, to take it out again.
+    buckets: HashMap<(Seat, [i32; 2]), Vec<PartId>>,
+    bucketed: HashMap<PartId, Vec<(Seat, [i32; 2])>>,
+    /// The parts whose box reaches past the edge of their sector: a body on
+    /// the next sector may stand on them, so every column of their body
+    /// asks them.
+    edges: Vec<PartId>,
     /// The models announced, by id.
     meshed: Vec<ModelId>,
     changes: Vec<ModelChange>,
@@ -180,6 +201,53 @@ impl Parts {
     /// The moon is somewhere else: what is seated on it goes with it.
     pub(crate) fn orbit(&mut self, moon: DVec3) {
         self.moon = moon;
+    }
+
+    /// Holds a part under a name, in its buckets: the one it replaces, if any.
+    fn hold(
+        &mut self,
+        generator: &Generator,
+        id: PartId,
+        seat: Seat,
+        part: Part,
+    ) -> Option<(Seat, Part)> {
+        let before = self.let_go(id);
+        self.held.insert(id, (seat, part));
+        let side = f64::from(seat.sphere(generator).blocks().side());
+        let reach = part.reach() + BODY_HALF;
+        let [u, v, _] = part.pose.at;
+        if u - reach < 0.0 || v - reach < 0.0 || u + reach > side || v + reach > side {
+            self.edges.push(id);
+        }
+        let bucket = |n: f64| (n / BUCKET).floor() as i32;
+        let (lo, hi) = (
+            [bucket(u - reach), bucket(v - reach)],
+            [bucket(u + reach), bucket(v + reach)],
+        );
+        let mut cells = Vec::new();
+        for y in lo[1]..=hi[1] {
+            for x in lo[0]..=hi[0] {
+                self.buckets.entry((seat, [x, y])).or_default().push(id);
+                cells.push((seat, [x, y]));
+            }
+        }
+        self.bucketed.insert(id, cells);
+        before
+    }
+
+    /// Lets go of a part by its name, out of its buckets: what it was.
+    fn let_go(&mut self, id: PartId) -> Option<(Seat, Part)> {
+        let was = self.held.remove(&id)?;
+        for cell in self.bucketed.remove(&id).unwrap_or_default() {
+            if let Some(bucket) = self.buckets.get_mut(&cell) {
+                bucket.retain(|held| *held != id);
+                if bucket.is_empty() {
+                    self.buckets.remove(&cell);
+                }
+            }
+        }
+        self.edges.retain(|held| *held != id);
+        Some(was)
     }
 
     /// A world keeps the parts from here on: what was held is forgotten,
@@ -214,7 +282,7 @@ impl Parts {
     /// Takes back the last change made here, or puts back the last taken
     /// back. In a world, the world is asked to, and says what the parts are
     /// then; alone, the stacks here say.
-    pub(crate) fn restore(&mut self, back: bool) {
+    pub(crate) fn restore(&mut self, generator: &Generator, back: bool) {
         if let Some(link) = &mut self.link {
             let asked = match back {
                 true => link.ask(wire::TAKE_BACK, &wire::TakeBack {}),
@@ -232,16 +300,15 @@ impl Parts {
         };
         let inverse = match change {
             Change::Placed(id) => self
-                .held
-                .remove(&id)
+                .let_go(id)
                 .map(|(seat, part)| Change::Removed(id, seat, part)),
             Change::Removed(id, seat, part) => {
-                self.held.insert(id, (seat, part));
+                self.hold(generator, id, seat, part);
                 self.mesh(&part);
                 Some(Change::Placed(id))
             }
             Change::Set(id, seat, part) => {
-                let before = self.held.insert(id, (seat, part));
+                let before = self.hold(generator, id, seat, part);
                 self.mesh(&part);
                 before.map(|(seat, part)| Change::Set(id, seat, part))
             }
@@ -262,10 +329,11 @@ impl Parts {
             .unwrap_or_default()
     }
 
-    /// Sends the world the sets that waited for the cadence, and asks it,
-    /// every second, for the parts near the body this client lacks or
-    /// holds stale.
-    pub(crate) fn look(&mut self, dt: f64) {
+    /// Sends the world the sets that waited for the cadence, and once a
+    /// second lets go of the parts far behind the body and asks the world
+    /// for the parts near it this client lacks or holds stale. `body` is
+    /// the body the client's own stands on and where, from its centre.
+    pub(crate) fn look(&mut self, generator: &Generator, body: (Body, DVec3), dt: f64) {
         let Some(link) = &mut self.link else {
             return;
         };
@@ -284,6 +352,20 @@ impl Parts {
             return;
         }
         link.since_look_s = 0.0;
+        // A part far behind the body is let go, and asked for again when
+        // the body comes back.
+        let far: Vec<PartId> = self
+            .held
+            .iter()
+            .filter(|(_, (seat, part))| away_m(generator, *seat, &part.pose, body) > DROP_M)
+            .map(|(&id, _)| id)
+            .collect();
+        for local in far {
+            self.forget(local);
+        }
+        let Some(link) = &mut self.link else {
+            return;
+        };
         let held = link
             .versions
             .iter()
@@ -293,7 +375,7 @@ impl Parts {
     }
 
     /// An event of the world's parts.
-    pub(crate) fn receive(&mut self, kind: &str, payload: &[u8]) {
+    pub(crate) fn receive(&mut self, generator: &Generator, kind: &str, payload: &[u8]) {
         let Some(me) = self.link.as_ref().map(|link| link.me) else {
             return;
         };
@@ -315,7 +397,7 @@ impl Parts {
                         return;
                     }
                 }
-                self.arrived(record);
+                self.arrived(generator, record);
             }
             wire::CHANGED => {
                 let Ok(changed) = wire::Changed::decode(payload) else {
@@ -336,7 +418,7 @@ impl Parts {
                     true => {
                         link.versions.insert(record.id, record.version);
                     }
-                    false => self.arrived(record),
+                    false => self.arrived(generator, record),
                 }
             }
             wire::REMOVED => {
@@ -349,7 +431,7 @@ impl Parts {
                     return;
                 };
                 for record in &seen.records {
-                    self.arrived(record);
+                    self.arrived(generator, record);
                 }
                 for id in seen.gone {
                     self.gone(id);
@@ -403,7 +485,7 @@ impl Parts {
 
     /// A part as the world holds it: held here under the name it has here,
     /// or a new one.
-    fn arrived(&mut self, record: &wire::Record) {
+    fn arrived(&mut self, generator: &Generator, record: &wire::Record) {
         let Some((seat, part)) = record.part.as_ref().and_then(seat::part_from_wire) else {
             return;
         };
@@ -425,8 +507,22 @@ impl Parts {
                 local
             }
         };
-        self.held.insert(local, (seat, part));
+        self.hold(generator, local, seat, part);
         self.mesh(&part);
+    }
+
+    /// Lets go of a part held here, by its name here: what the world calls
+    /// it is forgotten too, so a look brings it again when it is near.
+    fn forget(&mut self, local: PartId) {
+        self.let_go(local);
+        if let Some(link) = &mut self.link {
+            link.dirty.remove(&local);
+            link.deferred.retain(|(part, _)| *part != local);
+            if let Some(id) = link.world_of.remove(&local) {
+                link.local_of.remove(&id);
+                link.versions.remove(&id);
+            }
+        }
     }
 
     /// A part the world no longer holds.
@@ -439,7 +535,7 @@ impl Parts {
             link.world_of.remove(&local);
             link.dirty.remove(&local);
             link.deferred.retain(|(part, _)| *part != local);
-            self.held.remove(&local);
+            self.let_go(local);
         }
     }
 
@@ -454,8 +550,8 @@ impl Parts {
         if let Some(at) = link.placing.iter().position(|(asked, _)| *asked == id) {
             let (_, local) = link.placing.remove(at);
             if !code.is_empty() {
-                self.held.remove(&local);
                 link.deferred.retain(|(part, _)| *part != local);
+                self.let_go(local);
             }
             return true;
         }
@@ -526,10 +622,10 @@ impl Parts {
 
     /// Places a part on a seat and names it. In a world, the world is asked
     /// to place it too, and names it in its own way.
-    pub(crate) fn place(&mut self, seat: Seat, part: Part) -> PartId {
+    pub(crate) fn place(&mut self, generator: &Generator, seat: Seat, part: Part) -> PartId {
         self.next += 1;
         let id = PartId(self.next);
-        self.held.insert(id, (seat, part));
+        self.hold(generator, id, seat, part);
         self.mesh(&part);
         match &mut self.link {
             Some(link) => {
@@ -549,11 +645,17 @@ impl Parts {
 
     /// Replaces a part, kept by its name: moved, turned, stretched,
     /// repainted or made solid or not. False for a name nothing holds.
-    pub(crate) fn set(&mut self, id: PartId, seat: Seat, part: Part) -> bool {
-        let Some(held) = self.held.get_mut(&id) else {
+    pub(crate) fn set(
+        &mut self,
+        generator: &Generator,
+        id: PartId,
+        seat: Seat,
+        part: Part,
+    ) -> bool {
+        if !self.held.contains_key(&id) {
             return false;
-        };
-        let before = core::mem::replace(held, (seat, part));
+        }
+        let before = self.hold(generator, id, seat, part).expect("held");
         self.mesh(&part);
         // The latest set of a part goes at the cadence: a drag sets it every
         // frame. Alone, sets of one part in a row are one change.
@@ -574,7 +676,7 @@ impl Parts {
 
     /// Removes a part by its name. False for a name nothing holds.
     pub(crate) fn remove(&mut self, id: PartId) -> bool {
-        let Some((seat, part)) = self.held.remove(&id) else {
+        let Some((seat, part)) = self.let_go(id) else {
             return false;
         };
         match &mut self.link {
@@ -641,8 +743,15 @@ impl Parts {
             DVec3::from(tangents.dv).normalize() * half_m,
         );
         let feet = [DVec3::ZERO, -du - dv, du - dv, -du + dv, du + dv];
-        self.held
-            .values()
+        // The parts of the column's bucket, and those over a seam of this
+        // body, whichever sector they are seated on.
+        let bucket = [
+            (point.u / BUCKET).floor() as i32,
+            (point.v / BUCKET).floor() as i32,
+        ];
+        let near = self.buckets.get(&(seat, bucket)).into_iter().flatten();
+        near.chain(self.edges.iter())
+            .filter_map(|id| self.held.get(id))
             .filter(|(on, part)| on.body() == body && part.solid)
             .filter_map(|(on, part)| {
                 // Near enough to be over the body at all: its farthest
@@ -663,12 +772,23 @@ impl Parts {
     }
 
     /// Every part drawn as a model, placed in the world this frame, and the
-    /// marks over them.
-    pub fn drawn(&self, generator: &Generator) -> Vec<ModelDraw> {
+    /// marks over them. A part further than [`AFAR_M`] from the body is its
+    /// box in one paint: a cube is that already, a model shows the colour
+    /// most of its voxels have. `body` is where the client's own body is,
+    /// from the centre of the body it stands on.
+    pub fn drawn(&self, generator: &Generator, body: (Body, DVec3)) -> Vec<ModelDraw> {
         self.all()
             .filter_map(|(_, seat, part)| {
+                let afar = away_m(generator, seat, &part.pose, body) > AFAR_M;
+                let mesh = match (afar, part.shape) {
+                    (true, Shape::Vox(hash)) => {
+                        let paint = self.afar.get(&hash).copied().unwrap_or(part.paint);
+                        model_id(Shape::Cube, paint)?
+                    }
+                    _ => model_of(part)?,
+                };
                 Some(ModelDraw {
-                    mesh: model_of(part)?,
+                    mesh,
                     transform: self.place_of(generator, seat, &part.pose),
                     pass: match Paint::of(part.paint).finish {
                         Finish::Glass => ModelPass::Glass,
@@ -754,6 +874,11 @@ impl Parts {
             self.changes
                 .push(ModelChange::Add(id, boxed(&model.grid, &model.palette)));
         }
+        // Seen from afar, the model is a box in the paint nearest the colour
+        // most of its voxels have.
+        let paint = afar_paint(&model.grid, &model.palette);
+        self.ensure(Shape::Cube, paint);
+        self.afar.insert(hash, paint);
         self.grids.insert(hash, model.grid);
     }
 
@@ -784,6 +909,37 @@ impl Parts {
             None => Some(boxed),
         }
     }
+}
+
+/// How far a body at `body`, from the centre of the body it is on, is from
+/// a part's anchor, metres: infinite from another body.
+fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -> f64 {
+    if seat.body() != body.0 {
+        return f64::INFINITY;
+    }
+    let anchor = seat::seated(seat.sphere(generator), seat.sector(), pose).translation;
+    anchor.distance(body.1)
+}
+
+/// The paint of the palette nearest the colour most of a model's voxels
+/// have: what it is drawn in from afar.
+fn afar_paint(grid: &vox::Grid, palette: &vox::Palette) -> u8 {
+    let mut counts = [0u32; 256];
+    for &voxel in &grid.voxels {
+        counts[usize::from(voxel)] += 1;
+    }
+    counts[0] = 0;
+    let most = (0..256).max_by_key(|&i| counts[i]).unwrap_or(0);
+    let [r, g, b, _] = palette[most].map(i32::from);
+    let nearest = PALETTE
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, [pr, pg, pb])| {
+            let [pr, pg, pb] = [*pr, *pg, *pb].map(i32::from);
+            (r - pr).pow(2) + (g - pg).pow(2) + (b - pb).pow(2)
+        })
+        .map_or(0, |(i, _)| i as u8);
+    Paint::plain(nearest).byte()
 }
 
 /// The model a part is drawn as. `None` for a shape drawn another way, a
@@ -1018,7 +1174,7 @@ mod tests {
             paint: 0,
             solid: true,
         };
-        parts.place(seat, part);
+        parts.place(&generator, seat, part);
         // A body a block past the seam, on the next sector, at the top.
         let placed = seat::seated(sphere, seat.sector(), &part.pose);
         let over = placed.transform_point3(DVec3::new(0.375, 0.0, 1.0));
@@ -1046,7 +1202,7 @@ mod tests {
             paint: 0,
             solid: true,
         };
-        let id = parts.place(seat, part);
+        let id = parts.place(&generator, seat, part);
         let point = SurfacePoint::new(seat.sector(), 1000.3, 999.8);
         let top_m = 12.0 * BLOCK_M;
         let footing = parts.footing(&generator, seat, point, top_m).unwrap();
@@ -1065,6 +1221,7 @@ mod tests {
         assert!(parts.footing(&generator, seat, aside, top_m).is_none());
         // Made open, nothing to stand on.
         parts.set(
+            &generator,
             id,
             seat,
             Part {
@@ -1081,7 +1238,7 @@ mod tests {
         assert_eq!(hit, id);
         assert!((away_m - 3.0).abs() < 1e-6, "{away_m}");
         // One model for every cube in a paint.
-        parts.place(seat, part);
+        parts.place(&generator, seat, part);
         assert_eq!(parts.drain_changes().len(), 1);
     }
 
@@ -1097,6 +1254,7 @@ mod tests {
             grid,
             palette: vox::default_palette(),
         };
+        let generator = Generator::new(worldgen::Recipe::new(1)).unwrap();
         let hash = [7; 32];
         let mut parts = Parts::default();
         let seat = Seat::Sector(topology::Sector::new(0).unwrap());
@@ -1108,8 +1266,8 @@ mod tests {
             paint: 0,
             solid: true,
         };
-        parts.place(seat, part);
-        parts.place(seat, part);
+        parts.place(&generator, seat, part);
+        parts.place(&generator, seat, part);
         assert_eq!(parts.wanted(), vec![hash]);
         assert!(parts.wanted().is_empty());
         assert!(
@@ -1117,7 +1275,6 @@ mod tests {
             "nothing is drawn before the file comes"
         );
         // Until it comes, the box holds a body up: on top of it.
-        let generator = Generator::new(worldgen::Recipe::new(1)).unwrap();
         let near = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-4);
         let under_arch = SurfacePoint::new(seat.sector(), 1000.6, 1000.0);
         let boxed = parts
@@ -1127,11 +1284,16 @@ mod tests {
 
         parts.model_arrived(hash, model);
         assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
+        // Its mesh, and the box it is from afar, in the paint most of it is.
         let changes = parts.drain_changes();
-        assert_eq!(changes.len(), 1);
-        let ModelChange::Add(_, mesh) = &changes[0] else {
-            panic!("a mesh is added");
-        };
+        assert_eq!(changes.len(), 2);
+        let mesh = changes
+            .iter()
+            .find_map(|change| match change {
+                ModelChange::Add(id, mesh) if *id == model_of_file(hash) => Some(mesh),
+                _ => None,
+            })
+            .expect("the model's mesh is added");
         // Seven voxels, of which some sides touch: fewer than 42 sides, all
         // inside the unit box.
         assert!(mesh.vertices.len() < 42 * 4 && !mesh.vertices.is_empty());

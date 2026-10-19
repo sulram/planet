@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 
 use client::collision;
-use client::{Client, Event, Input, Key, Level, Recipe};
+use client::{CUBE, Client, Event, Input, Key, Level, PartPose, Recipe, Seat, Shape};
 use topology::{Sector, SurfacePoint};
 use wasm_bindgen::prelude::wasm_bindgen;
 use worldgen::{Field, Generator, Source};
@@ -247,5 +247,101 @@ pub fn lay_frame() -> bool {
         client.drain_volume_changes();
         let events = client.drain_events();
         events.iter().any(|event| matches!(event, Event::Settled))
+    })
+}
+
+thread_local! {
+    static PARTS: RefCell<Option<(Client, Input)>> = const { RefCell::new(None) };
+}
+
+/// Where the parts stand: dry land in the middle of a sector of the test
+/// world, as the parts' own tests have it.
+const PARTS_AT: [f64; 2] = [0.41, 0.37];
+
+/// Stands a body among `count` cubes placed in a square around it, a block
+/// apart, and looks over them. The frame then draws every one, and the
+/// body's footing asks every one near it.
+#[wasm_bindgen]
+pub fn parts_start(count: i32) {
+    let mut client = Client::new(Recipe::new(1)).expect("the current generator version");
+    client.rehearse(Level::Admin);
+    client.set_view([1280, 720]);
+    let side = f64::from(client.sphere().blocks().side());
+    let (u, v) = (PARTS_AT[0] * side, PARTS_AT[1] * side);
+    client.teleport(SurfacePoint::new(Sector::ALL[0], u, v));
+    client.pose(0.0, -0.6, 12.0);
+    let feet = client.host("bench").feet();
+    let ground = client.host("bench").ground(feet.seat, feet.point);
+    let across = (f64::from(count).sqrt().ceil() as i32).max(1);
+    for i in 0..count {
+        let (x, y) = (i % across, i / across);
+        let at = [
+            u + f64::from(x - across / 2) * 3.0,
+            v + f64::from(y - across / 2) * 3.0,
+            ground,
+        ];
+        let part = client::Part {
+            shape: Shape::Cube,
+            pose: PartPose::upright(at, CUBE),
+            paint: (i % 16) as u8,
+            solid: true,
+        };
+        client
+            .host("bench")
+            .place_part(Seat::Sector(feet.seat.sector()), part)
+            .expect("a builder places");
+    }
+    let mut input = Input::default();
+    input.key(Key::Forward, true);
+    client.drain_events();
+    PARTS.with(|parts| *parts.borrow_mut() = Some((client, input)));
+}
+
+/// One frame among the parts, the body walking through them. The host
+/// times the call.
+#[wasm_bindgen]
+pub fn parts_frame() {
+    PARTS.with(|parts| {
+        let mut parts = parts.borrow_mut();
+        let (client, input) = parts.as_mut().expect("parts_start comes first");
+        client.update(1.0 / 60.0, input);
+        client.drain_events();
+        client.drain_terrain_changes();
+        client.drain_model_changes();
+    });
+}
+
+/// How many parts the frame draws: what the scene holds, so a budget is
+/// read against a count.
+#[wasm_bindgen]
+pub fn parts_count() -> i32 {
+    PARTS.with(|parts| {
+        let parts = parts.borrow();
+        let (client, _) = parts.as_ref().expect("parts_start comes first");
+        client.parts().all().count() as i32
+    })
+}
+
+/// `count` footings of the body among the parts placed: what one step asks
+/// of them, apart from the frame.
+#[wasm_bindgen]
+pub fn parts_footings(count: i32) -> f64 {
+    PARTS.with(|parts| {
+        let mut parts = parts.borrow_mut();
+        let (client, _) = parts.as_mut().expect("parts_start comes first");
+        let feet = client.host("bench").feet();
+        let mut sum = 0.0;
+        for i in 0..count {
+            let spread = f64::from(i) * 1e-3;
+            let point = SurfacePoint::new(feet.point.sector, feet.point.u + spread, feet.point.v);
+            let footing =
+                client
+                    .parts()
+                    .footing(client.generator(), feet.seat, point, feet.height_m);
+            sum += footing
+                .and_then(|footing| footing.floor_m)
+                .unwrap_or_default();
+        }
+        sum
     })
 }

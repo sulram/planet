@@ -479,7 +479,7 @@ impl Host<'_> {
     pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, PartRefusal> {
         self.may_place()?;
         self.sound(seat, &part.pose)?;
-        let id = self.lent.parts.place(seat, part);
+        let id = self.lent.parts.place(self.lent.generator, seat, part);
         let ask = self.lent.parts.last_ask();
         self.lent.history.did(Owner::Parts, ask);
         Ok(id)
@@ -490,7 +490,7 @@ impl Host<'_> {
     pub fn set_part(&mut self, id: PartId, seat: Seat, part: Part) -> Result<(), PartRefusal> {
         self.may_place()?;
         self.sound(seat, &part.pose)?;
-        match self.lent.parts.set(id, seat, part) {
+        match self.lent.parts.set(self.lent.generator, id, seat, part) {
             true => {
                 // A set goes to the world at a cadence, under no number yet.
                 self.lent.history.set(id.0, None);
@@ -536,7 +536,7 @@ impl Host<'_> {
         self.permitted()?;
         match self.lent.history.take_back() {
             Some(Owner::Cells) => self.lent.cells.take_back(self.lent.generator),
-            Some(Owner::Parts) => self.lent.parts.restore(true),
+            Some(Owner::Parts) => self.lent.parts.restore(self.lent.generator, true),
             None => {}
         }
         Ok(())
@@ -547,7 +547,7 @@ impl Host<'_> {
         self.permitted()?;
         match self.lent.history.put_back() {
             Some(Owner::Cells) => self.lent.cells.put_back(self.lent.generator),
-            Some(Owner::Parts) => self.lent.parts.restore(false),
+            Some(Owner::Parts) => self.lent.parts.restore(self.lent.generator, false),
             None => {}
         }
         Ok(())

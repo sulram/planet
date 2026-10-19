@@ -73,15 +73,24 @@ fn answer(id: u32, code: &str) -> Vec<u8> {
     }))
 }
 
-fn cube(u: f64) -> (Seat, Part) {
-    let seat = Seat::Sector(Sector::new(4).unwrap());
+/// A cube a metre a side, standing where the client's own body is, a few
+/// blocks along from it: near enough to be held, and placed by it.
+fn cube(client: &mut Client, along: f64) -> (Seat, Part) {
+    let feet = client.host("test").feet();
     let part = Part {
         shape: Shape::Cube,
-        pose: PartPose::upright([u, 20000.0, 10.0], CUBE),
+        pose: PartPose::upright(
+            [
+                feet.point.u + along,
+                feet.point.v,
+                feet.height_m / topology::BLOCK_M,
+            ],
+            CUBE,
+        ),
         paint: 5,
         solid: true,
     };
-    (seat, part)
+    (feet.seat, part)
 }
 
 fn record(id: u64, version: u64, seat: Seat, part: &Part) -> wire::Record {
@@ -95,7 +104,7 @@ fn record(id: u64, version: u64, seat: Seat, part: &Part) -> wire::Record {
 #[test]
 fn a_part_placed_is_asked_of_the_world_and_set_under_the_name_it_gives() {
     let mut client = welcomed();
-    let (seat, part) = cube(20000.0);
+    let (seat, part) = cube(&mut client, 4.0);
     let local = client.host("test").place_part(seat, part).unwrap();
     let place = asked(&mut client);
     assert_eq!(place.len(), 1);
@@ -148,7 +157,8 @@ fn one_history_takes_back_cells_and_parts_in_order() {
     client.set_view([1600, 900]);
     // A part, then a cell in a volume opened under the feet, then the part
     // set twice as a drag does.
-    let (seat, part) = cube(20000.0);
+    let (seat, part) = cube(&mut client, 4.0);
+    let standing = part.pose.at[2];
     let id = client.host("test").place_part(seat, part).unwrap();
     let feet = client.host("test").feet();
     client.host("test").open(feet.seat, feet.point).unwrap();
@@ -175,7 +185,7 @@ fn one_history_takes_back_cells_and_parts_in_order() {
     };
     // Back: the two sets as one, then the cell, then the part.
     key(&mut client, Key::Undo);
-    assert_eq!(client.parts().get(id).unwrap().1.pose.at[2], 10.0);
+    assert_eq!(client.parts().get(id).unwrap().1.pose.at[2], standing);
     key(&mut client, Key::Undo);
     assert!(!solid(&client));
     key(&mut client, Key::Undo);
@@ -194,7 +204,7 @@ fn one_history_takes_back_cells_and_parts_in_order() {
 #[test]
 fn what_others_place_arrives_and_what_is_refused_is_taken_back() {
     let mut client = welcomed();
-    let (seat, part) = cube(20010.0);
+    let (seat, part) = cube(&mut client, 8.0);
     // Someone else's, placed and then seen again stale, then gone.
     let placed = wire::Placed {
         session: 2,

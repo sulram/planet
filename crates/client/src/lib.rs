@@ -822,7 +822,8 @@ impl Client {
                     .receive(&self.generator, &envelope.kind, &envelope.payload);
             }
             Some(Message::Envelope(envelope)) if envelope.plugin == protocol::parts::OWNER => {
-                self.parts.receive(&envelope.kind, &envelope.payload);
+                self.parts
+                    .receive(&self.generator, &envelope.kind, &envelope.payload);
             }
             Some(Message::Envelope(envelope)) => {
                 let (plugins, lent) = self.lend();
@@ -962,6 +963,11 @@ impl Client {
         &self.parts
     }
 
+    /// The ground of the world, to read.
+    pub fn generator(&self) -> &Generator {
+        &self.generator
+    }
+
     /// What a hand changed, to read: whether there is a change to take
     /// back, and one to put back.
     pub fn history(&self) -> &History {
@@ -973,7 +979,7 @@ impl Client {
     pub fn take_back(&mut self) {
         match self.history.take_back() {
             Some(Owner::Cells) => self.cells.take_back(&self.generator),
-            Some(Owner::Parts) => self.parts.restore(true),
+            Some(Owner::Parts) => self.parts.restore(&self.generator, true),
             None => {}
         }
     }
@@ -982,7 +988,7 @@ impl Client {
     pub fn put_back(&mut self) {
         match self.history.put_back() {
             Some(Owner::Cells) => self.cells.put_back(&self.generator),
-            Some(Owner::Parts) => self.parts.restore(false),
+            Some(Owner::Parts) => self.parts.restore(&self.generator, false),
             None => {}
         }
     }
@@ -1091,7 +1097,8 @@ impl Client {
         self.cells.update(eye.position);
         self.cells
             .look(&self.generator, self.controller.held_by(), dt);
-        self.parts.look(dt);
+        self.parts
+            .look(&self.generator, self.controller.held_by(), dt);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -1310,7 +1317,7 @@ impl Client {
             volumes: self.cells.drawn(),
             glass: self.cells.glazed(),
             lamps: self.cells.lamps(),
-            models: self.parts.drawn(&self.generator),
+            models: self.parts.drawn(&self.generator, self.controller.held_by()),
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
             pictures,

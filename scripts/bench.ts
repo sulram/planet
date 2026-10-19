@@ -98,6 +98,28 @@ const FOOTING_BUDGET_MS = 0.05;
 	report('planet: worst frame of a 10 s walk in cave country', worst, FRAME_BUDGET_MS);
 }
 
+// A body walking among two thousand cubes placed around it: every one is
+// drawn each frame, and the footing of each step asks the ones near. The
+// frame is the whole frame; the footing is apart from it, as the ground's.
+{
+	const count = 2000;
+	bench.parts_start(count);
+	let worst = 0;
+	for (let frame = 0; frame < 300; frame++) {
+		const before = performance.now();
+		bench.parts_frame();
+		worst = Math.max(worst, performance.now() - before);
+	}
+	report(`planet: worst frame of a 5 s walk among ${bench.parts_count()} parts`, worst, FRAME_BUDGET_MS);
+	const rounds = 200;
+	bench.parts_footings(rounds);
+	const start = performance.now();
+	bench.parts_footings(rounds);
+	const ms = (performance.now() - start) / rounds;
+	report(`planet: four footings among ${count} parts, one body one step`, ms * 4, FOOTING_BUDGET_MS);
+	console.log(`     ${(ms * 1000).toFixed(1)} us a footing`);
+}
+
 // A platform of 64 laid on a solid base over the steepest plot near the test
 // world: the frame the command lands in, and every frame after it until each
 // chunk it changed is drawn. The worst of them is what a hand feels.
