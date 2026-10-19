@@ -45,6 +45,11 @@ pub(crate) struct Gizmo {
     /// The axis whose handle is under the pointer.
     pub hot: Option<usize>,
     pub drag: Option<Drag>,
+    /// The angles the panel last said, degrees about x, y and z: shown back
+    /// as said while they still describe the part's turn, so a turn past 90
+    /// degrees about the middle axis does not come back with the other two
+    /// flipped by 180, as its one decomposition would.
+    pub euler: Option<[f64; 3]>,
 }
 
 /// A handle being dragged: which axis, where the drag started along it and
@@ -86,6 +91,7 @@ impl Gizmo {
             world,
             hot: None,
             drag: None,
+            euler: None,
         })
     }
 
@@ -264,6 +270,7 @@ mod tests {
             world,
             hot: None,
             drag: None,
+            euler: None,
         }
     }
 

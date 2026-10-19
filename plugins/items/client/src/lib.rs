@@ -410,6 +410,12 @@ fn radians(degrees: [f64; 3]) -> DQuat {
     DQuat::from_euler(EulerRot::XYZ, x, y, z)
 }
 
+/// Whether two quaternions are one turn: the same, or each other's
+/// negative, within a hair.
+fn same_turn(a: DQuat, b: DQuat) -> bool {
+    a.dot(b).abs() > 1.0 - 1e-9
+}
+
 impl Items {
     /// The paint what is placed next is made of.
     fn made_of(&self) -> u8 {
@@ -553,6 +559,11 @@ impl Items {
             part.shape = Shape::Landmark(name);
         }
         let (id, seat) = (gizmo.id, gizmo.seat);
+        if let (Some(rotation), Some(gizmo)) = (set.rotation, &mut self.picked) {
+            // Said angles are shown back as said; a turn made another way
+            // is read off the part.
+            gizmo.euler = Some(rotation);
+        }
         self.apply(id, seat, part, host);
     }
 
@@ -681,7 +692,12 @@ impl Items {
                 id: Some(gizmo.id.0),
                 item: Some(item_of(gizmo.part.shape)),
                 at: Some(gizmo.part.pose.at),
-                rotation: Some(degrees(gizmo.part.pose.rotation)),
+                rotation: Some(
+                    gizmo
+                        .euler
+                        .filter(|said| same_turn(radians(*said), gizmo.part.pose.rotation))
+                        .unwrap_or_else(|| degrees(gizmo.part.pose.rotation)),
+                ),
                 scale: Some(gizmo.part.pose.scale),
                 solid: Some(gizmo.part.solid),
                 shine: Some(gizmo.part.shine),
@@ -1324,6 +1340,37 @@ mod tests {
             .unwrap();
         assert_eq!(hand["editing"], true);
         assert!(client.pointing());
+    }
+
+    #[test]
+    fn a_turn_said_in_degrees_is_shown_back_as_said() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"cube"}"#);
+        click(&mut client, [0.5, 0.7]);
+        events(&mut client);
+        // Past 90 degrees about y, the one decomposition would say
+        // [180, 60, 180]; the panel hears what it said.
+        client.command_json(r#"{"type":"items.set","rotation":[0,120,0]}"#);
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["rotation"], serde_json::json!([0.0, 120.0, 0.0]));
+        client.command_json(r#"{"type":"items.set","rotation":[30,120,0]}"#);
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["rotation"], serde_json::json!([30.0, 120.0, 0.0]));
+        // Turned another way, the part's own turn is read off it.
+        client.command_json(r#"{"type":"items.set","rotation":[0,0,0]}"#);
+        events(&mut client);
+        let part = client.parts().all().next().unwrap().2;
+        assert!(same_turn(part.pose.rotation, DQuat::IDENTITY));
     }
 
     #[test]
