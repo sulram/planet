@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Stat, ThemeToggle } from '$lib/ds';
+	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Spinner, Stat, ThemeToggle } from '$lib/ds';
 	import { upload } from '$lib/files';
 	import { t } from '$lib/i18n';
 	import type { Link } from '$lib/instance';
@@ -259,8 +259,14 @@
 			defaults ??= event.effects;
 			effects = event.effects;
 		}
-		else if (event.type === 'avatar_changed' && event.path !== avatar) remember(event.path);
+		else if (event.type === 'avatar_changed') {
+			fetching = event.path !== null && !event.worn;
+			if (event.path && event.path !== avatar) remember(event.path);
+		}
 	}
+
+	/** An avatar is on its way: the body stays as it was until it lands. */
+	let fetching = $state(false);
 
 	// An avatar picked in the world becomes this browser's choice.
 	function remember(path: string) {
@@ -285,6 +291,12 @@
 		</Panel>
 	{/if}
 	<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} />
+	{#if fetching}
+		<div class="fetching">
+			<Spinner label={t('engine.avatar.loading')} />
+			<span aria-hidden="true">{t('engine.avatar.loading')}</span>
+		</div>
+	{/if}
 	<nav class="bar" aria-label={t('engine.bar')}>
 		<IconButton icon="map-pin" label={t('engine.location')} aria-expanded={opened === 'location'} onclick={() => toggle('location')} />
 		{#if link}
@@ -401,6 +413,35 @@
 	}
 	.bar {
 		--control-bg: var(--bg-overlay);
+	}
+	/* The wait for an avatar on its way, at the bottom middle, in the voice
+	   of the engine's own waits. It shows after a beat, so a file that lands
+	   at once never flashes it. */
+	.fetching {
+		position: absolute;
+		bottom: var(--sp-5);
+		left: 50%;
+		z-index: var(--z-panel);
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+		min-height: var(--control-h);
+		padding: 0 var(--sp-3);
+		background: var(--bg-overlay);
+		color: var(--text-muted);
+		letter-spacing: var(--ls-caps);
+		text-transform: uppercase;
+		pointer-events: none;
+		transform: translateX(-50%);
+		animation: appear 200ms ease 300ms both;
+	}
+	@keyframes appear {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
 	}
 	.corner {
 		display: flex;

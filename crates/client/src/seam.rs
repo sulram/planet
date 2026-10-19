@@ -103,9 +103,13 @@ pub enum Event {
     ModeChanged {
         mode: Mode,
     },
-    /// The avatar now worn. A UI persists this as the person's choice.
+    /// The avatar this body is in, or on its way into, whenever either
+    /// changes. `path` is the choice: a UI persists it as the person's.
+    /// While `worn` is false the file is on its way and the body stays as
+    /// it was: a UI shows the wait. `None` is the box figure, nothing wanted.
     AvatarChanged {
-        path: String,
+        path: Option<String>,
+        worn: bool,
     },
     /// The effects now in force, clamped to what is sane. Sent once at the
     /// start too. A UI persists this as the person's choice.

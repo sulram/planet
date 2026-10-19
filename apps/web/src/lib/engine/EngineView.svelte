@@ -198,7 +198,7 @@
 			}
 		}
 		if (event.type === 'mode_changed') engineMode = event.mode;
-		if (event.type === 'avatar_changed') engineAvatar = event.path;
+		if (event.type === 'avatar_changed') engineAvatar = event.path ?? undefined;
 		if (event.type === 'effects_changed') engineEffects = JSON.stringify(event.effects);
 		onevent?.(event);
 	}
