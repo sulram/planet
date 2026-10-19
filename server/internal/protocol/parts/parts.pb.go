@@ -36,6 +36,7 @@ type Shape struct {
 	// Types that are valid to be assigned to Shape:
 	//
 	//	*Shape_Cube
+	//	*Shape_Vox
 	Shape         isShape_Shape `protobuf_oneof:"shape"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -87,6 +88,15 @@ func (x *Shape) GetCube() *Cube {
 	return nil
 }
 
+func (x *Shape) GetVox() []byte {
+	if x != nil {
+		if x, ok := x.Shape.(*Shape_Vox); ok {
+			return x.Vox
+		}
+	}
+	return nil
+}
+
 type isShape_Shape interface {
 	isShape_Shape()
 }
@@ -95,7 +105,15 @@ type Shape_Cube struct {
 	Cube *Cube `protobuf:"bytes,1,opt,name=cube,proto3,oneof"`
 }
 
+type Shape_Vox struct {
+	// A model from a `.vox` file: the SHA-256 of its content, 32 bytes,
+	// the file named `asset://<hex>.vox`.
+	Vox []byte `protobuf:"bytes,2,opt,name=vox,proto3,oneof"`
+}
+
 func (*Shape_Cube) isShape_Shape() {}
+
+func (*Shape_Vox) isShape_Shape() {}
 
 // The unit box, in one paint.
 type Cube struct {
@@ -857,9 +875,10 @@ var File_planet_parts_v1_parts_proto protoreflect.FileDescriptor
 
 const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\n" +
-	"\x1bplanet/parts/v1/parts.proto\x12\x0fplanet.parts.v1\x1a\x1bplanet/cells/v1/cells.proto\"=\n" +
+	"\x1bplanet/parts/v1/parts.proto\x12\x0fplanet.parts.v1\x1a\x1bplanet/cells/v1/cells.proto\"Q\n" +
 	"\x05Shape\x12+\n" +
-	"\x04cube\x18\x01 \x01(\v2\x15.planet.parts.v1.CubeH\x00R\x04cubeB\a\n" +
+	"\x04cube\x18\x01 \x01(\v2\x15.planet.parts.v1.CubeH\x00R\x04cube\x12\x12\n" +
+	"\x03vox\x18\x02 \x01(\fH\x00R\x03voxB\a\n" +
 	"\x05shape\"\x06\n" +
 	"\x04Cube\"\xa0\x01\n" +
 	"\x04Pose\x12\f\n" +
@@ -965,6 +984,7 @@ func file_planet_parts_v1_parts_proto_init() {
 	}
 	file_planet_parts_v1_parts_proto_msgTypes[0].OneofWrappers = []any{
 		(*Shape_Cube)(nil),
+		(*Shape_Vox)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

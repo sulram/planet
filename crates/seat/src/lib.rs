@@ -324,6 +324,7 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
     let [x, y, z, w] = pose.rotation.to_array();
     let shape = match part.shape {
         part::Shape::Cube => parts_wire::shape::Shape::Cube(parts_wire::Cube {}),
+        part::Shape::Vox(hash) => parts_wire::shape::Shape::Vox(hash.to_vec()),
     };
     parts_wire::Part {
         seat: Some(seat.wire()),
@@ -352,6 +353,8 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
     let pose = part.pose.as_ref()?;
     let shape = match part.shape.as_ref()?.shape.as_ref()? {
         parts_wire::shape::Shape::Cube(_) => part::Shape::Cube,
+        // A hash of any other length names no file.
+        parts_wire::shape::Shape::Vox(hash) => part::Shape::Vox(hash.as_slice().try_into().ok()?),
     };
     let pose = part::Pose {
         at: [pose.u, pose.v, pose.h],
@@ -435,6 +438,24 @@ mod tests {
             seat: Some(wire::seat::Seat::Sector(99)),
         };
         assert_eq!(Seat::from_wire(Some(&far)), None);
+    }
+
+    #[test]
+    fn a_model_survives_the_wire_and_a_hash_of_the_wrong_length_names_none() {
+        let seat = Seat::Sector(Sector::new(2).unwrap());
+        let part = part::Part {
+            shape: part::Shape::Vox([9; 32]),
+            pose: part::Pose::upright([10.0, 20.0, 3.0], [0.5, 0.5, 1.0]),
+            paint: 0,
+            solid: false,
+        };
+        let wire = part_wire(seat, &part);
+        assert_eq!(part_from_wire(&wire), Some((seat, part)));
+        let mut cut = wire;
+        cut.shape = Some(parts_wire::Shape {
+            shape: Some(parts_wire::shape::Shape::Vox(vec![9; 31])),
+        });
+        assert_eq!(part_from_wire(&cut), None);
     }
 
     #[test]

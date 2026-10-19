@@ -58,6 +58,28 @@ stands 2 m tall: the size of a thing in a room. Rotation is free, with snaps
 at a quarter turn and at fifteen degrees; nothing in collision or the picture
 is special to a right angle, so the snap is the panel's.
 
+## A part's pose, store and footing
+
+A part is kept by its seat, never by a volume: its record is an id the world
+gives, a seat, a pose, a shape, a paint and a solid flag. The pose is an
+anchor as an address with fractional blocks and a height over the datum, a
+rotation in the flat frame of that point, and a scale in blocks. The frame is
+the sector's u made unit, up, and their cross, a block long each: a part is
+rigid in it, so a cube of scale 1 is a cell at the middle of a sector and a
+little wider than one at its corners. The pose is always in range of its
+sector: a part is moved as a world transform, by a gizmo, a nudge or a hand,
+and `seat::reseat` reads sector, address, height, turn and scale back from
+it, so a part crossing a seam is the same part at the same place. In the
+module, the parts are an owner as the cells are (110), under the name `parts`
+on the envelope: place, set and remove, each asked with the plots the part's
+box covers so land answers by plot. The store holds one row a part, keyed by
+id, indexed by the plot of its anchor so a change is told to whoever is near
+(107). Footing: a solid part answers a body's column as the cells do, solid
+at the step's height a wall whose top is the floor offered, below it a floor,
+above it a roof; a model's footing is its own voxel grid read through the
+pose, a cube's its box. A part's model is drawn by the cells' shader and lit
+by the same lamps; a light part is a lamp of its own, to come.
+
 ## What a body collides with
 
 A cube is an oriented box. A model is its own grid of voxels, read through

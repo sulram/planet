@@ -24,6 +24,38 @@ pub struct PartId(pub u64);
 pub enum Shape {
     /// The unit box, in one paint.
     Cube,
+    /// A model: a `.vox` file, named by the SHA-256 of its content, its
+    /// voxels filling the unit box in their own palette (`vox`). The paint
+    /// is nobody's. What a body meets of it is its own grid, read through
+    /// the pose by whoever holds the file; here it is its box.
+    Vox([u8; 32]),
+}
+
+impl Shape {
+    /// The model a file's asset name, `asset://<sha256>.vox`, stands for.
+    /// `None` for a name that is no model's.
+    pub fn of_asset(name: &str) -> Option<Shape> {
+        let hex = name.strip_prefix("asset://")?.strip_suffix(".vox")?;
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut hash = [0; 32];
+        for (byte, pair) in hash.iter_mut().zip(hex.as_bytes().chunks(2)) {
+            *byte = u8::from_str_radix(core::str::from_utf8(pair).ok()?, 16).ok()?;
+        }
+        Some(Shape::Vox(hash))
+    }
+
+    /// The asset name of a model's file. `None` for a shape of the core's.
+    pub fn asset(self) -> Option<String> {
+        match self {
+            Shape::Vox(hash) => {
+                let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+                Some(format!("asset://{hex}.vox"))
+            }
+            Shape::Cube => None,
+        }
+    }
 }
 
 /// Where a part stands and how it is turned and stretched, in the flat
@@ -159,7 +191,9 @@ impl Part {
 
 /// Where a line `from + toward * t`, said in the space of a unit box, is
 /// inside it: the `t` it goes in and the `t` it comes out, or `None` when it
-/// never is. What a handle drawn as a box is picked by.
+/// never is. A line along a side counts as inside it. What a handle drawn
+/// as a box is picked by, and what a shape with a grid of its own walks
+/// between.
 pub fn through(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
     slab(from, toward)
 }
@@ -218,9 +252,6 @@ fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
     }
 }
 
-/// Where a line `from + toward * t` is inside the unit box: the `t` it goes
-/// in and the `t` it comes out, or `None` when it never is. A line along a
-/// side counts as inside it.
 fn slab(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
     let (low, high) = (DVec3::new(-0.5, -0.5, 0.0), DVec3::new(0.5, 0.5, 1.0));
     let (mut near, mut far) = (f64::NEG_INFINITY, f64::INFINITY);
@@ -251,6 +282,23 @@ mod tests {
             pose,
             paint: 0,
             solid: true,
+        }
+    }
+
+    #[test]
+    fn a_model_is_named_by_its_file() {
+        let name = format!("asset://{}.vox", "0a".repeat(32));
+        let shape = Shape::of_asset(&name).unwrap();
+        assert_eq!(shape, Shape::Vox([0x0a; 32]));
+        assert_eq!(shape.asset().as_deref(), Some(name.as_str()));
+        assert_eq!(Shape::Cube.asset(), None);
+        for wrong in [
+            "asset://0a0a.vox",
+            &format!("asset://{}.png", "0a".repeat(32)),
+            &format!("{}.vox", "0a".repeat(32)),
+            &format!("asset://{}.vox", "zz".repeat(32)),
+        ] {
+            assert_eq!(Shape::of_asset(wrong), None, "{wrong}");
         }
     }
 

@@ -476,6 +476,18 @@ impl Host<'_> {
         }
     }
 
+    /// Asks for a model's file, once, so a hand knows its size before it
+    /// places it. What arrives is kept and drawn for every part that names
+    /// it.
+    pub fn want_model(&mut self, hash: [u8; 32]) {
+        self.lent.parts.want(hash);
+    }
+
+    /// How many voxels a model has along each axis, once its file arrived.
+    pub fn model_size(&self, hash: [u8; 32]) -> Option<[u32; 3]> {
+        self.lent.parts.size_of(hash)
+    }
+
     /// Removes a part by its name.
     pub fn remove_part(&mut self, id: PartId) -> Result<(), PartRefusal> {
         self.may_place()?;
