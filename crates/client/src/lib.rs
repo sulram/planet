@@ -1028,7 +1028,7 @@ impl Client {
         // Each plugin's turn, then the cells drawn as the turns left them,
         // and kept in step with what the world holds near the body.
         let (plugins, lent) = self.lend();
-        plugins.turn(&eye, input, taken.interrupted, lent);
+        plugins.turn(&eye, input, (taken.interrupted, taken.inspected), lent);
         self.cells.update(eye.position);
         self.cells
             .look(&self.generator, self.controller.held_by(), dt);

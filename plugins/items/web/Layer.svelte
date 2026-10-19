@@ -15,6 +15,8 @@
 	let item = $state<Item | null>(null);
 	let mode = $state<Mode>('move');
 	let picked = $state<Picked | null>(null);
+	/** The part picked as it stood when it was picked: what reset goes back to. */
+	let origin = $state<Picked | null>(null);
 	let paint = $state(0);
 	let finish = $state<Finish>('matte');
 	let edge = $state<Edge>('none');
@@ -25,7 +27,10 @@
 			if (kind === 'hand') {
 				const hand = parseHand(event);
 				if (hand) ({ editing, item, mode, paint, finish, edge } = hand);
-			} else if (kind === 'picked') picked = parsePicked(event);
+			} else if (kind === 'picked') {
+				picked = parsePicked(event);
+				if (picked?.id !== origin?.id) origin = picked;
+			}
 			else if (kind === 'refused') refused = parseRefused(event);
 		});
 		// What is in hand was said before this layer listened: ask for it.
@@ -45,6 +50,7 @@
 		{item}
 		{mode}
 		{picked}
+		{origin}
 		{paint}
 		{finish}
 		{edge}

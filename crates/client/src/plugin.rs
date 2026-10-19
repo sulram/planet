@@ -123,6 +123,11 @@ pub struct Turn<'a> {
     /// Whether the shell let everything go since the last turn: what was
     /// half done is dropped, never landed.
     pub interrupted: bool,
+    /// Whether the pointer's secondary button was tapped since the last
+    /// turn, where the eye's pointer is: heard by every plugin, whoever
+    /// has the pointer, so a thing in the world is picked to be looked at
+    /// again from anywhere.
+    pub inspected: bool,
 }
 
 impl Turn<'_> {
@@ -638,7 +643,13 @@ impl Plugins {
     }
 
     /// Gives every plugin that is on its turn in the frame.
-    pub(crate) fn turn(&mut self, eye: &Eye, input: &Input, interrupted: bool, mut lent: Lent<'_>) {
+    pub(crate) fn turn(
+        &mut self,
+        eye: &Eye,
+        input: &Input,
+        (interrupted, inspected): (bool, bool),
+        mut lent: Lent<'_>,
+    ) {
         for held in self.held.iter_mut().filter(|held| held.on) {
             let name = held.plugin.name();
             let keys: Vec<&'static str> = held
@@ -652,6 +663,7 @@ impl Plugins {
                 using: input.held(Key::Use) && *lent.pointer == Some(name),
                 keys: &keys,
                 interrupted,
+                inspected,
             };
             held.plugin.turn(&turn, &mut lent.again().host(name));
         }

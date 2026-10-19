@@ -38,7 +38,14 @@ struct State {
     looking: bool,
     /// Where the world's files are read from: what `asset://` stands for.
     files: String,
+    /// Where the secondary button went down, in client pixels, while it is
+    /// down: let go within a few pixels of it, it was a tap.
+    secondary_down: Option<(f64, f64)>,
 }
+
+/// Pixels the pointer may move between the secondary button going down and
+/// up for it to be a tap and not a drag.
+const TAP_PX: f64 = 4.0;
 
 /// Where the web app serves the asset root.
 const ASSET_ROOT: &str = "/assets/";
@@ -84,6 +91,7 @@ impl Engine {
             link: None,
             looking: false,
             files: FILES.to_owned(),
+            secondary_down: None,
         }));
         let alive = Rc::new(RefCell::new(true));
         let listeners = listen(&canvas, &state);
@@ -581,6 +589,9 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             let event: PointerEvent = event.unchecked_into();
             let _ = canvas.focus();
             let mut state = state.borrow_mut();
+            if event.button() == SECONDARY {
+                state.secondary_down = Some((event.client_x().into(), event.client_y().into()));
+            }
             if state.client.pointing() {
                 event.prevent_default();
                 let _ = canvas.set_pointer_capture(event.pointer_id());
@@ -605,7 +616,18 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             let mut state = state.borrow_mut();
             match event.button() {
                 PRIMARY => state.input.key(Key::Use, false),
-                SECONDARY => state.looking = false,
+                SECONDARY => {
+                    state.looking = false;
+                    // Let go where it went down, it was a tap: what is under
+                    // the pointer is picked to be looked at again.
+                    let (x, y) = (f64::from(event.client_x()), f64::from(event.client_y()));
+                    if let Some((x0, y0)) = state.secondary_down.take()
+                        && (x - x0).abs() <= TAP_PX
+                        && (y - y0).abs() <= TAP_PX
+                    {
+                        state.input.inspect();
+                    }
+                }
                 _ => {}
             }
         }
@@ -634,15 +656,10 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             }
         }
     };
-    // The secondary button looks while a tool is in hand; the page keeps
-    // its menu.
-    let menu = {
-        let state = state.clone();
-        move |event: web_sys::Event| {
-            if state.borrow().client.pointing() {
-                event.prevent_default();
-            }
-        }
+    // The secondary button is the world's over the canvas: it looks while
+    // a tool is in hand and picks with a tap. The page's menu stays off it.
+    let menu = move |event: web_sys::Event| {
+        event.prevent_default();
     };
     let wheel = {
         let state = state.clone();
@@ -658,6 +675,7 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             let mut state = state.borrow_mut();
             state.input.release_all();
             state.looking = false;
+            state.secondary_down = None;
         }
     };
 

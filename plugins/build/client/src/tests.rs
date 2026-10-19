@@ -144,6 +144,7 @@ fn update(build: &mut Build, client: &mut Client, eye: &Eye, using: bool, turnin
         using,
         keys,
         interrupted: false,
+        inspected: false,
     };
     build.turn(&turn, &mut client.host(NAME));
 }
@@ -807,6 +808,7 @@ fn escape_drops_a_stroke_half_drawn_and_so_does_a_shell_that_lets_go() {
         using: false,
         keys: &[],
         interrupted: true,
+        inspected: false,
     };
     build.turn(&let_go, &mut client.host(NAME));
     assert!(client.cells().cell(point.sector, over).is_air());

@@ -581,9 +581,22 @@ impl Plugin for Items {
         }
     }
 
-    /// One turn: with an item in hand a click places it; with the menu open
-    /// the gizmo works.
+    /// One turn: a tap of the secondary button on a part picks it, from
+    /// anywhere, and opens the menu on it; with an item in hand a click
+    /// places it; with the menu open the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
+        if turn.inspected && host.may_change() {
+            let (from, toward) = turn.eye.sight();
+            if let Some((id, _)) = host.pick(from, toward) {
+                if !self.editing {
+                    self.editing = true;
+                    host.point(true);
+                }
+                self.item = None;
+                self.say_hand(host);
+                self.pick(Some(id), host);
+            }
+        }
         if !self.editing {
             self.using = turn.using;
             return;
@@ -796,6 +809,34 @@ mod tests {
         client.command_json(r#"{"type":"items.take","item":"cube"}"#);
         click(&mut client, [0.3, 0.7]);
         assert_eq!(client.parts().all().count(), 2, "a cube beside the picture");
+    }
+
+    #[test]
+    fn a_tap_of_the_secondary_button_picks_a_part_from_anywhere() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"cube"}"#);
+        click(&mut client, [0.5, 0.7]);
+        client.command_json(r#"{"type":"items.edit","on":false}"#);
+        events(&mut client);
+        assert!(!client.pointing());
+        let mut input = Input::default();
+        input.pointer = Some([0.5, 0.7]);
+        input.inspect();
+        client.update(1.0 / 60.0, &mut input);
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert!(picked["id"].is_number());
+        let hand = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.hand")
+            .unwrap();
+        assert_eq!(hand["editing"], true);
+        assert!(client.pointing());
     }
 
     #[test]
