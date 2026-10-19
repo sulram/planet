@@ -17,6 +17,13 @@ export interface Seam {
 	 * `said` for `chat.said`. Returns how to stop hearing.
 	 */
 	listen(hear: (kind: string, event: Record<string, unknown>) => void): () => void;
+	/**
+	 * Says whether this plugin's menu is open. One UI is open at a time: a
+	 * menu that opens closes the stage's own panel and every other menu.
+	 */
+	menu(open: boolean): void;
+	/** Hears when the stage closes this plugin's menu, another UI having opened. Returns how to stop hearing. */
+	closing(hear: () => void): () => void;
 	/** Lets the world go, so a form in the layer has the keys and the pointer. */
 	release(): void;
 	/** Hands the world back. */

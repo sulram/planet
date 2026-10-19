@@ -52,6 +52,11 @@
 		return stop;
 	});
 
+	// The menu is one of the one UI open at a time: the stage hears when it
+	// opens and closes it when another opens.
+	$effect(() => seam.menu(editing));
+	$effect(() => seam.closing(() => seam.command('edit', { on: false })));
+
 	function ask(kind: string, body?: Record<string, unknown>) {
 		refused = null;
 		seam.command(kind, body);

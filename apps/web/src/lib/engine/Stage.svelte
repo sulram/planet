@@ -32,8 +32,9 @@
 	// The full viewport engine and what floats over it: what a world and the
 	// founding screen share. In the top right corner a bar of icons, one a
 	// panel: where you are, who is here, the language, the plugins and the
-	// settings, which hold the mode and the picture. One panel is open at a
-	// time, under the bar. The keys live behind the help button. The page may
+	// settings, which hold the mode and the picture. One UI is open at a
+	// time: a panel under the bar or one plugin's menu; whichever opens
+	// closes the rest. The keys live behind the help button. The page may
 	// bring a panel of its own, in the top left corner, where a plugin's menu
 	// otherwise sits.
 	// The compass point a bearing lands on, and the angle beside it. A rose has
@@ -130,6 +131,8 @@
 
 	type Hear = (kind: string, event: Record<string, unknown>) => void;
 	const hearing = new Map<string, Set<Hear>>();
+	/** Who hears when the stage closes a plugin's menu. */
+	const closers = new Map<string, Set<() => void>>();
 	const seams = new Map<string, Seam>();
 
 	function seamOf(plugin: string): Seam {
@@ -141,6 +144,16 @@
 				listen(hear) {
 					const heard = hearing.get(plugin) ?? new Set<Hear>();
 					hearing.set(plugin, heard.add(hear));
+					return () => heard.delete(hear);
+				},
+				menu(open) {
+					const menu: Opened = `plugin:${plugin}`;
+					if (open) show(menu);
+					else if (opened === menu) opened = null;
+				},
+				closing(hear) {
+					const heard = closers.get(plugin) ?? new Set<() => void>();
+					closers.set(plugin, heard.add(hear));
 					return () => heard.delete(hear);
 				},
 				release: () => view?.release(),
@@ -221,12 +234,20 @@
 		}
 	}
 
-	/** The panel open under the bar, if any. */
-	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings';
+	/** The one UI open: a panel under the bar, or a plugin's menu as `plugin:<name>`. */
+	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings' | `plugin:${string}`;
 	let opened = $state<Opened | null>(null);
 
+	/** Opens one UI, or none, and closes a plugin's menu that was open instead. */
+	function show(next: Opened | null) {
+		if (opened === next) return;
+		const was = opened;
+		opened = next;
+		if (was?.startsWith('plugin:')) for (const close of closers.get(was.slice('plugin:'.length)) ?? []) close();
+	}
+
 	function toggle(panel: Opened) {
-		opened = opened === panel ? null : panel;
+		show(opened === panel ? null : panel);
 	}
 
 	function receive(event: EngineEvent | PluginEvent) {
@@ -291,7 +312,7 @@
 	{#if opened === 'location'}
 		<Panel {title} corner="top-right" under>
 			{#snippet aside()}
-				<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+				<IconButton icon="x" label={t('common.close')} onclick={() => show(null)} />
 			{/snippet}
 			{#if stats}
 				<dl>
@@ -307,7 +328,7 @@
 			{#snippet aside()}
 				<span class="corner">
 					<Badge variant={session === 'online' ? 'solid' : 'outline'}>{t(`engine.session.${session}`)}</Badge>
-					<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+					<IconButton icon="x" label={t('common.close')} onclick={() => show(null)} />
 				</span>
 			{/snippet}
 			{#if onsignin}<Button variant="ghost" onclick={onsignin}>{t('door.signIn')}</Button>{/if}
@@ -345,14 +366,14 @@
 	{:else if opened === 'language'}
 		<Panel title={t('common.language')} corner="top-right" under>
 			{#snippet aside()}
-				<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+				<IconButton icon="x" label={t('common.close')} onclick={() => show(null)} />
 			{/snippet}
 			<LangSwitch />
 		</Panel>
 	{:else if opened === 'plugins' && onswitch && link}
 		<Panel title={t('engine.plugins')} corner="top-right" under>
 			{#snippet aside()}
-				<IconButton icon="x" label={t('common.close')} onclick={() => (opened = null)} />
+				<IconButton icon="x" label={t('common.close')} onclick={() => show(null)} />
 			{/snippet}
 			{#each plugins as plugin (plugin.name)}
 				<Checkbox
@@ -365,7 +386,7 @@
 			{/each}
 		</Panel>
 	{:else if opened === 'settings'}
-		<Settings {mode} onmode={(value) => (mode = value)} {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => (opened = null)} />
+		<Settings {mode} onmode={(value) => (mode = value)} {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => show(null)} />
 	{/if}
 </div>
 
