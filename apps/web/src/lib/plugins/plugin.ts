@@ -21,6 +21,12 @@ export interface Seam {
 	release(): void;
 	/** Hands the world back. */
 	take(): void;
+	/**
+	 * Sends a file to the world under the page's key, and resolves to the
+	 * asset's name, `asset://<sha256>.<ext>` (`$lib/files`). Throws a
+	 * `Refused` with the world's code: `kind`, `size`, `level`, `key`.
+	 */
+	upload(file: Blob): Promise<string>;
 }
 
 /** What a plugin's layer is mounted with, while its plugin is on in this world. */

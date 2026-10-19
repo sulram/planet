@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Stat, ThemeToggle } from '$lib/ds';
+	import { upload } from '$lib/files';
 	import { t } from '$lib/i18n';
 	import type { Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
@@ -58,6 +59,8 @@
 		link?: Link;
 		/** What the world said this person may do. Null in the offline preview, with no world to ask. */
 		level?: Level | null;
+		/** The page's key, which a file a plugin sends to the world rides with. Empty for a visitor. */
+		key?: string;
 		/** The name is an account's, as mundos signed it: shown, never edited here. */
 		account?: boolean;
 		/** Goes to mundos's door to sign in. Present for a visitor of a hosted world. */
@@ -70,7 +73,7 @@
 		children?: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, name = '', link, level = null, account = false, onsignin, onswitch, onready, children }: Props =
+	let { title, recipe, fieldPath, avatar, name = '', link, level = null, key = '', account = false, onsignin, onswitch, onready, children }: Props =
 		$props();
 
 	// A visitor's name, edited where it is shown. The engine hears it at once,
@@ -141,7 +144,8 @@
 					return () => heard.delete(hear);
 				},
 				release: () => view?.release(),
-				take: () => view?.take()
+				take: () => view?.take(),
+				upload: (file) => upload(file, key)
 			};
 			seams.set(plugin, seam);
 		}

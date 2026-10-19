@@ -1,12 +1,13 @@
 //! Placing an item: a click puts it where the pointer meets the world, on a
 //! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
 //! Placed, the part is picked, so the hand that put it there moves it next.
+//! A model stands as big as its file says, a voxel an eighth of a cell.
 
-use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
+use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape, VOXEL};
 use glam::DVec3;
 use topology::BLOCK_M;
 
-use crate::{Item, Items, refuse};
+use crate::{Item, Items, Refusal, refuse};
 
 impl Items {
     /// Places the item in hand where the eye's pointer meets the world.
@@ -16,13 +17,24 @@ impl Items {
             return;
         };
         let at = [feet.point.u, feet.point.v, feet.height_m / BLOCK_M];
-        let part = match item {
-            Item::Cube => client::Part {
-                shape: Shape::Cube,
-                pose: PartPose::upright(at, CUBE),
-                paint: self.made_of(),
-                solid: true,
-            },
+        let (shape, scale) = match item {
+            Item::Cube => (Shape::Cube, CUBE),
+            Item::Model => {
+                // With no file taken there is nothing to place yet.
+                let Some(hash) = self.model else {
+                    return;
+                };
+                let Some(size) = host.model_size(hash) else {
+                    return refuse(host, Refusal::Unread);
+                };
+                (Shape::Vox(hash), size.map(|n| f64::from(n) * VOXEL))
+            }
+        };
+        let part = client::Part {
+            shape,
+            pose: PartPose::upright(at, scale),
+            paint: self.made_of(),
+            solid: true,
         };
         match host.place_part(feet.seat, part) {
             Ok(id) => {
