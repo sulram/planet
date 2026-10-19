@@ -1362,6 +1362,48 @@ mod tests {
         assert!((3.0..8.0).contains(&away), "{away} blocks ahead");
     }
 
+    /// Standing on the ground, an add lands on it; high up, the cube floats
+    /// in front of the body at its own height.
+    #[test]
+    fn a_take_ahead_lands_on_ground_within_reach_and_floats_over_a_drop() {
+        let mut client = client();
+        let mut input = Input::default();
+        // On foot, settled on the ground.
+        for _ in 0..30 {
+            client.update(1.0 / 60.0, &mut input);
+        }
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        let (_, seat, part) = client
+            .parts()
+            .all()
+            .map(|(id, seat, part)| (id, seat, *part))
+            .next()
+            .unwrap();
+        let under = client.host("test").ground(
+            seat,
+            topology::SurfacePoint::new(seat.sector(), part.pose.at[0], part.pose.at[1]),
+        );
+        assert!(
+            (part.pose.at[2] - under).abs() < 1.0,
+            "stands on the ground: at {} blocks, the ground under it at {under}",
+            part.pose.at[2]
+        );
+        // Ten metres up: in the air on purpose, the cube floats level with
+        // the feet.
+        client.pose(10.0, 0.0, 4.0);
+        client.update(1.0 / 60.0, &mut input);
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        let feet = client.host("test").feet();
+        let (_, _, part) = client.parts().all().last().unwrap();
+        assert!(
+            (part.pose.at[2] - feet.height_m / BLOCK_M).abs() < 1.0,
+            "floats at the feet's height {} blocks, placed at {}",
+            feet.height_m / BLOCK_M,
+            part.pose.at[2]
+        );
+        assert!(part.pose.at[2] - under > 10.0, "well over the ground");
+    }
+
     #[test]
     fn a_part_placed_over_another_stands_on_its_top() {
         let mut client = client();

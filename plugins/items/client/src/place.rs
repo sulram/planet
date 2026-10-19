@@ -15,6 +15,12 @@ use topology::BLOCK_M;
 /// stands on what is there, a floor over the ground too.
 const AHEAD_M: f64 = 2.5;
 const OVER_M: f64 = 6.0;
+/// How far under the feet the ground may be for a thing placed in front
+/// of the body to stand on it, metres: a flyer a little over a floor, or
+/// over the top of a platform, still builds on it. Further down, the body
+/// is in the air on purpose, and the thing floats at its own height in
+/// front of it rather than landing on a ground it cannot see.
+const HOLD_M: f64 = 2.0;
 
 use crate::{Item, Items, Refusal, refuse};
 
@@ -34,12 +40,21 @@ impl Items {
 
     /// Places the item in hand in front of the body, with no click: a line
     /// from over the body's front straight down meets the ground, a cell
-    /// or a part, and the item stands there. A file given lands so.
+    /// or a part, and the item stands there when that is within [`HOLD_M`]
+    /// under the feet; further down, the item floats in front of the body
+    /// at its own height. A file given lands so.
     pub(crate) fn place_ahead(&mut self, item: Item, host: &mut Host<'_>) {
         let body = host.body();
         let flat = (body.facing - body.up * body.facing.dot(body.up)).normalize_or(body.facing);
-        let from = body.position + flat * AHEAD_M + body.up * OVER_M;
-        self.place_along(item, from, -body.up, host);
+        let ahead = body.position + flat * AHEAD_M;
+        let from = ahead + body.up * OVER_M;
+        let own = host.feet();
+        let feet = met(host, from, -body.up)
+            .filter(|met| {
+                met.seat.body() == own.seat.body() && own.height_m - met.height_m <= HOLD_M
+            })
+            .unwrap_or_else(|| host.feet_at(ahead));
+        self.place_at(item, feet, from, host);
     }
 
     /// Places the item in hand where a line meets the world.
@@ -47,6 +62,12 @@ impl Items {
         let Some(feet) = met(host, from, toward) else {
             return;
         };
+        self.place_at(item, feet, from, host);
+    }
+
+    /// Places the item in hand standing at some feet, its front turned to
+    /// where the line that found them started, the eye.
+    fn place_at(&mut self, item: Item, feet: Feet, from: DVec3, host: &mut Host<'_>) {
         let at = [feet.point.u, feet.point.v, feet.height_m / BLOCK_M];
         let part = match item {
             Item::Cube => client::Part {
