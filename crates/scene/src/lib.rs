@@ -344,6 +344,38 @@ pub enum VolumeChange {
 /// every target offers (WebGL2, 16 KiB).
 pub const MAX_JOINTS: usize = 128;
 
+/// Stable identity of a model mesh while it is in the scene: the mesh of a
+/// shape of part in one paint, or of one model.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct ModelId(pub u64);
+
+/// A mesh of cubes in its own space, drawn where a part puts it: a cube is
+/// a model of one voxel, a model of many. Its units are the model's own,
+/// one a voxel of it, and the anchor is the middle of its bottom. Its
+/// vertices are a volume's, so it is lit, edged and glazed as the cells are.
+#[derive(Clone, Debug)]
+pub struct ModelMesh {
+    pub vertices: Vec<VolumeVertex>,
+    pub indices: Vec<u32>,
+}
+
+/// A change to the set of model meshes a renderer holds.
+#[derive(Clone, Debug)]
+pub enum ModelChange {
+    Add(ModelId, ModelMesh),
+    Remove(ModelId),
+}
+
+/// One model placed in the world this frame.
+#[derive(Clone, Copy, Debug)]
+pub struct ModelDraw {
+    pub mesh: ModelId,
+    /// World from model space.
+    pub transform: DAffine3,
+    /// Whether it is drawn as glass, over what is solid and blended.
+    pub glass: bool,
+}
+
 /// Stable identity of a skinned mesh while it is in the scene.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct SkinnedMeshId(pub u64);
@@ -449,6 +481,9 @@ pub struct Frame {
     pub glass: Vec<VolumeDraw>,
     /// The lights among the cells in reach. A view is lit by the nearest.
     pub lamps: Vec<Lamp>,
+    /// The models placed in reach: every part. All their meshes were
+    /// announced by a [`ModelChange::Add`].
+    pub models: Vec<ModelDraw>,
     /// The stroke a build tool would make: drawn see-through over the world,
     /// cast by nothing. Announced by a [`VolumeChange::Guide`].
     pub ghost: Option<VolumeDraw>,

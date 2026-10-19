@@ -19,6 +19,13 @@ pub const STEP_M: f64 = BLOCK_M;
 pub const BODY_M: f64 = 1.8;
 /// Metres between probes along a ray looking for ground.
 const PROBE_M: f64 = BLOCK_M / 2.0;
+/// Times the stretch of a ray between the last probe over the ground and
+/// the first under it is halved to find where it goes in: to a sixteenth
+/// of a probe.
+const HALVINGS: usize = 4;
+/// Half the width of a standing body in address space, in blocks: how near
+/// a wall it comes, and how far past the edge of a floor it still stands.
+pub const BODY_HALF: f64 = 0.6;
 
 /// What a body at one direction stands on, and what is over its head.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -96,14 +103,32 @@ pub fn admits(from: Footing, to: Footing, feet_m: f64) -> bool {
 /// out of the hill its body is standing against.
 pub fn clear_run_m(generator: &Generator, from: DVec3, toward: DVec3, reach_m: f64) -> f64 {
     let radius_m = generator.sphere().radius_m();
-    let mut at_m = PROBE_M;
-    while at_m < reach_m {
-        let at = from + toward * at_m;
+    let under = |at: DVec3| {
         let direction = at.normalize_or(DVec3::Y).to_array();
-        if at.length() - radius_m < generator.sample_at(direction, 0.0).height_m {
-            return at_m - PROBE_M;
+        at.length() - radius_m < generator.sample_at(direction, 0.0).height_m
+    };
+    ground_run_m(from, toward, reach_m, under).map_or(reach_m, |hit_m| (hit_m - PROBE_M).max(0.0))
+}
+
+/// How far a ray from `from` along `toward`, unit, runs before it goes into
+/// whatever `under` says is below the ground, up to `reach_m`: `None` when
+/// it stays over it that far. Probed every [`PROBE_M`], then halved in to
+/// where it goes under.
+pub fn ground_run_m(
+    from: DVec3,
+    toward: DVec3,
+    reach_m: f64,
+    under: impl Fn(DVec3) -> bool,
+) -> Option<f64> {
+    let steps = (reach_m / PROBE_M).floor().max(0.0) as usize;
+    let step = (1..=steps).find(|&i| under(from + toward * (i as f64 * PROBE_M)))?;
+    let (mut over_m, mut under_m) = ((step - 1) as f64 * PROBE_M, step as f64 * PROBE_M);
+    for _ in 0..HALVINGS {
+        let middle_m = (over_m + under_m) / 2.0;
+        match under(from + toward * middle_m) {
+            true => under_m = middle_m,
+            false => over_m = middle_m,
         }
-        at_m += PROBE_M;
     }
-    reach_m
+    Some(under_m)
 }

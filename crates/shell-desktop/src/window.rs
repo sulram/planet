@@ -146,6 +146,7 @@ impl Stage {
         self.renderer.apply(client.drain_terrain_changes());
         self.renderer.apply_volumes(client.drain_volume_changes());
         self.renderer.apply_skinned(client.drain_skinned_changes());
+        self.renderer.apply_models(client.drain_model_changes());
         for event in client.drain_events() {
             self.panel.event(&event);
             match event {

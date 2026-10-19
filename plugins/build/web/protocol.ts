@@ -6,9 +6,9 @@
  * plugin's crate writes them. Pure: no WASM, no DOM.
  */
 
-/** What a hand does while building: three make a stroke, one drag each, and the fourth works with the volume where the body stands. */
-export type Tool = 'create' | 'delete' | 'paint' | 'volume';
-export const tools = ['create', 'delete', 'paint', 'volume'] as const satisfies readonly Tool[];
+/** What a hand does while building: three make a stroke, one drag each, the fourth works with the volume where the body stands, and the fifth places a part with a click. */
+export type Tool = 'create' | 'delete' | 'paint' | 'volume' | 'part';
+export const tools = ['create', 'delete', 'paint', 'volume', 'part'] as const satisfies readonly Tool[];
 
 /** How what is laid takes the light: lit, see-through, or shining and lighting what is near. */
 export type Finish = 'matte' | 'glass' | 'light';
@@ -25,9 +25,9 @@ export const platforms = [8, 16, 32, 64] as const;
 export type Base = 'deck' | 'solid' | 'floating';
 export const bases = ['deck', 'solid', 'floating'] as const satisfies readonly Base[];
 
-/** Why a tool was not handed over, no platform laid or no volume deleted: where the body stands, or who it is. */
-export type Refusal = 'sea' | 'seam' | 'high' | 'level' | 'field' | 'empty';
-const refusals = ['sea', 'seam', 'high', 'level', 'field', 'empty'] as const satisfies readonly Refusal[];
+/** Why a tool was not handed over, no platform laid, no volume deleted or no part placed: where the body stands, who it is, or what was asked. */
+export type Refusal = 'sea' | 'seam' | 'high' | 'level' | 'field' | 'empty' | 'pose' | 'gone';
+const refusals = ['sea', 'seam', 'high', 'level', 'field', 'empty', 'pose', 'gone'] as const satisfies readonly Refusal[];
 
 /** `build.hand`: the tool in hand, null when not building, the colour it lays, in which finish and with which edge, and the side of the next platform. */
 export interface Hand {

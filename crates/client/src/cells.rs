@@ -57,23 +57,20 @@ use worldgen::{Generator, Source};
 pub use seat::Seat;
 pub(crate) use seat::ground;
 
-use crate::collision::{Footing, STEP_M};
+use crate::collision::{BODY_HALF, Footing, STEP_M};
 use crate::grass::TUFT_M;
 
 /// Metres between the points of a line of sight where the ground is asked
 /// whether it hides what the pointer is over.
 const GROUND_STEP_M: f64 = 1.0;
 /// How far a pointer reaches into the world to build, metres.
-const REACH_M: f64 = 80.0;
+pub const REACH_M: f64 = 80.0;
 /// Metres between the points of a line of sight bent into a volume's cells:
 /// a block, straight enough to walk exactly between them.
 const SIGHT_STEP_M: f64 = BLOCK_M;
 /// Times the stretch of a line of sight that crosses the ground is halved
 /// to find where: to a sixteenth of a cell.
 const GROUND_HALVINGS: usize = 5;
-/// Half the width of a standing body in address space, in cells: how near a
-/// wall it comes.
-const BODY_HALF: f64 = 0.6;
 /// How far the ghost of a gesture stands off the cubes it covers, metres.
 const GHOST_LIFT_M: f32 = 0.012;
 /// The ghost's id, which no chunk of any volume has.
@@ -145,8 +142,8 @@ pub const PALETTE: [[u8; 3]; 16] = [
 /// What a gesture that deletes shows over what it takes away.
 const DELETE_COLOR: [u8; 3] = [230, 70, 60];
 
-/// Why the cells refuse what was asked of them. A plugin says it at the
-/// seam under its own name, and a front end in its own words.
+/// Why the cells, or the parts, refuse what was asked of them. A plugin
+/// says it at the seam under its own name, and a front end in its own words.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Refusal {
     /// Changing the cells is a builder's and an admin's, and the world named
@@ -159,6 +156,10 @@ pub enum Refusal {
     Sea,
     /// The plot is on the edge of a sector: a volume stays inside one.
     Seam,
+    /// A part's pose is no pose: not finite, not a turn, or flat.
+    Pose,
+    /// No part of that name stands.
+    Gone,
 }
 
 /// A box of a seat's cells shown as a faint grid, a line between each cell
@@ -491,7 +492,8 @@ impl Cells {
     }
 
     /// Where the centre of a body is now.
-    fn centre(&self, body: Body) -> DVec3 {
+    /// Where a body's centre is now, from the planet's.
+    pub(crate) fn centre(&self, body: Body) -> DVec3 {
         match body {
             Body::Moon => self.moon,
             Body::Planet => DVec3::ZERO,
@@ -1925,8 +1927,8 @@ fn paint_rgb(paint: u8) -> [u8; 3] {
 }
 
 /// How the sides of a paint are drawn: its colour and how much it shines
-/// with it, then its edge.
-fn paint_look(paint: u8) -> ([u8; 4], u8) {
+/// with it, then its edge. A part in a paint is drawn so too.
+pub(crate) fn paint_look(paint: u8) -> ([u8; 4], u8) {
     let [r, g, b] = paint_rgb(paint);
     let paint = Paint::of(paint);
     let shine = match paint.finish {

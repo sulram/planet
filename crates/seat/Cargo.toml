@@ -10,7 +10,12 @@ publish.workspace = true
 topology.workspace = true
 worldgen.workspace = true
 voxel.workspace = true
+part.workspace = true
 protocol.workspace = true
+glam.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
 
 [lints]
 workspace = true

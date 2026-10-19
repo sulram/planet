@@ -5,6 +5,14 @@
 //!
 //! A rule here is written once and run on both sides: the client predicts
 //! with it, and the server decides with it, in its module.
+//!
+//! A part stands on a seat too (DECISIONS 111): [`frame`] is the flat frame
+//! of a point of it, [`seated`] where a part in a pose stands in the world,
+//! and [`reseat`] the seat and pose of a part standing in the world.
+
+mod frame;
+
+pub use frame::{frame, reseat, seated};
 
 use protocol::Body;
 use protocol::cells as wire;

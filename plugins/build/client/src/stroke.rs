@@ -26,7 +26,7 @@ impl Tool {
             Tool::Create => Some(Mark::Create),
             Tool::Delete => Some(Mark::Delete),
             Tool::Paint => Some(Mark::Paint),
-            Tool::Volume => None,
+            Tool::Volume | Tool::Part => None,
         }
     }
 }
@@ -101,6 +101,9 @@ impl Build {
     /// time the key that turns goes down, the stroke turns to the next of
     /// the three layers through its start.
     pub(crate) fn handle(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
+        if self.tool == Some(Tool::Part) {
+            return self.place(turn, host);
+        }
         let eye = &turn.eye;
         let turning = turn.held(key::TURN);
         let turned = turning && !self.turning;

@@ -72,13 +72,19 @@ impl Volumes {
                 0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Unorm8x4
             ],
         })];
+        // The sides of cubes with the vertex stage of a volume in front.
+        let source = format!(
+            "{}\n{}",
+            include_str!("shaders/cubes.wgsl"),
+            include_str!("shaders/volume.wgsl")
+        );
         let make = |layout: &wgpu::BindGroupLayout, surface: Surface| {
             pipeline(
                 device,
                 format,
                 PipelineSpec {
                     label: "volume",
-                    source: include_str!("shaders/volume.wgsl"),
+                    source: &source,
                     layouts: &[layout, placement_layout],
                     buffers,
                     surface,

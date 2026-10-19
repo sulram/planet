@@ -96,6 +96,7 @@ pub fn run(shot: Shot) -> Result<(), String> {
     headless
         .renderer
         .apply_skinned(client.drain_skinned_changes());
+    headless.renderer.apply_models(client.drain_model_changes());
     if shot.measure > 0 {
         for (label, shadows, grass, clouds, bloom) in [
             ("base", false, false, false, false),

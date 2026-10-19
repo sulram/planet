@@ -14,6 +14,7 @@ mod compose;
 mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
+mod models;
 mod shadow;
 mod skinned;
 mod terrain;
@@ -21,7 +22,7 @@ mod volumes;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DVec3, Mat4, Vec3};
-use scene::{Camera, Frame, SkinnedChange, TerrainChange, VolumeChange};
+use scene::{Camera, Frame, ModelChange, SkinnedChange, TerrainChange, VolumeChange};
 
 pub use gpu::{Gpu, surface_configuration};
 #[cfg(not(target_arch = "wasm32"))]
@@ -71,6 +72,7 @@ struct ViewResources {
     boxes: boxes::Instances,
     skinned: skinned::InstanceUniforms,
     volumes: terrain::PatchUniforms,
+    models: models::InstanceUniforms,
 }
 
 pub struct Renderer {
@@ -85,6 +87,7 @@ pub struct Renderer {
     volumes: volumes::Volumes,
     boxes: boxes::Boxes,
     skinned: skinned::Skinned,
+    models: models::Models,
     sky: wgpu::RenderPipeline,
     composer: compose::Composer,
     clouds: clouds::Clouds,
@@ -174,6 +177,7 @@ impl Renderer {
         );
         let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, scene);
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
+        let models = models::Models::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
         Renderer {
@@ -188,6 +192,7 @@ impl Renderer {
             volumes,
             boxes,
             skinned,
+            models,
             sky,
             composer,
             clouds,
@@ -213,6 +218,13 @@ impl Renderer {
     pub fn apply_skinned(&mut self, changes: Vec<SkinnedChange>) {
         for change in changes {
             self.skinned.apply(&self.device, &self.queue, change);
+        }
+    }
+
+    /// Uploads and drops the meshes of models (parts).
+    pub fn apply_models(&mut self, changes: Vec<ModelChange>) {
+        for change in changes {
+            self.models.apply(&self.device, change);
         }
     }
 
@@ -278,6 +290,13 @@ impl Renderer {
             &frame.skinned,
             view.camera.position,
         );
+        let models = resources.models.write(
+            &self.device,
+            &self.queue,
+            &self.models,
+            &frame.models,
+            view.camera.position,
+        );
 
         let matrices = shadow::matrices(frame, &view.camera);
         let wanted: Vec<_> = frame
@@ -334,6 +353,8 @@ impl Renderer {
                 .draw_shadow(&mut pass, &resources.boxes, box_count);
             self.skinned
                 .draw_shadow(&mut pass, &resources.skinned, &skinned_drawn);
+            self.models
+                .draw_shadow(&mut pass, &resources.models, &models, *matrix);
         }
 
         if resources
@@ -376,6 +397,7 @@ impl Renderer {
                 .draw_grass(&mut pass, &resources.patches, &drawn);
         }
         self.volumes.draw(&mut pass, &resources.volumes, &volumes);
+        self.models.draw(&mut pass, &resources.models, &models);
         self.boxes.draw(&mut pass, &resources.boxes, box_count);
         self.skinned
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
@@ -423,7 +445,7 @@ impl Renderer {
         // Glass, and what only a builder sees, go over the sea and the
         // clouds, tested against the depth of what is solid: drawn before
         // them, the sea behind a pane would be laid over it.
-        if volumes.over() {
+        if volumes.over() || models.over() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("over"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -450,6 +472,7 @@ impl Renderer {
             pass.set_bind_group(0, &resources.bind_group, &[]);
             self.volumes
                 .draw_over(&mut pass, &resources.volumes, &volumes);
+            self.models.draw_over(&mut pass, &resources.models, &models);
         }
         self.composer.finish(
             encoder,
@@ -578,6 +601,7 @@ impl Renderer {
             boxes: boxes::Instances::new(&self.device),
             skinned: skinned::InstanceUniforms::default(),
             volumes: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
+            models: models::InstanceUniforms::default(),
         }
     }
 }

@@ -14,6 +14,7 @@ mod controller;
 mod figure;
 mod grass;
 mod input;
+mod parts;
 mod peers;
 mod place;
 mod plugin;
@@ -23,17 +24,19 @@ mod terrain;
 mod wardrobe;
 
 use glam::DVec3;
-use scene::{SkinnedChange, TerrainChange, VolumeChange};
+use scene::{ModelChange, SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
 use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 
 pub use assets::AssetRequest;
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
-pub use cells::{Aim, Cells, Guide, Met, PALETTE, Refusal, Seat, Sight};
-pub use controller::{Controller, Wish};
+pub use cells::{Aim, Cells, Guide, Met, PALETTE, REACH_M, Refusal, Seat, Sight};
+pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};
+pub use part::{Part, PartId, Pose as PartPose, Shape};
+pub use parts::{CUBE, Parts};
 use peers::Peers;
 pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, Plugin, Turn};
@@ -64,6 +67,8 @@ pub struct Client {
     moon_terrain: Terrain,
     /// The cells of the world: its volumes, and what is drawn of them.
     cells: Cells,
+    /// The parts of the world: what is placed that is no cell.
+    parts: Parts,
     /// What the last world to welcome this client said it may do. `None`
     /// until one has: with no world, nothing is changed (DECISIONS 104).
     level: Option<Level>,
@@ -130,6 +135,7 @@ impl Client {
             terrain: Terrain::new(Body::new(terrain::Kind::Planet, sphere)),
             moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
             cells: Cells::default(),
+            parts: Parts::default(),
             level: None,
             pointer: None,
             figure: Figure::default(),
@@ -418,6 +424,7 @@ impl Client {
             events: &mut self.events,
             generator: &self.generator,
             cells: &mut self.cells,
+            parts: &mut self.parts,
             controller: &mut self.controller,
             level: self.level,
             pointer: &mut self.pointer,
@@ -874,6 +881,11 @@ impl Client {
         self.cells.drain_changes()
     }
 
+    /// The meshes of models to upload and drop, in order.
+    pub fn drain_model_changes(&mut self) -> Vec<ModelChange> {
+        self.parts.drain_changes()
+    }
+
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
         let mut changes = self.terrain.drain_changes();
         changes.extend(self.moon_terrain.drain_changes());
@@ -934,8 +946,16 @@ impl Client {
         let footprint_m = streamer.drawn_footprint_m(self.controller.radial());
         self.controller.set_drawn_footprint(footprint_m);
         self.cells.orbit(moon);
-        self.controller
-            .update(dt, wish, &self.generator, &self.cells);
+        self.parts.orbit(moon);
+        self.controller.update(
+            dt,
+            wish,
+            &self.generator,
+            Built {
+                cells: &self.cells,
+                parts: &self.parts,
+            },
+        );
         let motion = Motion::of(&self.controller);
         self.figure.update(dt, &motion, &self.clips);
         self.peers.update(dt, moon, &self.clips);
@@ -1046,6 +1066,7 @@ impl Client {
             radius_m: MOON_RADIUS_M,
         });
         self.cells.orbit(moon);
+        self.parts.orbit(moon);
         let eye = self.controller.camera(&self.generator).position;
         let (plugins, lent) = self.lend();
         plugins.settle(lent);
@@ -1158,6 +1179,7 @@ impl Client {
             volumes: self.cells.drawn(),
             glass: self.cells.glazed(),
             lamps: self.cells.lamps(),
+            models: self.parts.drawn(&self.generator),
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
         }

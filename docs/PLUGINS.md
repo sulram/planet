@@ -21,23 +21,20 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   the wire and a panel in each front end.
 - Ours, compiled in: a config at the root lists them and the build bundles
   them, so a version is the core plus the plugins chosen for it.
-- Native plugins: chat, building, land, avatars, made in that order (96).
-  Chat and building stand as plugins; avatars are extracted from where they
-  stand today.
+- Native plugins: chat, building, land, avatars, in that order (96). Chat and
+  building stand as plugins; avatars are extracted from where they stand.
 - Which plugins are on is the world's own (91). The config says whether each
   starts on; the admin switches any of them at the founding and after, in the
   world folder. A plugin switched off keeps its store untouched.
-- A plugin imports the core, never another plugin, and draws through `scene`
-  as the client does. `ALLOWED` in `scripts/docs.ts` holds it: a plugin's row
-  names crates of the core.
+- A plugin imports the core, never another plugin, and draws through `scene`.
+  `ALLOWED` in `scripts/docs.ts` holds it: a plugin's row names core crates.
 
 ## Owners
 
 - Every piece of a world's state has one owner, the core or one plugin (93).
-  The owner alone changes it; everyone else sends it an op or asks it a
-  question.
-- The core owns the recipe, who a session is, its level, its stance and the
-  cells.
+  The owner alone changes it; everyone else sends it an op or asks a question.
+- The core owns the recipe, who a session is, its level, its stance, the
+  cells and the parts.
 - A plugin owns what it keeps: its store in the world folder, its payloads on
   the wire, its panel.
 
@@ -88,6 +85,10 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   them and the op that changes them, a gesture over a box. Building is a
   plugin of how a hand arrives at gestures: tools, kinds of construction,
   modifiers, keys, a panel. With building off, what stands, stands.
+- The parts are the core's (111): a placed thing that is no cell, kept by its
+  seat with a pose, a shape, a paint and a solid flag; placed, set and removed
+  as ops, moved in the world and read back. Building holds its hand, gizmo
+  and panel for every shape, and a file kind is a shape.
 
 ## Where a plugin lives
 

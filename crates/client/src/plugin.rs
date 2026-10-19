@@ -7,11 +7,13 @@
 //! server, a key or a turn reaches a plugin by the name it gave.
 //!
 //! A plugin speaks to the core's systems through its [`Host`]: the ground,
-//! the cells, the body. What a system holds is read freely. What changes it
-//! is an op, and the host asks whether this session may before the system
-//! sees it.
+//! the cells, the parts, the body. What a system holds is read freely. What
+//! changes it is an op, and the host asks whether this session may before
+//! the system sees it.
 
 use glam::{DQuat, DVec3};
+use part::{Part, PartId};
+use protocol::Body;
 use serde::Serialize;
 use serde_json::Value;
 use topology::{QuadSphere, SurfacePoint};
@@ -19,11 +21,17 @@ use voxel::{Gesture, Span};
 use worldgen::Generator;
 
 use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
+use crate::collision;
 use crate::controller::Controller;
 use crate::input::{Chord, Input, Key, KeyAsk};
+use crate::parts::Parts;
 use crate::place::Pose;
 use crate::seam::{Event, Level, PluginOn};
 use crate::session::Session;
+
+/// How far from the moon's centre a point of the world is the moon's,
+/// metres: its radius and the band over it where anything stands.
+const MOON_REACH_M: f64 = worldgen::MOON_RADIUS_M + 2000.0;
 
 /// A plugin's client half.
 pub trait Plugin {
@@ -141,6 +149,7 @@ pub(crate) struct Lent<'a> {
     pub events: &'a mut Vec<Event>,
     pub generator: &'a Generator,
     pub cells: &'a mut Cells,
+    pub parts: &'a mut Parts,
     pub controller: &'a mut Controller,
     pub level: Option<Level>,
     /// The plugin that has the pointer, while one does.
@@ -154,6 +163,7 @@ impl<'a> Lent<'a> {
             events: self.events,
             generator: self.generator,
             cells: self.cells,
+            parts: self.parts,
             controller: self.controller,
             level: self.level,
             pointer: self.pointer,
@@ -231,6 +241,61 @@ impl Host<'_> {
     /// lower.
     pub fn lift(&mut self, floor_m: f64) {
         self.lent.controller.lift_onto(floor_m);
+    }
+
+    /// Where a point of the world is, as feet standing there: the seat under
+    /// it, the column of it there, and its height over that body's datum.
+    /// On the moon when it is within the moon's reach, else on the planet.
+    pub fn feet_at(&self, point: DVec3) -> Feet {
+        let generator = self.lent.generator;
+        let moon = self.lent.cells.centre(Body::Moon);
+        let body = match (point - moon).length() < MOON_REACH_M {
+            true => Body::Moon,
+            false => Body::Planet,
+        };
+        let sphere = seat::sphere_of(generator, body);
+        let from_centre = point - self.lent.cells.centre(body);
+        let point = sphere.blocks().surface_point(from_centre.to_array());
+        Feet {
+            seat: Seat::on(body, point.sector),
+            point,
+            height_m: from_centre.length() - sphere.radius_m(),
+        }
+    }
+
+    /// Where a line of sight from a point of the world along a direction,
+    /// unit, goes into the ground of a body within `reach_m`, as feet
+    /// standing there, and how far along, metres. `None` when it meets no
+    /// ground that far.
+    pub fn ground_hit(&self, from: DVec3, toward: DVec3, reach_m: f64) -> Option<(Feet, f64)> {
+        let generator = self.lent.generator;
+        let bodies = [Body::Planet, Body::Moon].into_iter().filter(|&body| {
+            // A line nowhere near a body meets no ground of it.
+            let centre = self.lent.cells.centre(body);
+            let radius_m = seat::sphere_of(generator, body).radius_m();
+            let to = centre - from;
+            let along = to.dot(toward).clamp(0.0, reach_m);
+            (to - toward * along).length() < radius_m + MOON_REACH_M
+        });
+        let hits = bodies.filter_map(|body| {
+            let sphere = seat::sphere_of(generator, body);
+            let from = from - self.lent.cells.centre(body);
+            let under = |at: DVec3| {
+                let direction = at.normalize_or(DVec3::Y).to_array();
+                at.length() - sphere.radius_m() < seat::ground_m(generator, body, direction)
+            };
+            let hit_m = collision::ground_run_m(from, toward, reach_m, under)?;
+            let at = from + toward * hit_m;
+            let point = sphere.blocks().surface_point(at.to_array());
+            let feet = Feet {
+                seat: Seat::on(body, point.sector),
+                point,
+                height_m: at.length() - sphere.radius_m(),
+            };
+            Some((hit_m, feet))
+        });
+        hits.min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(away_m, feet)| (feet, away_m))
     }
 
     /// Takes the pointer, or lets it go: with it, the pointer stays free to
@@ -333,6 +398,49 @@ impl Host<'_> {
     /// none with none to show: each a box of a seat's cells as a faint grid.
     pub fn guide(&mut self, guides: &[Guide]) {
         self.lent.cells.guide(self.lent.generator, guides);
+    }
+
+    /// The parts, to read: what stands where.
+    pub fn parts(&self) -> &Parts {
+        self.lent.parts
+    }
+
+    /// The nearest part a line from a point of the world along a direction,
+    /// unit, meets, and how far along, metres.
+    pub fn pick(&self, from: DVec3, toward: DVec3) -> Option<(PartId, f64)> {
+        self.lent.parts.pick(self.lent.generator, from, toward)
+    }
+
+    /// Places a part on a seat, where its pose says: a change like any
+    /// other. The name it is given.
+    pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, Refusal> {
+        self.permitted()?;
+        if !part.pose.is_sound() {
+            return Err(Refusal::Pose);
+        }
+        Ok(self.lent.parts.place(seat, part))
+    }
+
+    /// Sets a part by its name: moved, turned, stretched, repainted, made
+    /// solid or not, or seated elsewhere.
+    pub fn set_part(&mut self, id: PartId, seat: Seat, part: Part) -> Result<(), Refusal> {
+        self.permitted()?;
+        if !part.pose.is_sound() {
+            return Err(Refusal::Pose);
+        }
+        match self.lent.parts.set(id, seat, part) {
+            true => Ok(()),
+            false => Err(Refusal::Gone),
+        }
+    }
+
+    /// Removes a part by its name.
+    pub fn remove_part(&mut self, id: PartId) -> Result<(), Refusal> {
+        self.permitted()?;
+        match self.lent.parts.remove(id) {
+            true => Ok(()),
+            false => Err(Refusal::Gone),
+        }
     }
 
     /// Takes back the last change that landed.

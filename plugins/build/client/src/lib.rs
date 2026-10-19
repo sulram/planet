@@ -34,6 +34,7 @@
 //! {"type":"build.history","undo":true,"redo":false}
 //! ```
 
+mod place;
 mod stroke;
 
 use build_world::Platform;
@@ -54,7 +55,8 @@ pub use build_world::{NAME, PLATFORMS, VERSION};
 /// cells, or repaint what is solid, and one drag is one stroke, however many
 /// cells it covers. The fourth works with the volume where the body stands:
 /// it opens it, closes it, or shows the slab a platform would lay there
-/// until a base is asked for.
+/// until a base is asked for. The fifth places a part: a click puts a cube
+/// where the pointer meets the world.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tool {
@@ -62,6 +64,7 @@ pub enum Tool {
     Delete,
     Paint,
     Volume,
+    Part,
 }
 
 /// How what is laid takes the light: lit by what shines on it, see-through,
@@ -127,6 +130,10 @@ pub enum Refusal {
     Field,
     /// No volume stands under the body: there is none to close.
     Empty,
+    /// A part's pose is no pose: not finite, not a turn, or flat.
+    Pose,
+    /// The part asked about is gone.
+    Gone,
 }
 
 impl From<client::Refusal> for Refusal {
@@ -136,6 +143,8 @@ impl From<client::Refusal> for Refusal {
             client::Refusal::Field => Refusal::Field,
             client::Refusal::Sea => Refusal::Sea,
             client::Refusal::Seam => Refusal::Seam,
+            client::Refusal::Pose => Refusal::Pose,
+            client::Refusal::Gone => Refusal::Gone,
         }
     }
 }
@@ -261,6 +270,7 @@ mod key {
     pub const DELETE: &str = "delete";
     pub const PAINT: &str = "paint";
     pub const VOLUME: &str = "volume";
+    pub const PART: &str = "part";
     /// Each time it goes down, the stroke turns to the next of the three
     /// layers through its start: on its side, then standing one way, then
     /// the other.
@@ -820,6 +830,7 @@ impl Plugin for Build {
             KeyAsk::pressed(key::DELETE, "Digit2"),
             KeyAsk::pressed(key::PAINT, "Digit3"),
             KeyAsk::pressed(key::VOLUME, "Digit4"),
+            KeyAsk::pressed(key::PART, "Digit5"),
             KeyAsk::pressed(key::CANCEL, "Escape"),
             KeyAsk::held(key::TURN, "AltLeft"),
             KeyAsk::held(key::TURN, "AltRight"),
@@ -842,6 +853,7 @@ impl Plugin for Build {
             key::DELETE => self.take(Some(Tool::Delete), host),
             key::PAINT => self.take(Some(Tool::Paint), host),
             key::VOLUME => self.take(Some(Tool::Volume), host),
+            key::PART => self.take(Some(Tool::Part), host),
             // A stroke half drawn goes first, then the tool itself.
             key::CANCEL => {
                 if !self.cancel() && self.tool.is_some() {

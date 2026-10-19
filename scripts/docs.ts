@@ -114,11 +114,12 @@ const ALLOWED: Record<string, string[]> = {
 	scene: [],
 	protocol: [],
 	voxel: [],
-	seat: ['topology', 'worldgen', 'voxel', 'protocol'],
+	part: [],
+	seat: ['topology', 'worldgen', 'voxel', 'part', 'protocol'],
 	worldgen: ['topology'],
 	avatar: ['scene'],
 	render: ['scene'],
-	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'seat', 'protocol'],
+	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'part', 'seat', 'protocol'],
 	'ui-native': ['client', 'scene'],
 	// What a plugin's world half stands on, and the host of world halves. It
 	// never imports `client`, and neither does the module that is its shell.
@@ -129,7 +130,7 @@ const ALLOWED: Record<string, string[]> = {
 	'chat-world': ['world', 'protocol'],
 	'chat-client': ['client', 'protocol', 'chat-world'],
 	'build-world': ['world', 'voxel'],
-	'build-client': ['client', 'topology', 'voxel', 'build-world'],
+	'build-client': ['client', 'topology', 'voxel', 'part', 'build-world'],
 };
 // A crate is a folder with a manifest: the core's under crates/, and a
 // plugin's two under plugins/<name>/, `<name>-client` and `<name>-world`

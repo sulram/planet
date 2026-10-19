@@ -14,6 +14,34 @@ use worldgen::Generator;
 
 use crate::cells::{Cells, Seat};
 use crate::collision::{self, BODY_M, Footing, STEP_M};
+use crate::parts::Parts;
+
+/// What is built, as a body stands on it and is stopped by it: the cells of
+/// the volumes and the solid parts, each a system of the core.
+#[derive(Clone, Copy)]
+pub struct Built<'a> {
+    pub cells: &'a Cells,
+    pub parts: &'a Parts,
+}
+
+impl Built<'_> {
+    /// What a body with its feet `feet_m` over the datum, standing in a
+    /// column of a seat, has under and over it of what is built. `None`
+    /// with nothing built near.
+    fn footing(&self, seat: Seat, point: SurfacePoint, feet_m: f64) -> Option<Footing> {
+        let cells = self.cells.footing(seat, point, feet_m);
+        let parts = self.parts.footing(seat, point, feet_m);
+        match (cells, parts) {
+            (Some(cells), Some(parts)) => Some(cells.with(parts)),
+            (cells, parts) => cells.or(parts),
+        }
+    }
+
+    /// Whether anything is built on a body.
+    fn stands_on(&self, body: Body) -> bool {
+        self.cells.stands_on(body) || self.parts.stands_on(body)
+    }
+}
 use crate::seam::Mode;
 
 const WALK_MPS: f64 = 4.8;
@@ -350,10 +378,10 @@ impl Controller {
         self.passes = on;
     }
 
-    /// The volumes whose cells hold this body: on foot always, and in flight
+    /// What is built that holds this body: on foot always, and in flight
     /// unless it was let pass through them.
-    fn cells<'a>(&self, cells: &'a Cells) -> Option<&'a Cells> {
-        (self.mode == Mode::Walk || !self.passes).then_some(cells)
+    fn built<'a>(&self, built: Built<'a>) -> Option<Built<'a>> {
+        (self.mode == Mode::Walk || !self.passes).then_some(built)
     }
 
     /// The seat the body is over, and the column of it: a sector of the
@@ -373,23 +401,23 @@ impl Controller {
     /// What the body stands on, and what is over its head. Out in the open
     /// the floor is the surface and there is no roof; inside a volume both
     /// are its cells.
-    fn footing(&self, generator: &Generator, cells: Option<&Cells>) -> Footing {
+    fn footing(&self, generator: &Generator, built: Option<Built<'_>>) -> Footing {
         let (seat, point) = self.over(generator);
-        self.footing_at(seat, point, generator, cells)
+        self.footing_at(seat, point, generator, built)
     }
 
     /// What a body with its feet where they are would stand on at a column
-    /// of a seat: the ground, and the cells of any volume under or over it.
+    /// of a seat: the ground, and what is built under or over it.
     fn footing_at(
         &self,
         seat: Seat,
         point: SurfacePoint,
         generator: &Generator,
-        cells: Option<&Cells>,
+        built: Option<Built<'_>>,
     ) -> Footing {
         let direction = seat.sphere(generator).blocks().direction(point);
         let ground = Footing::solid(seat::ground_m(generator, seat.body(), direction));
-        match cells.and_then(|cells| cells.footing(seat, point, self.height_m)) {
+        match built.and_then(|built| built.footing(seat, point, self.height_m)) {
             Some(built) => ground.with(built),
             None => ground,
         }
@@ -612,7 +640,7 @@ impl Controller {
         self.height_m - surface
     }
 
-    pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator, cells: &Cells) {
+    pub fn update(&mut self, dt: f64, wish: Wish, generator: &Generator, built: Built<'_>) {
         // `up` is the avatar's own frame: look, steer and fly by it. `gravity`
         // is the world's: fall and float by it. On foot the two agree within a
         // moment; in flight they may not, and the frame wins.
@@ -689,7 +717,7 @@ impl Controller {
         };
 
         self.settle_eye(dt);
-        self.step(velocity * dt, generator, cells);
+        self.step(velocity * dt, generator, built);
         self.resolve_site();
         self.speed_mps = velocity.length();
         self.sprinting = wish.sprint && self.speed_mps > 0.1;
@@ -723,7 +751,7 @@ impl Controller {
     /// Moves by a world space displacement: in address space on the planet,
     /// over a plain sphere on the moon, where the cells of a volume in the
     /// way stop it all the same.
-    fn step(&mut self, delta: DVec3, generator: &Generator, built: &Cells) {
+    fn step(&mut self, delta: DVec3, generator: &Generator, built: Built<'_>) {
         match self.site {
             Site::Planet => self.step_on_planet(delta, generator, built),
             Site::Moon { direction } => {
@@ -731,11 +759,11 @@ impl Controller {
                 let along = delta - direction * direction.dot(delta);
                 let asked = (direction * radius + along).normalize();
                 let held = self
-                    .cells(built)
-                    .filter(|cells| cells.stands_on(Body::Moon));
+                    .built(built)
+                    .filter(|built| built.stands_on(Body::Moon));
                 self.site = Site::Moon {
                     direction: match held {
-                        Some(cells) => self.past_cells(direction, asked, generator, cells),
+                        Some(built) => self.past_built(direction, asked, generator, built),
                         None => asked,
                     },
                 };
@@ -749,8 +777,8 @@ impl Controller {
             self.height_m = self.height_m.min(FLOAT_M).max(ground);
             return;
         }
-        let cells = self.cells(built);
-        let footing = self.footing(generator, cells);
+        let built = self.built(built);
+        let footing = self.footing(generator, built);
         let floor_m = match self.mode {
             // A flyer is held over the ground as it is drawn, so it never
             // ends up looking at the terrain from underneath, and over the
@@ -760,8 +788,8 @@ impl Controller {
             Mode::Fly if !self.underground(ground) => {
                 let shown_m = self.shown_ground_m(generator, self.radial()) + 0.5;
                 let (seat, point) = self.over(generator);
-                let built_m = cells
-                    .and_then(|cells| cells.footing(seat, point, self.height_m))
+                let built_m = built
+                    .and_then(|built| built.footing(seat, point, self.height_m))
                     .and_then(|footing| footing.floor_m);
                 Some(built_m.map_or(shown_m, |built_m| shown_m.max(built_m)))
             }
@@ -821,7 +849,7 @@ impl Controller {
         self.eye_off_mps = (self.eye_off_mps - EYE_SETTLE_PER_S * pull) * decay;
     }
 
-    fn step_on_planet(&mut self, delta: DVec3, generator: &Generator, built: &Cells) {
+    fn step_on_planet(&mut self, delta: DVec3, generator: &Generator, built: Built<'_>) {
         let tangents = self.sphere.blocks().tangents(self.point);
         let up = DVec3::from(tangents.up);
         let radius = self.sphere.radius_m() + self.height_m;
@@ -838,18 +866,18 @@ impl Controller {
         let det = a * c - b * b;
         let (du, dv) = ((c * p - b * q) / det, (a * q - b * p) / det);
 
-        let cells = self.cells(built);
+        let held = self.built(built);
         let (grid, here) = (self.sphere.blocks(), self.point);
         let seat = |point: SurfacePoint| Seat::Sector(point.sector);
         self.point = if self.stopped_by_rock(generator) {
             self.walk_to(grid, here, du, dv, |point| {
-                self.footing_at(seat(point), point, generator, cells)
+                self.footing_at(seat(point), point, generator, held)
             })
-        } else if let Some(cells) = cells.filter(|_| self.mode == Mode::Fly) {
-            // Open ground holds a flyer up and never stops it; the cells of a
-            // volume are walls to it all the same.
+        } else if let Some(held) = held.filter(|_| self.mode == Mode::Fly) {
+            // Open ground holds a flyer up and never stops it; what is built
+            // is a wall to it all the same.
             self.walk_to(grid, here, du, dv, |point| {
-                let built = cells.footing(seat(point), point, self.height_m);
+                let built = held.footing(seat(point), point, self.height_m);
                 built.unwrap_or(Footing::OPEN)
             })
         } else {
@@ -870,10 +898,16 @@ impl Controller {
     }
 
     /// Where a step over the moon ends, from one direction from its centre
-    /// toward another: where it asked, or short of the cells of a volume in
-    /// the way. The moon's ground stops nobody, and its cells are walked in
-    /// the address space of the moon's own grid, as the planet's are.
-    fn past_cells(&self, from: DVec3, asked: DVec3, generator: &Generator, cells: &Cells) -> DVec3 {
+    /// toward another: where it asked, or short of what is built in the
+    /// way. The moon's ground stops nobody, and what is built there is
+    /// walked in the address space of the moon's own grid, as the planet's.
+    fn past_built(
+        &self,
+        from: DVec3,
+        asked: DVec3,
+        generator: &Generator,
+        built: Built<'_>,
+    ) -> DVec3 {
         let grid = generator.moon().blocks();
         let here = grid.surface_point(from.to_array());
         let there = grid.surface_point(asked.to_array());
@@ -883,8 +917,8 @@ impl Controller {
         }
         let (du, dv) = (there.u - here.u, there.v - here.v);
         let point = self.walk_to(grid, here, du, dv, |point| {
-            let built = cells.footing(Seat::Moon(point.sector), point, self.height_m);
-            built.unwrap_or(Footing::OPEN)
+            let footing = built.footing(Seat::Moon(point.sector), point, self.height_m);
+            footing.unwrap_or(Footing::OPEN)
         });
         match point == grid.wrapped(SurfacePoint::new(here.sector, here.u + du, here.v + dv)) {
             true => asked,
@@ -1028,7 +1062,15 @@ mod tests {
             ..Wish::default()
         };
         for _ in 0..120 {
-            controller.update(1.0 / 60.0, wish, &generator, &build);
+            controller.update(
+                1.0 / 60.0,
+                wish,
+                &generator,
+                Built {
+                    cells: &build,
+                    parts: &Parts::default(),
+                },
+            );
         }
         point.u.floor() + 8.0 - controller.point().u
     }
@@ -1061,7 +1103,15 @@ mod tests {
         let (mut feet_m, mut eye_m) = (0.0f64, 0.0f64);
         for _ in 0..48 {
             let before = (controller.height_m, radius(&controller));
-            controller.update(1.0 / 60.0, wish, &generator, &build);
+            controller.update(
+                1.0 / 60.0,
+                wish,
+                &generator,
+                Built {
+                    cells: &build,
+                    parts: &Parts::default(),
+                },
+            );
             feet_m = feet_m.max(controller.height_m - before.0);
             eye_m = eye_m.max(radius(&controller) - before.1);
         }

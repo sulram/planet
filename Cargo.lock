@@ -417,6 +417,7 @@ dependencies = [
  "avatar",
  "glam",
  "libm",
+ "part",
  "protocol",
  "scene",
  "seat",
@@ -1863,6 +1864,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "part"
+version = "0.0.0"
+dependencies = [
+ "glam",
+ "proptest",
+]
+
+[[package]]
 name = "peniko"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2371,6 +2380,9 @@ dependencies = [
 name = "seat"
 version = "0.0.0"
 dependencies = [
+ "glam",
+ "part",
+ "proptest",
  "protocol",
  "topology",
  "voxel",
