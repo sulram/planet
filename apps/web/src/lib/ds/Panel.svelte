@@ -54,9 +54,11 @@
 	.panel--bottom-right {
 		max-height: calc(100% - 3 * var(--sp-4) - var(--control-h) - 2 * var(--bw));
 	}
+	/* Under the row of buttons that opened it, and short of the row in the
+	   bottom corners, so a tall one covers neither. */
 	.panel--under {
 		top: calc(2 * var(--sp-4) + var(--control-h) + 2 * var(--bw));
-		max-height: calc(100% - 3 * var(--sp-4) - var(--control-h) - 2 * var(--bw));
+		max-height: calc(100% - 3 * var(--sp-4) - var(--sp-5) - 2 * var(--control-h) - 4 * var(--bw));
 	}
 	.panel--bottom-left {
 		bottom: var(--sp-4);

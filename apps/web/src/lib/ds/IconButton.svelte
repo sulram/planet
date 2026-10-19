@@ -39,7 +39,9 @@
 		width: var(--control-h);
 		height: var(--control-h);
 		border: var(--bw) solid var(--border-strong);
-		background: transparent;
+		/* Over the world a row of buttons sets `--control-bg` to the overlay;
+		   hover and the open state still win, since they are read here. */
+		background: var(--control-bg, transparent);
 		color: var(--text);
 		cursor: pointer;
 	}
