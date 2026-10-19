@@ -25,6 +25,7 @@ use part::{ContentId, Media, PictureLevel as Level};
 use scene::{Camera, Image, PictureChange, PictureDraw, PictureId};
 
 use crate::assets::Requests;
+use crate::sound::{Sound, SoundSource};
 
 /// The longest side of a thumb and of a low version, texels, as the owner's
 /// client makes them.
@@ -61,6 +62,10 @@ const PLAYING_UNSEEN_FRAMES: u64 = 60;
 /// for again: ten seconds at sixty, so a missing file is not fetched every
 /// frame.
 const RETRY_FRAMES: u64 = 600;
+
+/// How far a video is heard when its reach says "by its size": a screen
+/// two metres tall carries twenty four.
+const HEARD_BY_SIZE: f64 = 12.0;
 
 /// Frames an open waits for the shell's answer before it is given up:
 /// fifteen seconds at sixty. A source that never answers would otherwise
@@ -113,6 +118,17 @@ fn coarser(level: Level) -> Option<Level> {
         Level::Low => Some(Level::Thumb),
         Level::Full => Some(Level::Low),
     }
+}
+
+/// A picture as its part places it: where the unit quad stands, its size in
+/// metres in it, how it is lit, how far it is heard (0 by its size) and
+/// whether its back is drawn.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Placed {
+    pub world_from_quad: DAffine3,
+    pub shine: f32,
+    pub reach_m: f32,
+    pub both_sides: bool,
 }
 
 /// How a view sees: what turns a quad's height in metres into texels on the
@@ -186,6 +202,8 @@ pub struct Pictures {
     wanting: Vec<(f64, ContentId, String)>,
     /// Levels that failed to land or to open, by the frame they failed in.
     failed: HashMap<ContentId, u64>,
+    /// What is heard this frame: the playing pictures that carry sound.
+    heard: Vec<Sound>,
     /// What each picture shows, by the id of its original.
     shown: HashMap<ContentId, Shown>,
     next_id: u64,
@@ -196,34 +214,46 @@ pub struct Pictures {
 }
 
 impl Pictures {
-    /// The level a quad shows this frame, and the draw of it.
-    /// `world_from_quad` places the unit quad, its size in metres in it. The
-    /// level wanted is asked for when it is not resident.
+    /// The level a quad shows this frame, and the draw of it. The level
+    /// wanted is asked for when it is not resident.
     pub(crate) fn draw(
         &mut self,
         media: &Media,
-        world_from_quad: DAffine3,
-        shine: f32,
-        both_sides: bool,
+        placed: Placed,
         screen: &Screen,
         requests: &mut Requests,
     ) -> PictureDraw {
+        let Placed {
+            world_from_quad,
+            shine,
+            reach_m,
+            both_sides,
+        } = placed;
         let transform = world_from_quad;
         let width_m = transform.matrix3.x_axis.length();
         let height_m = transform.matrix3.y_axis.length();
         let radius_m = 0.5 * libm::hypot(width_m, height_m);
         let (px, in_view) = screen.measure(transform.translation, radius_m, height_m);
+        // A video is heard within its reach, seen or not: it stays open there.
+        let heard_m = if reach_m > 0.0 {
+            f64::from(reach_m)
+        } else {
+            height_m * HEARD_BY_SIZE
+        };
+        let audible =
+            media.sounds() && (transform.translation - screen.camera.position).length() <= heard_m;
 
         let frame = self.frame;
         let shown = self.shown.entry(media.full).or_default();
         shown.seen = frame;
         let showing = shown.level;
-        // A picture that moves plays whenever it is in view, the budget
-        // allowing: its thumb is its poster, for out of view and over budget.
-        let wanted = if !in_view {
-            Level::Thumb
-        } else if media.moves() {
+        // A picture that moves plays whenever it is in view, or heard, the
+        // budget allowing: its thumb is its poster, for out of view and over
+        // budget.
+        let wanted = if media.moves() && (in_view || audible) {
             Level::Full
+        } else if !in_view {
+            Level::Thumb
         } else {
             pick(media, showing, px)
         };
@@ -233,6 +263,16 @@ impl Pictures {
                 .get_mut(&media.full)
                 .expect("entered above")
                 .level = Some(level);
+        }
+        if level == Some(Level::Full)
+            && media.sounds()
+            && let Some(picture) = picture
+        {
+            self.heard.push(Sound {
+                source: SoundSource::Picture(picture),
+                position: transform.translation,
+                reach_m: heard_m,
+            });
         }
         PictureDraw {
             picture,
@@ -391,6 +431,12 @@ impl Pictures {
         }
     }
 
+    /// Opens a frame: what was heard last frame is forgotten, and the draws
+    /// say it again. Called once every frame before any draw.
+    pub fn begin_frame(&mut self) {
+        self.heard.clear();
+    }
+
     /// Closes a frame: what went unseen too long is dropped, and the least
     /// recently seen beyond that while the budget is blown; the pictures
     /// wanted playing are opened, the tallest on the screen first, while a
@@ -472,6 +518,11 @@ impl Pictures {
     pub fn drain_moving(&mut self) -> Vec<Moving> {
         core::mem::take(&mut self.moving)
     }
+
+    /// What is heard this frame, from the draws on to the next frame's start.
+    pub fn heard(&self) -> &[Sound] {
+        &self.heard
+    }
 }
 
 /// The level a still quad `px` pixels tall wants, given the one it shows:
@@ -550,6 +601,16 @@ mod tests {
         DAffine3::from_translation(DVec3::new(0.0, 0.0, 5.0))
     }
 
+    /// A quad placed by `world_from_quad`, lit, heard `reach_m` far, one sided.
+    fn placed(world_from_quad: DAffine3, reach_m: f32) -> Placed {
+        Placed {
+            world_from_quad,
+            shine: 0.0,
+            reach_m,
+            both_sides: false,
+        }
+    }
+
     fn pixels(width: u32, height: u32) -> Image {
         Image {
             width,
@@ -615,7 +676,7 @@ mod tests {
         let mut pictures = Pictures::default();
         let mut requests = Requests::default();
         let m = media();
-        let draw = pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        let draw = pictures.draw(&m, placed(ahead(2.0), 0.0), &screen(1000.0), &mut requests);
         assert_eq!(draw.picture, None, "a card until a level lands");
         let asked = requests.drain();
         assert_eq!(asked.len(), 1);
@@ -637,7 +698,7 @@ mod tests {
         let m = media();
         pictures.arrived(m.thumb, Ok(pixels(128, 85))).unwrap();
         let near = ahead(1.0);
-        let draw = pictures.draw(&m, near, 0.0, false, &screen(1000.0), &mut requests);
+        let draw = pictures.draw(&m, placed(near, 0.0), &screen(1000.0), &mut requests);
         let thumb = pictures.resident[&m.thumb].id;
         assert_eq!(draw.picture, Some(thumb), "the thumb stands in");
         let asked = requests.drain();
@@ -646,7 +707,7 @@ mod tests {
             [m.name(Level::Low)]
         );
         pictures.arrived(m.low, Ok(pixels(1024, 682))).unwrap();
-        let draw = pictures.draw(&m, near, 0.0, false, &screen(1000.0), &mut requests);
+        let draw = pictures.draw(&m, placed(near, 0.0), &screen(1000.0), &mut requests);
         assert_eq!(draw.picture, Some(pictures.resident[&m.low].id));
         assert!(
             requests.drain().is_empty(),
@@ -660,7 +721,7 @@ mod tests {
         let mut requests = Requests::default();
         let m = media();
         let behind = DAffine3::from_translation(DVec3::new(0.0, 0.0, 5.0));
-        pictures.draw(&m, behind, 0.0, false, &screen(1000.0), &mut requests);
+        pictures.draw(&m, placed(behind, 0.0), &screen(1000.0), &mut requests);
         let asked = requests.drain();
         assert_eq!(
             asked.iter().map(|r| r.path.clone()).collect::<Vec<_>>(),
@@ -702,16 +763,16 @@ mod tests {
         let mut pictures = Pictures::default();
         let mut requests = Requests::default();
         let m = media();
-        pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(2.0), 0.0), &screen(1000.0), &mut requests);
         assert_eq!(requests.drain().len(), 1);
         pictures.arrived(m.low, Err("HTTP 404".into())).unwrap_err();
         pictures.end_frame();
-        pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(2.0), 0.0), &screen(1000.0), &mut requests);
         assert!(requests.drain().is_empty(), "not asked again at once");
         for _ in 0..RETRY_FRAMES {
             pictures.end_frame();
         }
-        pictures.draw(&m, ahead(2.0), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(2.0), 0.0), &screen(1000.0), &mut requests);
         assert_eq!(requests.drain().len(), 1, "asked again after a while");
     }
 
@@ -721,6 +782,73 @@ mod tests {
             kind: ImageKind::Gif,
             ..media()
         }
+    }
+
+    #[test]
+    fn a_video_is_heard_within_its_reach_seen_or_not() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        let video = Media {
+            kind: ImageKind::Mp4,
+            ..moving()
+        };
+        // Behind the eye, five metres away: within the reach a two metre
+        // screen has by its size, so it opens, and is heard there.
+        pictures.draw(
+            &video,
+            placed(behind(), 0.0),
+            &screen(1000.0),
+            &mut requests,
+        );
+        pictures.end_frame();
+        let opened = pictures.drain_moving();
+        let [Moving::Open { picture, .. }] = opened.as_slice() else {
+            panic!("opened though unseen");
+        };
+        pictures.opened(*picture, Ok((320, 240))).unwrap();
+        pictures.draw(
+            &video,
+            placed(behind(), 0.0),
+            &screen(1000.0),
+            &mut requests,
+        );
+        let [heard] = pictures.heard() else {
+            panic!("one sound");
+        };
+        assert_eq!(heard.source, SoundSource::Picture(*picture));
+        assert_eq!(heard.position, DVec3::new(0.0, 0.0, 5.0));
+        assert!(
+            (heard.reach_m - 12.0).abs() < 1e-9,
+            "a metre tall, heard twelve"
+        );
+        pictures.end_frame();
+        assert_eq!(
+            pictures.heard().len(),
+            1,
+            "heard until the next frame opens"
+        );
+        pictures.begin_frame();
+        assert!(pictures.heard().is_empty(), "heard is a frame's");
+        // A reach of its own, shorter than the distance: a poster, unheard.
+        let mut far = Pictures::default();
+        far.draw(
+            &video,
+            placed(behind(), 3.0),
+            &screen(1000.0),
+            &mut requests,
+        );
+        far.end_frame();
+        assert!(far.drain_moving().is_empty());
+        // A GIF carries no sound: behind the eye it is a poster.
+        let mut gif = Pictures::default();
+        gif.draw(
+            &moving(),
+            placed(behind(), 0.0),
+            &screen(1000.0),
+            &mut requests,
+        );
+        gif.end_frame();
+        assert!(gif.drain_moving().is_empty());
     }
 
     #[test]
@@ -735,9 +863,7 @@ mod tests {
         // Far, but in view: a still this small would show its thumb.
         pictures.draw(
             &small,
-            ahead(40.0),
-            0.0,
-            false,
+            placed(ahead(40.0), 0.0),
             &screen(600.0),
             &mut requests,
         );
@@ -755,12 +881,12 @@ mod tests {
         let mut requests = Requests::default();
         let m = moving();
         // Out of view: the thumb, a poster, fetched as pixels like any level.
-        pictures.draw(&m, behind(), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.draw(&m, placed(behind(), 0.0), &screen(1000.0), &mut requests);
         pictures.end_frame();
         assert_eq!(requests.drain()[0].path, m.name(Level::Thumb));
         assert!(pictures.drain_moving().is_empty());
         // Near: the original is opened, not fetched.
-        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         assert!(
             requests.drain().is_empty(),
             "the original is never asked as pixels"
@@ -783,7 +909,7 @@ mod tests {
             pictures.drain_changes().as_slice(),
             [PictureChange::Live { id, width: 640, height: 480 }] if *id == picture
         ));
-        let draw = pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        let draw = pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         assert_eq!(draw.picture, Some(picture));
         pictures.end_frame();
         // Turned away, the poster up: a second unseen and it is closed. Until
@@ -791,11 +917,11 @@ mod tests {
         pictures.arrived(m.thumb, Ok(pixels(128, 85))).unwrap();
         pictures.drain_changes();
         for _ in 0..PLAYING_UNSEEN_FRAMES {
-            pictures.draw(&m, behind(), 0.0, false, &screen(1000.0), &mut requests);
+            pictures.draw(&m, placed(behind(), 0.0), &screen(1000.0), &mut requests);
             pictures.end_frame();
         }
         assert!(pictures.drain_moving().is_empty(), "kept to the edge");
-        pictures.draw(&m, behind(), 0.0, false, &screen(1000.0), &mut requests);
+        pictures.draw(&m, placed(behind(), 0.0), &screen(1000.0), &mut requests);
         pictures.end_frame();
         assert_eq!(pictures.drain_moving(), [Moving::Close(picture)]);
         assert!(matches!(
@@ -809,7 +935,7 @@ mod tests {
         let mut pictures = Pictures::default();
         let mut requests = Requests::default();
         let m = moving();
-        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         pictures.end_frame();
         let opened = pictures.drain_moving();
         let [Moving::Open { picture, .. }] = opened.as_slice() else {
@@ -819,11 +945,11 @@ mod tests {
             .opened(*picture, Err("no decoder".into()))
             .unwrap_err();
         for _ in 0..RETRY_FRAMES {
-            pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+            pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
             pictures.end_frame();
         }
         assert!(pictures.drain_moving().is_empty());
-        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         pictures.end_frame();
         assert_eq!(pictures.drain_moving().len(), 1);
     }
@@ -833,29 +959,29 @@ mod tests {
         let mut pictures = Pictures::default();
         let mut requests = Requests::default();
         let m = moving();
-        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         pictures.end_frame();
         let opened = pictures.drain_moving();
         let [Moving::Open { picture, .. }] = opened.as_slice() else {
             panic!("one open");
         };
         for _ in 0..OPEN_FRAMES {
-            pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+            pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
             pictures.end_frame();
         }
         assert!(pictures.drain_moving().is_empty(), "waited for");
-        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         pictures.end_frame();
         assert_eq!(pictures.drain_moving(), [Moving::Close(*picture)]);
         // A late answer is nothing; the picture is asked for again after a while.
         pictures.opened(*picture, Ok((1, 1))).unwrap();
         assert!(pictures.drain_changes().is_empty());
         for _ in 1..RETRY_FRAMES {
-            pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+            pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
             pictures.end_frame();
         }
         assert!(pictures.drain_moving().is_empty());
-        pictures.draw(&m, ahead(0.5), 0.0, false, &screen(2000.0), &mut requests);
+        pictures.draw(&m, placed(ahead(0.5), 0.0), &screen(2000.0), &mut requests);
         pictures.end_frame();
         assert!(matches!(
             pictures.drain_moving().as_slice(),
@@ -877,9 +1003,7 @@ mod tests {
         for i in (0..8u8).rev() {
             pictures.draw(
                 &near(i),
-                ahead(1.0 + f64::from(i) * 0.15),
-                0.0,
-                false,
+                placed(ahead(1.0 + f64::from(i) * 0.15), 0.0),
                 &screen(3000.0),
                 &mut requests,
             );
@@ -903,9 +1027,7 @@ mod tests {
         // Nothing more opens while they play, or wait to be answered.
         pictures.draw(
             &near(7),
-            ahead(0.5),
-            0.0,
-            false,
+            placed(ahead(0.5), 0.0),
             &screen(1000.0),
             &mut requests,
         );
@@ -927,7 +1049,12 @@ mod tests {
                 full: id(50 + i),
                 ..media()
             };
-            pictures.draw(&m, ahead(100.0), 0.0, false, &screen(1000.0), &mut requests);
+            pictures.draw(
+                &m,
+                placed(ahead(100.0), 0.0),
+                &screen(1000.0),
+                &mut requests,
+            );
         }
         assert_eq!(requests.drain().len(), IN_FLIGHT);
     }

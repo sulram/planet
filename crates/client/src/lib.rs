@@ -22,6 +22,7 @@ mod place;
 mod plugin;
 mod seam;
 mod session;
+mod sound;
 mod terrain;
 mod wardrobe;
 
@@ -54,6 +55,7 @@ pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Anchor, Command, Event, Label, Level, Mode, PeerInfo, PluginOn, SessionStatus};
 pub use session::Outbound;
 use session::Session;
+pub use sound::{Sound, SoundSource};
 use terrain::{Body, Cover, Terrain};
 use wardrobe::Wardrobe;
 
@@ -752,6 +754,12 @@ impl Client {
         self.pictures.drain_changes()
     }
 
+    /// Every source of sound this frame, for the shell to mix at the eye:
+    /// the pictures playing that carry sound. Read after [`Client::update`].
+    pub fn sounds(&self) -> &[Sound] {
+        self.pictures.heard()
+    }
+
     /// Pictures that move, for the shell to open and close, in the order the
     /// client decided. The shell answers an open with
     /// [`Client::moving_opened`] and writes every frame into the renderer.
@@ -1317,6 +1325,7 @@ impl Client {
             aspect: f64::from(self.aspect),
             height_px: f64::from(self.view_height_px),
         };
+        self.pictures.begin_frame();
         let drawn = self.parts.pictures(
             &self.generator,
             self.controller.held_by(),

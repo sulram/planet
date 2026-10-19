@@ -49,7 +49,7 @@ use crate::cells::{
     Ask, LAMP_FAR_M, LAMP_GAIN, LAMP_GROWS_M, LAMP_REACH_M, LAMP_SIDES, paint_look, paint_rgb,
 };
 use crate::collision::{BODY_HALF, Footing, STEP_M};
-use crate::pictures::{Pictures, Screen};
+use crate::pictures::{Pictures, Placed, Screen};
 
 /// Seconds between two looks at what the world holds near the body.
 const LOOK_S: f64 = 1.0;
@@ -963,7 +963,17 @@ impl Parts {
                     (false, true) => 1.0,
                     (false, false) => 0.0,
                 };
-                Some(pictures.draw(&media, world_from_quad, shine, true, screen, requests))
+                Some(pictures.draw(
+                    &media,
+                    Placed {
+                        world_from_quad,
+                        shine,
+                        reach_m: part.reach_m,
+                        both_sides: true,
+                    },
+                    screen,
+                    requests,
+                ))
             })
             .collect()
     }

@@ -214,6 +214,12 @@ impl Media {
         self.millis > 0
     }
 
+    /// Whether the original carries sound: a video does, a GIF or a WebP
+    /// never.
+    pub fn sounds(&self) -> bool {
+        self.moves() && self.kind == ImageKind::Mp4
+    }
+
     /// The content id of a level.
     pub fn id(&self, level: PictureLevel) -> ContentId {
         match level {
