@@ -155,8 +155,10 @@ compositor. What the world *is* lives in WORLD.md.
   a hole in it.
 - Weather turns about the planet's axis with the clock (the wind), and the
   noise rises through the layer along the local up, so clouds reshape in
-  place as they travel. The angle wraps and the rise swings, both on the
-  CPU in f64. Cosmetic: not simulated, not stored, the same for a clock.
+  place as they travel. The angle wraps and the rise swings within a
+  twentieth of the radius (a radial shift squeezes the shapes sideways by
+  its share of it), both on the CPU in f64. Cosmetic: not simulated, not
+  stored, the same for a clock.
 - Sun shadows: three cascades around the eye (40 m, 400 m, 4 km half side,
   1024 px each), snapped to their texel, in the frame of the nearest body.
   Terrain, volumes, boxes and avatars cast; everything lit by `lit` receives.

@@ -23,6 +23,9 @@ ground somewhere). Clouds also reshape where they stand: the noise rises
 through the layer along the local up, the third dimension spent as time. A
 sideways slide was tried first and read as more travel, not change. No repeat
 of the noise lines up with a local up, so the rise cannot wrap unseen: it
-swings over 64 repeats instead, continuous for ever. Both are computed in f64
-on the CPU, so a long clock costs no precision. Rejected for now: temporal
+swings instead, continuous for ever. A rise of `s` metres samples the noise
+at a radius `s` nearer the centre, where the shapes are squeezed sideways by
+`(r - s) / r`; past the radius they turn inside out, every heap a spike. So
+the swing is a twentieth of the radius, never a count of repeats. Both are
+computed in f64 on the CPU, so a long clock costs no precision. Rejected for now: temporal
 reprojection (needs motion vectors, ROADMAP).

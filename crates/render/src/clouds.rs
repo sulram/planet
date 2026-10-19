@@ -28,10 +28,14 @@ const WISP_RISE_M_S: f64 = 22.0;
 /// Metres across one repeat of the noise, for bodies and for wisps.
 const SHAPE_TILE_M: f64 = 6200.0;
 const DETAIL_TILE_M: f64 = 1150.0;
-/// The rise turns back after this many repeats. It is along the local up,
-/// which no repeat of the noise lines up with, so it cannot wrap unseen; it
-/// swings instead, continuous for ever and small enough to stay exact in f32.
-const RISE_SWING: f64 = 64.0;
+/// How far the rise goes before it turns back, as a fraction of the planet's
+/// radius. The rise is along the local up, which no repeat of the noise lines
+/// up with, so it cannot wrap unseen; it swings instead, continuous for ever.
+/// A rise of `s` metres samples the noise at a radius `s` nearer the centre,
+/// where the same angle spans `(r - s) / r` of the distance: it squeezes the
+/// shapes sideways by that much. This fraction keeps the squeeze under a
+/// twentieth; past the radius the noise turns inside out, every heap a spike.
+const RISE_OF_RADIUS: f64 = 0.05;
 /// A clock that moved more than this between frames, or backwards, was set,
 /// not run: the weather is then what that clock says from its start.
 const CLOCK_JUMP_S: f64 = 5.0;
@@ -70,16 +74,27 @@ impl Weather {
         let change = f64::from(effects.cloud_change);
         self.turned_rad = (self.turned_rad + elapsed * f64::from(effects.wind_m_s) / radius_m)
             % core::f64::consts::TAU;
+        let (body_swing, wisp_swing) = rise_swings(radius_m);
         self.body_repeats = (self.body_repeats + elapsed * change * BODY_RISE_M_S / SHAPE_TILE_M)
-            % (2.0 * RISE_SWING);
+            % (2.0 * body_swing);
         self.wisp_repeats = (self.wisp_repeats + elapsed * change * WISP_RISE_M_S / DETAIL_TILE_M)
-            % (2.0 * RISE_SWING);
-        let swing = |repeats: f64| (RISE_SWING - (repeats - RISE_SWING).abs()) as f32;
+            % (2.0 * wisp_swing);
+        let swing = |repeats: f64, swing: f64| (swing - (repeats - swing).abs()) as f32;
         WeatherNow {
             wind: [self.turned_rad.cos() as f32, self.turned_rad.sin() as f32],
-            rise: [swing(self.body_repeats), swing(self.wisp_repeats)],
+            rise: [
+                swing(self.body_repeats, body_swing),
+                swing(self.wisp_repeats, wisp_swing),
+            ],
         }
     }
+}
+
+/// How far the rise swings on a planet of this radius, in repeats of the body
+/// noise and of the wisp noise.
+fn rise_swings(radius_m: f64) -> (f64, f64) {
+    let swing_m = radius_m * RISE_OF_RADIUS;
+    (swing_m / SHAPE_TILE_M, swing_m / DETAIL_TILE_M)
 }
 
 pub struct Clouds {
@@ -301,7 +316,7 @@ mod tests {
     fn the_weather_never_jumps() {
         // Frame by frame across a turn of the swing, and when the wind changes.
         let mut effects = scene::Effects::default();
-        let turn = RISE_SWING * DETAIL_TILE_M / WISP_RISE_M_S;
+        let turn = RADIUS_M * RISE_OF_RADIUS / WISP_RISE_M_S;
         let mut weather = Weather::default();
         let mut last = weather.advance(turn - 1.0, &effects, RADIUS_M);
         for frame in 1..120 {
@@ -312,6 +327,26 @@ mod tests {
             assert!((now.rise[1] - last.rise[1]).abs() < 0.001);
             assert!((now.wind[0] - last.wind[0]).abs() < 0.0001);
             last = now;
+        }
+    }
+
+    #[test]
+    fn the_rise_stays_a_small_part_of_the_radius() {
+        // A clock of years, a planet of twenty kilometres: the noise is never
+        // sampled nearer the centre than a twentieth of the way.
+        let effects = scene::Effects::default();
+        for clock_s in [0.0, 36_000.0, 1.8e9, 1.8e9 + 1234.5] {
+            let now = Weather::default().advance(clock_s, &effects, RADIUS_M);
+            let body_m = f64::from(now.rise[0]) * SHAPE_TILE_M;
+            let wisp_m = f64::from(now.rise[1]) * DETAIL_TILE_M;
+            assert!(
+                (0.0..=RADIUS_M * RISE_OF_RADIUS).contains(&body_m),
+                "{body_m}"
+            );
+            assert!(
+                (0.0..=RADIUS_M * RISE_OF_RADIUS).contains(&wisp_m),
+                "{wisp_m}"
+            );
         }
     }
 }
