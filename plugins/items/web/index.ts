@@ -9,7 +9,9 @@ const items: WebPlugin = {
 	Layer,
 	hints: [
 		{ keys: 'I', does: () => t('hint.items') },
-		{ keys: () => t('hint.place.keys'), does: () => t('hint.place') }
+		{ keys: () => t('hint.place.keys'), does: () => t('hint.place') },
+		{ keys: () => t('hint.handles.keys'), does: () => t('hint.handles') },
+		{ keys: () => t('hint.remove.keys'), does: () => t('hint.remove') }
 	]
 };
 

@@ -76,7 +76,7 @@ func founded(t *testing.T, dir string, level world.Level) *httptest.Server {
 func TestAChangeIsKeptToldToWhoIsNearAndShownToWhoArrives(t *testing.T) {
 	dir := t.TempDir()
 	web := founded(t, dir, world.LevelAdmin)
-	if _, about := call(t, "GET", web.URL+"/api/world", nil); len(spoken(about)) != 2 {
+	if _, about := call(t, "GET", web.URL+"/api/world", nil); len(spoken(about)) != 3 {
 		t.Fatalf("the cells are the core's, and no plugin a world speaks of: %v", about)
 	}
 	if status, answer := call(t, "POST", web.URL+"/api/plugins", map[string]any{"name": "cells", "on": false}); status != http.StatusNotFound {

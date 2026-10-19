@@ -1,24 +1,29 @@
 //! The items plugin's client half: the menu of things to place in the
-//! world, the item in hand, and the click that places it as a part
-//! (DECISIONS 111). Building is the cells; this is everything placed that
-//! is no cell.
+//! world, the item in hand, the click that places it as a part, and the
+//! gizmo that moves, turns and stretches a part picked (DECISIONS 111).
+//! Building is the cells; this is everything placed that is no cell.
 //!
 //! An item is what the menu offers: a cube in a paint, and a picture, which
 //! is taken with the record of its file. A model from a file is an item of
 //! its own, a shape of part, and enters here as a kind with the words it
-//! needs. The parts are the core's: this plugin asks its host to place one
-//! and holds no part.
+//! needs. The parts are the core's: this plugin asks its host to place and
+//! set them and holds no part.
 //!
-//! The seam, under `items.`: the commands `take`, `paint`, `finish`, `edge`
-//! and `state`; the events `hand` and `refused`.
+//! The seam, under `items.`: the commands `edit`, `take`, `pick`, `mode`,
+//! `set`, `remove`, `paint`, `finish`, `edge` and `state`; the events
+//! `hand`, `picked` and `refused`.
 
+mod gizmo;
 mod place;
 
-use client::{Host, KeyAsk, Media, Plugin, Turn};
+use client::{Host, KeyAsk, Media, Part, PartId, Plugin, Turn};
+use glam::{DQuat, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use voxel::{Edge, Finish, Paint};
 
+use gizmo::Gizmo;
+pub use gizmo::Mode;
 pub use items_world::{NAME, VERSION};
 
 /// What the menu offers to place.
@@ -35,8 +40,8 @@ pub enum Item {
     Picture,
 }
 
-/// Why an item was not handed over, or a part not placed. A front end says
-/// it in its own words.
+/// Why an item was not handed over, or a part not placed or set. A front
+/// end says it in its own words.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Refusal {
@@ -59,21 +64,42 @@ impl From<client::PartRefusal> for Refusal {
     }
 }
 
+/// `items.edit`: open the menu, the pointer picking parts, or close it.
+pub const EDIT: &str = "edit";
 /// `items.take`: take an item in hand, or `null` to put it down. A picture
 /// rides with its `media`, or with none while its file is still to pick.
 pub const TAKE: &str = "take";
-/// `items.paint`: pick a colour of the palette for what is placed next.
+/// `items.pick`: pick a part by its name, or `null` to let it go.
+pub const PICK: &str = "pick";
+/// `items.mode`: what a drag of a handle does.
+pub const MODE: &str = "mode";
+/// `items.set`: set the part picked: where it stands, how it is turned, in
+/// degrees about its own axes, how long its sides are, in blocks, and
+/// whether it is solid. What is left out stays.
+pub const SET: &str = "set";
+/// `items.remove`: remove the part picked.
+pub const REMOVE: &str = "remove";
+/// `items.paint`: pick a colour of the palette for what is placed next, and
+/// for the part picked.
 pub const PAINT: &str = "paint";
-/// `items.finish`: how what is placed next takes the light.
+/// `items.finish`: how it takes the light.
 pub const FINISH: &str = "finish";
-/// `items.edge`: the line around each side of what is placed next.
+/// `items.edge`: the line around each side.
 pub const EDGE: &str = "edge";
 /// `items.state`: say what is in hand, for a layer that just mounted.
 pub const STATE: &str = "state";
-/// `items.hand`: the item in hand, `null` when none, and the paint in hand.
+/// `items.hand`: whether the menu is open, the item in hand, `null` when
+/// none, the mode and the paint in hand.
 pub const HAND: &str = "hand";
+/// `items.picked`: the part picked, as it stands, or `null` when none.
+pub const PICKED: &str = "picked";
 /// `items.refused`: why what was asked was not done.
 pub const REFUSED: &str = "refused";
+
+#[derive(Deserialize)]
+struct Edit {
+    on: bool,
+}
 
 #[derive(Deserialize)]
 struct Take {
@@ -99,6 +125,24 @@ impl MediaBody {
 }
 
 #[derive(Deserialize)]
+struct Pick {
+    id: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct Moded {
+    mode: Mode,
+}
+
+#[derive(Deserialize, Default)]
+struct Set {
+    at: Option<[f64; 3]>,
+    rotation: Option<[f64; 3]>,
+    scale: Option<[f64; 3]>,
+    solid: Option<bool>,
+}
+
+#[derive(Deserialize)]
 struct Painted {
     paint: u8,
 }
@@ -115,10 +159,26 @@ struct Edged {
 
 #[derive(Serialize)]
 struct Hand {
+    editing: bool,
     item: Option<Item>,
+    mode: Mode,
     paint: u8,
     finish: Finish,
     edge: Edge,
+}
+
+/// A part as the panel shows it.
+#[derive(Serialize)]
+struct Picked {
+    id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    at: Option<[f64; 3]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rotation: Option<[f64; 3]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scale: Option<[f64; 3]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    solid: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -127,23 +187,35 @@ struct Refused {
 }
 
 mod key {
-    /// Take the item taken last, or put the item in hand down.
+    /// Open the menu, or close it.
     pub const ITEMS: &str = "items";
-    /// Put the item in hand down.
+    /// Drop what is in hand: a drag, the part picked, the item, the menu.
     pub const CANCEL: &str = "cancel";
+    /// What a drag of a handle does.
+    pub const MOVE: &str = "move";
+    pub const ROTATE: &str = "rotate";
+    pub const SCALE: &str = "scale";
+    /// Remove the part picked.
+    pub const REMOVE: &str = "remove";
+    /// Held while stretching: every side alike.
+    pub const UNIFORM: &str = "uniform";
 }
 
 /// The colours a hand can pick: as many as the world's palette holds.
 const PAINTS: u8 = client::PALETTE.len() as u8;
 
-/// The item in hand and the paint it is placed in.
+/// The menu, the item in hand, the paint it is placed in, and the part
+/// picked.
 pub struct Items {
+    /// Whether the menu is open: the pointer is this plugin's, picking
+    /// parts where no item is in hand.
+    editing: bool,
     item: Option<Item>,
-    /// The item taken last, which the key takes again.
-    last: Item,
+    mode: Mode,
     paint: u8,
     finish: Finish,
     edge: Edge,
+    picked: Option<Gizmo>,
     /// The picture placed next, once its file is picked.
     picture: Option<Media>,
     /// Whether the pointer's button was down last turn.
@@ -153,11 +225,13 @@ pub struct Items {
 impl Default for Items {
     fn default() -> Self {
         Items {
+            editing: false,
             item: None,
-            last: Item::Cube,
+            mode: Mode::Move,
             paint: 0,
             finish: Finish::Matte,
             edge: Edge::None,
+            picked: None,
             picture: None,
             using: false,
         }
@@ -167,6 +241,17 @@ impl Default for Items {
 /// The plugin as a shell plugs it in.
 pub fn plugin() -> Box<dyn Plugin> {
     Box::new(Items::default())
+}
+
+/// A turn about each of a part's own axes, degrees, from its rotation.
+fn degrees(rotation: DQuat) -> [f64; 3] {
+    let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
+    [x, y, z].map(f64::to_degrees)
+}
+
+fn radians(degrees: [f64; 3]) -> DQuat {
+    let [x, y, z] = degrees.map(f64::to_radians);
+    DQuat::from_euler(EulerRot::XYZ, x, y, z)
 }
 
 impl Items {
@@ -180,30 +265,190 @@ impl Items {
         .byte()
     }
 
-    /// Takes an item in hand or puts it down. With one in hand the pointer
-    /// is this plugin's.
-    fn take(&mut self, item: Option<Item>, host: &mut Host<'_>) {
+    /// Opens the menu or closes it. Open, the pointer is this plugin's.
+    fn edit(&mut self, on: bool, host: &mut Host<'_>) {
+        if on && !host.may_change() {
+            return refuse(host, Refusal::Level);
+        }
+        self.editing = on;
+        if !on {
+            self.item = None;
+            self.unpick(host);
+        }
+        host.point(on);
+        self.say_hand(host);
+    }
+
+    /// Takes an item in hand or puts it down. The menu opens with it.
+    pub(crate) fn take(&mut self, item: Option<Item>, host: &mut Host<'_>) {
         if item.is_some() && !host.may_change() {
             return refuse(host, Refusal::Level);
         }
-        self.item = item;
-        if let Some(item) = item {
-            self.last = item;
+        if item.is_some() {
+            self.editing = true;
+            self.unpick(host);
+            host.point(true);
         }
-        host.point(item.is_some());
+        self.item = item;
         self.say_hand(host);
+    }
+
+    /// Picks a part, or lets the one picked go.
+    pub(crate) fn pick(&mut self, id: Option<PartId>, host: &mut Host<'_>) {
+        self.picked = id.and_then(|id| Gizmo::new(host, id));
+        if id.is_some() && self.picked.is_none() {
+            refuse(host, Refusal::Gone);
+        }
+        self.say_picked(host);
+    }
+
+    fn unpick(&mut self, host: &mut Host<'_>) {
+        if self.picked.take().is_some() {
+            host.mark(&[]);
+            self.say_picked(host);
+        }
+    }
+
+    /// Sets the part picked as the panel asks.
+    fn set(&mut self, set: Set, host: &mut Host<'_>) {
+        let Some(gizmo) = &self.picked else {
+            return refuse(host, Refusal::Gone);
+        };
+        let mut part = gizmo.part;
+        if let Some(at) = set.at {
+            part.pose.at = at;
+        }
+        if let Some(rotation) = set.rotation {
+            part.pose.rotation = radians(rotation);
+        }
+        if let Some(scale) = set.scale {
+            part.pose.scale = scale;
+        }
+        if let Some(solid) = set.solid {
+            part.solid = solid;
+        }
+        let (id, seat) = (gizmo.id, gizmo.seat);
+        self.apply(id, seat, part, host);
+    }
+
+    /// Sets a part and keeps the gizmo on it.
+    fn apply(&mut self, id: PartId, seat: client::Seat, part: Part, host: &mut Host<'_>) {
+        if let Err(refusal) = host.set_part(id, seat, part) {
+            return refuse(host, refusal.into());
+        }
+        if let Some(gizmo) = &mut self.picked {
+            gizmo.refresh(host);
+        }
+        self.say_picked(host);
+    }
+
+    /// Repaints the part picked, when one is, in the paint in hand.
+    fn repaint(&mut self, host: &mut Host<'_>) {
+        if let Some(gizmo) = &self.picked {
+            let (id, seat, mut part) = (gizmo.id, gizmo.seat, gizmo.part);
+            part.paint = self.made_of();
+            self.apply(id, seat, part, host);
+        }
+    }
+
+    fn remove(&mut self, host: &mut Host<'_>) {
+        let Some(gizmo) = &self.picked else {
+            return refuse(host, Refusal::Gone);
+        };
+        let id = gizmo.id;
+        if let Err(refusal) = host.remove_part(id) {
+            return refuse(host, refusal.into());
+        }
+        self.unpick(host);
     }
 
     fn say_hand(&self, host: &mut Host<'_>) {
         host.emit(
             HAND,
             &Hand {
+                editing: self.editing,
                 item: self.item,
+                mode: self.mode,
                 paint: self.paint,
                 finish: self.finish,
                 edge: self.edge,
             },
         );
+    }
+
+    fn say_picked(&self, host: &mut Host<'_>) {
+        let picked = match &self.picked {
+            Some(gizmo) => Picked {
+                id: Some(gizmo.id.0),
+                at: Some(gizmo.part.pose.at),
+                rotation: Some(degrees(gizmo.part.pose.rotation)),
+                scale: Some(gizmo.part.pose.scale),
+                solid: Some(gizmo.part.solid),
+            },
+            None => Picked {
+                id: None,
+                at: None,
+                rotation: None,
+                scale: None,
+                solid: None,
+            },
+        };
+        host.emit(PICKED, &picked);
+    }
+
+    /// One turn with the menu open and no item in hand: a handle dragged
+    /// moves the part picked; a click picks a handle, a part, or nothing.
+    fn edit_turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
+        let (from, toward) = turn.eye.sight();
+        let pressed = turn.using && !self.using;
+        let released = !turn.using && self.using;
+        if let Some(gizmo) = &mut self.picked {
+            if !gizmo.refresh(host) {
+                self.unpick(host);
+                return;
+            }
+        }
+        let uniform = turn.held(key::UNIFORM);
+        if let Some(gizmo) = &mut self.picked {
+            if gizmo.drag.is_some() {
+                if released || turn.interrupted {
+                    gizmo.drag = None;
+                } else if let Some(world) = gizmo.dragged(self.mode, uniform, from, toward)
+                    && let Some((seat, pose)) = host.reseat(gizmo.seat.body(), &world)
+                {
+                    let (id, mut part) = (gizmo.id, gizmo.part);
+                    part.pose = pose;
+                    if let Err(refusal) = host.set_part(id, seat, part) {
+                        refuse(host, refusal.into());
+                    } else {
+                        gizmo.refresh(host);
+                        self.say_picked(host);
+                    }
+                }
+            } else {
+                let hit = gizmo.handle_hit(self.mode, from, toward);
+                gizmo.hot = hit.map(|(axis, _)| axis);
+                if pressed && let Some((axis, _)) = hit {
+                    gizmo.press(self.mode, axis, from, toward);
+                }
+            }
+        }
+        let dragging = self
+            .picked
+            .as_ref()
+            .is_some_and(|gizmo| gizmo.drag.is_some());
+        let on_handle = self
+            .picked
+            .as_ref()
+            .is_some_and(|gizmo| gizmo.hot.is_some());
+        if pressed && !dragging && !on_handle {
+            let id = host.pick(from, toward).map(|(id, _)| id);
+            if id != self.picked.as_ref().map(|gizmo| gizmo.id) {
+                self.pick(id, host);
+            }
+        }
+        let marks = self.picked.as_ref().map(|gizmo| gizmo.marks(self.mode));
+        host.mark(marks.as_deref().unwrap_or(&[]));
     }
 }
 
@@ -227,6 +472,11 @@ impl Plugin for Items {
                 .ok()
         }
         match kind {
+            EDIT => {
+                if let Some(Edit { on }) = read(body, host) {
+                    self.edit(on, host);
+                }
+            }
             TAKE => {
                 if let Some(Take { item, media }) = read(body, host) {
                     if item == Some(Item::Picture) {
@@ -240,25 +490,48 @@ impl Plugin for Items {
                     self.take(item, host);
                 }
             }
+            PICK => {
+                if let Some(Pick { id }) = read(body, host) {
+                    self.pick(id.map(PartId), host);
+                }
+            }
+            MODE => {
+                if let Some(Moded { mode }) = read(body, host) {
+                    self.mode = mode;
+                    self.say_hand(host);
+                }
+            }
+            SET => {
+                if let Some(set) = read(body, host) {
+                    self.set(set, host);
+                }
+            }
+            REMOVE => self.remove(host),
             PAINT => {
                 if let Some(Painted { paint }) = read(body, host) {
                     self.paint = paint.min(PAINTS - 1);
                     self.say_hand(host);
+                    self.repaint(host);
                 }
             }
             FINISH => {
                 if let Some(Finished { finish }) = read(body, host) {
                     self.finish = finish;
                     self.say_hand(host);
+                    self.repaint(host);
                 }
             }
             EDGE => {
                 if let Some(Edged { edge }) = read(body, host) {
                     self.edge = edge;
                     self.say_hand(host);
+                    self.repaint(host);
                 }
             }
-            STATE => self.say_hand(host),
+            STATE => {
+                self.say_hand(host);
+                self.say_picked(host);
+            }
             _ => host.reject(format!("`{kind}` is no command of items")),
         }
     }
@@ -267,36 +540,70 @@ impl Plugin for Items {
         vec![
             KeyAsk::pressed(key::ITEMS, "KeyI"),
             KeyAsk::pressed(key::CANCEL, "Escape"),
+            KeyAsk::pressed(key::MOVE, "KeyG"),
+            KeyAsk::pressed(key::ROTATE, "KeyR"),
+            KeyAsk::pressed(key::SCALE, "KeyT"),
+            KeyAsk::pressed(key::REMOVE, "Delete"),
+            KeyAsk::pressed(key::REMOVE, "Backspace"),
+            KeyAsk::held(key::UNIFORM, "ShiftLeft"),
+            KeyAsk::held(key::UNIFORM, "ShiftRight"),
         ]
     }
 
     fn key(&mut self, name: &str, host: &mut Host<'_>) {
         match name {
-            key::ITEMS => {
-                let item = match self.item {
-                    Some(_) => None,
-                    None => Some(self.last),
-                };
-                self.take(item, host);
+            key::ITEMS => self.edit(!self.editing, host),
+            // What is in hand goes first: a drag, the part picked, the
+            // item, then the menu itself.
+            key::CANCEL if self.editing => {
+                if let Some(gizmo) = &mut self.picked
+                    && gizmo.drag.is_some()
+                {
+                    gizmo.drag = None;
+                } else if self.picked.is_some() {
+                    self.unpick(host);
+                } else if self.item.is_some() {
+                    self.take(None, host);
+                } else {
+                    self.edit(false, host);
+                }
             }
-            key::CANCEL if self.item.is_some() => self.take(None, host),
+            key::MOVE | key::ROTATE | key::SCALE if self.editing => {
+                self.mode = match name {
+                    key::MOVE => Mode::Move,
+                    key::ROTATE => Mode::Rotate,
+                    _ => Mode::Scale,
+                };
+                self.say_hand(host);
+            }
+            key::REMOVE if self.picked.is_some() => self.remove(host),
             _ => {}
         }
     }
 
-    /// One turn with an item in hand: a click places it.
+    /// One turn: with an item in hand a click places it; with the menu open
+    /// the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        let pressed = turn.using && !self.using && !turn.interrupted;
-        self.using = turn.using;
-        if pressed && let Some(item) = self.item {
-            self.place(item, &turn.eye, host);
+        if !self.editing {
+            self.using = turn.using;
+            return;
         }
+        match self.item {
+            Some(item) => {
+                let pressed = turn.using && !self.using && !turn.interrupted;
+                if pressed {
+                    self.place(item, &turn.eye, host);
+                }
+            }
+            None => self.edit_turn(turn, host),
+        }
+        self.using = turn.using;
     }
 
     fn rest(&mut self, host: &mut Host<'_>) {
         self.using = false;
-        if self.item.is_some() {
-            self.take(None, host);
+        if self.editing {
+            self.edit(false, host);
         }
     }
 }
@@ -325,27 +632,81 @@ mod tests {
             .collect()
     }
 
+    fn click(client: &mut Client, at: [f32; 2]) {
+        let mut input = Input::default();
+        input.pointer = Some(at);
+        input.key(Key::Use, true);
+        client.update(1.0 / 60.0, &mut input);
+        input.key(Key::Use, false);
+        client.update(1.0 / 60.0, &mut input);
+    }
+
     #[test]
-    fn a_click_with_a_cube_in_hand_places_a_part_in_the_paint_in_hand() {
+    fn a_click_with_a_cube_in_hand_places_a_part_and_picks_it() {
         let mut client = client();
         client.command_json(r#"{"type":"items.paint","paint":11}"#);
         client.command_json(r#"{"type":"items.take","item":"cube"}"#);
         let hand = events(&mut client);
         assert_eq!(hand.last().unwrap()["item"], "cube");
         assert!(client.pointing());
-        let mut input = Input::default();
-        input.pointer = Some([0.5, 0.7]);
-        input.key(Key::Use, true);
-        client.update(1.0 / 60.0, &mut input);
-        input.key(Key::Use, false);
-        client.update(1.0 / 60.0, &mut input);
-        let placed: Vec<_> = client.parts().all().collect();
+        click(&mut client, [0.5, 0.7]);
+        let placed: Vec<(PartId, Part)> = client
+            .parts()
+            .all()
+            .map(|(id, _, part)| (id, *part))
+            .collect();
         assert_eq!(placed.len(), 1);
-        assert_eq!(placed[0].2.paint, 11);
-        assert!(placed[0].2.solid);
-        // Put down, the pointer goes back and nothing more is placed.
-        client.command_json(r#"{"type":"items.take","item":null}"#);
+        assert_eq!(placed[0].1.paint, 11);
+        assert!(placed[0].1.solid);
+        // Placed, the part is picked and the hand is empty: the menu stays
+        // open to move it.
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["id"], placed[0].0.0);
+        let hand = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.hand")
+            .unwrap();
+        assert!(hand["item"].is_null() && hand["editing"] == true);
+        assert!(client.pointing());
+        // Closed, the pointer goes back.
+        client.command_json(r#"{"type":"items.edit","on":false}"#);
         assert!(!client.pointing());
+    }
+
+    #[test]
+    fn the_panel_sets_the_part_picked_and_a_key_removes_it() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"cube"}"#);
+        click(&mut client, [0.5, 0.7]);
+        events(&mut client);
+        client.command_json(
+            r#"{"type":"items.set","rotation":[0,0,90],"scale":[4,2,1],"solid":false}"#,
+        );
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["scale"], serde_json::json!([4.0, 2.0, 1.0]));
+        assert!((picked["rotation"][2].as_f64().unwrap() - 90.0).abs() < 1e-6);
+        assert_eq!(picked["solid"], false);
+        let part = client.parts().all().next().unwrap().2;
+        assert!(!part.solid);
+        // A pose that is none is refused and the part keeps its own.
+        client.command_json(r#"{"type":"items.set","scale":[0,2,1]}"#);
+        let said = events(&mut client);
+        assert_eq!(said.last().unwrap()["reason"], "pose");
+        client.command_json(r#"{"type":"items.remove"}"#);
+        assert_eq!(client.parts().all().count(), 0);
+        let said = events(&mut client);
+        assert!(said.last().unwrap()["id"].is_null());
     }
 
     #[test]
@@ -360,15 +721,7 @@ mod tests {
         );
         // Taken with no file yet, a click places nothing.
         client.command_json(r#"{"type":"items.take","item":"picture"}"#);
-        let mut input = Input::default();
-        input.pointer = Some([0.5, 0.7]);
-        let click = |client: &mut Client, input: &mut Input| {
-            input.key(Key::Use, true);
-            client.update(1.0 / 60.0, input);
-            input.key(Key::Use, false);
-            client.update(1.0 / 60.0, input);
-        };
-        click(&mut client, &mut input);
+        click(&mut client, [0.5, 0.7]);
         assert_eq!(client.parts().all().count(), 0);
         client.command_json(&format!(
             r#"{{"type":"items.take","item":"picture","media":{media}}}"#
@@ -380,11 +733,17 @@ mod tests {
                 .any(|event| matches!(event, Event::Rejected { .. })),
             "a sound picture is taken quietly"
         );
-        click(&mut client, &mut input);
+        click(&mut client, [0.5, 0.7]);
 
         let frame = client.settled_frame();
-        assert_eq!(frame.models.len(), 0, "a picture is no model");
         assert_eq!(frame.pictures.len(), 1);
+        assert!(
+            frame
+                .models
+                .iter()
+                .all(|model| model.transform != frame.pictures[0].transform),
+            "a picture is no model"
+        );
         let picture = frame.pictures[0];
         assert_eq!(picture.picture, None, "a card until its level lands");
         // A metre tall, in its aspect, its face turned to the eye.
@@ -433,22 +792,18 @@ mod tests {
                 .iter()
                 .any(|event| matches!(event, Event::Rejected { .. }))
         );
+        // The picture placed is picked: a cube beside it is placed off it.
         client.command_json(r#"{"type":"items.take","item":"cube"}"#);
-        click(&mut client, &mut input);
-        let frame = client.settled_frame();
-        assert_eq!(
-            (frame.models.len(), frame.pictures.len()),
-            (1, 1),
-            "a cube beside the picture"
-        );
+        click(&mut client, [0.3, 0.7]);
+        assert_eq!(client.parts().all().count(), 2, "a cube beside the picture");
     }
 
     #[test]
-    fn a_visitor_takes_nothing() {
+    fn a_visitor_opens_nothing() {
         let mut client = Client::new(Recipe::new(1)).unwrap();
         client.plug(plugin());
         client.rehearse(Level::SignedIn);
-        client.command_json(r#"{"type":"items.take","item":"cube"}"#);
+        client.command_json(r#"{"type":"items.edit","on":true}"#);
         let said = events(&mut client);
         assert_eq!(said.last().unwrap()["reason"], "level");
         assert!(!client.pointing());

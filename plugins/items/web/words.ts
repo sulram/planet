@@ -29,6 +29,17 @@ const en = {
 	'edge.none': 'None',
 	'edge.black': 'Black',
 	'edge.white': 'White',
+	part: 'Item picked',
+	mode: 'Handles',
+	'mode.move': 'Move',
+	'mode.rotate': 'Rotate',
+	'mode.scale': 'Scale',
+	position: 'Position',
+	rotation: 'Rotation',
+	scale: 'Size',
+	solid: 'Solid: a body stands on it and is stopped by it',
+	remove: 'Remove',
+	'help.edit': 'Click an item in the world to pick it. Drag a handle to move it; G, R and T switch the handles.',
 	'help.pick': 'Pick an item to place.',
 	'help.place': 'Click where it goes: on the ground, on a side or on another item. Esc puts it down.',
 	'refused.level': 'Only builders of this world can place items here.',
@@ -36,7 +47,11 @@ const en = {
 	'refused.gone': 'That item is gone.',
 	'hint.items': 'items, or put the item down',
 	'hint.place.keys': 'Click',
-	'hint.place': 'place the item in hand'
+	'hint.place': 'place the item in hand',
+	'hint.handles.keys': 'G R T',
+	'hint.handles': 'move, rotate or scale the item picked',
+	'hint.remove.keys': 'Delete',
+	'hint.remove': 'remove the item picked'
 };
 
 const pt: typeof en = {
@@ -66,6 +81,17 @@ const pt: typeof en = {
 	'edge.none': 'Nenhuma',
 	'edge.black': 'Preta',
 	'edge.white': 'Branca',
+	part: 'Item escolhido',
+	mode: 'Alças',
+	'mode.move': 'Mover',
+	'mode.rotate': 'Girar',
+	'mode.scale': 'Escalar',
+	position: 'Posição',
+	rotation: 'Rotação',
+	scale: 'Tamanho',
+	solid: 'Sólido: um corpo pisa nele e é barrado por ele',
+	remove: 'Remover',
+	'help.edit': 'Clique num item no mundo para escolhê-lo. Arraste uma alça para movê-lo; G, R e T trocam as alças.',
 	'help.pick': 'Escolha um item para colocar.',
 	'help.place': 'Clique onde ele vai: no chão, numa lateral ou sobre outro item. Esc larga o item.',
 	'refused.level': 'Só construtores deste mundo podem colocar itens aqui.',
@@ -73,7 +99,11 @@ const pt: typeof en = {
 	'refused.gone': 'Esse item não existe mais.',
 	'hint.items': 'itens, ou largar o item',
 	'hint.place.keys': 'Clique',
-	'hint.place': 'colocar o item na mão'
+	'hint.place': 'colocar o item na mão',
+	'hint.handles.keys': 'G R T',
+	'hint.handles': 'mover, girar ou escalar o item escolhido',
+	'hint.remove.keys': 'Delete',
+	'hint.remove': 'remover o item escolhido'
 };
 
 const zh: typeof en = {
@@ -103,6 +133,17 @@ const zh: typeof en = {
 	'edge.none': '无',
 	'edge.black': '黑',
 	'edge.white': '白',
+	part: '已选物件',
+	mode: '手柄',
+	'mode.move': '移动',
+	'mode.rotate': '旋转',
+	'mode.scale': '缩放',
+	position: '位置',
+	rotation: '旋转角',
+	scale: '尺寸',
+	solid: '实体：身体可站在上面并被其阻挡',
+	remove: '移除',
+	'help.edit': '点击世界中的物件以选中它。拖动手柄移动它；G、R、T 切换手柄。',
 	'help.pick': '选择要放置的物件。',
 	'help.place': '点击放置位置：地面、侧面或另一个物件上。Esc 放下。',
 	'refused.level': '只有本世界的建造者可以在这里放置物件。',
@@ -110,7 +151,11 @@ const zh: typeof en = {
 	'refused.gone': '该物件已不存在。',
 	'hint.items': '物件，或放下手中的物件',
 	'hint.place.keys': '点击',
-	'hint.place': '放置手中的物件'
+	'hint.place': '放置手中的物件',
+	'hint.handles.keys': 'G R T',
+	'hint.handles': '移动、旋转或缩放已选物件',
+	'hint.remove.keys': 'Delete',
+	'hint.remove': '移除已选物件'
 };
 
 export const t = words({ en, pt, zh });

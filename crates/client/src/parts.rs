@@ -26,7 +26,7 @@ use std::collections::{BTreeMap, HashMap};
 use glam::{DAffine3, DMat3, DVec3};
 use part::{Gap, Part, PartId, Pose, Shape};
 use protocol::Body;
-use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, PictureDraw, VolumeVertex};
+use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex};
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
 use voxel::{Finish, Paint};
@@ -81,6 +81,18 @@ pub struct Parts {
     wanted: Vec<[u8; 32]>,
     /// Where the moon is now, from the planet's centre.
     moon: DVec3,
+    /// The marks a hand shows over the world this frame: cubes in a paint,
+    /// each where its transform puts it, drawn over everything.
+    marks: Vec<ModelDraw>,
+}
+
+/// A mark a hand shows over the world: a unit cube in a paint, placed by a
+/// world transform from the planet's centre, drawn over everything and
+/// cast by nothing. The handles of a gizmo are marks.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Mark {
+    pub paint: u8,
+    pub transform: DAffine3,
 }
 
 impl Parts {
@@ -94,6 +106,35 @@ impl Parts {
             Body::Moon => self.moon,
             Body::Planet => DVec3::ZERO,
         }
+    }
+
+    /// The seat and pose a part standing in the world has: the world
+    /// transform from the planet's centre read back onto a body
+    /// (`seat::reseat`). `None` for a transform that is no pose.
+    pub fn reseat(
+        &self,
+        generator: &Generator,
+        body: Body,
+        world: &DAffine3,
+    ) -> Option<(Seat, Pose)> {
+        let on_body = DAffine3::from_translation(-self.centre(body)) * *world;
+        let (sector, pose) = seat::reseat(seat::sphere_of(generator, body), &on_body)?;
+        Some((Seat::on(body, sector), pose))
+    }
+
+    /// Shows marks over the world, in place of those shown before, and none
+    /// with none to show.
+    pub(crate) fn mark(&mut self, marks: &[Mark]) {
+        self.marks = marks
+            .iter()
+            .map(|mark| ModelDraw {
+                mesh: self
+                    .ensure(Shape::Cube, mark.paint)
+                    .expect("a cube is a model"),
+                transform: mark.transform,
+                pass: ModelPass::Over,
+            })
+            .collect();
     }
 
     /// A part by its name, and the seat it stands on.
@@ -190,16 +231,21 @@ impl Parts {
             .reduce(Footing::with)
     }
 
-    /// Every part drawn as a model, placed in the world this frame.
+    /// Every part drawn as a model, placed in the world this frame, and the
+    /// marks over them.
     pub fn drawn(&self, generator: &Generator) -> Vec<ModelDraw> {
         self.all()
             .filter_map(|(_, seat, part)| {
                 Some(ModelDraw {
                     mesh: model_of(part)?,
                     transform: self.place_of(generator, seat, &part.pose),
-                    glass: Paint::of(part.paint).finish == Finish::Glass,
+                    pass: match Paint::of(part.paint).finish {
+                        Finish::Glass => ModelPass::Glass,
+                        Finish::Matte | Finish::Light => ModelPass::Solid,
+                    },
                 })
             })
+            .chain(self.marks.iter().copied())
             .collect()
     }
 
@@ -232,21 +278,26 @@ impl Parts {
     /// Announces the model of a part, once. A file's is asked for instead,
     /// and announced when it arrives.
     fn mesh(&mut self, part: &Part) {
-        let Some(id) = model_of(part) else {
-            return;
-        };
-        if self.meshed.contains(&id) {
-            return;
-        }
-        match part.shape {
-            Shape::Cube => {
-                self.meshed.push(id);
-                self.changes.push(ModelChange::Add(id, cube(part.paint)));
+        self.ensure(part.shape, part.paint);
+    }
+
+    /// The model of a shape in a paint, announced the first time it is
+    /// asked for. A file's is asked for instead, and announced when it
+    /// arrives. `None` for a shape drawn another way, a picture.
+    fn ensure(&mut self, shape: Shape, paint: u8) -> Option<ModelId> {
+        let id = model_id(shape, paint)?;
+        if !self.meshed.contains(&id) {
+            match shape {
+                Shape::Cube => {
+                    self.meshed.push(id);
+                    self.changes.push(ModelChange::Add(id, cube(paint)));
+                }
+                Shape::Vox(hash) => self.want(hash),
+                // A picture is no model: drawn by `pictures`.
+                Shape::Image(_) => {}
             }
-            Shape::Vox(hash) => self.want(hash),
-            // A picture is no model: drawn by `pictures`.
-            Shape::Image(_) => {}
         }
+        Some(id)
     }
 
     /// Asks for a model's file, once: what a hand wants before it places
@@ -296,16 +347,22 @@ impl Parts {
     }
 }
 
-/// The model a part is drawn as: the core's shapes in a paint each, a file
-/// by its hash. `None` for a shape drawn another way, a picture.
+/// The model a part is drawn as. `None` for a shape drawn another way, a
+/// picture.
 fn model_of(part: &Part) -> Option<ModelId> {
-    let shape = match part.shape {
+    model_id(part.shape, part.paint)
+}
+
+/// The model of one of the core's shapes in a paint, or of a file by its
+/// hash.
+fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
+    let shape = match shape {
         Shape::Cube => 0,
         Shape::Vox(hash) => return Some(model_of_file(hash)),
         Shape::Image(_) => return None,
     };
     debug_assert!(shape < SHAPES >> 8);
-    Some(ModelId((shape << 8) | u64::from(part.paint)))
+    Some(ModelId((shape << 8) | u64::from(paint)))
 }
 
 fn model_of_file(hash: [u8; 32]) -> ModelId {

@@ -1149,6 +1149,7 @@ dependencies = [
  "glam",
  "items-world",
  "libm",
+ "part",
  "scene",
  "serde",
  "serde_json",

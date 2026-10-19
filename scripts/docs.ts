@@ -133,7 +133,7 @@ const ALLOWED: Record<string, string[]> = {
 	'build-world': ['world', 'voxel'],
 	'build-client': ['client', 'topology', 'voxel', 'build-world'],
 	'items-world': ['world'],
-	'items-client': ['client', 'topology', 'voxel', 'items-world'],
+	'items-client': ['client', 'topology', 'voxel', 'part', 'items-world'],
 };
 // A crate is a folder with a manifest: the core's under crates/, and a
 // plugin's two under plugins/<name>/, `<name>-client` and `<name>-world`

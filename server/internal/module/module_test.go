@@ -45,8 +45,8 @@ func TestTheModuleSaysWhatItCarries(t *testing.T) {
 		t.Fatalf("the core's cells are carried as an owner: %v %v", cells, cells.Plugin.Ops())
 	}
 	plugins := carried[1:]
-	if len(plugins) != 2 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On || plugins[0].Core {
-		t.Fatalf("this version carries chat, on, and building after it: %v", plugins)
+	if len(plugins) != 3 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On || plugins[0].Core {
+		t.Fatalf("this version carries chat, on, then building and items: %v", plugins)
 	}
 	if ops := plugins[0].Plugin.Ops(); len(ops) != 1 || ops[0] != (world.Op{Kind: "say", Level: world.LevelAnonymous}) {
 		t.Fatalf("chat offers one op, to every level: %v", ops)
@@ -56,6 +56,11 @@ func TestTheModuleSaysWhatItCarries(t *testing.T) {
 	build := plugins[1].Plugin
 	if build.Name() != "build" || build.Version() != 1 || !plugins[1].On || len(build.Ops()) != 0 {
 		t.Fatalf("building is on and offers no op: %s %d %v", build.Name(), build.Version(), build.Ops())
+	}
+	// So is items: placing is a hand's, and the parts are the core's.
+	items := plugins[2].Plugin
+	if items.Name() != "items" || items.Version() != 1 || !plugins[2].On || len(items.Ops()) != 0 {
+		t.Fatalf("items is on and offers no op: %s %d %v", items.Name(), items.Version(), items.Ops())
 	}
 }
 

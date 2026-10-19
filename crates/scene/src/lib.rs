@@ -366,14 +366,26 @@ pub enum ModelChange {
     Remove(ModelId),
 }
 
+/// Which pass a model is drawn in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ModelPass {
+    /// Opaque, with everything solid: it casts a shadow and hides what is
+    /// behind it.
+    Solid,
+    /// Glass: over what is solid and blended, tested against depth.
+    Glass,
+    /// Over everything, whatever stands before it, cast by nothing: a mark
+    /// for a hand to see, the handle of a gizmo.
+    Over,
+}
+
 /// One model placed in the world this frame.
 #[derive(Clone, Copy, Debug)]
 pub struct ModelDraw {
     pub mesh: ModelId,
     /// World from model space.
     pub transform: DAffine3,
-    /// Whether it is drawn as glass, over what is solid and blended.
-    pub glass: bool,
+    pub pass: ModelPass,
 }
 
 /// Stable identity of a skinned mesh while it is in the scene.

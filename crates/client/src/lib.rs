@@ -37,7 +37,7 @@ pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{ContentId, ImageKind, Media, Part, PartId, PictureLevel, Pose as PartPose, Shape};
-pub use parts::{CUBE, PartRefusal, Parts, VOXEL};
+pub use parts::{CUBE, Mark, PartRefusal, Parts, VOXEL};
 use peers::Peers;
 use pictures::Pictures;
 pub use pictures::{FULL_SIDE, LOW_SIDE, Screen, THUMB_SIDE};

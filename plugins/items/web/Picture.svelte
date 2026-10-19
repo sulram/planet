@@ -11,21 +11,26 @@
 	// engine's (`image.ts`).
 	let { seam, key }: KindProps = $props();
 
+	/** Why the last file was not taken: the world's refusal codes, and the browser's. */
+	type Refused = 'kind' | 'size' | 'level' | 'key' | 'unreachable' | 'canvas';
+	const refusals: readonly Refused[] = ['kind', 'size', 'level', 'key', 'unreachable', 'canvas'];
+
 	let picture = $state<Media | null>(null);
 	let busy = $state(false);
-	let error = $state('');
+	let error = $state<Refused | null>(null);
 	let input = $state<HTMLInputElement>();
 
 	async function picked(event: Event) {
 		const file = (event.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
 		busy = true;
-		error = '';
+		error = null;
 		try {
 			picture = await prepareImage(file, (blob) => upload(blob, key));
 			seam.command('take', { item: 'picture', media: picture });
 		} catch (refused) {
-			error = refused instanceof Error ? refused.message : 'kind';
+			const code = refused instanceof Error ? refused.message : '';
+			error = refusals.find((known) => known === code) ?? 'unreachable';
 		} finally {
 			busy = false;
 			if (input) input.value = '';

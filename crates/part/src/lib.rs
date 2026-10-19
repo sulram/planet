@@ -339,7 +339,8 @@ fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
 /// Where a line `from + toward * t`, in a part's own space, is inside the
 /// unit box: the `t` it goes in and the `t` it comes out, or `None` when it
 /// never is. A line along a side counts as inside it. What a shape with a
-/// grid of its own walks between.
+/// grid of its own walks between, and what a handle drawn as a box is
+/// picked by.
 pub fn through(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
     slab(from, toward)
 }

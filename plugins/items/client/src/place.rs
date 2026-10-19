@@ -1,7 +1,8 @@
 //! Placing an item: a click puts it where the pointer meets the world, on a
 //! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
 //! A picture stands a metre tall in its own aspect, its face turned to the
-//! eye, as a pane nobody collides with.
+//! eye, as a pane nobody collides with. Placed, the part is picked, so the
+//! hand that put it there moves it next.
 
 use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
 use glam::{DQuat, DVec3};
@@ -49,8 +50,12 @@ impl Items {
                 }
             }
         };
-        if let Err(refusal) = host.place_part(feet.seat, part) {
-            refuse(host, refusal.into());
+        match host.place_part(feet.seat, part) {
+            Ok(id) => {
+                self.take(None, host);
+                self.pick(Some(id), host);
+            }
+            Err(refusal) => refuse(host, refusal.into()),
         }
     }
 }
