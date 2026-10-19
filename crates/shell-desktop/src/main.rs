@@ -9,6 +9,7 @@
 
 mod args;
 mod assets;
+mod moving;
 mod shot;
 mod slice;
 mod window;

@@ -67,6 +67,8 @@ struct Stage {
     gpu: Gpu,
     renderer: Renderer,
     panel: ui_native::Panel,
+    /// The pictures that move, playing into the renderer.
+    playing: crate::moving::Playing,
     last_frame: Instant,
     /// The pointer is captured and steers the camera.
     looking: bool,
@@ -103,6 +105,7 @@ impl Stage {
             gpu,
             renderer,
             panel,
+            playing: crate::moving::Playing::default(),
             last_frame: Instant::now(),
             looking: false,
             right_down: None,
@@ -142,6 +145,7 @@ impl Stage {
 
         client.set_view([self.config.width, self.config.height]);
         assets::serve(client);
+        self.playing.tick(client, &self.renderer);
         let frame = client.update(dt, input);
         // A tool aims with a free pointer: taking one lets a captured one go.
         if client.pointing() && self.looking {

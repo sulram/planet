@@ -18,19 +18,24 @@ fn files() -> Option<PathBuf> {
     std::env::var_os("PLANET_FILES").map(PathBuf::from)
 }
 
+/// Where a reference is on disk: a world's file under the files folder, a
+/// default asset under the root. An absolute URL needs an HTTP client,
+/// which arrives with the socket: none.
+pub fn locate(reference: &str) -> Option<PathBuf> {
+    if let Some(name) = reference.strip_prefix("asset://") {
+        files().map(|files| files.join(name))
+    } else if reference.contains("://") {
+        None
+    } else {
+        Some(root().join(reference))
+    }
+}
+
 /// Answers every pending request from disk. Reads are small and local, so
 /// they happen inline.
 pub fn serve(client: &mut Client) {
     for request in client.drain_asset_requests() {
-        let path = if let Some(name) = request.path.strip_prefix("asset://") {
-            files().map(|files| files.join(name))
-        } else if request.path.contains("://") {
-            // An absolute URL needs an HTTP client, which arrives with the
-            // socket.
-            None
-        } else {
-            Some(root().join(&request.path))
-        };
+        let path = locate(&request.path);
         let bytes = match path {
             Some(path) => std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display())),
             None => Err(format!("{}: out of the desktop's reach", request.path)),
