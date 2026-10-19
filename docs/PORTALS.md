@@ -74,8 +74,12 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   builds, no bodies, no shadows, no grass. The streamer splits for the
   nearest of two eyes, the one past the portal four times as far as the
   view's, so a quarter height sight costs a quarter (`client::terrain`).
-- One portal is seen through at a time: the nearest within 32 m whose
-  landmark is known here, held or charted. Every other pane is dark, lit
-  with its own faint light. A pane casts no shadow: light passes a portal.
+- One portal is seen through at a time: the nearest within 96 m whose
+  landmark is known here, held or charted. Every other pane is a lens:
+  what is behind it, bent toward its middle and pulsing, as through thick
+  glass, with a faint rim, so a portal is a portal from afar. A pane
+  becomes a window from a lens, and back, over 0.6 s. The panes are drawn
+  after the sea and the clouds over a copy of the picture, which the lens
+  reads. A pane casts no shadow: light passes a portal.
 - What is drawn ahead and not built: the builds seen through it, the
   oblique near plane (sketches/portals.md).

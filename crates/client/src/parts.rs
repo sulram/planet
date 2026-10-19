@@ -420,14 +420,14 @@ impl Parts {
     }
 
     /// The panes of the portals in reach: the disc inside each ring, placed
-    /// as a picture's quad is, facing the ring's front. `seen` names the
-    /// portal the world is seen through this frame.
+    /// as a picture's quad is, facing the ring's front. `seen` says how
+    /// much the world is seen through each, by name; none is a lens.
     pub fn panes(
         &self,
         generator: &Generator,
         body: (Body, DVec3),
         reach_m: f64,
-        seen: Option<PartId>,
+        seen: &BTreeMap<PartId, f32>,
     ) -> Vec<PaneDraw> {
         // The quad's `x` along the box's, its `y` up the box, its front out
         // of the box's front (`-y`), the disc as wide as the rim leaves.
@@ -448,7 +448,7 @@ impl Parts {
             .filter(|(_, seat, part, _)| away_m(generator, *seat, &part.pose, body) <= reach_m)
             .map(|(id, seat, part, portal)| PaneDraw {
                 transform: self.place_of(generator, seat, &part.pose) * quad_in_box(portal),
-                seen: seen == Some(id),
+                seen: seen.get(&id).copied().unwrap_or(0.0),
             })
             .collect()
     }

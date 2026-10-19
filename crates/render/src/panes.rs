@@ -5,8 +5,11 @@
 //! the screen. The eye past the portal shares the view's projection, so a
 //! point of the pane and the point seen through it fall on the same pixel,
 //! and the pane is a window, with parallax (Valve's Portal draws its
-//! portals so). A pane with nothing seen through it is dark, lit with its
-//! own faint light. A pane casts no shadow: light passes a portal.
+//! portals so). A pane with nothing seen through it is a lens: what is
+//! behind it, bent toward its middle and pulsing, as through thick glass,
+//! so a portal is a portal from afar too. Drawn after the sea and the
+//! clouds over a copy of the picture so far, which the lens reads. A pane
+//! casts no shadow: light passes a portal.
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DAffine3, DVec3};
@@ -20,7 +23,8 @@ use crate::{PipelineSpec, Surface, pipeline};
 #[repr(C)]
 struct Instance {
     relative_from_quad: [[f32; 4]; 4],
-    /// `x`: 1 when the world seen through the portal shows in this pane.
+    /// `x`: how much the world seen through the portal shows in this pane,
+    /// 0 a lens to 1 a window.
     params: [f32; 4],
 }
 
@@ -39,6 +43,7 @@ impl Panes {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         view_layout: &wgpu::BindGroupLayout,
+        behind_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
     ) -> Panes {
         let through_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -83,9 +88,9 @@ impl Panes {
             PipelineSpec {
                 label: "panes",
                 source: include_str!("shaders/pane.wgsl"),
-                layouts: &[view_layout, &through_layout],
+                layouts: &[view_layout, &through_layout, behind_layout],
                 buffers,
-                surface: Surface::Solid,
+                surface: Surface::Lens,
             },
         );
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -148,7 +153,8 @@ impl Panes {
     }
 
     /// Draws every pane [`Instances::write`] placed, in order, sampling the
-    /// world seen through the portal when one is drawn this frame.
+    /// world seen through the portal when one is drawn this frame, in a
+    /// pass with the copy of the picture behind them bound as group 2.
     pub fn draw(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
@@ -235,7 +241,7 @@ impl Instances {
                 let relative = DAffine3::from_translation(-camera) * pane.transform;
                 Instance {
                     relative_from_quad: glam::DMat4::from(relative).as_mat4().to_cols_array_2d(),
-                    params: [f32::from(u8::from(pane.seen)), 0.0, 0.0, 0.0],
+                    params: [pane.seen, 0.0, 0.0, 0.0],
                 }
             })
             .collect();

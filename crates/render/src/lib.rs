@@ -204,7 +204,13 @@ impl Renderer {
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
         let pictures =
             pictures::Pictures::new(&device, &gpu.queue, &view_layout, &shadow_layout, scene);
-        let panes = panes::Panes::new(&device, &gpu.queue, &view_layout, scene);
+        let panes = panes::Panes::new(
+            &device,
+            &gpu.queue,
+            &view_layout,
+            composer.behind_layout(),
+            scene,
+        );
         let models = models::Models::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
@@ -512,8 +518,6 @@ impl Renderer {
             self.skinned.draw(&mut pass, &resources.skinned, skinned);
             self.pictures
                 .draw(&mut pass, &resources.pictures, &frame.pictures);
-            self.panes
-                .draw(&mut pass, &resources.panes, &frame.panes, through);
         }
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
@@ -555,6 +559,38 @@ impl Renderer {
         if frame.effects.clouds && !submerged {
             self.composer
                 .clouds(encoder, &resources.bind_group, targets, &mut at);
+        }
+        // The portals' panes go over the sea and the clouds, tested against
+        // the depth of what is solid: a lens bends a copy of what is behind
+        // it, a window shows the world past the portal.
+        if sight.whole && !frame.panes.is_empty() {
+            let (over, behind) = self.composer.behind(encoder, targets, &at);
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("panes"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: over,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                // The depth is read only here: the lens reads it as a
+                // texture in the same pass, and a pane writes none.
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &targets.depth,
+                    depth_ops: None,
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &resources.bind_group, &[]);
+            pass.set_bind_group(2, behind, &[]);
+            self.panes
+                .draw(&mut pass, &resources.panes, &frame.panes, through);
         }
         // Glass, and what only a builder sees, go over the sea and the
         // clouds, tested against the depth of what is solid: drawn before
@@ -762,6 +798,9 @@ enum Surface {
     Guide,
     /// A mark over everything: tested against no depth and writing none.
     Overlay,
+    /// A portal's pane: opaque, tested against depth and writing none,
+    /// drawn after the sea and the clouds over a copy of what is behind it.
+    Lens,
     Foliage,
     Shadow,
     ShadowCutout,
@@ -821,7 +860,7 @@ fn pipeline(
         primitive: wgpu::PrimitiveState {
             cull_mode: (matches!(
                 spec.surface,
-                Surface::Solid | Surface::Glass | Surface::Ghost | Surface::Overlay
+                Surface::Solid | Surface::Glass | Surface::Ghost | Surface::Overlay | Surface::Lens
             ) || shadow)
                 .then_some(wgpu::Face::Back),
             ..Default::default()

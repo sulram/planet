@@ -203,7 +203,7 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
         pictures: Vec::new(),
         panes: vec![scene::PaneDraw {
             transform: pane,
-            seen: false,
+            seen: 0.0,
         }],
         through: None,
         warp: None,
@@ -221,7 +221,7 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
     );
 
     // Seen through: the eye past the portal faces the sun.
-    frame.panes[0].seen = true;
+    frame.panes[0].seen = 1.0;
     frame.through = Some(scene::Through {
         camera: Camera {
             rotation: DQuat::from_rotation_y(core::f64::consts::PI),

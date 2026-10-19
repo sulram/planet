@@ -549,9 +549,11 @@ pub struct Warp {
 pub struct PaneDraw {
     /// World from the quad.
     pub transform: DAffine3,
-    /// Whether the world seen through the portal, [`Frame::through`], shows
-    /// in it: a window, else a dark pane lit with its own faint light.
-    pub seen: bool,
+    /// How much the world seen through the portal, [`Frame::through`],
+    /// shows in it, 0 to 1: at 0 a lens, the world behind the pane bent and
+    /// pulsing as through glass; at 1 a window; between, the one becoming
+    /// the other.
+    pub seen: f32,
 }
 
 /// The world past a portal, as seen from the eye carried through it: the

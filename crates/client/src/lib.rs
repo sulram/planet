@@ -25,6 +25,8 @@ mod session;
 mod terrain;
 mod wardrobe;
 
+use std::collections::BTreeMap;
+
 use glam::{DAffine3, DMat3, DQuat, DVec3};
 use scene::{ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
@@ -129,6 +131,10 @@ pub struct Client {
     had_labels: bool,
     /// A body's passage through a portal, while it lasts.
     passage: Option<Passage>,
+    /// How much each portal's pane shows the world seen through it, by
+    /// name: eased toward 1 for the one seen through, toward 0 for the
+    /// rest, so a lens becomes a window and back over [`SEEN_S`].
+    seen: BTreeMap<PartId, f32>,
     /// Whether the last frame's streaming found nothing to build.
     settled: bool,
     entropy: u64,
@@ -196,6 +202,7 @@ impl Client {
             had_anchors: false,
             had_labels: false,
             passage: None,
+            seen: BTreeMap::new(),
             settled: false,
             entropy: 0,
         };
@@ -1082,6 +1089,7 @@ impl Client {
         self.parts
             .look(&self.generator, self.controller.held_by(), dt);
         let through = self.through(&camera);
+        self.ease_seen(dt, through.as_ref().map(|(id, _)| *id));
         let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -1191,9 +1199,30 @@ impl Client {
         self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
         let through = self.through(&camera);
+        self.ease_seen(f64::INFINITY, through.as_ref().map(|(id, _)| *id));
         let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::settle);
         let pictures = self.pictures_drawn(&camera);
         self.frame(camera, patches, pictures, through.zip(seen))
+    }
+
+    /// Eases how much each portal's pane shows the world seen through it:
+    /// toward 1 for the portal seen through this frame, toward 0 for every
+    /// other, a step of `dt` over [`SEEN_S`]. A portal no longer held is
+    /// forgotten.
+    fn ease_seen(&mut self, dt: f64, through: Option<PartId>) {
+        let step = (dt / SEEN_S).min(1.0) as f32;
+        let portals: Vec<PartId> = self
+            .parts
+            .all()
+            .filter(|(_, _, part)| matches!(part.shape, Shape::Portal(_)))
+            .map(|(id, _, _)| id)
+            .collect();
+        self.seen.retain(|id, _| portals.contains(id));
+        for id in portals {
+            let target = f32::from(u8::from(through == Some(id)));
+            let amount = self.seen.entry(id).or_insert(0.0);
+            *amount += (target - *amount).clamp(-step, step);
+        }
     }
 
     /// The body's motion as the figure shows it: falling, while it passes
@@ -1487,7 +1516,7 @@ impl Client {
                 &self.generator,
                 self.controller.held_by(),
                 f64::from(self.effects.parts_reach_m),
-                through.as_ref().map(|((id, _), _)| *id),
+                &self.seen,
             ),
             through: through.map(|((_, camera), patches)| scene::Through { camera, patches }),
             warp: self.warp(&camera),
@@ -1724,9 +1753,11 @@ const LABEL_M: f64 = 120.0;
 /// within a frame's budget, or [`Terrain::settle`] until nothing is missing.
 type Select = fn(&mut Terrain, &Generator, Cover, &[Viewpoint], f32) -> Vec<Vec<scene::PatchId>>;
 
-/// How far from the body a portal is seen through, metres: a plot's width.
-/// One at a time, the nearest.
-const THROUGH_M: f64 = 32.0;
+/// How far from the body a portal is seen through, metres: three plots.
+/// One at a time, the nearest; further, a pane is a lens.
+const THROUGH_M: f64 = 96.0;
+/// How long a pane takes to become a window from a lens, and back, seconds.
+const SEEN_S: f64 = 0.6;
 
 /// How long a body falls into a portal before it is through, and how long
 /// the picture takes to burst out past it, seconds: a passage is under a
