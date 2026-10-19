@@ -48,6 +48,17 @@ texture, lit or shining, a still or one that moves.
   100 ms, as browsers do), and a muted looping `<video>` plays an MP4; under
   WebGL2 a frame goes through an `ImageBitmap`. On the desktop the `image`
   crate decodes a GIF or a WebP on a thread of its own; a video shows its
-  poster until GStreamer arrives (ROADMAP). Sound is not played.
+  poster until GStreamer arrives (ROADMAP).
+- A video is heard: its reach (`reach_m`, the knob a lamp has for its
+  light) says how far, 0 by its size, twelve times its height. Within its
+  reach it stays open out of view, so the sound does not die when one turns
+  away, and each frame the engine names every playing video with its place
+  and reach (`Client::sounds`). The shell mixes them at the eye with the
+  platform's audio: on the web one Web Audio listener at the origin of the
+  camera's frame and a panner a source, HRTF for direction, a straight fall
+  off from a metre to the reach. The browser lets sound out after the first
+  press or key; a video is muted until then. The desktop plays no sound.
+  A peer's voice, heard by proximity, is the next source over the same
+  list and panners.
 - A moving picture is placed as a screen, in the light finish, until its
   shine says otherwise.
