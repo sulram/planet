@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DAffine3, DMat4, DVec3, Vec3};
-use scene::{ModelChange, ModelDraw, ModelId, VolumeVertex};
+use scene::{ModelChange, ModelDraw, ModelId, ModelPass, VolumeVertex};
 use wgpu::util::DeviceExt;
 
 use crate::{PipelineSpec, Surface, pipeline};
@@ -31,6 +31,7 @@ pub struct Models {
     pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
     glass_pipeline: wgpu::RenderPipeline,
+    over_pipeline: wgpu::RenderPipeline,
     instance_layout: wgpu::BindGroupLayout,
     meshes: HashMap<ModelId, Mesh>,
 }
@@ -89,6 +90,7 @@ impl Models {
             pipeline: make(view_layout, Surface::Solid),
             shadow_pipeline: make(shadow_layout, Surface::Shadow),
             glass_pipeline: make(view_layout, Surface::Glass),
+            over_pipeline: make(view_layout, Surface::Overlay),
             instance_layout,
             meshes: HashMap::new(),
         }
@@ -166,19 +168,25 @@ impl Models {
     }
 
     /// The glass, after everything opaque, the sea and the clouds: it tests
-    /// depth and writes none.
+    /// depth and writes none. Then the marks over everything.
     pub fn draw_over(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         uniforms: &InstanceUniforms,
         placed: &Placed,
     ) {
-        if placed.glass.is_empty() {
-            return;
-        }
-        pass.set_pipeline(&self.glass_pipeline);
-        for &(slot, id) in &placed.glass {
-            self.draw_one(pass, uniforms, slot, id);
+        let passes = [
+            (&self.glass_pipeline, &placed.glass),
+            (&self.over_pipeline, &placed.over),
+        ];
+        for (pipeline, drawn) in passes {
+            if drawn.is_empty() {
+                continue;
+            }
+            pass.set_pipeline(pipeline);
+            for &(slot, id) in drawn {
+                self.draw_one(pass, uniforms, slot, id);
+            }
         }
     }
 
@@ -204,13 +212,14 @@ impl Models {
 pub struct Placed {
     solid: Vec<(usize, ModelId, Vec3, f32)>,
     glass: Vec<(usize, ModelId)>,
+    over: Vec<(usize, ModelId)>,
 }
 
 impl Placed {
     /// Whether anything is drawn over the picture once the sea and the
     /// clouds are in it.
     pub fn over(&self) -> bool {
-        !self.glass.is_empty()
+        !self.glass.is_empty() || !self.over.is_empty()
     }
 }
 
@@ -249,9 +258,10 @@ impl InstanceUniforms {
                 normal_from_model: DMat4::from_mat3(normal).as_mat4().to_cols_array_2d(),
             };
             queue.write_buffer(&self.slots[slot].0, 0, bytemuck::bytes_of(&uniform));
-            match draw.glass {
-                true => placed.glass.push((slot, draw.mesh)),
-                false => {
+            match draw.pass {
+                ModelPass::Glass => placed.glass.push((slot, draw.mesh)),
+                ModelPass::Over => placed.over.push((slot, draw.mesh)),
+                ModelPass::Solid => {
                     let mesh = &models.meshes[&draw.mesh];
                     let stretch = [relative.x_axis, relative.y_axis, relative.z_axis]
                         .map(DVec3::length)

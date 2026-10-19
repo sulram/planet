@@ -36,7 +36,7 @@ pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{Part, PartId, Pose as PartPose, Shape};
-pub use parts::{CUBE, PartRefusal, Parts};
+pub use parts::{CUBE, Mark, PartRefusal, Parts};
 use peers::Peers;
 pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, Plugin, Turn};

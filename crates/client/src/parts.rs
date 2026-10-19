@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use glam::{DAffine3, DVec3};
 use part::{Part, PartId, Pose, Shape};
 use protocol::Body;
-use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, VolumeVertex};
+use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, VolumeVertex};
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
 use voxel::{Finish, Paint};
@@ -63,6 +63,18 @@ pub struct Parts {
     changes: Vec<ModelChange>,
     /// Where the moon is now, from the planet's centre.
     moon: DVec3,
+    /// The marks a hand shows over the world this frame: cubes in a paint,
+    /// each where its transform puts it, drawn over everything.
+    marks: Vec<ModelDraw>,
+}
+
+/// A mark a hand shows over the world: a unit cube in a paint, placed by a
+/// world transform from the planet's centre, drawn over everything and
+/// cast by nothing. The handles of a gizmo are marks.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Mark {
+    pub paint: u8,
+    pub transform: DAffine3,
 }
 
 impl Parts {
@@ -76,6 +88,33 @@ impl Parts {
             Body::Moon => self.moon,
             Body::Planet => DVec3::ZERO,
         }
+    }
+
+    /// The seat and pose a part standing in the world has: the world
+    /// transform from the planet's centre read back onto a body
+    /// (`seat::reseat`). `None` for a transform that is no pose.
+    pub fn reseat(
+        &self,
+        generator: &Generator,
+        body: Body,
+        world: &DAffine3,
+    ) -> Option<(Seat, Pose)> {
+        let on_body = DAffine3::from_translation(-self.centre(body)) * *world;
+        let (sector, pose) = seat::reseat(seat::sphere_of(generator, body), &on_body)?;
+        Some((Seat::on(body, sector), pose))
+    }
+
+    /// Shows marks over the world, in place of those shown before, and none
+    /// with none to show.
+    pub(crate) fn mark(&mut self, marks: &[Mark]) {
+        self.marks = marks
+            .iter()
+            .map(|mark| ModelDraw {
+                mesh: self.ensure(Shape::Cube, mark.paint),
+                transform: mark.transform,
+                pass: ModelPass::Over,
+            })
+            .collect();
     }
 
     /// A part by its name, and the seat it stands on.
@@ -172,14 +211,18 @@ impl Parts {
             .reduce(Footing::with)
     }
 
-    /// Every part, placed in the world this frame.
+    /// Every part, placed in the world this frame, and the marks over them.
     pub fn drawn(&self, generator: &Generator) -> Vec<ModelDraw> {
         self.all()
             .map(|(_, seat, part)| ModelDraw {
                 mesh: model_of(part),
                 transform: self.place_of(generator, seat, &part.pose),
-                glass: Paint::of(part.paint).finish == Finish::Glass,
+                pass: match Paint::of(part.paint).finish {
+                    Finish::Glass => ModelPass::Glass,
+                    Finish::Matte | Finish::Light => ModelPass::Solid,
+                },
             })
+            .chain(self.marks.iter().copied())
             .collect()
     }
 
@@ -189,25 +232,36 @@ impl Parts {
 
     /// Announces the model of a part, once.
     fn mesh(&mut self, part: &Part) {
-        let id = model_of(part);
-        if self.meshed.contains(&id) {
-            return;
+        self.ensure(part.shape, part.paint);
+    }
+
+    /// The model of a shape in a paint, announced the first time it is
+    /// asked for.
+    fn ensure(&mut self, shape: Shape, paint: u8) -> ModelId {
+        let id = model_id(shape, paint);
+        if !self.meshed.contains(&id) {
+            self.meshed.push(id);
+            let mesh = match shape {
+                Shape::Cube => cube(paint),
+            };
+            self.changes.push(ModelChange::Add(id, mesh));
         }
-        self.meshed.push(id);
-        let mesh = match part.shape {
-            Shape::Cube => cube(part.paint),
-        };
-        self.changes.push(ModelChange::Add(id, mesh));
+        id
     }
 }
 
-/// The model a part is drawn as: the core's shapes in a paint each.
+/// The model a part is drawn as.
 fn model_of(part: &Part) -> ModelId {
-    let shape = match part.shape {
+    model_id(part.shape, part.paint)
+}
+
+/// The model of one of the core's shapes in a paint.
+fn model_id(shape: Shape, paint: u8) -> ModelId {
+    let shape = match shape {
         Shape::Cube => 0,
     };
     debug_assert!(shape < SHAPES >> 8);
-    ModelId((shape << 8) | u64::from(part.paint))
+    ModelId((shape << 8) | u64::from(paint))
 }
 
 /// A cube of one voxel in a paint: the unit box, its sides wound counter

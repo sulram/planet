@@ -1115,6 +1115,7 @@ dependencies = [
  "client",
  "glam",
  "items-world",
+ "part",
  "serde",
  "serde_json",
  "topology",

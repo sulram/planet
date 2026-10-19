@@ -10,6 +10,7 @@
 		Icon,
 		IconButton,
 		Palette,
+		VectorInput,
 		Input,
 		LangSwitch,
 		Page,
@@ -255,6 +256,9 @@
 				<Icon name="puzzle" label="Plugins" />
 				<Icon name="languages" label="Language" />
 				<Icon name="box" label="Cube" />
+				<Icon name="move-3d" label="Move" />
+				<Icon name="rotate-3d" label="Rotate" />
+				<Icon name="scale-3d" label="Scale" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
 			</div>
 			<p class="muted">IconButton: an action said by its icon alone, square, for a corner where words do not fit. The label is required; it is the accessible name and the tooltip.</p>
@@ -269,6 +273,12 @@
 			<p>The paints of a world as they will be laid: the colour in a finish and with an edge, the one in hand pressed.</p>
 			<Palette colors={['#f2f0eb', '#b8b8b3', '#5c5c5a', '#1e1e1f', '#9c3b2e', '#c8693f', '#d9c08c', '#7a5230']} paint={4} finish="matte" edge="none" label="Colour" pick={(n) => `Colour ${n}`} onpick={() => {}} />
 			<Palette colors={['#f2f0eb', '#b8b8b3', '#5c5c5a', '#1e1e1f', '#9c3b2e', '#c8693f', '#d9c08c', '#7a5230']} paint={1} finish="glass" edge="black" label="Colour, glass" pick={(n) => `Colour ${n}`} onpick={() => {}} />
+		</section>
+		<section>
+			<h2>VectorInput</h2>
+			<p>A vector, one field an axis: drag a field sideways to scrub its value, Shift for ten times the step, click to type.</p>
+			<VectorInput label="Position" axes={['u', 'v', 'h']} values={[1024.5, 980.25, 12]} step={0.5} onchange={() => {}} />
+			<VectorInput label="Rotation" axes={['x', 'y', 'z']} values={[0, 0, 45]} step={1} decimals={0} min={-180} max={180} onchange={() => {}} />
 		</section>
 
 		<section>

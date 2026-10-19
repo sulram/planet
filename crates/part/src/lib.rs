@@ -60,7 +60,7 @@ impl Pose {
 
     /// The part's own space from the flat frame, with the anchor in it: what
     /// a point of the seat is in the unit box.
-    fn inward(&self) -> DAffine3 {
+    pub fn inward(&self) -> DAffine3 {
         self.local().inverse() * DAffine3::from_translation(-DVec3::from(self.at))
     }
 
@@ -168,6 +168,13 @@ impl Part {
     pub fn placed(&self) -> DAffine3 {
         DAffine3::from_translation(DVec3::from(self.pose.at)) * self.pose.local()
     }
+}
+
+/// Where a line `from + toward * t`, said in the space of a unit box, is
+/// inside it: the `t` it goes in and the `t` it comes out, or `None` when it
+/// never is. What a handle drawn as a box is picked by.
+pub fn through(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
+    slab(from, toward)
 }
 
 fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {

@@ -164,12 +164,12 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 	if status, _ := call(t, "POST", web.URL+"/api/world", recipe); status != http.StatusOK {
 		t.Fatalf("the world is founded: %d", status)
 	}
-	if _, about := call(t, "GET", web.URL+"/api/world", nil); !slices.Equal(spoken(about), []string{"chat", "build"}) {
+	if _, about := call(t, "GET", web.URL+"/api/world", nil); !slices.Equal(spoken(about), []string{"chat", "build", "items"}) {
 		t.Fatalf("a world says which plugins it speaks: %v", about)
 	}
 
 	a, welcome := dial(t, web)
-	if len(welcome.Plugins) != 2 || welcome.Plugins[0].Name != "chat" || welcome.Plugins[0].Version != 1 {
+	if len(welcome.Plugins) != 3 || welcome.Plugins[0].Name != "chat" || welcome.Plugins[0].Version != 1 {
 		t.Fatalf("and says it again in its welcome: %v", welcome.Plugins)
 	}
 	a.say(line("hi"))
@@ -189,13 +189,13 @@ func TestChatRidesTheEnvelopeAndAnAdminSwitchesIt(t *testing.T) {
 	if status != http.StatusOK || slices.Contains(spoken(about), "chat") {
 		t.Fatalf("an admin switches chat off: %d %v", status, about)
 	}
-	if on := a.hear(func(m *pb.ServerMessage) bool { return m.GetPlugins() != nil }).GetPlugins(); len(on.Plugins) != 1 || on.Plugins[0].Name != "build" {
+	if on := a.hear(func(m *pb.ServerMessage) bool { return m.GetPlugins() != nil }).GetPlugins(); len(on.Plugins) != 2 || on.Plugins[0].Name != "build" || on.Plugins[1].Name != "items" {
 		t.Fatalf("whoever is here is told, and what else was on stays on: %v", on)
 	}
 	// Off, a line is dropped: the next thing heard from a plugin is none.
 	a.say(line("anyone?"))
 	b, late := dial(t, web)
-	if len(late.Plugins) != 1 || late.Plugins[0].Name != "build" {
+	if len(late.Plugins) != 2 || late.Plugins[0].Name != "build" {
 		t.Fatalf("and whoever arrives after hears it off: %v", late.Plugins)
 	}
 	b.say(&pb.ClientMessage{Message: &pb.ClientMessage_Wear{Wear: &pb.Wear{Avatar: "avatars/Ada.vrm"}}})

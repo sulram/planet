@@ -1,20 +1,25 @@
 <script lang="ts">
-	import { Alert, Icon, IconButton, Palette, Panel, Segmented } from '$lib/ds';
+	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, Segmented, VectorInput } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import type { Seam } from '$lib/plugins/plugin';
 	import { kinds } from './kinds';
-	import { edges, finishes, type Edge, type Finish, type Item, type Refusal } from './protocol';
+	import { edges, finishes, modes, type Edge, type Finish, type Item, type Mode, type Picked, type Refusal } from './protocol';
 	import { t } from './words';
 
 	// The menu of items: a button in the top left corner, and the panel it
 	// opens. The kinds to place, the one in hand pressed; under them the
-	// controls of that kind, when it has any, and the material what is placed
-	// next is made of, the palette as building shows it. The foot says what
-	// to do.
+	// controls of that kind, when it has any. Then the item picked in the
+	// world, when one is: what its handles do, where it stands, how it is
+	// turned, how big it is, whether it is solid, and the way to remove it.
+	// Then the material, the palette as building shows it, which paints what
+	// is placed next and the item picked alike. The foot says what to do.
 	interface Props {
-		open: boolean;
+		/** Whether the menu is open: the pointer picks items in the world. */
+		editing: boolean;
 		/** The item in hand, null when none. */
 		item: Item | null;
+		mode: Mode;
+		picked: Picked | null;
 		/** Index into `palette`. */
 		paint: number;
 		finish: Finish;
@@ -24,25 +29,31 @@
 		/** Why the last thing asked for was not done, until the next one. */
 		refused: Refusal | null;
 		seam: Seam;
-		onopen: () => void;
-		onclose: () => void;
+		onedit: (on: boolean) => void;
 		ontake: (item: Item | null) => void;
+		onmode: (mode: Mode) => void;
+		onset: (set: Partial<Omit<Picked, 'id'>>) => void;
+		onremove: () => void;
 		onpaint: (paint: number) => void;
 		onfinish: (finish: Finish) => void;
 		onedge: (edge: Edge) => void;
 	}
 
-	let { open, item, paint, finish, edge, palette, refused, seam, onopen, onclose, ontake, onpaint, onfinish, onedge }: Props = $props();
+	let { editing, item, mode, picked, paint, finish, edge, palette, refused, seam, onedit, ontake, onmode, onset, onremove, onpaint, onfinish, onedge }: Props =
+		$props();
 
+	const modeIcons = { move: 'move-3d', rotate: 'rotate-3d', scale: 'scale-3d' } as const;
+	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`mode.${value}`) })));
 	const finishOptions = $derived(finishes.map((value) => ({ value, label: t(`finish.${value}`) })));
 	const edgeOptions = $derived(edges.map((value) => ({ value, label: t(`edge.${value}`) })));
 	const inHand = $derived(kinds.find((kind) => kind.name === item));
+	const vector = (values: number[]) => [values[0], values[1], values[2]] as [number, number, number];
 </script>
 
-{#if open}
+{#if editing}
 	<Panel title={t('title')} corner="top-left">
 		{#snippet aside()}
-			<IconButton icon="x" label="{core('common.close')} · Esc" onclick={onclose} />
+			<IconButton icon="x" label="{core('common.close')} · Esc" onclick={() => onedit(false)} />
 		{/snippet}
 		<div class="kinds" role="group" aria-label={t('kind')}>
 			{#each kinds as kind (kind.name)}
@@ -60,6 +71,20 @@
 		{#if refused}
 			<Alert variant="info">{t(`refused.${refused}`)}</Alert>
 		{/if}
+		{#if picked}
+			<section>
+				<header class="head">
+					<h3>{t('part')}</h3>
+					<Icon name={modeIcons[mode]} />
+				</header>
+				<Segmented options={modeOptions} value={mode} label={t('mode')} onselect={onmode} />
+				<VectorInput label={t('position')} axes={['u', 'v', 'h']} values={picked.at} step={0.5} decimals={1} onchange={(at) => onset({ at: vector(at) })} />
+				<VectorInput label={t('rotation')} axes={['x', 'y', 'z']} values={picked.rotation} step={1} decimals={0} min={-180} max={180} onchange={(rotation) => onset({ rotation: vector(rotation) })} />
+				<VectorInput label={t('scale')} axes={['x', 'y', 'z']} values={picked.scale} step={0.5} min={0.01} onchange={(scale) => onset({ scale: vector(scale) })} />
+				<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
+				<Button variant="danger" type="button" onclick={onremove}>{t('remove')} <kbd>Del</kbd></Button>
+			</section>
+		{/if}
 		<section>
 			<h3>{t('material')}</h3>
 			<Palette colors={palette} {paint} {finish} {edge} label={t('paint')} pick={(n) => t('paint.pick', { n: String(n) })} onpick={onpaint} />
@@ -72,23 +97,21 @@
 				<Segmented options={edgeOptions} value={edge} label={t('edge')} onselect={onedge} />
 			</div>
 		</section>
-		<p class="foot">{t(item ? 'help.place' : 'help.pick')}</p>
+		<p class="foot">{t(item ? 'help.place' : picked ? 'help.edit' : 'help.pick')}</p>
 	</Panel>
 {:else}
 	<div class="toggle">
-		<IconButton icon="box" label="{t('title')} · I" onclick={onopen} />
+		<IconButton icon="box" label="{t('title')} · I" onclick={() => onedit(true)} />
 	</div>
 {/if}
 
 <style>
 	.toggle {
+		--control-bg: var(--bg-overlay);
 		position: absolute;
 		top: var(--sp-4);
 		left: var(--sp-4);
 		z-index: var(--z-panel);
-	}
-	.toggle {
-		--control-bg: var(--bg-overlay);
 	}
 	.kinds {
 		display: grid;
@@ -107,10 +130,7 @@
 		color: var(--text);
 		cursor: pointer;
 	}
-	.kind:hover {
-		background: var(--action);
-		color: var(--action-text);
-	}
+	.kind:hover,
 	.kind[aria-pressed='true'] {
 		background: var(--action);
 		color: var(--action-text);
@@ -121,6 +141,12 @@
 		gap: var(--sp-3);
 		padding-top: var(--sp-3);
 		border-top: var(--bw) solid var(--border);
+	}
+	.head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		color: var(--text-muted);
 	}
 	h3 {
 		letter-spacing: var(--ls-caps);
@@ -136,6 +162,10 @@
 	}
 	.row > span {
 		min-width: 11ch;
+	}
+	kbd {
+		margin-left: var(--sp-2);
+		opacity: 0.55;
 	}
 	.foot {
 		padding-top: var(--sp-3);

@@ -32,6 +32,7 @@ export { default as Stack } from './Stack.svelte';
 export { default as Stat } from './Stat.svelte';
 export { default as Table } from './Table.svelte';
 export { default as ThemeToggle } from './ThemeToggle.svelte';
+export { default as VectorInput } from './VectorInput.svelte';
 export { default as Topbar } from './Topbar.svelte';
 export { theme } from './theme.svelte';
 export type { Theme } from './theme';

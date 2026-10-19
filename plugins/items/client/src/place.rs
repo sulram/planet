@@ -1,5 +1,6 @@
 //! Placing an item: a click puts it where the pointer meets the world, on a
 //! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
+//! Placed, the part is picked, so the hand that put it there moves it next.
 
 use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
 use glam::DVec3;
@@ -23,8 +24,12 @@ impl Items {
                 solid: true,
             },
         };
-        if let Err(refusal) = host.place_part(feet.seat, part) {
-            refuse(host, refusal.into());
+        match host.place_part(feet.seat, part) {
+            Ok(id) => {
+                self.take(None, host);
+                self.pick(Some(id), host);
+            }
+            Err(refusal) => refuse(host, refusal.into()),
         }
     }
 }

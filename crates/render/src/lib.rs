@@ -645,6 +645,8 @@ enum Surface {
     Ghost,
     /// A guide over the world: as a ghost is, and seen from both sides.
     Guide,
+    /// A mark over everything: tested against no depth and writing none.
+    Overlay,
     Foliage,
     Shadow,
     ShadowCutout,
@@ -704,7 +706,7 @@ fn pipeline(
         primitive: wgpu::PrimitiveState {
             cull_mode: (matches!(
                 spec.surface,
-                Surface::Solid | Surface::Glass | Surface::Ghost
+                Surface::Solid | Surface::Glass | Surface::Ghost | Surface::Overlay
             ) || shadow)
                 .then_some(wgpu::Face::Back),
             ..Default::default()
@@ -715,8 +717,12 @@ fn pipeline(
             depth_write_enabled: Some(
                 spec.surface == Surface::Solid || spec.surface == Surface::Foliage || shadow,
             ),
-            // Reversed depth: nearer is greater. The sky sits at exactly 0.
-            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+            // Reversed depth: nearer is greater. The sky sits at exactly 0. A
+            // mark over everything passes whatever is there.
+            depth_compare: Some(match spec.surface {
+                Surface::Overlay => wgpu::CompareFunction::Always,
+                _ => wgpu::CompareFunction::GreaterEqual,
+            }),
             stencil: Default::default(),
             bias: if shadow {
                 wgpu::DepthBiasState {

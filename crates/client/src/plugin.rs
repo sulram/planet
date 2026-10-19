@@ -11,8 +11,8 @@
 //! changes it is an op, and the host asks whether this session may before
 //! the system sees it.
 
-use glam::{DQuat, DVec3};
-use part::{Part, PartId};
+use glam::{DAffine3, DQuat, DVec3};
+use part::{Part, PartId, Pose as PartPose};
 use protocol::Body;
 use serde::Serialize;
 use serde_json::Value;
@@ -24,7 +24,7 @@ use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
 use crate::collision;
 use crate::controller::Controller;
 use crate::input::{Chord, Input, Key, KeyAsk};
-use crate::parts::{PartRefusal, Parts};
+use crate::parts::{Mark, PartRefusal, Parts};
 use crate::place::Pose;
 use crate::seam::{Event, Level, PluginOn};
 use crate::session::Session;
@@ -419,13 +419,42 @@ impl Host<'_> {
         }
     }
 
+    /// The world from a part's own space, from the planet's centre: where
+    /// it stands this frame. `None` for a name nothing holds.
+    pub fn part_transform(&self, id: PartId) -> Option<DAffine3> {
+        self.lent.parts.transform(self.lent.generator, id)
+    }
+
+    /// The seat and pose a part standing in the world would have, on a
+    /// body: how a part is moved. A gizmo changes the world transform and
+    /// asks here what pose that is. `None` for a transform that is no pose.
+    pub fn reseat(&self, body: Body, world: &DAffine3) -> Option<(Seat, PartPose)> {
+        self.lent.parts.reseat(self.lent.generator, body, world)
+    }
+
+    /// Shows marks over the world, in place of those shown before, and none
+    /// with none to show: cubes in a paint drawn over everything, for a hand
+    /// to see.
+    pub fn mark(&mut self, marks: &[Mark]) {
+        self.lent.parts.mark(marks);
+    }
+
+    /// Whether a pose is one a part on a seat can have: sound, and inside
+    /// the seat's sector.
+    fn sound(&self, seat: Seat, pose: &PartPose) -> Result<(), PartRefusal> {
+        let side = f64::from(seat.sphere(self.lent.generator).blocks().side());
+        let inside = |n: f64| (0.0..=side).contains(&n);
+        match pose.is_sound() && inside(pose.at[0]) && inside(pose.at[1]) {
+            true => Ok(()),
+            false => Err(PartRefusal::Pose),
+        }
+    }
+
     /// Places a part on a seat, where its pose says: a change like any
     /// other. The name it is given.
     pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, PartRefusal> {
         self.may_place()?;
-        if !part.pose.is_sound() {
-            return Err(PartRefusal::Pose);
-        }
+        self.sound(seat, &part.pose)?;
         Ok(self.lent.parts.place(seat, part))
     }
 
@@ -433,9 +462,7 @@ impl Host<'_> {
     /// solid or not, or seated elsewhere.
     pub fn set_part(&mut self, id: PartId, seat: Seat, part: Part) -> Result<(), PartRefusal> {
         self.may_place()?;
-        if !part.pose.is_sound() {
-            return Err(PartRefusal::Pose);
-        }
+        self.sound(seat, &part.pose)?;
         match self.lent.parts.set(id, seat, part) {
             true => Ok(()),
             false => Err(PartRefusal::Gone),

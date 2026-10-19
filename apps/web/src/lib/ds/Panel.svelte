@@ -48,8 +48,12 @@
 		top: var(--sp-4);
 		right: var(--sp-4);
 	}
-	/* A panel from a bottom corner stops short of the row of buttons in the
-	   top corners, so a tall one never covers the button above it. */
+	/* A panel stops short of the row of buttons in the corners across from
+	   it, so a tall one never covers a button: it scrolls instead. */
+	.panel--top-left,
+	.panel--top-right {
+		max-height: calc(100% - 2 * var(--sp-4) - var(--sp-5) - var(--control-h) - 2 * var(--bw));
+	}
 	.panel--bottom-left,
 	.panel--bottom-right {
 		max-height: calc(100% - 3 * var(--sp-4) - var(--control-h) - 2 * var(--bw));
