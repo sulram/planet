@@ -134,6 +134,7 @@ this file in the same change.
 | Footprint | What one sample covers: the spacing of the mesh asking the generator, or what a pixel covers of the sea. Detail finer than it is faded out. |
 | Anchor | A patch origin wrapped to the detail period in f64: what fixes shader detail to the planet. |
 | Entity | The family a part belongs to: GLB, part, light, field, portal, media frame, script. What is built of it is a part. |
+| Model | A `.vox` file placed in the world: its voxels in their own palette, named by the hash of its content, read and meshed by `crates/vox`. |
 | Asset | A heavy file, named by the hash of its content, in the world's bucket folder. |
 | Placement | The use of an asset by an entity. Counts against budgets. |
 | Budget | Per-volume limit on triangles, texture size and bytes. |
