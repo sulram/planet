@@ -3,6 +3,8 @@ use std::rc::Rc;
 
 use client::{Chord, Client, Form, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
+
+use crate::moving;
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, PointerEvent, WheelEvent};
 
@@ -22,13 +24,13 @@ pub struct Engine {
     listeners: Vec<Listener>,
 }
 
-struct State {
+pub(crate) struct State {
     canvas: HtmlCanvasElement,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     gpu: Gpu,
-    renderer: Renderer,
-    client: Client,
+    pub(crate) renderer: Renderer,
+    pub(crate) client: Client,
     input: Input,
     on_event: js_sys::Function,
     last_frame_ms: f64,
@@ -37,10 +39,14 @@ struct State {
     /// Building, the right button is held: the pointer turns the camera.
     looking: bool,
     /// Where the world's files are read from: what `asset://` stands for.
-    files: String,
+    pub(crate) files: String,
     /// Where the secondary button went down, in client pixels, while it is
     /// down: let go within a few pixels of it, it was a tap.
     secondary_down: Option<(f64, f64)>,
+    /// The pictures that move, playing into the renderer.
+    pub(crate) playing: moving::Playing,
+    /// Drawing through WebGL2, where a frame takes another road to the texture.
+    pub(crate) webgl: bool,
 }
 
 /// Pixels the pointer may move between the secondary button going down and
@@ -70,6 +76,7 @@ impl Engine {
         let config = surface_configuration(&surface, &gpu.adapter, canvas.width(), canvas.height());
         surface.configure(&gpu.device, &config);
         let renderer = Renderer::new(&gpu, config.format);
+        let webgl = gpu.adapter.get_info().backend == wgpu::Backend::Gl;
 
         // A placeholder world until the UI sends the recipe it wants.
         let mut client =
@@ -92,6 +99,8 @@ impl Engine {
             looking: false,
             files: FILES.to_owned(),
             secondary_down: None,
+            playing: moving::Playing::default(),
+            webgl,
         }));
         let alive = Rc::new(RefCell::new(true));
         let listeners = listen(&canvas, &state);
@@ -265,7 +274,7 @@ fn fetch_assets(state: &Rc<RefCell<State>>) {
 /// An asset reference as a URL: a world's file (`asset://`) is under the
 /// files base, an absolute one (a user's own avatar) passes through, a
 /// relative one lives under the asset root.
-fn resolve(reference: &str, files: &str) -> String {
+pub(crate) fn resolve(reference: &str, files: &str) -> String {
     if let Some(name) = reference.strip_prefix("asset://") {
         format!("{files}/{name}")
     } else if reference.starts_with('/') || reference.contains("://") {
@@ -275,7 +284,7 @@ fn resolve(reference: &str, files: &str) -> String {
     }
 }
 
-async fn respond(url: &str) -> Result<web_sys::Response, String> {
+pub(crate) async fn respond(url: &str) -> Result<web_sys::Response, String> {
     let window = web_sys::window().ok_or("no window")?;
     let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
         .await
@@ -447,6 +456,7 @@ fn run(state: Rc<RefCell<State>>, alive: Rc<RefCell<bool>>) {
             return;
         }
         fetch_assets(&state);
+        moving::tick(&state);
         pump_link(&state);
         let (events, on_event) = {
             let mut held = state.borrow_mut();
@@ -471,7 +481,7 @@ fn request_frame(tick: &Closure<dyn FnMut()>) {
         .expect("requestAnimationFrame");
 }
 
-fn now_ms() -> f64 {
+pub(crate) fn now_ms() -> f64 {
     web_sys::window()
         .and_then(|w| w.performance())
         .map_or(0.0, |p| p.now())

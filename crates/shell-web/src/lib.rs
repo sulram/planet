@@ -5,4 +5,6 @@
 //! the command/event seam as JSON (`client::Command`, `client::Event`).
 
 #[cfg(target_arch = "wasm32")]
+mod moving;
+#[cfg(target_arch = "wasm32")]
 mod web;

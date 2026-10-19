@@ -49,6 +49,10 @@ web-sys = { version = "0.3", features = [
     "BinaryType",
     "MessageEvent",
     "CloseEvent",
+    "HtmlMediaElement",
+    "HtmlVideoElement",
+    "MediaError",
+    "VideoFrame",
 ] }
 
 [lints]
