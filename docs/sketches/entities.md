@@ -17,8 +17,8 @@ has both as features of a parcel; Hyperfy has them as entities with a GLB.
 The drawing: one noun, a **part**. A part has a pose, a scale, whether it is
 solid to a body, and a shape. The shape is what differs: a cube is one voxel
 of one paint; a **model** is a `.vox` file by the hash of its content; a GLB,
-an image in a frame, a light, a portal and a spawn point would be shapes
-after them. Everything else, the gizmo, the panel, the ops, the store, the
+an image in a frame, a light, a portal (`portals.md`) and a spawn point would
+be shapes after them; a landmark is one (116). Everything else, the gizmo, the panel, the ops, the store, the
 permission, the budget, is written once over the part and never over a shape.
 
 By 108's two questions a part is the core's: with building switched off what
