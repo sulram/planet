@@ -69,7 +69,8 @@ impl Portal {
     /// The widest rim: to the middle of the box, no pane left.
     pub const RIM_MAX: u8 = Self::RIM_UNITS / 2;
     /// A rim as a hand first makes it: six hundredths of the width, twelve
-    /// centimetres on a ring two metres across.
+    /// centimetres on a ring two metres across, twenty four on the four a
+    /// hand places.
     pub const RIM: u8 = 12;
 
     /// The rim's width, of the box's width.

@@ -1875,7 +1875,7 @@ mod tests {
             })
         );
         assert!(!part.solid);
-        assert_eq!(part.pose.scale, [4.0, 0.1, 4.0], "two metres across");
+        assert_eq!(part.pose.scale, [8.0, 0.1, 8.0], "four metres across");
         let said = events(&mut client);
         let picked = said
             .iter()

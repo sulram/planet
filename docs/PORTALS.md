@@ -13,7 +13,7 @@ lives in WORLD.md; how the picture is made in RENDER.md.
 
 ## The ring
 
-- `Shape::Portal(to)` in `crates/part`: a standing ring two metres across,
+- `Shape::Portal(to)` in `crates/part`: a standing ring four metres across,
   a rim in the colour in hand round a pane, leading to a landmark by the
   name the world gave it. `None` leads nowhere: a landmark never chosen,
   or gone.

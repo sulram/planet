@@ -31,8 +31,9 @@ const STAR: [f64; 3] = [2.0, 2.0, 0.16];
 /// The box of a sound, blocks: half a cell, room for its gizmo and nothing
 /// to the eye.
 const SPEAKER: [f64; 3] = [0.5, 0.5, 0.5];
-/// A portal's ring, in blocks: two metres across, a pane thick.
-const RING: [f64; 3] = [2.0 * CUBE[0], PANE, 2.0 * CUBE[2]];
+/// A portal's ring, in blocks: four metres across, a pane thick, a door a
+/// body walks through without aiming.
+const RING: [f64; 3] = [4.0 * CUBE[0], PANE, 4.0 * CUBE[2]];
 
 impl Items {
     /// Places the item in hand where the eye's pointer meets the world.
@@ -150,7 +151,7 @@ impl Items {
                 }
             }
             Item::Portal => {
-                // A ring two metres across, its front, its box's `-y` side,
+                // A ring four metres across, its front, its box's `-y` side,
                 // turned to face where the eye stands, as a picture is.
                 let eye = host.feet_at(from);
                 let toward = [eye.point.u - at[0], eye.point.v - at[1]];

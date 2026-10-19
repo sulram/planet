@@ -17,8 +17,8 @@
 	let to = $state(0);
 	/** The rim's width, of the ring's width: 0 is none, 0.5 the middle. */
 	let rim = $state(0.06);
-	/** The ring's width in metres: the picked one's, or the two metres a hand places. */
-	const width_m = $derived(picked ? picked.scale[0] * 0.5 : 2);
+	/** The ring's width in metres: the picked one's, or the four metres a hand places. */
+	const width_m = $derived(picked ? picked.scale[0] * 0.5 : 4);
 
 	const NOWHERE = '0';
 	const options = $derived([

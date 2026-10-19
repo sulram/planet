@@ -53,7 +53,9 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     }
     let air = atmosphere_from(origin, dir, 1.0e9);
     let toward_sun = max(dot(dir, view.sun.xyz), 0.0);
-    let disc = smoothstep(0.99985, 0.99995, toward_sun) * 20.0;
+    // The disc is two and a half degrees of radius, a little under the moon's
+    // (twenty radii off: 2.9 degrees), so the two read as one sky's.
+    let disc = smoothstep(0.99905, 0.99920, toward_sun) * 20.0;
     let glow = pow(toward_sun, 64.0) * 0.25;
     // The planet hides the stars behind it.
     let ground = ray_sphere(view.camera.xyz, dir, view.camera.w);
