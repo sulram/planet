@@ -36,8 +36,9 @@ impl Items {
 
 /// Where a line of sight meets the world, as feet standing there: the
 /// nearest of a side of a cell, a part and the ground. Met on a side of a
-/// cell that is no top, the feet stand off it by half a cube, so the cube
-/// placed there touches the side.
+/// cell that is no top, the feet stand off it so the cube placed there
+/// touches the side: by half a cube from a wall, by a whole one under a
+/// ceiling, since a cube rises from its feet.
 fn met(host: &Host<'_>, from: DVec3, toward: DVec3) -> Option<Feet> {
     let mut nearest: Option<(f64, Feet)> = None;
     let mut offer = |away_m: f64, feet: Feet| {
@@ -66,11 +67,10 @@ fn met(host: &Host<'_>, from: DVec3, toward: DVec3) -> Option<Feet> {
         let along = toward.dot(outward);
         if along < -1e-9 {
             let away_m = (centre - from).dot(outward) / along;
-            let top = axis == 2 && face.positive;
-            let off = if top {
-                DVec3::ZERO
-            } else {
-                outward * (CUBE[0] / 2.0 * BLOCK_M)
+            let off = match (axis == 2, face.positive) {
+                (true, true) => DVec3::ZERO,
+                (true, false) => outward * (CUBE[2] * BLOCK_M),
+                (false, _) => outward * (CUBE[0] / 2.0 * BLOCK_M),
             };
             offer(away_m, host.feet_at(from + toward * away_m + off));
         }

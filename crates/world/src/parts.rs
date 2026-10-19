@@ -96,12 +96,9 @@ impl Parts {
         self.index.as_mut().expect("read just now")
     }
 
-    /// Whether a part may stand on its seat as its pose says: inside the
-    /// seat's sector.
+    /// Whether a part may stand on its seat as its pose says.
     fn inside(measure: &Measure, seat: Seat, part: &part::Part) -> bool {
-        let side = f64::from(measure.body(seat.body()).blocks().side());
-        let within = |n: f64| (0.0..=side).contains(&n);
-        within(part.pose.at[0]) && within(part.pose.at[1])
+        seat::inside(measure.body(seat.body()), &part.pose)
     }
 
     fn keep(&mut self, room: &mut dyn Room, id: u64, kept: &Kept) {

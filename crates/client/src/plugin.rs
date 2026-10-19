@@ -451,9 +451,7 @@ impl Host<'_> {
     /// Whether a pose is one a part on a seat can have: sound, and inside
     /// the seat's sector.
     fn sound(&self, seat: Seat, pose: &PartPose) -> Result<(), PartRefusal> {
-        let side = f64::from(seat.sphere(self.lent.generator).blocks().side());
-        let inside = |n: f64| (0.0..=side).contains(&n);
-        match pose.is_sound() && inside(pose.at[0]) && inside(pose.at[1]) {
+        match pose.is_sound() && seat::inside(seat.sphere(self.lent.generator), pose) {
             true => Ok(()),
             false => Err(PartRefusal::Pose),
         }
