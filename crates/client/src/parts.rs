@@ -46,8 +46,7 @@ use worldgen::Generator;
 
 use crate::assets::Requests;
 use crate::cells::{
-    Ask, LAMP_FAR_M, LAMP_GAIN, LAMP_GROWS_M, LAMP_REACH_M, LAMP_SIDES, PALETTE, paint_look,
-    paint_rgb,
+    Ask, LAMP_FAR_M, LAMP_GAIN, LAMP_GROWS_M, LAMP_REACH_M, LAMP_SIDES, paint_look, paint_rgb,
 };
 use crate::collision::{BODY_HALF, Footing, STEP_M};
 use crate::pictures::{Pictures, Screen};
@@ -56,11 +55,9 @@ use crate::pictures::{Pictures, Screen};
 const LOOK_S: f64 = 1.0;
 /// How far a body goes from a part before its client lets it go, metres:
 /// past where the world shows it (`world::parts::HOLD_M`) by the same
-/// margin the cells keep for a volume seen afar (`seat::AFAR`).
-const DROP_M: f64 = 2304.0;
-/// How far off a part is drawn as its box in one paint instead of its
-/// model, metres: where a volume is seen whole, a part is seen whole.
-pub const AFAR_M: f64 = seat::HOLD_M;
+/// margin the cells keep for a volume seen afar (`seat::AFAR`). How far
+/// one is drawn within that is the eye's own, `Effects::parts_reach_m`.
+const DROP_M: f64 = 8448.0;
 /// What a part whose file is still on its way is drawn as: its box in white
 /// glass with a white edge, and over it a white light turning once a
 /// second, so the place it will fill is seen and seen to be waiting.
@@ -189,8 +186,6 @@ pub struct Parts {
     /// With no world: the changes made here to take back and put back.
     done: Vec<Change>,
     undone: Vec<Change>,
-    /// The paint each model of a file is drawn in from afar.
-    afar: HashMap<[u8; 32], u8>,
     /// Every part by the buckets of its seat's grid its box reaches, and
     /// which buckets each is in, to take it out again.
     buckets: HashMap<(Seat, [i32; 2]), Vec<PartId>>,
@@ -799,18 +794,21 @@ impl Parts {
     }
 
     /// Every part drawn as a model, placed in the world this frame, and the
-    /// marks over them. A part further than [`AFAR_M`] from the body is its
-    /// box in one paint: a cube is that already, a model shows the colour
-    /// most of its voxels have. `body` is where the client's own body is,
-    /// from the centre of the body it stands on.
+    /// marks over them. A part further than `reach_m` from the body is not
+    /// drawn. `body` is where the client's own body is, from the centre of
+    /// the body it stands on.
     pub fn drawn(
         &self,
         generator: &Generator,
         body: (Body, DVec3),
+        reach_m: f64,
         clock_s: f64,
     ) -> Vec<ModelDraw> {
         let mut drawn = Vec::new();
         for (_, seat, part) in self.all() {
+            if away_m(generator, seat, &part.pose, body) > reach_m {
+                continue;
+            }
             let transform = self.place_of(generator, seat, &part.pose);
             // A model whose file is still on its way: its box in glass, and
             // a mark turning over it.
@@ -834,15 +832,7 @@ impl Parts {
                 }
                 continue;
             }
-            let afar = away_m(generator, seat, &part.pose, body) > AFAR_M;
-            let mesh = match (afar, part.shape) {
-                (true, Shape::Vox(hash)) => {
-                    let paint = self.afar.get(&hash).copied().unwrap_or(part.paint);
-                    model_id(Shape::Cube, paint)
-                }
-                _ => model_of(part),
-            };
-            let Some(mesh) = mesh else {
+            let Some(mesh) = model_of(part) else {
                 continue;
             };
             drawn.push(ModelDraw {
@@ -858,12 +848,15 @@ impl Parts {
         drawn
     }
 
-    /// Every part that is a picture, placed in the world this frame at the
-    /// level it is seen at from the screen. A picture in a light finish is
-    /// a screen, shining with its own colour; any other is lit as a print.
+    /// Every part that is a picture within `reach_m` of the body, placed in
+    /// the world this frame at the level it is seen at from the screen. A
+    /// picture in a light finish is a screen, shining with its own colour;
+    /// any other is lit as a print.
     pub(crate) fn pictures(
         &self,
         generator: &Generator,
+        body: (Body, DVec3),
+        reach_m: f64,
         pictures: &mut Pictures,
         screen: &Screen,
         requests: &mut Requests,
@@ -873,6 +866,9 @@ impl Parts {
                 let Shape::Image(media) = part.shape else {
                     return None;
                 };
+                if away_m(generator, seat, &part.pose, body) > reach_m {
+                    return None;
+                }
                 let world_from_quad = self.place_of(generator, seat, &part.pose) * FRONT;
                 // As the part says; a picture in the light finish with no
                 // shine said is a screen.
@@ -973,11 +969,6 @@ impl Parts {
             self.changes
                 .push(ModelChange::Add(id, boxed(&model.grid, &model.palette)));
         }
-        // Seen from afar, the model is a box in the paint nearest the colour
-        // most of its voxels have.
-        let paint = afar_paint(&model.grid, &model.palette);
-        self.ensure(Shape::Cube, paint);
-        self.afar.insert(hash, paint);
         self.grids.insert(hash, model.grid);
     }
 
@@ -1036,27 +1027,6 @@ fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -
     }
     let anchor = seat::seated(seat.sphere(generator), seat.sector(), pose).translation;
     anchor.distance(body.1)
-}
-
-/// The paint of the palette nearest the colour most of a model's voxels
-/// have: what it is drawn in from afar.
-fn afar_paint(grid: &vox::Grid, palette: &vox::Palette) -> u8 {
-    let mut counts = [0u32; 256];
-    for &voxel in &grid.voxels {
-        counts[usize::from(voxel)] += 1;
-    }
-    counts[0] = 0;
-    let most = (0..256).max_by_key(|&i| counts[i]).unwrap_or(0);
-    let [r, g, b, _] = palette[most].map(i32::from);
-    let nearest = PALETTE
-        .iter()
-        .enumerate()
-        .min_by_key(|(_, [pr, pg, pb])| {
-            let [pr, pg, pb] = [*pr, *pg, *pb].map(i32::from);
-            (r - pr).pow(2) + (g - pg).pow(2) + (b - pb).pow(2)
-        })
-        .map_or(0, |(i, _)| i as u8);
-    Paint::plain(nearest).byte()
 }
 
 /// The model a part is drawn as. `None` for a shape drawn another way, a
@@ -1404,10 +1374,10 @@ mod tests {
         parts.drain_changes();
         parts.model_arrived(hash, model);
         assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
-        // Its mesh, and the box it is from afar, in the paint most of it is;
-        // the glass box and the mark of its loading were announced before.
+        // Its mesh; the glass box and the mark of its loading were
+        // announced before.
         let changes = parts.drain_changes();
-        assert_eq!(changes.len(), 2);
+        assert_eq!(changes.len(), 1);
         let mesh = changes
             .iter()
             .find_map(|change| match change {

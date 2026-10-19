@@ -72,6 +72,17 @@
 			<Slider label={t('engine.settings.exposure')} value={effects.exposure} min={0.1} max={4} oninput={(value) => set('exposure', value)} />
 			<Select label={t('engine.settings.toneMap')} options={toneMapOptions} value={effects.tone_map} onselect={(value) => set('tone_map', value)} />
 		</Stack>
+		<Stack>
+			<Slider
+				label={t('engine.settings.partsReach')}
+				value={effects.parts_reach_m}
+				min={256}
+				max={8192}
+				step={64}
+				format={(n) => t('engine.stats.metres', { n: n.toFixed(0) })}
+				oninput={(value) => set('parts_reach_m', value)}
+			/>
+		</Stack>
 		{#if defaults}
 			<Button variant="ghost" type="button" onclick={() => defaults && onchange(defaults)}>{t('engine.settings.defaults')}</Button>
 		{/if}

@@ -18,9 +18,10 @@ use crate::{Level, Measure, Op, Plugin, Room, Who};
 /// The version of the parts' wire.
 pub const VERSION: u32 = 1;
 
-/// How near a body a part is for its client to hold it, metres: the step
-/// afar the cells are held to, since a part is a record and not chunks.
-pub const HOLD_M: f64 = 2048.0;
+/// How near a body a part is for its client to hold it, metres: as far as
+/// the cells are seen afar, since a part is a record and not chunks, and
+/// the client draws it to a reach of its own within this.
+pub const HOLD_M: f64 = 8192.0;
 /// The most records one look is answered with.
 const LOOK_RECORDS: usize = 4096;
 

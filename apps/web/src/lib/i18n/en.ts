@@ -75,6 +75,7 @@ export const en = {
 	'engine.settings.wind': 'Wind',
 	'engine.settings.cloudChange': 'Cloud change',
 	'engine.settings.exposure': 'Exposure',
+	'engine.settings.partsReach': 'Items reach',
 	'engine.settings.haze': 'Haze',
 	'engine.settings.waterClarity': 'Water clarity',
 	'engine.settings.bloom': 'Bloom',

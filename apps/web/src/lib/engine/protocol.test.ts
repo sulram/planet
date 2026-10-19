@@ -18,6 +18,7 @@ describe('parseEvent', () => {
 			bloom_threshold: 1.1,
 			haze: 1,
 			water_clarity: 3,
+			parts_reach_m: 5000,
 			tone_map: 'aces'
 		};
 		expect(parseEvent(JSON.stringify({ type: 'effects_changed', effects }))).toEqual({ type: 'effects_changed', effects });

@@ -222,6 +222,9 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
                 egui::Slider::new(&mut effects.bloom_threshold, 0.2..=8.0).text("Bloom from"),
             );
             ui.add(egui::Slider::new(&mut effects.exposure, 0.1..=4.0).text("Exposure"));
+            ui.add(
+                egui::Slider::new(&mut effects.parts_reach_m, 256.0..=8192.0).text("Items reach m"),
+            );
             egui::ComboBox::from_label("Tone map")
                 .selected_text(tone_map_name(effects.tone_map))
                 .show_ui(ui, |ui| {

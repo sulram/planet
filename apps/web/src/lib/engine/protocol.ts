@@ -30,6 +30,7 @@ export interface Effects {
 	bloom_threshold: number;
 	haze: number;
 	water_clarity: number;
+	parts_reach_m: number;
 	tone_map: ToneMap;
 }
 

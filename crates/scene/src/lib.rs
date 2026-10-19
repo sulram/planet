@@ -152,6 +152,9 @@ pub struct Effects {
     pub haze: f32,
     /// How far a swimmer sees under the sea, as a factor of plain sea water.
     pub water_clarity: f32,
+    /// How far from the body a part is drawn, metres. Past it, it is not
+    /// there to see.
+    pub parts_reach_m: f32,
     pub tone_map: ToneMap,
 }
 
@@ -170,6 +173,7 @@ impl Default for Effects {
             bloom_threshold: 0.3,
             haze: 0.8,
             water_clarity: 3.0,
+            parts_reach_m: 5000.0,
             tone_map: ToneMap::Aces,
         }
     }

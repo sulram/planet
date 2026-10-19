@@ -76,6 +76,7 @@ export const pt: Messages = {
 	'engine.settings.wind': 'Vento',
 	'engine.settings.cloudChange': 'Mudança das nuvens',
 	'engine.settings.exposure': 'Exposição',
+	'engine.settings.partsReach': 'Alcance dos itens',
 	'engine.settings.haze': 'Névoa',
 	'engine.settings.waterClarity': 'Clareza da água',
 	'engine.settings.bloom': 'Bloom',

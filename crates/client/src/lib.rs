@@ -244,6 +244,7 @@ impl Client {
             bloom_threshold: sane(effects.bloom_threshold, 0.2, 8.0, usual.bloom_threshold),
             haze: sane(effects.haze, 0.0, 6.0, usual.haze),
             water_clarity: sane(effects.water_clarity, 0.25, 12.0, usual.water_clarity),
+            parts_reach_m: sane(effects.parts_reach_m, 256.0, 8192.0, usual.parts_reach_m),
             ..effects
         };
         self.events.push(Event::EffectsChanged {
@@ -1249,6 +1250,8 @@ impl Client {
         };
         let drawn = self.parts.pictures(
             &self.generator,
+            self.controller.held_by(),
+            f64::from(self.effects.parts_reach_m),
             &mut self.pictures,
             &screen,
             &mut self.requests,
@@ -1321,9 +1324,12 @@ impl Client {
                 lamps.extend(self.parts.lamps(&self.generator));
                 lamps
             },
-            models: self
-                .parts
-                .drawn(&self.generator, self.controller.held_by(), self.clock_s),
+            models: self.parts.drawn(
+                &self.generator,
+                self.controller.held_by(),
+                f64::from(self.effects.parts_reach_m),
+                self.clock_s,
+            ),
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
             pictures,

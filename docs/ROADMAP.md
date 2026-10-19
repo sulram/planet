@@ -81,7 +81,6 @@ end to end.
 - [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
 - [ ] A light part lights what is near, as a lamp among the cells does
 - [ ] Items beside the cube: a `.vox` model (its session: `crates/vox`, the upload route), a shape of part, a draw of its own and a row in the items menu. A picture stands (`Shape::Image`): its knobs, one side or both, a screen or a print, are read off its paint's finish until the panel offers them
-- [ ] A part's box from afar in the paint most of its sides show, for a cube in glass or light as for a model
 
 ### Bodies (108)
 

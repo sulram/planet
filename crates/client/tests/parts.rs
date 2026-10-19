@@ -7,7 +7,6 @@ use client::{
 };
 use protocol::parts as wire;
 use protocol::{Message, client_message, server_message};
-use topology::Sector;
 
 fn server(message: server_message::Message) -> Vec<u8> {
     protocol::encode(&protocol::ServerMessage {
@@ -245,7 +244,9 @@ fn what_others_place_arrives_and_what_is_refused_is_taken_back() {
 fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
     let mut client = welcomed();
     client.set_view([1600, 900]);
-    let seat = Seat::Sector(Sector::new(4).unwrap());
+    let feet = client.host("test").feet();
+    // Beside the body, within reach of its eye.
+    let seat = Seat::Sector(feet.point.sector);
     let media = Media {
         width: 3000,
         height: 2000,
@@ -254,7 +255,6 @@ fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
         full: ContentId([3; 32]),
         kind: ImageKind::Jpg,
     };
-    let feet = client.host("test").feet();
     let part = Part {
         shape: Shape::Image(media),
         pose: PartPose::upright(
