@@ -25,4 +25,6 @@ pub struct Sound {
     pub position: DVec3,
     /// How far it is heard, metres: silent from there on.
     pub reach_m: f64,
+    /// How loud, 0 to 1, as its part says.
+    pub volume: f32,
 }

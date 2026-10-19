@@ -81,6 +81,8 @@ impl Items {
                 shine: 0.0,
                 reach_m: 0.0,
                 name: None,
+                muted: false,
+                volume: 0.0,
             },
             Item::Model => {
                 // With no file taken there is nothing to place yet.
@@ -98,6 +100,8 @@ impl Items {
                     shine: 0.0,
                     reach_m: 0.0,
                     name: None,
+                    muted: false,
+                    volume: 0.0,
                 }
             }
             Item::Picture => {
@@ -123,6 +127,8 @@ impl Items {
                     shine: 0.0,
                     reach_m: 0.0,
                     name: None,
+                    muted: false,
+                    volume: 0.0,
                 }
             }
             Item::Sound => {
@@ -139,6 +145,8 @@ impl Items {
                     shine: 0.0,
                     reach_m: 0.0,
                     name: None,
+                    muted: false,
+                    volume: 0.0,
                 }
             }
             Item::Portal => {
@@ -163,6 +171,8 @@ impl Items {
                     shine: 0.0,
                     reach_m: 0.0,
                     name: None,
+                    muted: false,
+                    volume: 0.0,
                 }
             }
             Item::Landmark => {
@@ -175,6 +185,8 @@ impl Items {
                     shine: 0.0,
                     reach_m: 0.0,
                     name: None,
+                    muted: false,
+                    volume: 0.0,
                 }
             }
         };

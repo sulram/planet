@@ -65,6 +65,10 @@ export interface Picked {
 	lamp: boolean;
 	/** Whether it is heard: a video. Its reach is how far. */
 	sound: boolean;
+	/** Whether what sounds of it is silenced. */
+	muted: boolean;
+	/** How loud it sounds, 0 to 1. */
+	volume: number;
 	/** What a landmark is called. */
 	name?: string;
 	/** Where a portal leads: a landmark's name in the world, null when it leads nowhere. */
@@ -98,10 +102,10 @@ const isVector = (value: unknown): value is [number, number, number] =>
 
 /** Reads a `picked` event: the part picked, or null when none is, or when the event is no part. */
 export function parsePicked(event: Record<string, unknown>): Picked | null {
-	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound, name, to, rim } = event;
+	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound, muted, volume, name, to, rim } = event;
 	if (typeof id !== 'number' || !isItem(item)) return null;
 	if (!isVector(at) || !isVector(rotation) || !isVector(scale) || typeof solid !== 'boolean' || typeof shine !== 'number' || typeof reach_m !== 'number' || typeof lamp !== 'boolean') return null;
-	const picked: Picked = { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound: sound === true };
+	const picked: Picked = { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound: sound === true, muted: muted === true, volume: typeof volume === 'number' ? volume : 1 };
 	if (typeof name === 'string') picked.name = name;
 	if ('to' in event) picked.to = typeof to === 'number' ? to : null;
 	if (typeof rim === 'number') picked.rim = rim;

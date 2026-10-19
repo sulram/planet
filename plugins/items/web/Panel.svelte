@@ -271,7 +271,13 @@
 					{#if picked.item === 'picture' || picked.lamp}
 						<Slider label={t('shine')} value={picked.shine} min={0} max={8} step={0.1} format={(n) => n.toFixed(1)} oninput={(shine) => onset({ shine })} />
 					{/if}
-					{#if picked.lamp || picked.sound}
+					{#if picked.sound}
+						<Checkbox checked={!picked.muted} onchange={(on) => onset({ muted: !on })}>{t('sound.on')}</Checkbox>
+					{/if}
+					{#if picked.sound && !picked.muted}
+						<Slider label={t('volume')} value={picked.volume} min={0.05} max={1} step={0.05} format={(n) => `${Math.round(n * 100)}%`} oninput={(volume) => onset({ volume })} />
+					{/if}
+					{#if picked.lamp || (picked.sound && !picked.muted)}
 						<Slider
 							label={picked.sound ? t('reach.sound') : t('reach')}
 							value={picked.reach_m}

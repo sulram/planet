@@ -129,6 +129,8 @@ pub(crate) struct Placed {
     pub shine: f32,
     pub reach_m: f32,
     pub both_sides: bool,
+    /// How loud a video sounds, 0 to 1; 0 is silenced, and not heard.
+    pub volume: f32,
 }
 
 /// How a view sees: what turns a quad's height in metres into texels on the
@@ -228,6 +230,7 @@ impl Pictures {
             shine,
             reach_m,
             both_sides,
+            volume,
         } = placed;
         let transform = world_from_quad;
         let width_m = transform.matrix3.x_axis.length();
@@ -240,8 +243,9 @@ impl Pictures {
         } else {
             height_m * HEARD_BY_SIZE
         };
-        let audible =
-            media.sounds() && (transform.translation - screen.camera.position).length() <= heard_m;
+        let audible = media.sounds()
+            && volume > 0.0
+            && (transform.translation - screen.camera.position).length() <= heard_m;
 
         let frame = self.frame;
         let shown = self.shown.entry(media.full).or_default();
@@ -266,12 +270,14 @@ impl Pictures {
         }
         if level == Some(Level::Full)
             && media.sounds()
+            && volume > 0.0
             && let Some(picture) = picture
         {
             self.heard.push(Sound {
                 source: SoundSource::Picture(picture),
                 position: transform.translation,
                 reach_m: heard_m,
+                volume,
             });
         }
         PictureDraw {
@@ -608,6 +614,7 @@ mod tests {
             shine: 0.0,
             reach_m,
             both_sides: false,
+            volume: 1.0,
         }
     }
 
@@ -849,6 +856,47 @@ mod tests {
         );
         gif.end_frame();
         assert!(gif.drain_moving().is_empty());
+    }
+
+    #[test]
+    fn a_silenced_video_is_not_heard_and_plays_for_the_eye_alone() {
+        let mut pictures = Pictures::default();
+        let mut requests = Requests::default();
+        let video = Media {
+            kind: ImageKind::Mp4,
+            ..moving()
+        };
+        let silenced = Placed {
+            volume: 0.0,
+            ..placed(behind(), 0.0)
+        };
+        // Behind the eye and silenced: nothing to hear, so nothing opens.
+        pictures.draw(&video, silenced, &screen(1000.0), &mut requests);
+        pictures.end_frame();
+        assert!(pictures.drain_moving().is_empty());
+        // In view and silenced: it plays, and is not in what is heard.
+        let silenced = Placed {
+            volume: 0.0,
+            ..placed(ahead(0.5), 0.0)
+        };
+        pictures.draw(&video, silenced, &screen(2000.0), &mut requests);
+        pictures.end_frame();
+        let opened = pictures.drain_moving();
+        let [Moving::Open { picture, .. }] = opened.as_slice() else {
+            panic!("plays for the eye");
+        };
+        pictures.opened(*picture, Ok((320, 240))).unwrap();
+        pictures.begin_frame();
+        pictures.draw(&video, silenced, &screen(2000.0), &mut requests);
+        assert!(pictures.heard().is_empty());
+        // Half as loud: heard at half.
+        let half = Placed {
+            volume: 0.5,
+            ..placed(ahead(0.5), 0.0)
+        };
+        pictures.begin_frame();
+        pictures.draw(&video, half, &screen(2000.0), &mut requests);
+        assert_eq!(pictures.heard()[0].volume, 0.5);
     }
 
     #[test]

@@ -117,6 +117,8 @@ fn cube(point: SurfacePoint, h: f64) -> wire::Part {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     seat::part_wire(Seat::Sector(point.sector), &part)
 }
@@ -130,6 +132,8 @@ fn landmark(point: SurfacePoint, name: &str) -> wire::Part {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     seat::part_wire(Seat::Sector(point.sector), &part)
 }

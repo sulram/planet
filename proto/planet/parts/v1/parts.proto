@@ -122,6 +122,10 @@ message Part {
   // most 64 bytes of UTF-8, empty when unnamed. A landmark's name is its
   // shape's.
   string name = 8;
+  // Whether what sounds of it is silenced: a video's track, a sound's file.
+  bool muted = 9;
+  // How loud it sounds, 0 to 1, as the panel says it; 0 is full, as unset.
+  float volume = 10;
 }
 
 // A part as the world keeps it: under the name it gave, one more for each

@@ -92,6 +92,8 @@ fn cube(client: &mut Client, along: f64) -> (Seat, Part) {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     (feet.seat, part)
 }
@@ -274,6 +276,8 @@ fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     let placed = wire::Placed {
         session: 2,
@@ -328,6 +332,8 @@ fn a_landmark_another_placed_is_a_lit_star_with_its_name_over_it() {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     let placed = wire::Placed {
         session: 2,
@@ -400,6 +406,8 @@ fn a_landmark_on_the_moon_is_travelled_to_on_the_moon() {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     client.host("test").place_part(seat, part).unwrap();
     let place = client.host("test").place_at(seat, &pose);
@@ -435,6 +443,8 @@ fn a_portal_seen_through_looks_at_the_cells_by_its_star() {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     let star = client.host("test").place_part(seat, star).unwrap();
     let ring = Part {
@@ -455,6 +465,8 @@ fn a_portal_seen_through_looks_at_the_cells_by_its_star() {
         shine: 0.0,
         reach_m: 0.0,
         name: None,
+        muted: false,
+        volume: 0.0,
     };
     client.host("test").place_part(seat, ring).unwrap();
     client.drain_outbound();

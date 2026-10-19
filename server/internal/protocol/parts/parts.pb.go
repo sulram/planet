@@ -728,7 +728,11 @@ type Part struct {
 	// What its builder calls it, for the list of what is near: trimmed, at
 	// most 64 bytes of UTF-8, empty when unnamed. A landmark's name is its
 	// shape's.
-	Name          string `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"`
+	// Whether what sounds of it is silenced: a video's track, a sound's file.
+	Muted bool `protobuf:"varint,9,opt,name=muted,proto3" json:"muted,omitempty"`
+	// How loud it sounds, 0 to 1, as the panel says it; 0 is full, as unset.
+	Volume        float32 `protobuf:"fixed32,10,opt,name=volume,proto3" json:"volume,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -817,6 +821,20 @@ func (x *Part) GetName() string {
 		return x.Name
 	}
 	return ""
+}
+
+func (x *Part) GetMuted() bool {
+	if x != nil {
+		return x.Muted
+	}
+	return false
+}
+
+func (x *Part) GetVolume() float32 {
+	if x != nil {
+		return x.Volume
+	}
+	return 0
 }
 
 // A part as the world keeps it: under the name it gave, one more for each
@@ -1544,7 +1562,7 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x02sx\x18\b \x01(\x01R\x02sx\x12\x0e\n" +
 	"\x02sy\x18\t \x01(\x01R\x02sy\x12\x0e\n" +
 	"\x02sz\x18\n" +
-	" \x01(\x01R\x02sz\"\xf9\x01\n" +
+	" \x01(\x01R\x02sz\"\xa7\x02\n" +
 	"\x04Part\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12)\n" +
 	"\x04pose\x18\x02 \x01(\v2\x15.planet.parts.v1.PoseR\x04pose\x12,\n" +
@@ -1553,7 +1571,10 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x05solid\x18\x05 \x01(\bR\x05solid\x12\x14\n" +
 	"\x05shine\x18\x06 \x01(\x02R\x05shine\x12\x17\n" +
 	"\areach_m\x18\a \x01(\x02R\x06reachM\x12\x12\n" +
-	"\x04name\x18\b \x01(\tR\x04name\"]\n" +
+	"\x04name\x18\b \x01(\tR\x04name\x12\x14\n" +
+	"\x05muted\x18\t \x01(\bR\x05muted\x12\x16\n" +
+	"\x06volume\x18\n" +
+	" \x01(\x02R\x06volume\"]\n" +
 	"\x06Record\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12)\n" +
 	"\x04part\x18\x02 \x01(\v2\x15.planet.parts.v1.PartR\x04part\x12\x18\n" +

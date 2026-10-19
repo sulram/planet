@@ -287,6 +287,10 @@ struct Set {
     shine: Option<f32>,
     /// How far its light goes, metres; 0 is by its size.
     reach_m: Option<f32>,
+    /// Whether what sounds of it is silenced.
+    muted: Option<bool>,
+    /// How loud it sounds, 0 to 1.
+    volume: Option<f32>,
     /// Another picture in the place of the one picked: its width follows
     /// the new aspect, its height stays.
     #[serde(default)]
@@ -363,6 +367,12 @@ struct Picked {
     /// Whether it is heard: a video. Its reach is how far.
     #[serde(skip_serializing_if = "Option::is_none")]
     sound: Option<bool>,
+    /// Whether what sounds of it is silenced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    muted: Option<bool>,
+    /// How loud it sounds, 0 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    volume: Option<f32>,
     /// What a landmark is called.
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
@@ -614,6 +624,12 @@ impl Items {
         if let Some(reach_m) = set.reach_m {
             part.reach_m = reach_m;
         }
+        if let Some(muted) = set.muted {
+            part.muted = muted;
+        }
+        if let Some(volume) = set.volume {
+            part.volume = volume.clamp(0.0, 1.0);
+        }
         if let Some(body) = &set.media {
             let Some(media) = body.media() else {
                 return host.reject("a picture names three asset:// files".into());
@@ -804,6 +820,12 @@ impl Items {
                     _ => false,
                 }),
                 name: name_of(&gizmo.part),
+                muted: Some(gizmo.part.muted),
+                volume: Some(if gizmo.part.volume > 0.0 {
+                    gizmo.part.volume
+                } else {
+                    1.0
+                }),
                 to: match gizmo.part.shape {
                     Shape::Portal(portal) => Some(portal.to.map(|to| to.0)),
                     _ => None,
@@ -824,6 +846,8 @@ impl Items {
                 reach_m: None,
                 lamp: None,
                 sound: None,
+                muted: None,
+                volume: None,
                 name: None,
                 to: None,
                 rim: None,

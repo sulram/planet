@@ -292,6 +292,8 @@ mod tests {
                 shine: 0.0,
                 reach_m: 0.0,
                 name: None,
+                muted: false,
+                volume: 0.0,
             },
             frame: world,
             hot: None,

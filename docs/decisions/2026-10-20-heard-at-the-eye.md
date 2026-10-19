@@ -10,4 +10,4 @@ lives_in:
 
 **Why:** Sound is not seen: turning away must not kill it, so hearing, not sight, keeps a video open. The knob a lamp already has is the reach, so the record gains nothing. The camera is the listener because left and right must match what is on the screen; in third person the body may face elsewhere. One list of sources with a panner each is the shape a peer's voice, heard by proximity, joins without a second seam.
 
-**Rejected:** Closing a video a second out of view, as a GIF is: sound would stop behind one's back. A volume field on the record: the reach is enough for a first cut, and a knob can come when someone asks. Mixing in the engine: the engine carries no audio, as it carries no codec; the platform's audio stack is the shell's. The body as the listener: hearing would not follow the view.
+**Rejected:** Closing a video a second out of view, as a GIF is: sound would stop behind one's back.  Mixing in the engine: the engine carries no audio, as it carries no codec; the platform's audio stack is the shell's. The body as the listener: hearing would not follow the view.

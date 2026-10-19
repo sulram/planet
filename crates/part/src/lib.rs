@@ -439,6 +439,11 @@ pub struct Part {
     /// What its builder calls it, for the list of what is near. A
     /// landmark's name is its shape's.
     pub name: Option<Name>,
+    /// Whether what sounds of it is silenced: a video's track, a sound's file.
+    pub muted: bool,
+    /// How loud it sounds, 0 to 1, as the panel says it; 0 is full, as
+    /// unset, read through [`Part::loudness`].
+    pub volume: f32,
 }
 
 /// The most a part shines with its own colour.
@@ -447,6 +452,17 @@ pub const MAX_SHINE: f32 = 8.0;
 pub const MAX_REACH_M: f32 = 256.0;
 
 impl Part {
+    /// How loud it sounds, 0 to 1: full when the record says nothing.
+    pub fn loudness(&self) -> f32 {
+        if self.muted {
+            0.0
+        } else if self.volume > 0.0 {
+            self.volume.min(1.0)
+        } else {
+            1.0
+        }
+    }
+
     /// Whether what is said of the part beside its pose is sound: a shine
     /// and a reach that are numbers within theirs.
     pub fn is_sound(&self) -> bool {
@@ -730,6 +746,8 @@ mod tests {
             shine: 0.0,
             reach_m: 0.0,
             name: None,
+            muted: false,
+            volume: 0.0,
         }
     }
 

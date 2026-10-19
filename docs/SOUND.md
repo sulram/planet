@@ -29,6 +29,12 @@ What is heard in the world, and how the shell mixes it at the eye.
   is drawn of it but its gizmo when picked; the list of what is near finds
   it. Eight play at once, the nearest first; one leaving its reach closes a
   second later.
+- A video and a sound carry `muted` and `volume` (0 to 1, full when the
+  record says nothing): the panel's "Sound" box silences one, and with it
+  on, volume and reach show. Silenced, a video plays for the eye alone and
+  is not kept open out of view; a sound is not opened. The shell holds a
+  gain a source, the part's volume while the engine names it, silence
+  while it does not.
 - The sources are one list a frame (`Client::sounds`), a panner each in
   the shell: a peer's voice, heard by proximity, joins it next. An ambience
   for a volume, heard inside it with no fall off, waits on the volume's

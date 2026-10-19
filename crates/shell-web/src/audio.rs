@@ -14,8 +14,8 @@ use glam::DVec3;
 use scene::Camera;
 use wasm_bindgen::JsValue;
 use web_sys::{
-    AudioContext, AudioContextState, DistanceModelType, HtmlAudioElement, HtmlMediaElement,
-    MediaElementAudioSourceNode, PannerNode, PanningModelType,
+    AudioContext, AudioContextState, DistanceModelType, GainNode, HtmlAudioElement,
+    HtmlMediaElement, MediaElementAudioSourceNode, PannerNode, PanningModelType,
 };
 
 /// Within this far of a source the sound is at its full; from there to its
@@ -26,9 +26,13 @@ const FULL_M: f64 = 1.0;
 struct Panned {
     element: HtmlMediaElement,
     node: MediaElementAudioSourceNode,
+    /// How loud: the part's volume while the engine names it, silence while
+    /// it does not.
+    gain: GainNode,
     panner: PannerNode,
     /// Where it stood when last heard, relative to the eye.
     at: DVec3,
+    volume: f32,
 }
 
 #[derive(Default)]
@@ -73,18 +77,23 @@ impl Audio {
         };
         let made = (|| -> Result<Panned, JsValue> {
             let node = context.create_media_element_source(element)?;
+            let gain = context.create_gain()?;
+            gain.gain().set_value(0.0);
             let panner = context.create_panner()?;
             panner.set_panning_model(PanningModelType::Hrtf);
             panner.set_distance_model(DistanceModelType::Linear);
             panner.set_ref_distance(FULL_M);
             panner.set_rolloff_factor(1.0);
-            node.connect_with_audio_node(&panner)?;
+            node.connect_with_audio_node(&gain)?;
+            gain.connect_with_audio_node(&panner)?;
             panner.connect_with_audio_node(&context.destination())?;
             Ok(Panned {
                 element: element.clone(),
                 node,
+                gain,
                 panner,
                 at: DVec3::ZERO,
+                volume: 0.0,
             })
         })();
         match made {
@@ -101,6 +110,7 @@ impl Audio {
             panned.element.set_muted(true);
             let _ = panned.element.pause();
             panned.node.disconnect().ok();
+            panned.gain.disconnect().ok();
             panned.panner.disconnect().ok();
         }
     }
@@ -137,16 +147,27 @@ impl Audio {
         self.detach(source);
     }
 
-    /// Every source put where it stands this frame, relative to the eye,
-    /// and let out once the browser allows. A source the engine does not
-    /// name this frame keeps its last place.
+    /// Every source put where it stands this frame, relative to the eye, as
+    /// loud as its part says, and let out once the browser allows. A source
+    /// the engine does not name this frame is silent: a video silenced, or
+    /// out of its reach, still plays for the eye.
     pub fn tick(&mut self, camera: &Camera, sounds: &[Sound]) {
         let running = self.running();
         let eye_from_world = camera.rotation.inverse();
+        for panned in self.sources.values_mut() {
+            if panned.volume != 0.0 {
+                panned.volume = 0.0;
+                panned.gain.gain().set_value(0.0);
+            }
+        }
         for sound in sounds {
             let Some(panned) = self.sources.get_mut(&sound.source) else {
                 continue;
             };
+            if panned.volume != sound.volume {
+                panned.volume = sound.volume;
+                panned.gain.gain().set_value(sound.volume);
+            }
             let at = eye_from_world * (sound.position - camera.position);
             if at != panned.at {
                 panned.at = at;

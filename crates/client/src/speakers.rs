@@ -40,7 +40,7 @@ pub struct Speakers {
     open: HashMap<PartId, u64>,
     /// Within reach this frame and not open: how far, which, its file,
     /// where and how far it carries.
-    wanting: Vec<(f64, PartId, String, DVec3, f64)>,
+    wanting: Vec<(f64, PartId, String, DVec3, f64, f32)>,
     heard: Vec<Sound>,
     outbox: Vec<Sounding>,
     frame: u64,
@@ -55,7 +55,19 @@ impl Speakers {
 
     /// One sound part, where it stands and how far the part says it is
     /// heard (0 by default), against where the eye is.
-    pub fn hear(&mut self, part: PartId, clip: &Clip, at: DVec3, reach_m: f32, eye: DVec3) {
+    pub fn hear(
+        &mut self,
+        part: PartId,
+        clip: &Clip,
+        at: DVec3,
+        reach_m: f32,
+        volume: f32,
+        eye: DVec3,
+    ) {
+        // A silenced one is not heard, and not opened.
+        if volume <= 0.0 {
+            return;
+        }
         let reach = if reach_m > 0.0 {
             f64::from(reach_m)
         } else {
@@ -69,10 +81,12 @@ impl Speakers {
                     source: SoundSource::Clip(part),
                     position: at,
                     reach_m: reach,
+                    volume,
                 });
             }
         } else if away <= reach {
-            self.wanting.push((away, part, clip.name(), at, reach));
+            self.wanting
+                .push((away, part, clip.name(), at, reach, volume));
         }
     }
 
@@ -92,7 +106,7 @@ impl Speakers {
         }
         self.wanting
             .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(core::cmp::Ordering::Equal));
-        for (_, part, path, at, reach) in self.wanting.drain(..) {
+        for (_, part, path, at, reach, volume) in self.wanting.drain(..) {
             if self.open.len() >= CLIPS_AT_ONCE {
                 break;
             }
@@ -102,6 +116,7 @@ impl Speakers {
                 source: SoundSource::Clip(part),
                 position: at,
                 reach_m: reach,
+                volume,
             });
         }
         self.frame += 1;
@@ -144,7 +159,7 @@ mod tests {
         let mut speakers = Speakers::default();
         let at = DVec3::new(10.0, 0.0, 0.0);
         speakers.begin_frame();
-        speakers.hear(PartId(1), &clip(1), at, 0.0, DVec3::ZERO);
+        speakers.hear(PartId(1), &clip(1), at, 0.0, 1.0, DVec3::ZERO);
         speakers.end_frame();
         let opened = speakers.drain();
         assert_eq!(
@@ -160,18 +175,18 @@ mod tests {
         let far = DVec3::new(30.0, 0.0, 0.0);
         for _ in 0..UNHEARD_FRAMES {
             speakers.begin_frame();
-            speakers.hear(PartId(1), &clip(1), at, 0.0, far);
+            speakers.hear(PartId(1), &clip(1), at, 0.0, 1.0, far);
             speakers.end_frame();
         }
         assert!(speakers.drain().is_empty(), "kept to the edge");
         speakers.begin_frame();
-        speakers.hear(PartId(1), &clip(1), at, 0.0, far);
+        speakers.hear(PartId(1), &clip(1), at, 0.0, 1.0, far);
         speakers.end_frame();
         assert_eq!(speakers.drain(), [Sounding::Close(PartId(1))]);
         // Its own reach says how far: a short one is not opened from ten metres.
         let mut short = Speakers::default();
         short.begin_frame();
-        short.hear(PartId(1), &clip(1), at, 5.0, DVec3::ZERO);
+        short.hear(PartId(1), &clip(1), at, 5.0, 1.0, DVec3::ZERO);
         short.end_frame();
         assert!(short.drain().is_empty());
     }
@@ -182,7 +197,7 @@ mod tests {
         speakers.begin_frame();
         for i in (0..12u8).rev() {
             let at = DVec3::new(f64::from(i) + 1.0, 0.0, 0.0);
-            speakers.hear(PartId(u64::from(i)), &clip(i), at, 0.0, DVec3::ZERO);
+            speakers.hear(PartId(u64::from(i)), &clip(i), at, 0.0, 1.0, DVec3::ZERO);
         }
         speakers.end_frame();
         let opened: Vec<PartId> = speakers

@@ -1055,6 +1055,7 @@ impl Parts {
                         shine,
                         reach_m: part.reach_m,
                         both_sides: true,
+                        volume: part.loudness(),
                     },
                     screen,
                     requests,
@@ -1071,7 +1072,7 @@ impl Parts {
                 continue;
             };
             let at = self.place_of(generator, seat, &part.pose).translation;
-            speakers.hear(id, &clip, at, part.reach_m, eye);
+            speakers.hear(id, &clip, at, part.reach_m, part.loudness(), eye);
         }
     }
 
@@ -1689,6 +1690,8 @@ mod tests {
             shine: 0.0,
             reach_m: 0.0,
             name: None,
+            muted: false,
+            volume: 0.0,
         }));
         // The cube is still the unit box.
         let cube = cube(5);
@@ -1716,6 +1719,8 @@ mod tests {
             shine: 0.0,
             reach_m: 0.0,
             name: None,
+            muted: false,
+            volume: 0.0,
         };
         parts.place(&generator, seat, part);
         // A body a block past the seam, on the next sector, at the top.
@@ -1747,6 +1752,8 @@ mod tests {
             shine: 0.0,
             reach_m: 0.0,
             name: None,
+            muted: false,
+            volume: 0.0,
         };
         let id = parts.place(&generator, seat, part);
         let point = SurfacePoint::new(seat.sector(), 1000.3, 999.8);
@@ -1814,6 +1821,8 @@ mod tests {
             shine: 0.0,
             reach_m: 0.0,
             name: None,
+            muted: false,
+            volume: 0.0,
         };
         parts.place(&generator, seat, part);
         parts.place(&generator, seat, part);

@@ -138,6 +138,12 @@ pub struct Part {
     /// shape's.
     #[prost(string, tag="8")]
     pub name: ::prost::alloc::string::String,
+    /// Whether what sounds of it is silenced: a video's track, a sound's file.
+    #[prost(bool, tag="9")]
+    pub muted: bool,
+    /// How loud it sounds, 0 to 1, as the panel says it; 0 is full, as unset.
+    #[prost(float, tag="10")]
+    pub volume: f32,
 }
 /// A part as the world keeps it: under the name it gave, one more for each
 /// change that landed in it.
