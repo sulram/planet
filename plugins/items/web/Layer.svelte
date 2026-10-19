@@ -104,6 +104,7 @@
 		charting = false;
 		seam.core({ type: 'go_to', place });
 	}}
+	onadd={() => item && ask('take', { item, ahead: true })}
 	onclose={() => {
 		charting = false;
 		listing = false;

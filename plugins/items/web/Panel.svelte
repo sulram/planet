@@ -45,6 +45,8 @@
 		onchart: (on: boolean) => void;
 		/** Travel to a place code. */
 		ongo: (place: string) => void;
+		/** Place the item in hand in front of the body, with no click. */
+		onadd: () => void;
 		onclose: () => void;
 		onpick: (id: number) => void;
 		onedit: (on: boolean) => void;
@@ -77,6 +79,7 @@
 		onlist,
 		onchart,
 		ongo,
+		onadd,
 		onclose,
 		onpick,
 		onedit,
@@ -171,9 +174,14 @@
 					</button>
 				{/each}
 			</div>
-			{#if inHand?.Extra}
+			{#if inHand?.Extra || inHand?.adds}
 				<section>
-					<inHand.Extra {seam} />
+					{#if inHand.Extra}
+						<inHand.Extra {seam} />
+					{/if}
+					{#if inHand.adds}
+						<Button type="button" onclick={onadd}>{t('add')}</Button>
+					{/if}
 				</section>
 			{/if}
 			{#if refused}
