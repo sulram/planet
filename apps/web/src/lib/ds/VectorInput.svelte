@@ -16,6 +16,8 @@
 		values: readonly number[];
 		/** How much one pixel of drag, and a typed value's rounding, is worth. */
 		step?: number;
+		/** What a drag steps by with Shift held: ten steps when unsaid. A coarse step, like a rotation's 15 degrees, makes Shift the fine one. */
+		fine?: number;
 		/** Digits after the point, as shown. */
 		decimals?: number;
 		min?: number;
@@ -32,7 +34,7 @@
 		locked?: boolean;
 	}
 
-	let { label, axes, values, step = 0.1, decimals = 2, min = -Infinity, max = Infinity, onchange, onreset, resetLabel, lockLabel, locked: lockedAtFirst = false }: Props =
+	let { label, axes, values, step = 0.1, fine, decimals = 2, min = -Infinity, max = Infinity, onchange, onreset, resetLabel, lockLabel, locked: lockedAtFirst = false }: Props =
 		$props();
 
 	// svelte-ignore state_referenced_locally
@@ -83,7 +85,7 @@
 		}
 		if (dragging === null) return;
 		const steps = Math.round((event.clientX - startX) * SENSITIVITY);
-		set(dragging, startValue + steps * step * (event.shiftKey ? 10 : 1));
+		set(dragging, startValue + steps * (event.shiftKey ? (fine ?? step * 10) : step));
 	}
 
 	function up(axis: number, event: PointerEvent) {

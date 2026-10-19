@@ -214,7 +214,8 @@
 						label={t('rotation')}
 						axes={['x', 'y', 'z']}
 						values={picked.rotation}
-						step={1}
+						step={15}
+						fine={1}
 						decimals={0}
 						min={-180}
 						max={180}
