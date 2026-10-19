@@ -129,8 +129,9 @@ end to end.
 
 ## Plugins: wishes
 
-- [ ] Files: uploads through the world server into the bucket folder (89), what entities and media stand on
-- [ ] Entities: GLB with budgets, primitive parts, gizmos
+- [ ] Files: `POST /api/files` from a builder's session into the bucket folder (89), named by content hash, listed and served by the world; `.vox` first, GLB and images after (sketches/entities.md)
+- [ ] Models: a `.vox` file as a shape of a part, read and meshed by `crates/vox` with its own palette, solid or passable, placed with the one gizmo (sketches/entities.md)
+- [ ] Entities: GLB as a shape of a part, with budgets
 - [ ] Images: URL or upload, client-made thumbnail and low version, proximity LOD, texture budget
 - [ ] Video on the web (browser decoder), decoder budget, posters
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens

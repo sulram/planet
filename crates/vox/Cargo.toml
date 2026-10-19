@@ -1,0 +1,12 @@
+[package]
+name = "vox"
+description = "A MagicaVoxel file read into one grid with its palette, and its faces. No sphere, no IO."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
