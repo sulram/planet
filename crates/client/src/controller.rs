@@ -28,9 +28,15 @@ impl Built<'_> {
     /// What a body with its feet `feet_m` over the datum, standing in a
     /// column of a seat, has under and over it of what is built. `None`
     /// with nothing built near.
-    fn footing(&self, seat: Seat, point: SurfacePoint, feet_m: f64) -> Option<Footing> {
+    fn footing(
+        &self,
+        generator: &Generator,
+        seat: Seat,
+        point: SurfacePoint,
+        feet_m: f64,
+    ) -> Option<Footing> {
         let cells = self.cells.footing(seat, point, feet_m);
-        let parts = self.parts.footing(seat, point, feet_m);
+        let parts = self.parts.footing(generator, seat, point, feet_m);
         match (cells, parts) {
             (Some(cells), Some(parts)) => Some(cells.with(parts)),
             (cells, parts) => cells.or(parts),
@@ -417,7 +423,7 @@ impl Controller {
     ) -> Footing {
         let direction = seat.sphere(generator).blocks().direction(point);
         let ground = Footing::solid(seat::ground_m(generator, seat.body(), direction));
-        match built.and_then(|built| built.footing(seat, point, self.height_m)) {
+        match built.and_then(|built| built.footing(generator, seat, point, self.height_m)) {
             Some(built) => ground.with(built),
             None => ground,
         }
@@ -789,7 +795,7 @@ impl Controller {
                 let shown_m = self.shown_ground_m(generator, self.radial()) + 0.5;
                 let (seat, point) = self.over(generator);
                 let built_m = built
-                    .and_then(|built| built.footing(seat, point, self.height_m))
+                    .and_then(|built| built.footing(generator, seat, point, self.height_m))
                     .and_then(|footing| footing.floor_m);
                 Some(built_m.map_or(shown_m, |built_m| shown_m.max(built_m)))
             }
@@ -877,7 +883,7 @@ impl Controller {
             // Open ground holds a flyer up and never stops it; what is built
             // is a wall to it all the same.
             self.walk_to(grid, here, du, dv, |point| {
-                let built = held.footing(seat(point), point, self.height_m);
+                let built = held.footing(generator, seat(point), point, self.height_m);
                 built.unwrap_or(Footing::OPEN)
             })
         } else {
@@ -917,7 +923,7 @@ impl Controller {
         }
         let (du, dv) = (there.u - here.u, there.v - here.v);
         let point = self.walk_to(grid, here, du, dv, |point| {
-            let footing = built.footing(Seat::Moon(point.sector), point, self.height_m);
+            let footing = built.footing(generator, Seat::Moon(point.sector), point, self.height_m);
             footing.unwrap_or(Footing::OPEN)
         });
         match point == grid.wrapped(SurfacePoint::new(here.sector, here.u + du, here.v + dv)) {

@@ -146,10 +146,12 @@ impl Gizmo {
 
     /// Where along a handle's axis a line of sight is: the parameter of
     /// the point of the axis nearest the line, metres from the part's
-    /// centre. `None` when the line runs along the axis.
-    fn along(&self, axis: usize, from: DVec3, toward: DVec3) -> Option<f64> {
-        let e = [self.world.x_axis, self.world.y_axis, self.world.z_axis][axis].normalize();
-        let centre = self.world.transform_point3(DVec3::new(0.0, 0.0, 0.5));
+    /// centre in `world`, the frame a drag started from, so a part moved by
+    /// the drag does not move the measure. `None` when the line runs along
+    /// the axis.
+    fn along(world: &DAffine3, axis: usize, from: DVec3, toward: DVec3) -> Option<f64> {
+        let e = [world.x_axis, world.y_axis, world.z_axis][axis].normalize();
+        let centre = world.transform_point3(DVec3::new(0.0, 0.0, 0.5));
         let w = centre - from;
         let b = e.dot(toward);
         let denom = 1.0 - b * b;
@@ -160,11 +162,12 @@ impl Gizmo {
     }
 
     /// The angle of a line of sight about a handle's axis, where the line
-    /// crosses the plane through the part's anchor across that axis.
-    fn around(&self, axis: usize, from: DVec3, toward: DVec3) -> Option<f64> {
-        let axes = [self.world.x_axis, self.world.y_axis, self.world.z_axis].map(|a| a.normalize());
+    /// crosses the plane through the part's anchor across that axis, in
+    /// `world`, the frame a drag started from.
+    fn around(world: &DAffine3, axis: usize, from: DVec3, toward: DVec3) -> Option<f64> {
+        let axes = [world.x_axis, world.y_axis, world.z_axis].map(|a| a.normalize());
         let (u, v, e) = (axes[(axis + 1) % 3], axes[(axis + 2) % 3], axes[axis]);
-        let anchor = self.world.translation;
+        let anchor = world.translation;
         let along = toward.dot(e);
         if along.abs() < 1e-6 {
             return None;
@@ -177,8 +180,8 @@ impl Gizmo {
     /// Starts a drag of a handle where the pointer is.
     pub fn press(&mut self, mode: Mode, axis: usize, from: DVec3, toward: DVec3) {
         let start = match mode {
-            Mode::Move | Mode::Scale => self.along(axis, from, toward),
-            Mode::Rotate => self.around(axis, from, toward),
+            Mode::Move | Mode::Scale => Self::along(&self.world, axis, from, toward),
+            Mode::Rotate => Self::around(&self.world, axis, from, toward),
         };
         if let Some(start) = start {
             self.drag = Some(Drag {
@@ -203,11 +206,11 @@ impl Gizmo {
         let e = axes[drag.axis];
         match mode {
             Mode::Move => {
-                let now = self.along(drag.axis, from, toward)?;
+                let now = Self::along(&drag.from, drag.axis, from, toward)?;
                 Some(DAffine3::from_translation(e * (now - drag.start)) * drag.from)
             }
             Mode::Rotate => {
-                let now = self.around(drag.axis, from, toward)?;
+                let now = Self::around(&drag.from, drag.axis, from, toward)?;
                 let anchor = drag.from.translation;
                 let turn = DQuat::from_axis_angle(e, now - drag.start);
                 Some(
@@ -218,7 +221,7 @@ impl Gizmo {
                 )
             }
             Mode::Scale => {
-                let now = self.along(drag.axis, from, toward)?;
+                let now = Self::along(&drag.from, drag.axis, from, toward)?;
                 let lengths =
                     [drag.from.x_axis, drag.from.y_axis, drag.from.z_axis].map(|a| a.length());
                 // The handle moves with the side it stretches, so the side
@@ -237,5 +240,60 @@ impl Gizmo {
                 Some(drag.from * DAffine3::from_scale(scale))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use client::{Part, PartId, Seat, Shape};
+    use topology::Sector;
+
+    fn picked(world: DAffine3) -> Gizmo {
+        Gizmo {
+            id: PartId(1),
+            seat: Seat::Sector(Sector::new(0).unwrap()),
+            part: Part {
+                shape: Shape::Cube,
+                pose: client::PartPose::upright([0.0, 0.0, 0.0], [2.0, 2.0, 2.0]),
+                paint: 0,
+                solid: true,
+            },
+            world,
+            hot: None,
+            drag: None,
+        }
+    }
+
+    /// A drag is measured against where it started, so a part that moved
+    /// under it is where the pointer says and not back and forth.
+    #[test]
+    fn a_drag_follows_the_pointer_and_does_not_oscillate() {
+        let from = DAffine3::from_translation(DVec3::new(10.0, 0.0, 0.0));
+        let mut gizmo = picked(from);
+        // Looking down from above, the pointer over the x axis.
+        let eye = |x: f64| (DVec3::new(x, 0.0, 20.0), -DVec3::Z);
+        let (at, toward) = eye(11.0);
+        gizmo.press(Mode::Move, 0, at, toward);
+        assert!(gizmo.drag.is_some());
+        let (at, toward) = eye(13.0);
+        let moved = gizmo.dragged(Mode::Move, false, at, toward).unwrap();
+        assert!((moved.translation.x - 12.0).abs() < 1e-9, "{moved:?}");
+        // The part moved there, the pointer stayed: it stays there.
+        gizmo.world = moved;
+        let again = gizmo.dragged(Mode::Move, false, at, toward).unwrap();
+        assert!((again.translation.x - 12.0).abs() < 1e-9, "{again:?}");
+        // Turned a quarter about z from the frame it started in.
+        let mut gizmo = picked(from);
+        let anchor = from.translation;
+        let (at, toward) = (anchor + DVec3::new(5.0, 0.0, 20.0), -DVec3::Z);
+        gizmo.press(Mode::Rotate, 2, at, toward);
+        let (at, toward) = (anchor + DVec3::new(0.0, 5.0, 20.0), -DVec3::Z);
+        let turned = gizmo.dragged(Mode::Rotate, false, at, toward).unwrap();
+        let x = turned.transform_vector3(DVec3::X);
+        assert!((x - DVec3::Y).length() < 1e-9, "{x:?}");
+        gizmo.world = turned;
+        let again = gizmo.dragged(Mode::Rotate, false, at, toward).unwrap();
+        assert!((again.transform_vector3(DVec3::X) - DVec3::Y).length() < 1e-9);
     }
 }

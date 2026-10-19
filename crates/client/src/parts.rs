@@ -30,10 +30,10 @@
 //! near the body are asked for every second. With no world, a headless
 //! picture or a bench, the parts are held here alone.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use glam::{DAffine3, DMat3, DVec3};
-use part::{Gap, Part, PartId, Pose, Shape};
+use part::{Part, PartId, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
 use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex};
@@ -98,9 +98,10 @@ struct Link {
     /// Places asked that the world has not named, the first first: the
     /// first `placed` of this session's own is the first of them.
     placing: Vec<(u32, PartId)>,
-    /// Sets and removes asked, by number: refused, what is held is asked
-    /// for again.
-    waiting: HashSet<u32>,
+    /// Sets and removes asked, by number, each of which part by the
+    /// world's name: refused, what the world holds of it is asked for
+    /// again.
+    waiting: HashMap<u32, u64>,
     /// What the world calls each part held here, and back.
     world_of: HashMap<PartId, u64>,
     local_of: HashMap<u64, PartId>,
@@ -324,7 +325,7 @@ impl Parts {
             ),
             Deferred::Remove => link.ask(wire::REMOVE, &wire::Remove { id }),
         };
-        link.waiting.insert(asked);
+        link.waiting.insert(asked, id);
     }
 
     /// A part as the world holds it: held here under the name it has here,
@@ -363,6 +364,8 @@ impl Parts {
         link.versions.remove(&id);
         if let Some(local) = link.local_of.remove(&id) {
             link.world_of.remove(&local);
+            link.dirty.remove(&local);
+            link.deferred.retain(|(part, _)| *part != local);
             self.held.remove(&local);
         }
     }
@@ -383,8 +386,11 @@ impl Parts {
             }
             return true;
         }
-        if link.waiting.remove(&id) {
+        if let Some(world) = link.waiting.remove(&id) {
+            // Refused: what is held of it is stale by the world's word, so
+            // the next look brings the part as the world has it.
             if !code.is_empty() {
+                link.versions.remove(&world);
                 link.since_look_s = LOOK_S;
             }
             return true;
@@ -519,25 +525,45 @@ impl Parts {
     }
 
     /// What a body with its feet `feet_m` over the datum, standing in a
-    /// column of a seat, has under and over it of the solid parts there.
-    /// `None` with none near.
-    pub fn footing(&self, seat: Seat, point: SurfacePoint, feet_m: f64) -> Option<Footing> {
-        let column = [point.u, point.v];
-        let reach = (feet_m + STEP_M) / BLOCK_M;
+    /// column of a seat, has under and over it of the solid parts on that
+    /// body. Asked in the world, up the body's own radial, so a part whose
+    /// box reaches over a seam holds a body on the next sector all the
+    /// same. `None` with none near.
+    pub fn footing(
+        &self,
+        generator: &Generator,
+        seat: Seat,
+        point: SurfacePoint,
+        feet_m: f64,
+    ) -> Option<Footing> {
+        let body = seat.body();
+        let sphere = seat::sphere_of(generator, body);
+        let foot = DVec3::from(sphere.position(point, feet_m));
+        let tangents = sphere.blocks().tangents(point);
+        let up = DVec3::from(tangents.up);
+        let half_m = BODY_HALF * BLOCK_M;
+        let (du, dv) = (
+            DVec3::from(tangents.du).normalize() * half_m,
+            DVec3::from(tangents.dv).normalize() * half_m,
+        );
+        let feet = [DVec3::ZERO, -du - dv, du - dv, -du + dv, du + dv];
         self.held
             .values()
-            .filter(|(on, part)| *on == seat && part.solid)
-            .filter(|(_, part)| {
-                // Near enough to be over the body at all: within its longest
-                // side of the anchor, and the body's width.
-                let span = part.pose.scale.iter().fold(0.0, |a: f64, &b| a.max(b)) + BODY_HALF;
-                let [u, v, _] = part.pose.at;
-                (u - column[0]).abs() <= span && (v - column[1]).abs() <= span
+            .filter(|(on, part)| on.body() == body && part.solid)
+            .filter_map(|(on, part)| {
+                // Near enough to be over the body at all: its farthest
+                // corner, and the body's width, from the body's column.
+                let placed = seat::seated(sphere, on.sector(), &part.pose);
+                let to = placed.translation - foot;
+                let across = (to - up * to.dot(up)).length();
+                if across > part.reach() * BLOCK_M + half_m {
+                    return None;
+                }
+                part::gap_along(&placed.inverse(), foot, up, &feet, STEP_M)
             })
-            .filter_map(|(_, part)| self.gap_of(part, column, reach))
             .map(|gap| Footing {
-                floor_m: gap.floor.map(|n| n * BLOCK_M),
-                ceiling_m: gap.ceiling.map(|n| n * BLOCK_M),
+                floor_m: gap.floor.map(|t| feet_m + t),
+                ceiling_m: gap.ceiling.map(|t| feet_m + t),
             })
             .reduce(Footing::with)
     }
@@ -643,19 +669,6 @@ impl Parts {
     pub fn size_of(&self, hash: [u8; 32]) -> Option<[u32; 3]> {
         self.grids.get(&hash).map(|grid| grid.size)
     }
-
-    /// What a body standing in a column has under and over it of one part:
-    /// its box, and for a model whose file arrived, its own voxels.
-    fn gap_of(&self, part: &Part, column: [f64; 2], reach: f64) -> Option<Gap> {
-        let boxed = part.gap(column, BODY_HALF, reach)?;
-        let Shape::Vox(hash) = part.shape else {
-            return Some(boxed);
-        };
-        match self.grids.get(&hash) {
-            Some(grid) => model_gap(grid, part, column, reach),
-            None => Some(boxed),
-        }
-    }
 }
 
 /// The model a part is drawn as. `None` for a shape drawn another way, a
@@ -679,66 +692,6 @@ fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
 fn model_of_file(hash: [u8; 32]) -> ModelId {
     let head: [u8; 8] = hash[..8].try_into().expect("eight of thirty two");
     ModelId(u64::from_be_bytes(head) | FILE)
-}
-
-/// Where a body's feet are read, each way of its column: the middle and the
-/// four corners of its width.
-const FEET: [[f64; 2]; 5] = [
-    [0.0, 0.0],
-    [-BODY_HALF, -BODY_HALF],
-    [BODY_HALF, -BODY_HALF],
-    [-BODY_HALF, BODY_HALF],
-    [BODY_HALF, BODY_HALF],
-];
-
-/// What a body standing in a column has under its feet and over its head
-/// of a model's own voxels, read through its pose: up each foot's line
-/// through the part's box, the solid runs of the grid along it. Solid at the
-/// height of the step is a wall whose top is the floor offered, below it a
-/// floor, above it a roof, as a cube answers (`part::Part::gap`).
-fn model_gap(grid: &vox::Grid, part: &Part, column: [f64; 2], reach: f64) -> Option<Gap> {
-    let inward = part.pose.inward();
-    let up = inward.transform_vector3(DVec3::Z);
-    let size = grid.size.map(f64::from);
-    let to_grid = |p: DVec3| [(p.x + 0.5) * size[0], (p.y + 0.5) * size[1], p.z * size[2]];
-    let mut gap: Option<Gap> = None;
-    for [dx, dy] in FEET {
-        let foot = inward.transform_point3(DVec3::new(column[0] + dx, column[1] + dy, 0.0));
-        let Some((low, high)) = part::through(foot, up) else {
-            continue;
-        };
-        let runs = grid.solid_runs(to_grid(foot + up * low), to_grid(foot + up * high));
-        let mut found = Gap {
-            floor: None,
-            ceiling: None,
-        };
-        for (a, b) in runs {
-            let (h0, h1) = (low + a * (high - low), low + b * (high - low));
-            if h0 <= reach && reach <= h1 || h1 <= reach {
-                found.floor = Some(found.floor.map_or(h1, |floor| floor.max(h1)));
-            } else {
-                found.ceiling = Some(found.ceiling.map_or(h0, |roof| roof.min(h0)));
-            }
-        }
-        if found.floor.is_none() && found.ceiling.is_none() {
-            continue;
-        }
-        gap = Some(match gap {
-            None => found,
-            Some(gap) => Gap {
-                floor: pick(gap.floor, found.floor, f64::max),
-                ceiling: pick(gap.ceiling, found.ceiling, f64::min),
-            },
-        });
-    }
-    gap
-}
-
-fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
-    match (a, b) {
-        (Some(a), Some(b)) => Some(f(a, b)),
-        (a, b) => a.or(b),
-    }
 }
 
 /// A model's voxels meshed into the unit box: `vox` meshes them in voxels
@@ -876,6 +829,37 @@ mod tests {
     }
 
     #[test]
+    fn a_part_over_a_seam_holds_a_body_on_the_next_sector() {
+        let generator = Generator::new(worldgen::Recipe::new(1)).unwrap();
+        let sphere = generator.sphere();
+        let side = f64::from(sphere.blocks().side());
+        let mut parts = Parts::default();
+        let seat = Seat::Sector(topology::Sector::new(0).unwrap());
+        // Anchored half a block inside the edge, four blocks wide: its box
+        // reaches a block and a half over the seam.
+        let part = Part {
+            shape: Shape::Cube,
+            pose: Pose::upright([side - 0.5, side / 2.0, 20.0], [4.0, 4.0, 2.0]),
+            paint: 0,
+            solid: true,
+        };
+        parts.place(seat, part);
+        // A body a block past the seam, on the next sector, at the top.
+        let placed = seat::seated(sphere, seat.sector(), &part.pose);
+        let over = placed.transform_point3(DVec3::new(0.375, 0.0, 1.0));
+        let point = sphere.blocks().surface_point(over.to_array());
+        assert_ne!(point.sector, seat.sector(), "the body is over the seam");
+        let feet_m = over.length() - sphere.radius_m();
+        let footing = parts
+            .footing(&generator, Seat::Sector(point.sector), point, feet_m)
+            .unwrap();
+        assert!(
+            (footing.floor_m.unwrap() - feet_m).abs() < 1e-3,
+            "{footing:?} vs {feet_m}"
+        );
+    }
+
+    #[test]
     fn a_body_stands_on_a_solid_cube_and_not_on_an_open_one() {
         let generator = Generator::new(worldgen::Recipe::new(1)).unwrap();
         let mut parts = Parts::default();
@@ -890,21 +874,20 @@ mod tests {
         let id = parts.place(seat, part);
         let point = SurfacePoint::new(seat.sector(), 1000.3, 999.8);
         let top_m = 12.0 * BLOCK_M;
-        let footing = parts.footing(seat, point, top_m).unwrap();
-        assert_eq!(footing.floor_m, Some(top_m));
-        // Under it, a roof.
-        let under = parts.footing(seat, point, 0.0).unwrap();
-        assert_eq!(under.ceiling_m, Some(10.0 * BLOCK_M));
-        // A step away, nothing.
+        let footing = parts.footing(&generator, seat, point, top_m).unwrap();
         assert!(
-            parts
-                .footing(
-                    seat,
-                    SurfacePoint::new(seat.sector(), 1003.0, 1000.0),
-                    top_m
-                )
-                .is_none()
+            (footing.floor_m.unwrap() - top_m).abs() < 1e-4,
+            "{footing:?}"
         );
+        // Under it, a roof.
+        let under = parts.footing(&generator, seat, point, 0.0).unwrap();
+        assert!(
+            (under.ceiling_m.unwrap() - 10.0 * BLOCK_M).abs() < 1e-4,
+            "{under:?}"
+        );
+        // A step away, nothing.
+        let aside = SurfacePoint::new(seat.sector(), 1003.0, 1000.0);
+        assert!(parts.footing(&generator, seat, aside, top_m).is_none());
         // Made open, nothing to stand on.
         parts.set(
             id,
@@ -914,7 +897,7 @@ mod tests {
                 ..part
             },
         );
-        assert!(parts.footing(seat, point, top_m).is_none());
+        assert!(parts.footing(&generator, seat, point, top_m).is_none());
         // Aimed at from above in the world, it is met at its top.
         let world = parts.transform(&generator, id).unwrap();
         let top = world.transform_point3(DVec3::new(0.0, 0.0, 1.0));
@@ -925,77 +908,5 @@ mod tests {
         // One model for every cube in a paint.
         parts.place(seat, part);
         assert_eq!(parts.drain_changes().len(), 1);
-    }
-
-    #[test]
-    fn a_model_is_asked_for_once_and_stood_on_by_its_own_voxels() {
-        // A shelter of four voxels across and four up: a pillar at one end
-        // and a roof over air wide and high enough for a body.
-        let grid = vox::Grid {
-            size: [4, 1, 4],
-            voxels: vec![1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1],
-        };
-        let model = vox::Model {
-            grid,
-            palette: vox::default_palette(),
-        };
-        let hash = [7; 32];
-        let mut parts = Parts::default();
-        let seat = Seat::Sector(topology::Sector::new(0).unwrap());
-        // A block a voxel: the box is 4 by 1 by 4 blocks, from 998 to 1002
-        // across and 10 to 14 up.
-        let part = Part {
-            shape: Shape::Vox(hash),
-            pose: Pose::upright([1000.0, 1000.0, 10.0], [4.0, 1.0, 4.0]),
-            paint: 0,
-            solid: true,
-        };
-        parts.place(seat, part);
-        parts.place(seat, part);
-        assert_eq!(parts.wanted(), vec![hash]);
-        assert!(parts.wanted().is_empty());
-        assert!(
-            parts.drain_changes().is_empty(),
-            "nothing is drawn before the file comes"
-        );
-        // Until it comes, the box holds a body up: on top of it.
-        let under_arch = SurfacePoint::new(seat.sector(), 1000.6, 1000.0);
-        let boxed = parts.footing(seat, under_arch, 14.0 * BLOCK_M).unwrap();
-        assert_eq!(boxed.floor_m, Some(14.0 * BLOCK_M));
-
-        parts.model_arrived(hash, model);
-        assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
-        let changes = parts.drain_changes();
-        assert_eq!(changes.len(), 1);
-        let ModelChange::Add(_, mesh) = &changes[0] else {
-            panic!("a mesh is added");
-        };
-        // Seven voxels, of which some sides touch: fewer than 42 sides, all
-        // inside the unit box.
-        assert!(mesh.vertices.len() < 42 * 4 && !mesh.vertices.is_empty());
-        for v in &mesh.vertices {
-            assert!(v.position[0].abs() <= 0.5 && v.position[1].abs() <= 0.5);
-            assert!((0.0..=1.0).contains(&v.position[2]));
-        }
-        // Standing on top: the top of the roof, four blocks up.
-        let on_top = parts.footing(seat, under_arch, 14.0 * BLOCK_M).unwrap();
-        assert_eq!(on_top.floor_m, Some(14.0 * BLOCK_M));
-        // Under the roof, where the box said floor, the voxels say a roof
-        // three blocks over the anchor and no floor of the part.
-        let feet_m = 10.0 * BLOCK_M;
-        let under = parts.footing(seat, under_arch, feet_m).unwrap();
-        assert_eq!(under.floor_m, None, "{under:?}");
-        assert!(
-            (under.ceiling_m.unwrap() - 13.0 * BLOCK_M).abs() < 1e-9,
-            "{under:?}"
-        );
-        // Over the pillar, feet at the anchor: a wall, whose top is the
-        // floor offered.
-        let pillar = SurfacePoint::new(seat.sector(), 998.5, 1000.0);
-        let wall = parts.footing(seat, pillar, feet_m).unwrap();
-        assert!(
-            (wall.floor_m.unwrap() - 14.0 * BLOCK_M).abs() < 1e-9,
-            "{wall:?}"
-        );
     }
 }

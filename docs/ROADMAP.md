@@ -80,6 +80,7 @@ end to end.
 - [ ] **Undo is universal**: one history of every change that landed, the cells', the parts' and every owner's to come, taken back and put back in order as one list, never a history per owner; the cells' own history today is the first member of it
 - [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
 - [ ] A client lets go of parts far behind it, as it does volumes
+- [ ] The parts' footing by bucket: a body's column asks the few parts near it, not every part held, once a world holds thousands
 - [ ] A light part lights what is near, as a lamp among the cells does
 - [ ] Items beside the cube: a `.vox` model (its session: `crates/vox`, the upload route), a shape of part, a draw of its own and a row in the items menu. A picture stands (`Shape::Image`): its knobs, one side or both, a screen or a print, are read off its paint's finish until the panel offers them
 - [ ] Measure: parts in a frame against the budget, `bun run bench`

@@ -310,6 +310,14 @@ pub fn away_m(
     dot(apart, apart).sqrt()
 }
 
+/// Whether a part may stand on a seat of a body as its pose says: its
+/// anchor inside the body's sector. One rule, read on both sides.
+pub fn inside(sphere: QuadSphere, pose: &part::Pose) -> bool {
+    let side = f64::from(sphere.blocks().side());
+    let within = |n: f64| (0.0..=side).contains(&n);
+    within(pose.at[0]) && within(pose.at[1])
+}
+
 /// A part as the wire says it.
 pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
     let pose = &part.pose;

@@ -290,41 +290,23 @@ impl Part {
         if !self.solid {
             return None;
         }
-        let inward = self.pose.inward();
-        let up = inward.transform_vector3(DVec3::Z);
+        let foot = DVec3::new(column[0], column[1], 0.0);
         let feet = [
-            [0.0, 0.0],
-            [-half, -half],
-            [half, -half],
-            [-half, half],
-            [half, half],
+            DVec3::ZERO,
+            DVec3::new(-half, -half, 0.0),
+            DVec3::new(half, -half, 0.0),
+            DVec3::new(-half, half, 0.0),
+            DVec3::new(half, half, 0.0),
         ];
-        let mut gap: Option<Gap> = None;
-        for [dx, dy] in feet {
-            let foot = inward.transform_point3(DVec3::new(column[0] + dx, column[1] + dy, 0.0));
-            let Some((low, high)) = slab(foot, up) else {
-                continue;
-            };
-            let found = if low <= reach && reach <= high || high <= reach {
-                Gap {
-                    floor: Some(high),
-                    ceiling: None,
-                }
-            } else {
-                Gap {
-                    floor: None,
-                    ceiling: Some(low),
-                }
-            };
-            gap = Some(match gap {
-                None => found,
-                Some(gap) => Gap {
-                    floor: pick(gap.floor, found.floor, f64::max),
-                    ceiling: pick(gap.ceiling, found.ceiling, f64::min),
-                },
-            });
-        }
-        gap
+        gap_along(&self.pose.inward(), foot, DVec3::Z, &feet, reach)
+    }
+
+    /// How far a corner of this part reaches from its anchor, in blocks:
+    /// what is within this of the anchor may be over a body, nothing
+    /// further is.
+    pub fn reach(&self) -> f64 {
+        let [sx, sy, sz] = self.pose.scale;
+        DVec3::new(sx / 2.0, sy / 2.0, sz).length()
     }
 
     /// The flat frame from the part's own space, with the anchor in it:
@@ -332,6 +314,53 @@ impl Part {
     pub fn placed(&self) -> DAffine3 {
         DAffine3::from_translation(DVec3::from(self.pose.at)) * self.pose.local()
     }
+}
+
+/// What a body standing at `foot` has under its feet and over its head of
+/// a unit box, along `up`, when its step reaches `reach` along it: the
+/// body's footprint is `foot` and each of `feet` added to it. `inward` is
+/// the box's own space from the frame `foot`, `up` and `feet` are said in,
+/// and the gap is in that frame's units along `up` from `foot`. `None`
+/// where the box is not over the body at all.
+///
+/// Solid at the height of the step is a wall, and the wall's top is the
+/// floor it offers, which a walker refuses when it is more than a step up.
+/// Air there means the box below is the floor and the box above is the
+/// roof.
+pub fn gap_along(
+    inward: &DAffine3,
+    foot: DVec3,
+    up: DVec3,
+    feet: &[DVec3],
+    reach: f64,
+) -> Option<Gap> {
+    let up_in = inward.transform_vector3(up);
+    let mut gap: Option<Gap> = None;
+    for &at in feet {
+        let foot_in = inward.transform_point3(foot + at);
+        let Some((low, high)) = slab(foot_in, up_in) else {
+            continue;
+        };
+        let found = if (low <= reach && reach <= high) || high <= reach {
+            Gap {
+                floor: Some(high),
+                ceiling: None,
+            }
+        } else {
+            Gap {
+                floor: None,
+                ceiling: Some(low),
+            }
+        };
+        gap = Some(match gap {
+            None => found,
+            Some(gap) => Gap {
+                floor: pick(gap.floor, found.floor, f64::max),
+                ceiling: pick(gap.ceiling, found.ceiling, f64::min),
+            },
+        });
+    }
+    gap
 }
 
 fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
