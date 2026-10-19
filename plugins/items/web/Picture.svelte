@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/ds';
-	import { upload } from '$lib/files';
 	import { KINDS, prepareImage, type Media } from './image';
 	import type { KindProps } from './kinds';
 	import { t } from './words';
@@ -9,7 +8,7 @@
 	// three versions, sent up, and taken in hand with the item. The next
 	// click places it. What a placed picture is at every distance is the
 	// engine's (`image.ts`).
-	let { seam, key }: KindProps = $props();
+	let { seam }: KindProps = $props();
 
 	/** Why the last file was not taken: the world's refusal codes, and the browser's. */
 	type Refused = 'kind' | 'size' | 'level' | 'key' | 'unreachable' | 'canvas';
@@ -26,7 +25,7 @@
 		busy = true;
 		error = null;
 		try {
-			picture = await prepareImage(file, (blob) => upload(blob, key));
+			picture = await prepareImage(file, (blob) => seam.upload(blob));
 			seam.command('take', { item: 'picture', media: picture });
 		} catch (refused) {
 			const code = refused instanceof Error ? refused.message : '';

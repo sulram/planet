@@ -13,7 +13,8 @@ pub mod shape {
     pub enum Shape {
         #[prost(message, tag="1")]
         Cube(super::Cube),
-        /// A `.vox` model: the SHA-256 of its file, 32 bytes.
+        /// A model from a `.vox` file: the SHA-256 of its content, 32 bytes,
+        /// the file named `asset://<hex>.vox`.
         #[prost(bytes, tag="2")]
         Vox(::prost::alloc::vec::Vec<u8>),
         #[prost(message, tag="3")]

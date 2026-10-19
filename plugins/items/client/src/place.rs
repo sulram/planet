@@ -1,14 +1,15 @@
 //! Placing an item: a click puts it where the pointer meets the world, on a
 //! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
-//! A picture stands a metre tall in its own aspect, its face turned to the
+//! A model stands as big as its file says, a voxel an eighth of a cell. A
+//! picture stands a metre tall in its own aspect, its face turned to the
 //! eye, as a pane nobody collides with. Placed, the part is picked, so the
 //! hand that put it there moves it next.
 
-use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
+use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape, VOXEL};
 use glam::{DQuat, DVec3};
 use topology::BLOCK_M;
 
-use crate::{Item, Items, refuse};
+use crate::{Item, Items, Refusal, refuse};
 
 /// How thick a picture's pane is, in blocks: enough to pick, nothing to see.
 const PANE: f64 = 0.1;
@@ -28,6 +29,21 @@ impl Items {
                 paint: self.made_of(),
                 solid: true,
             },
+            Item::Model => {
+                // With no file taken there is nothing to place yet.
+                let Some(hash) = self.model else {
+                    return;
+                };
+                let Some(size) = host.model_size(hash) else {
+                    return refuse(host, Refusal::Unread);
+                };
+                client::Part {
+                    shape: Shape::Vox(hash),
+                    pose: PartPose::upright(at, size.map(|n| f64::from(n) * VOXEL)),
+                    paint: self.made_of(),
+                    solid: true,
+                }
+            }
             Item::Picture => {
                 // Nothing chosen yet: the panel asks for a file.
                 let Some(media) = self.picture else {

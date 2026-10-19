@@ -9,7 +9,7 @@
 	// it shows those and asks for others, and what a click places and a
 	// drag moves is the plugin's crate's. The menu is open while the plugin
 	// says it is editing, from its button or from a key.
-	let { seam, level, palette, key }: LayerProps = $props();
+	let { seam, level, palette }: LayerProps = $props();
 
 	let editing = $state(false);
 	let item = $state<Item | null>(null);
@@ -57,7 +57,6 @@
 		{palette}
 		{refused}
 		{seam}
-		{key}
 		onedit={(on) => ask('edit', { on })}
 		ontake={(next) => ask('take', { item: next })}
 		onmode={(next) => ask('mode', { mode: next })}

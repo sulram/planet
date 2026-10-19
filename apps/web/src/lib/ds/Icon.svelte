@@ -22,7 +22,8 @@
 		| 'move-3d'
 		| 'rotate-3d'
 		| 'scale-3d'
-		| 'rotate-ccw';
+		| 'rotate-ccw'
+		| 'package';
 
 	interface Props {
 		name: IconName;
@@ -59,6 +60,9 @@
 		// Lucide's two ellipse arcs, as it draws them.
 		'rotate-3d': 'm15.194 13.707 3.814 1.86-1.86 3.814M16.47214 7.52786A5 10 0 1 0 13 21.79796M21.79796 11A10 5 0 1 0 19 15.57071',
 		'scale-3d': 'M5 7v11a1 1 0 0 0 1 1h11M5.293 18.707 11 13m6 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M3 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
+		// Lucide draws the middle line as a polyline; spelled as a path here.
+		package:
+			'M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73zM12 22V12M3.29 7 12 12l8.71-5M7.5 4.27l9 5.15',
 		// Lucide draws these four as rects with a radius of 1; spelled as paths here.
 		'layout-dashboard':
 			'M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1ZM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z'

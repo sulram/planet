@@ -31,8 +31,6 @@
 		/** Why the last thing asked for was not done, until the next one. */
 		refused: Refusal | null;
 		seam: Seam;
-		/** The session's key, for a kind that sends a file up. */
-		key: string;
 		onedit: (on: boolean) => void;
 		ontake: (item: Item | null) => void;
 		onmode: (mode: Mode) => void;
@@ -43,7 +41,7 @@
 		onedge: (edge: Edge) => void;
 	}
 
-	let { editing, item, mode, picked, origin, paint, finish, edge, palette, refused, seam, key, onedit, ontake, onmode, onset, onremove, onpaint, onfinish, onedge }: Props =
+	let { editing, item, mode, picked, origin, paint, finish, edge, palette, refused, seam, onedit, ontake, onmode, onset, onremove, onpaint, onfinish, onedge }: Props =
 		$props();
 
 	const modeIcons = { move: 'move-3d', rotate: 'rotate-3d', scale: 'scale-3d' } as const;
@@ -69,7 +67,7 @@
 		</div>
 		{#if inHand?.Extra}
 			<section>
-				<inHand.Extra {seam} {key} />
+				<inHand.Extra {seam} />
 			</section>
 		{/if}
 		{#if refused}

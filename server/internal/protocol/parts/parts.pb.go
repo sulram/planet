@@ -168,7 +168,8 @@ type Shape_Cube struct {
 }
 
 type Shape_Vox struct {
-	// A `.vox` model: the SHA-256 of its file, 32 bytes.
+	// A model from a `.vox` file: the SHA-256 of its content, 32 bytes,
+	// the file named `asset://<hex>.vox`.
 	Vox []byte `protobuf:"bytes,2,opt,name=vox,proto3,oneof"`
 }
 

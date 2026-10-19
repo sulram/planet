@@ -17,7 +17,8 @@ option go_package = "github.com/sulram/planet/server/internal/protocol/parts;par
 message Shape {
   oneof shape {
     Cube cube = 1;
-    // A `.vox` model: the SHA-256 of its file, 32 bytes.
+    // A model from a `.vox` file: the SHA-256 of its content, 32 bytes,
+    // the file named `asset://<hex>.vox`.
     bytes vox = 2;
     Media image = 3;
   }

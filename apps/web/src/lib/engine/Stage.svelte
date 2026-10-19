@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Stat, ThemeToggle } from '$lib/ds';
+	import { upload } from '$lib/files';
 	import { t } from '$lib/i18n';
 	import type { Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
@@ -58,7 +59,7 @@
 		link?: Link;
 		/** What the world said this person may do. Null in the offline preview, with no world to ask. */
 		level?: Level | null;
-		/** The session's key, handed to a plugin's layer for what it asks of the world's routes. Empty for a visitor. */
+		/** The page's key, which a file a plugin sends to the world rides with. Empty for a visitor. */
 		key?: string;
 		/** The name is an account's, as mundos signed it: shown, never edited here. */
 		account?: boolean;
@@ -143,7 +144,8 @@
 					return () => heard.delete(hear);
 				},
 				release: () => view?.release(),
-				take: () => view?.take()
+				take: () => view?.take(),
+				upload: (file) => upload(file, key)
 			};
 			seams.set(plugin, seam);
 		}
@@ -259,7 +261,7 @@
 	{/if}
 	{#each mounted as plugin (plugin.name)}
 		{#if plugin.Layer}
-			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {key} {palette} {peers} {anchors} />
+			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {palette} {peers} {anchors} />
 		{/if}
 	{/each}
 	{#if children}

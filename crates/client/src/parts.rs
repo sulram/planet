@@ -304,7 +304,6 @@ impl Parts {
         }
     }
 
-
     /// Asks the world for a set or a remove of a part it has named, or
     /// keeps it for when it has.
     fn send(&mut self, local: PartId, deferred: Deferred) {

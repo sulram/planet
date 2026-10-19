@@ -261,6 +261,7 @@
 				<Icon name="rotate-3d" label="Rotate" />
 				<Icon name="scale-3d" label="Scale" />
 				<Icon name="rotate-ccw" label="Reset" />
+				<Icon name="package" label="Model" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
 			</div>
 			<p class="muted">IconButton: an action said by its icon alone, square, for a corner where words do not fit. The label is required; it is the accessible name and the tooltip.</p>

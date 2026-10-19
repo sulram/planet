@@ -9,14 +9,13 @@ import type { Component } from 'svelte';
 import type { IconName } from '$lib/ds';
 import type { Seam } from '$lib/plugins/plugin';
 import Picture from './Picture.svelte';
+import Model from './Model.svelte';
 import type { Item } from './protocol';
 import { t } from './words';
 
 /** What a kind's own component is mounted with. */
 export interface KindProps {
 	seam: Seam;
-	/** The session's key, for what a kind asks of the world's routes: a file sent up. */
-	key: string;
 }
 
 export interface Kind {
@@ -29,5 +28,6 @@ export interface Kind {
 
 export const kinds: readonly Kind[] = [
 	{ name: 'cube', icon: 'box', label: () => t('kind.cube') },
-	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture }
+	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture },
+	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model }
 ];
