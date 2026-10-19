@@ -1,8 +1,8 @@
 //! The wire messages between a client and a world server.
 //!
 //! Generated from `proto/planet/v1/world.proto` by `bun run proto`, which
-//! writes `src/gen/`, with the cells' payloads and the bridge of the
-//! server's module beside it.
+//! writes `src/gen/`, with the cells' and the parts' payloads and the
+//! bridge of the server's module beside it.
 //! Nothing here is written by hand except this file; the same schemas
 //! generate the Go side, so the two cannot drift.
 
@@ -55,6 +55,31 @@ pub mod cells {
     pub const OPENED: &str = "opened";
     pub const CHANGED: &str = "changed";
     pub const RESTORED: &str = "restored";
+    pub const SEEN: &str = "seen";
+}
+
+/// The parts of a world on the wire, generated from
+/// `proto/planet/parts/v1/parts.proto`: the payloads of the envelopes whose
+/// owner is [`parts::OWNER`] (DECISIONS 111).
+pub mod parts {
+    pub mod v1 {
+        #![allow(clippy::all, clippy::pedantic)]
+        include!("gen/planet/parts/v1/planet.parts.v1.rs");
+    }
+
+    pub use v1::*;
+
+    /// The name the envelope says for the parts, a system of the core.
+    pub const OWNER: &str = "parts";
+    /// The ops a client asks of the parts.
+    pub const PLACE: &str = "place";
+    pub const SET: &str = "set";
+    pub const REMOVE: &str = "remove";
+    pub const LOOK: &str = "look";
+    /// The events the world says of them.
+    pub const PLACED: &str = "placed";
+    pub const CHANGED: &str = "changed";
+    pub const REMOVED: &str = "removed";
     pub const SEEN: &str = "seen";
 }
 

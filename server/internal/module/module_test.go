@@ -44,7 +44,12 @@ func TestTheModuleSaysWhatItCarries(t *testing.T) {
 	if cells.Plugin.Name() != "cells" || !cells.Core || !cells.On || len(cells.Plugin.Ops()) != 6 {
 		t.Fatalf("the core's cells are carried as an owner: %v %v", cells, cells.Plugin.Ops())
 	}
-	plugins := carried[1:]
+	// Then the parts, the second system of the core: placed things.
+	parts := carried[1]
+	if parts.Plugin.Name() != "parts" || !parts.Core || !parts.On || len(parts.Plugin.Ops()) != 4 {
+		t.Fatalf("the core's parts are carried as an owner: %v %v", parts, parts.Plugin.Ops())
+	}
+	plugins := carried[2:]
 	if len(plugins) != 3 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On || plugins[0].Core {
 		t.Fatalf("this version carries chat, on, then building and items: %v", plugins)
 	}

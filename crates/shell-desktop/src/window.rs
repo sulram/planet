@@ -314,7 +314,13 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(pixels) => pixels.y as f32 / 40.0,
                 };
             }
-            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers.state();
+                self.input.chord = Chord {
+                    command: self.modifiers.super_key() || self.modifiers.control_key(),
+                    shift: self.modifiers.shift_key(),
+                };
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let PhysicalKey::Code(code) = event.physical_key else {
                     return;

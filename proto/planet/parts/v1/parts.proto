@@ -1,0 +1,138 @@
+// The parts of a world on the wire (DECISIONS 111): what a client asks of
+// them and what the world says of them, each the payload of an Envelope
+// whose owner is `parts`.
+//
+// Up, the ops: `place`, `set`, `remove`, `look`. Down, the events:
+// `placed`, `changed`, `removed`, `seen`.
+syntax = "proto3";
+
+package planet.parts.v1;
+
+import "planet/cells/v1/cells.proto";
+
+option go_package = "github.com/sulram/planet/server/internal/protocol/parts;parts";
+
+// What a part is. A shape a file gives is named by the hash of its content,
+// a variant beside the cube.
+message Shape {
+  oneof shape {
+    Cube cube = 1;
+    // A `.vox` model: the SHA-256 of its file, 32 bytes.
+    bytes vox = 2;
+    Media image = 3;
+  }
+}
+
+// The unit box, in one paint.
+message Cube {}
+
+// A picture: its size in texels and the three files its owner's client made
+// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
+// 89): the thumb and the low version are WebP, the original is `kind`.
+message Media {
+  uint32 width = 1;
+  uint32 height = 2;
+  bytes thumb = 3;
+  bytes low = 4;
+  bytes full = 5;
+  ImageKind kind = 6;
+}
+
+enum ImageKind {
+  IMAGE_KIND_UNSPECIFIED = 0;
+  IMAGE_KIND_PNG = 1;
+  IMAGE_KIND_JPG = 2;
+  IMAGE_KIND_WEBP = 3;
+}
+
+// Where a part stands in the flat frame of its seat, in blocks: its anchor
+// along u and v and over the datum, how it is turned, a unit quaternion in
+// that frame, and how long its unit box is along each of its own axes.
+message Pose {
+  double u = 1;
+  double v = 2;
+  double h = 3;
+  double qx = 4;
+  double qy = 5;
+  double qz = 6;
+  double qw = 7;
+  double sx = 8;
+  double sy = 9;
+  double sz = 10;
+}
+
+// A part as a client asks for it and the world keeps it.
+message Part {
+  planet.cells.v1.Seat seat = 1;
+  Pose pose = 2;
+  Shape shape = 3;
+  // Of the palette, as a cell's paint is.
+  uint32 paint = 4;
+  // Whether a body stands on it and is stopped by it.
+  bool solid = 5;
+}
+
+// A part as the world keeps it: under the name it gave, one more for each
+// change that landed in it.
+message Record {
+  uint64 id = 1;
+  Part part = 2;
+  uint64 version = 3;
+}
+
+// `place`: places a part. The world names it and tells everyone near with
+// `placed`, the asker included: its places are answered in the order they
+// were asked, so the first `placed` of its own is its first place.
+message Place {
+  Part part = 1;
+}
+
+// `set`: sets a part by its name: moved, turned, stretched, repainted, made
+// solid or not, or seated elsewhere.
+message Set {
+  uint64 id = 1;
+  Part part = 2;
+}
+
+// `remove`: removes a part by its name.
+message Remove {
+  uint64 id = 1;
+}
+
+// `look`: what this client holds of the parts near it, each at the version
+// it holds it. The world answers with `seen`.
+message Look {
+  repeated Held held = 1;
+}
+
+message Held {
+  uint64 id = 1;
+  uint64 version = 2;
+}
+
+// `placed`: a part was placed, to everyone near it, the asker included.
+message Placed {
+  // Who asked.
+  uint32 session = 1;
+  Record record = 2;
+}
+
+// `changed`: a part was set, to everyone near it.
+message Changed {
+  uint32 session = 1;
+  Record record = 2;
+}
+
+// `removed`: a part was removed, to everyone near where it stood.
+message Removed {
+  uint32 session = 1;
+  uint64 id = 2;
+}
+
+// `seen`: parts as they stand, and those that stand no more. The answer to
+// `look`: the parts near the asker that it lacks or holds at another
+// version, and those it holds that are gone.
+message Seen {
+  repeated Record records = 1;
+  repeated uint64 gone = 2;
+}

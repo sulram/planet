@@ -572,7 +572,7 @@ impl Client {
                 })
                 .map_err(|e| e.to_string()),
             Purpose::Model(hash) => vox::parse(&bytes)
-                .map(|model| self.parts.arrived(*hash, model))
+                .map(|model| self.parts.model_arrived(*hash, model))
                 .map_err(|e| format!("{e:?}")),
             Purpose::Picture(id) => Err(format!("{}: a picture is answered as pixels", id.hex())),
         });
@@ -757,6 +757,7 @@ impl Client {
                 self.level = Some(Level::from_wire(welcome.level));
                 // The world keeps the cells from here on.
                 self.cells.link(welcome.session);
+                self.parts.link(welcome.session);
                 for peer in &welcome.peers {
                     self.peers.add(peer, &self.generator);
                 }
@@ -805,6 +806,9 @@ impl Client {
                 self.cells
                     .receive(&self.generator, &envelope.kind, &envelope.payload);
             }
+            Some(Message::Envelope(envelope)) if envelope.plugin == protocol::parts::OWNER => {
+                self.parts.receive(&envelope.kind, &envelope.payload);
+            }
             Some(Message::Envelope(envelope)) => {
                 let (plugins, lent) = self.lend();
                 plugins.receive(&envelope, lent);
@@ -813,10 +817,12 @@ impl Client {
                 let cells = self
                     .cells
                     .answered(&self.generator, answer.id, &answer.code);
-                if cells && !answer.code.is_empty() {
+                let parts = !cells && self.parts.answered(answer.id, &answer.code);
+                if (cells || parts) && !answer.code.is_empty() {
+                    let what = if cells { "cells" } else { "parts" };
                     self.events.push(Event::Rejected {
                         message: format!(
-                            "the world refused a change to the cells: {}",
+                            "the world refused a change to the {what}: {}",
                             answer.code
                         ),
                     });
@@ -863,6 +869,7 @@ impl Client {
     fn went_offline(&mut self) {
         // What the world kept went with it.
         self.cells.unlink();
+        self.parts.unlink();
         self.peers.clear();
         self.dress_all();
         self.events.push(Event::Session {
@@ -881,6 +888,10 @@ impl Client {
         for ask in self.cells.drain_asks() {
             self.session
                 .ask(protocol::cells::OWNER, ask.kind, ask.payload, ask.id);
+        }
+        for ask in self.parts.drain_asks() {
+            self.session
+                .ask(protocol::parts::OWNER, ask.kind, ask.payload, ask.id);
         }
         self.session.drain_outbound()
     }
@@ -1032,6 +1043,7 @@ impl Client {
         self.cells.update(eye.position);
         self.cells
             .look(&self.generator, self.controller.held_by(), dt);
+        self.parts.look(dt);
         let patches = self.stream(&camera, Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.

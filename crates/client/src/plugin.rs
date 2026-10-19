@@ -118,6 +118,10 @@ pub struct Turn<'a> {
     /// Whether the pointer's button is down. False for a plugin that has
     /// not the pointer.
     pub using: bool,
+    /// What is held right now, command and shift. The core's keys, so a
+    /// plugin reads them here and never asks for them: a shift asked for
+    /// would take the sprint from the body.
+    pub chord: Chord,
     /// The keys this plugin asked to read held that are down, by name.
     pub keys: &'a [&'static str],
     /// Whether the shell let everything go since the last turn: what was
@@ -661,6 +665,7 @@ impl Plugins {
             let turn = Turn {
                 eye: *eye,
                 using: input.held(Key::Use) && *lent.pointer == Some(name),
+                chord: input.chord,
                 keys: &keys,
                 interrupted,
                 inspected,

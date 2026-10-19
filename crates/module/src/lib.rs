@@ -31,7 +31,7 @@ pub fn serve(call: &[u8]) -> Vec<Vec<u8>> {
         .lock()
         .expect("the server calls one call at a time")
         .get_or_insert_with(|| {
-            let core = vec![world::cells::system()];
+            let core = vec![world::cells::system(), world::parts::system()];
             Host::new(core, plugins_world::all(), measure_of, ground_of)
         })
         .serve(call, &mut asked);

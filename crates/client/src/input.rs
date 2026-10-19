@@ -121,6 +121,9 @@ pub struct Input {
     /// Where the pointer is, as fractions of the view from the top left.
     /// `None` while it is captured: then it aims through the middle.
     pub pointer: Option<[f32; 2]>,
+    /// What is held right now, command and shift: the core's keys, which a
+    /// plugin reads in its turn and never asks for.
+    pub chord: Chord,
 }
 
 impl Input {

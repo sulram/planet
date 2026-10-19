@@ -19,13 +19,23 @@
 //! paint and shared by every cube in it. A model of a file (`Shape::Vox`) is
 //! asked for over the asset seam when a part first names it, meshed once it
 //! arrives, and shared by every part that names it; until it arrives the
-//! part stands undrawn, and its box holds a body up.
+//! part stands undrawn, and its box holds a body up. A picture is drawn
+//! apart, by `pictures`.
+//!
+//! In a world, the world keeps the parts (DECISIONS 111): a part placed here
+//! is placed at once and asked of the world, which names it; what the world
+//! calls a part is the link's business, and a hand knows a part by the name
+//! given here. A set or a remove of a part the world has not named yet
+//! waits for the name. What others change arrives as events, and the parts
+//! near the body are asked for every second. With no world, a headless
+//! picture or a bench, the parts are held here alone.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use glam::{DAffine3, DMat3, DVec3};
 use part::{Gap, Part, PartId, Pose, Shape};
-use protocol::Body;
+use protocol::parts as wire;
+use protocol::{Body, Message};
 use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex};
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
@@ -33,9 +43,12 @@ use voxel::{Finish, Paint};
 use worldgen::Generator;
 
 use crate::assets::Requests;
-use crate::cells::paint_look;
+use crate::cells::{Ask, paint_look};
 use crate::collision::{BODY_HALF, Footing, STEP_M};
 use crate::pictures::{Pictures, Screen};
+
+/// Seconds between two looks at what the world holds near the body.
+const LOOK_S: f64 = 1.0;
 
 /// The size of a cube as a hand places it, in blocks: a metre.
 pub const CUBE: [f64; 3] = [2.0, 2.0, 2.0];
@@ -64,12 +77,60 @@ const SHAPES: u64 = 1 << 16;
 /// The bit that marks the model of a file.
 const FILE: u64 = 1 << 63;
 
+/// A set or a remove asked before the world named the part.
+enum Deferred {
+    Set(Seat, Part),
+    Remove,
+}
+
+/// The parts as a world keeps them, from where this client stands.
+#[derive(Default)]
+struct Link {
+    /// This client's own session: a part placed under that number is one
+    /// it placed.
+    me: u32,
+    /// The last number given to an op.
+    asked: u32,
+    asks: Vec<Ask>,
+    /// Places asked that the world has not named, the first first: the
+    /// first `placed` of this session's own is the first of them.
+    placing: Vec<(u32, PartId)>,
+    /// Sets and removes asked, by number: refused, what is held is asked
+    /// for again.
+    waiting: HashSet<u32>,
+    /// What the world calls each part held here, and back.
+    world_of: HashMap<PartId, u64>,
+    local_of: HashMap<u64, PartId>,
+    /// The version the world last said of each part, by its world name.
+    versions: HashMap<u64, u64>,
+    /// What was asked of a part before the world named it, in order.
+    deferred: Vec<(PartId, Deferred)>,
+    since_look_s: f64,
+}
+
+impl Link {
+    /// Queues an op for the world, under the next number.
+    fn ask<M: Message>(&mut self, kind: &'static str, op: &M) -> u32 {
+        self.asked = self.asked.wrapping_add(1).max(1);
+        let id = self.asked;
+        self.asks.push(Ask {
+            kind,
+            payload: op.encode_to_vec(),
+            id,
+        });
+        id
+    }
+}
+
 /// Every part held, by its name, and what draws them.
 #[derive(Default)]
 pub struct Parts {
     held: BTreeMap<PartId, (Seat, Part)>,
-    /// The next name given here, while no world gives them.
+    /// The next name given here: a hand knows a part by it, in a world or
+    /// alone.
     next: u64,
+    /// The world that keeps the parts, while one does.
+    link: Option<Link>,
     /// The models announced, by id.
     meshed: Vec<ModelId>,
     changes: Vec<ModelChange>,
@@ -99,6 +160,219 @@ impl Parts {
     /// The moon is somewhere else: what is seated on it goes with it.
     pub(crate) fn orbit(&mut self, moon: DVec3) {
         self.moon = moon;
+    }
+
+    /// A world keeps the parts from here on: what was held is forgotten,
+    /// and what the world holds near the body is asked for at once.
+    pub(crate) fn link(&mut self, me: u32) {
+        self.held.clear();
+        self.link = Some(Link {
+            me,
+            since_look_s: LOOK_S,
+            ..Link::default()
+        });
+    }
+
+    /// The world is gone, and what it kept with it.
+    pub(crate) fn unlink(&mut self) {
+        self.held.clear();
+        self.link = None;
+    }
+
+    /// What to ask the world since the last call, in order.
+    pub(crate) fn drain_asks(&mut self) -> Vec<Ask> {
+        self.link
+            .as_mut()
+            .map(|link| core::mem::take(&mut link.asks))
+            .unwrap_or_default()
+    }
+
+    /// Asks the world, every second, for the parts near the body this
+    /// client lacks or holds stale.
+    pub(crate) fn look(&mut self, dt: f64) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        link.since_look_s += dt;
+        if link.since_look_s < LOOK_S {
+            return;
+        }
+        link.since_look_s = 0.0;
+        let held = link
+            .versions
+            .iter()
+            .map(|(&id, &version)| wire::Held { id, version })
+            .collect();
+        link.ask(wire::LOOK, &wire::Look { held });
+    }
+
+    /// An event of the world's parts.
+    pub(crate) fn receive(&mut self, kind: &str, payload: &[u8]) {
+        let Some(me) = self.link.as_ref().map(|link| link.me) else {
+            return;
+        };
+        match kind {
+            wire::PLACED => {
+                let Ok(placed) = wire::Placed::decode(payload) else {
+                    return;
+                };
+                let Some(record) = &placed.record else {
+                    return;
+                };
+                if placed.session == me {
+                    // The first place of this session's own that the world
+                    // has not named: this is its name.
+                    let link = self.link.as_mut().expect("linked");
+                    if !link.placing.is_empty() {
+                        let (_, local) = link.placing.remove(0);
+                        self.name(local, record);
+                        return;
+                    }
+                }
+                self.arrived(record);
+            }
+            wire::CHANGED => {
+                let Ok(changed) = wire::Changed::decode(payload) else {
+                    return;
+                };
+                let Some(record) = &changed.record else {
+                    return;
+                };
+                // A change of this session's own is held already; the
+                // version is what is new of it.
+                match changed.session == me {
+                    true => {
+                        let link = self.link.as_mut().expect("linked");
+                        link.versions.insert(record.id, record.version);
+                    }
+                    false => self.arrived(record),
+                }
+            }
+            wire::REMOVED => {
+                if let Ok(removed) = wire::Removed::decode(payload) {
+                    self.gone(removed.id);
+                }
+            }
+            wire::SEEN => {
+                let Ok(seen) = wire::Seen::decode(payload) else {
+                    return;
+                };
+                for record in &seen.records {
+                    self.arrived(record);
+                }
+                for id in seen.gone {
+                    self.gone(id);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The world named a part placed here: what was asked of it meanwhile
+    /// goes out under that name.
+    fn name(&mut self, local: PartId, record: &wire::Record) {
+        let link = self.link.as_mut().expect("linked");
+        link.world_of.insert(local, record.id);
+        link.local_of.insert(record.id, local);
+        link.versions.insert(record.id, record.version);
+        let deferred: Vec<Deferred> = {
+            let (mine, rest): (Vec<_>, Vec<_>) = core::mem::take(&mut link.deferred)
+                .into_iter()
+                .partition(|(id, _)| *id == local);
+            link.deferred = rest;
+            mine.into_iter().map(|(_, deferred)| deferred).collect()
+        };
+        for deferred in deferred {
+            self.send(local, deferred);
+        }
+    }
+
+    /// Asks the world for a set or a remove of a part it has named, or
+    /// keeps it for when it has.
+    fn send(&mut self, local: PartId, deferred: Deferred) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        let Some(&id) = link.world_of.get(&local) else {
+            link.deferred.push((local, deferred));
+            return;
+        };
+        let asked = match deferred {
+            Deferred::Set(seat, part) => link.ask(
+                wire::SET,
+                &wire::Set {
+                    id,
+                    part: Some(seat::part_wire(seat, &part)),
+                },
+            ),
+            Deferred::Remove => link.ask(wire::REMOVE, &wire::Remove { id }),
+        };
+        link.waiting.insert(asked);
+    }
+
+    /// A part as the world holds it: held here under the name it has here,
+    /// or a new one.
+    fn arrived(&mut self, record: &wire::Record) {
+        let Some((seat, part)) = record.part.as_ref().and_then(seat::part_from_wire) else {
+            return;
+        };
+        let link = self.link.as_mut().expect("linked");
+        let stale = link.versions.get(&record.id) != Some(&record.version);
+        link.versions.insert(record.id, record.version);
+        let local = match link.local_of.get(&record.id) {
+            Some(&local) => {
+                if !stale {
+                    return;
+                }
+                local
+            }
+            None => {
+                self.next += 1;
+                let local = PartId(self.next);
+                link.local_of.insert(record.id, local);
+                link.world_of.insert(local, record.id);
+                local
+            }
+        };
+        self.held.insert(local, (seat, part));
+        self.mesh(&part);
+    }
+
+    /// A part the world no longer holds.
+    fn gone(&mut self, id: u64) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        link.versions.remove(&id);
+        if let Some(local) = link.local_of.remove(&id) {
+            link.world_of.remove(&local);
+            self.held.remove(&local);
+        }
+    }
+
+    /// The world answered an op of the parts: landed, with no code, or
+    /// refused with one. A place refused takes the part back; a set or a
+    /// remove refused asks for what is held again. False for a number that
+    /// is none of the parts'.
+    pub(crate) fn answered(&mut self, id: u32, code: &str) -> bool {
+        let Some(link) = &mut self.link else {
+            return false;
+        };
+        if let Some(at) = link.placing.iter().position(|(asked, _)| *asked == id) {
+            let (_, local) = link.placing.remove(at);
+            if !code.is_empty() {
+                self.held.remove(&local);
+                link.deferred.retain(|(part, _)| *part != local);
+            }
+            return true;
+        }
+        if link.waiting.remove(&id) {
+            if !code.is_empty() {
+                link.since_look_s = LOOK_S;
+            }
+            return true;
+        }
+        false
     }
 
     fn centre(&self, body: Body) -> DVec3 {
@@ -154,12 +428,20 @@ impl Parts {
         self.held.values().any(|(seat, _)| seat.body() == body)
     }
 
-    /// Places a part on a seat and names it.
+    /// Places a part on a seat and names it. In a world, the world is asked
+    /// to place it too, and names it in its own way.
     pub(crate) fn place(&mut self, seat: Seat, part: Part) -> PartId {
         self.next += 1;
         let id = PartId(self.next);
         self.held.insert(id, (seat, part));
         self.mesh(&part);
+        if let Some(link) = &mut self.link {
+            let place = wire::Place {
+                part: Some(seat::part_wire(seat, &part)),
+            };
+            let asked = link.ask(wire::PLACE, &place);
+            link.placing.push((asked, id));
+        }
         id
     }
 
@@ -171,12 +453,17 @@ impl Parts {
         };
         *held = (seat, part);
         self.mesh(&part);
+        self.send(id, Deferred::Set(seat, part));
         true
     }
 
     /// Removes a part by its name. False for a name nothing holds.
     pub(crate) fn remove(&mut self, id: PartId) -> bool {
-        self.held.remove(&id).is_some()
+        if self.held.remove(&id).is_none() {
+            return false;
+        }
+        self.send(id, Deferred::Remove);
+        true
     }
 
     /// The world from a part's own space, with the centre of its body in it.
@@ -317,7 +604,7 @@ impl Parts {
 
     /// A model's file arrived: its grid is kept and its mesh announced, the
     /// voxels filling the unit box.
-    pub(crate) fn arrived(&mut self, hash: [u8; 32], model: vox::Model) {
+    pub(crate) fn model_arrived(&mut self, hash: [u8; 32], model: vox::Model) {
         let id = model_of_file(hash);
         if !self.meshed.contains(&id) {
             self.meshed.push(id);
@@ -652,7 +939,7 @@ mod tests {
         let boxed = parts.footing(seat, under_arch, 14.0 * BLOCK_M).unwrap();
         assert_eq!(boxed.floor_m, Some(14.0 * BLOCK_M));
 
-        parts.arrived(hash, model);
+        parts.model_arrived(hash, model);
         assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
         let changes = parts.drain_changes();
         assert_eq!(changes.len(), 1);

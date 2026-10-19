@@ -12,8 +12,12 @@ protocol.workspace = true
 worldgen.workspace = true
 voxel.workspace = true
 seat.workspace = true
+part.workspace = true
 libm.workspace = true
 prost.workspace = true
+
+[dev-dependencies]
+glam.workspace = true
 
 [lints]
 workspace = true

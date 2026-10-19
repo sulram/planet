@@ -3,6 +3,8 @@
 //! the systems of the core that run where the world is decided, the cells
 //! ([`cells`]), which are owners as a plugin is and stand on the same room.
 //!
+//! The parts ([`parts`]) are an owner the same way.
+//!
 //! A world half is the part of a plugin that runs where the world is decided.
 //! It is the mirror of the client half's `client::Plugin` and its host: the
 //! server's module holds each world half and hands it a [`Room`], and a test
@@ -17,6 +19,7 @@ use worldgen::Generator;
 
 pub mod cells;
 mod host;
+pub mod parts;
 
 pub use host::{GroundOf, Host, Installed, MeasureOf};
 pub use protocol::Level;

@@ -52,6 +52,15 @@ A cube is a model of one voxel and a `.vox` file a model of many, so both are
 lit, edged and glazed by the cells' own shader, whose sides are one file
 (`cubes.wgsl`) with a vertex stage each for a volume and a model.
 
+**Kept by the world.** The parts are an owner in the module as the cells are
+(110), under the name `parts` on the envelope: `place`, `set`, `remove` and
+`look`, one row a part in its store, under a name the world gives and never
+gives twice. A place is told to whoever is near and to the asker, whose
+places are answered in the order asked, so a client binds the first `placed`
+of its own to its first place; a hand knows a part by the name given on the
+client, and what the world calls it is the link's. A set or a remove asked
+before the name arrives waits for it.
+
 **Footing.** A solid part answers a body as the cells do: the column of the
 body, as wide as the body, against the part's box; solid at the height of the
 step is a wall, below it a floor, above it a roof. A builder with a tool in
@@ -67,4 +76,5 @@ as a fifth tool of building, which it was for one commit.
 **Lives in:** PLUGINS.md § The core's words; ARCHITECTURE.md § The core and
 its plugins; GLOSSARY.md; ROADMAP.md § The parts; `crates/part`,
 `crates/seat/src/frame.rs`, `crates/client/src/parts.rs`,
-`crates/render/src/models.rs`, `plugins/items`.
+`crates/render/src/models.rs`, `crates/world/src/parts.rs`,
+`proto/planet/parts/v1/parts.proto`, `plugins/items`.
