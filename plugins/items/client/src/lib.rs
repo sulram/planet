@@ -85,6 +85,8 @@ pub const MODE: &str = "mode";
 /// `items.set`: set the part picked: where it stands, how it is turned, in
 /// degrees about its own axes, how long its sides are, in blocks, and
 /// whether it is solid. What is left out stays.
+/// With `media`, another picture takes the place of the one picked, as
+/// wide as its aspect makes it at the same height.
 pub const SET: &str = "set";
 /// `items.remove`: remove the part picked.
 pub const REMOVE: &str = "remove";
@@ -152,6 +154,10 @@ struct Set {
     rotation: Option<[f64; 3]>,
     scale: Option<[f64; 3]>,
     solid: Option<bool>,
+    /// Another picture in the place of the one picked: its width follows
+    /// the new aspect, its height stays.
+    #[serde(default)]
+    media: Option<MediaBody>,
 }
 
 #[derive(Deserialize)]
@@ -184,6 +190,9 @@ struct Hand {
 #[derive(Serialize)]
 struct Picked {
     id: Option<u64>,
+    /// What kind of item it is, by the part's shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    item: Option<Item>,
     #[serde(skip_serializing_if = "Option::is_none")]
     at: Option<[f64; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -358,6 +367,13 @@ impl Items {
         if let Some(solid) = set.solid {
             part.solid = solid;
         }
+        if let Some(body) = &set.media {
+            let Some(media) = body.media() else {
+                return host.reject("a picture names three asset:// files".into());
+            };
+            part.shape = Shape::Image(media);
+            part.pose.scale[0] = part.pose.scale[2] * media.aspect();
+        }
         let (id, seat) = (gizmo.id, gizmo.seat);
         self.apply(id, seat, part, host);
     }
@@ -412,6 +428,11 @@ impl Items {
         let picked = match &self.picked {
             Some(gizmo) => Picked {
                 id: Some(gizmo.id.0),
+                item: Some(match gizmo.part.shape {
+                    Shape::Cube => Item::Cube,
+                    Shape::Vox(_) => Item::Model,
+                    Shape::Image(_) => Item::Picture,
+                }),
                 at: Some(gizmo.part.pose.at),
                 rotation: Some(degrees(gizmo.part.pose.rotation)),
                 scale: Some(gizmo.part.pose.scale),
@@ -419,6 +440,7 @@ impl Items {
             },
             None => Picked {
                 id: None,
+                item: None,
                 at: None,
                 rotation: None,
                 scale: None,
@@ -858,6 +880,14 @@ mod tests {
             "a sound picture is taken quietly"
         );
         click(&mut client, [0.5, 0.7]);
+        // Placed, the picture is picked, and the pick says what kind it is.
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["item"], "picture");
 
         let frame = client.settled_frame();
         assert_eq!(frame.pictures.len(), 1);
@@ -915,6 +945,22 @@ mod tests {
                 .drain_events()
                 .iter()
                 .any(|event| matches!(event, Event::Rejected { .. }))
+        );
+        // Another picture in the picked one's place keeps its height and
+        // takes the new aspect.
+        let square = format!(
+            r#"{{"width":1000,"height":1000,"thumb":"asset://{}.webp","low":"asset://{}.webp","full":"asset://{}.png"}}"#,
+            hex("04"),
+            hex("05"),
+            hex("06")
+        );
+        client.command_json(&format!(r#"{{"type":"items.set","media":{square}}}"#));
+        let part = client.parts().all().next().unwrap().2;
+        assert!(matches!(part.shape, Shape::Image(media) if media.width == 1000));
+        assert!(
+            (part.pose.scale[0] - part.pose.scale[2]).abs() < 1e-9,
+            "{:?}",
+            part.pose.scale
         );
         // The picture placed is picked: a cube beside it is placed off it.
         client.command_json(r#"{"type":"items.take","item":"cube"}"#);

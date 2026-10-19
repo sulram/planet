@@ -49,6 +49,7 @@
 	const finishOptions = $derived(finishes.map((value) => ({ value, label: t(`finish.${value}`) })));
 	const edgeOptions = $derived(edges.map((value) => ({ value, label: t(`edge.${value}`) })));
 	const inHand = $derived(kinds.find((kind) => kind.name === item));
+	const pickedKind = $derived(picked ? kinds.find((kind) => kind.name === picked.item) : undefined);
 	const vector = (values: number[]) => [values[0], values[1], values[2]] as [number, number, number];
 </script>
 
@@ -76,9 +77,15 @@
 		{#if picked}
 			<section>
 				<header class="head">
-					<h3>{t('part')}</h3>
+					<h3>
+						{#if pickedKind}<Icon name={pickedKind.icon} />{/if}
+						{pickedKind ? t('picked', { kind: pickedKind.label() }) : t('part')}
+					</h3>
 					<Icon name={modeIcons[mode]} />
 				</header>
+				{#if pickedKind?.Extra}
+					<pickedKind.Extra {seam} {picked} />
+				{/if}
 				<Segmented options={modeOptions} value={mode} label={t('mode')} onselect={onmode} />
 				<VectorInput
 					label={t('position')}

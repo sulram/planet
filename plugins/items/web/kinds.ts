@@ -10,12 +10,14 @@ import type { IconName } from '$lib/ds';
 import type { Seam } from '$lib/plugins/plugin';
 import Picture from './Picture.svelte';
 import Model from './Model.svelte';
-import type { Item } from './protocol';
+import type { Item, Picked } from './protocol';
 import { t } from './words';
 
 /** What a kind's own component is mounted with. */
 export interface KindProps {
 	seam: Seam;
+	/** The part picked, while it is of this kind: the controls act on it instead of on what is in hand. */
+	picked?: Picked;
 }
 
 export interface Kind {

@@ -42,6 +42,8 @@ export interface Hand {
 /** `items.picked`: the part picked as it stands: where, in blocks of its seat; how it is turned, degrees about its own axes; how long its sides are, in blocks; whether it is solid. */
 export interface Picked {
 	id: number;
+	/** What kind of item it is. */
+	item: Item;
 	at: [number, number, number];
 	rotation: [number, number, number];
 	scale: [number, number, number];
@@ -69,10 +71,10 @@ const isVector = (value: unknown): value is [number, number, number] =>
 
 /** Reads a `picked` event: the part picked, or null when none is, or when the event is no part. */
 export function parsePicked(event: Record<string, unknown>): Picked | null {
-	const { id, at, rotation, scale, solid } = event;
-	if (typeof id !== 'number') return null;
+	const { id, item, at, rotation, scale, solid } = event;
+	if (typeof id !== 'number' || !isItem(item)) return null;
 	if (!isVector(at) || !isVector(rotation) || !isVector(scale) || typeof solid !== 'boolean') return null;
-	return { id, at, rotation, scale, solid };
+	return { id, item, at, rotation, scale, solid };
 }
 
 /** Reads a `refused` event. Null for a reason this front end has no words for. */
