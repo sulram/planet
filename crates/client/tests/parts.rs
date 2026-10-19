@@ -91,6 +91,7 @@ fn cube(client: &mut Client, along: f64) -> (Seat, Part) {
         solid: true,
         shine: 0.0,
         reach_m: 0.0,
+        name: None,
     };
     (feet.seat, part)
 }
@@ -272,6 +273,7 @@ fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
         solid: false,
         shine: 0.0,
         reach_m: 0.0,
+        name: None,
     };
     let placed = wire::Placed {
         session: 2,
@@ -325,6 +327,7 @@ fn a_landmark_another_placed_is_a_lit_star_with_its_name_over_it() {
         solid: false,
         shine: 0.0,
         reach_m: 0.0,
+        name: None,
     };
     let placed = wire::Placed {
         session: 2,

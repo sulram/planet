@@ -266,6 +266,7 @@ mod tests {
                 solid: true,
                 shine: 0.0,
                 reach_m: 0.0,
+                name: None,
             },
             world,
             hot: None,

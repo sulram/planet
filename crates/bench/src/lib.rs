@@ -287,6 +287,7 @@ pub fn parts_start(count: i32) {
             solid: true,
             shine: 0.0,
             reach_m: 0.0,
+            name: None,
         };
         client
             .host("bench")

@@ -162,6 +162,9 @@ struct NearOne {
     away_m: f64,
     paint: u8,
     solid: bool,
+    /// What its builder calls it, when named.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -550,13 +553,21 @@ impl Items {
             part.pose.scale[0] = part.pose.scale[2] * media.aspect();
         }
         if let Some(text) = &set.name {
-            let Shape::Landmark(_) = part.shape else {
-                return refuse(host, Refusal::Name);
-            };
-            let Some(name) = Name::new(text) else {
-                return refuse(host, Refusal::Name);
-            };
-            part.shape = Shape::Landmark(name);
+            // A landmark's name is its shape's, and it bears one always;
+            // any other part is named for the list, or unnamed again.
+            if let Shape::Landmark(_) = part.shape {
+                let Some(name) = Name::new(text) else {
+                    return refuse(host, Refusal::Name);
+                };
+                part.shape = Shape::Landmark(name);
+            } else if text.trim().is_empty() {
+                part.name = None;
+            } else {
+                let Some(name) = Name::new(text) else {
+                    return refuse(host, Refusal::Name);
+                };
+                part.name = Some(name);
+            }
         }
         let (id, seat) = (gizmo.id, gizmo.seat);
         if let (Some(rotation), Some(gizmo)) = (set.rotation, &mut self.picked) {
@@ -638,6 +649,7 @@ impl Items {
                     away_m,
                     paint: part.paint,
                     solid: part.solid,
+                    name: name_of(part),
                 }
             })
             .filter(|one| one.away_m <= LIST_M)
@@ -708,10 +720,7 @@ impl Items {
                     Shape::Sound(_) => true,
                     _ => false,
                 }),
-                name: match gizmo.part.shape {
-                    Shape::Landmark(name) => Some(name.to_string()),
-                    _ => None,
-                },
+                name: name_of(&gizmo.part),
             },
             None => Picked {
                 id: None,
@@ -748,7 +757,8 @@ impl Items {
             if gizmo.drag.is_some() {
                 if released || turn.interrupted {
                     gizmo.drag = None;
-                } else if let Some(world) = gizmo.dragged(self.mode, uniform, from, toward)
+                } else if let Some(world) =
+                    gizmo.dragged(mode_of(self.mode, gizmo), uniform, from, toward)
                     && let Some((seat, pose)) = host.reseat(gizmo.seat.body(), &world)
                 {
                     let (id, mut part) = (gizmo.id, gizmo.part);
@@ -761,10 +771,10 @@ impl Items {
                     }
                 }
             } else {
-                let hit = gizmo.handle_hit(self.mode, from, toward);
+                let hit = gizmo.handle_hit(mode_of(self.mode, gizmo), from, toward);
                 gizmo.hot = hit.map(|(axis, _)| axis);
                 if pressed && let Some((axis, _)) = hit {
-                    gizmo.press(self.mode, axis, from, toward);
+                    gizmo.press(mode_of(self.mode, gizmo), axis, from, toward);
                 }
             }
         }
@@ -782,7 +792,10 @@ impl Items {
                 self.pick(id, host);
             }
         }
-        let marks = self.picked.as_ref().map(|gizmo| gizmo.marks(self.mode));
+        let marks = self
+            .picked
+            .as_ref()
+            .map(|gizmo| gizmo.marks(mode_of(self.mode, gizmo)));
         host.mark(marks.as_deref().unwrap_or(&[]));
     }
 }
@@ -792,6 +805,24 @@ fn refuse(host: &mut Host<'_>, reason: Refusal) {
 }
 
 /// What kind of item a shape is.
+/// What a part is called: a landmark by its shape's name, any other by the
+/// name its builder gave it, if one.
+fn name_of(part: &Part) -> Option<String> {
+    match part.shape {
+        Shape::Landmark(name) => Some(name.to_string()),
+        _ => part.name.map(|name| name.to_string()),
+    }
+}
+
+/// The handles a part takes: a sound has a place and nothing else, so its
+/// handles move it whatever mode is in hand.
+fn mode_of(mode: Mode, gizmo: &Gizmo) -> Mode {
+    match gizmo.part.shape {
+        Shape::Sound(_) => Mode::Move,
+        _ => mode,
+    }
+}
+
 fn item_of(shape: Shape) -> Item {
     match shape {
         Shape::Cube => Item::Cube,
@@ -1340,6 +1371,49 @@ mod tests {
             .unwrap();
         assert_eq!(hand["editing"], true);
         assert!(client.pointing());
+    }
+
+    #[test]
+    fn any_part_is_named_for_the_list_and_unnamed_again() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"cube"}"#);
+        click(&mut client, [0.5, 0.7]);
+        events(&mut client);
+        client.command_json(r#"{"type":"items.set","name":"  Fountain "}"#);
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["name"], "Fountain");
+        client.command_json(r#"{"type":"items.list","on":true}"#);
+        let said = events(&mut client);
+        let near = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.near")
+            .unwrap();
+        assert_eq!(near["near"][0]["name"], "Fountain");
+        // Unnamed again: nothing said of a name.
+        client.command_json(r#"{"type":"items.set","name":""}"#);
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert!(picked.get("name").is_none());
+        // Over the bound: refused, the part keeps its name.
+        client.command_json(&format!(
+            r#"{{"type":"items.set","name":"{}"}}"#,
+            "x".repeat(65)
+        ));
+        assert!(
+            events(&mut client)
+                .iter()
+                .any(|e| e["type"] == "items.refused" && e["reason"] == "name")
+        );
     }
 
     #[test]

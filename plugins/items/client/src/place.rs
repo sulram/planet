@@ -56,6 +56,7 @@ impl Items {
                 solid: true,
                 shine: 0.0,
                 reach_m: 0.0,
+                name: None,
             },
             Item::Model => {
                 // With no file taken there is nothing to place yet.
@@ -72,6 +73,7 @@ impl Items {
                     solid: true,
                     shine: 0.0,
                     reach_m: 0.0,
+                    name: None,
                 }
             }
             Item::Picture => {
@@ -96,6 +98,7 @@ impl Items {
                     solid: false,
                     shine: 0.0,
                     reach_m: 0.0,
+                    name: None,
                 }
             }
             Item::Sound => {
@@ -111,6 +114,7 @@ impl Items {
                     solid: false,
                     shine: 0.0,
                     reach_m: 0.0,
+                    name: None,
                 }
             }
             Item::Landmark => {
@@ -122,6 +126,7 @@ impl Items {
                     solid: false,
                     shine: 0.0,
                     reach_m: 0.0,
+                    name: None,
                 }
             }
         };

@@ -108,6 +108,10 @@ message Part {
   // How far the light of a part that is a lamp goes, metres. 0 is by its
   // size.
   float reach_m = 7;
+  // What its builder calls it, for the list of what is near: trimmed, at
+  // most 64 bytes of UTF-8, empty when unnamed. A landmark's name is its
+  // shape's.
+  string name = 8;
 }
 
 // A part as the world keeps it: under the name it gave, one more for each

@@ -398,6 +398,9 @@ pub struct Part {
     /// How far the light of a part that is a lamp goes, metres, up to
     /// [`MAX_REACH_M`]. 0 is by its size.
     pub reach_m: f32,
+    /// What its builder calls it, for the list of what is near. A
+    /// landmark's name is its shape's.
+    pub name: Option<Name>,
 }
 
 /// The most a part shines with its own colour.
@@ -669,6 +672,7 @@ mod tests {
             solid: true,
             shine: 0.0,
             reach_m: 0.0,
+            name: None,
         }
     }
 

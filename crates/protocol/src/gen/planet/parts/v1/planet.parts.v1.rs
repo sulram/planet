@@ -120,6 +120,11 @@ pub struct Part {
     /// size.
     #[prost(float, tag="7")]
     pub reach_m: f32,
+    /// What its builder calls it, for the list of what is near: trimmed, at
+    /// most 64 bytes of UTF-8, empty when unnamed. A landmark's name is its
+    /// shape's.
+    #[prost(string, tag="8")]
+    pub name: ::prost::alloc::string::String,
 }
 /// A part as the world keeps it: under the name it gave, one more for each
 /// change that landed in it.

@@ -374,6 +374,9 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
         solid: part.solid,
         shine: part.shine,
         reach_m: part.reach_m,
+        name: part
+            .name
+            .map_or_else(String::new, |name| name.as_str().to_owned()),
     }
 }
 
@@ -430,6 +433,10 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
         solid: part.solid,
         shine: part.shine,
         reach_m: part.reach_m,
+        name: match part.name.as_str() {
+            "" => None,
+            name => Some(part::Name::new(name)?),
+        },
     };
     read.is_sound().then_some((seat, read))
 }
@@ -534,6 +541,7 @@ mod tests {
                 solid: false,
                 shine: 0.0,
                 reach_m: 0.0,
+                name: None,
             };
             assert_eq!(part_from_wire(&part_wire(seat, &sent)), Some((seat, sent)));
         }
@@ -546,6 +554,7 @@ mod tests {
                 solid: true,
                 shine: 0.0,
                 reach_m: 0.0,
+                name: None,
             },
         );
         if let Some(parts_wire::shape::Shape::Image(image)) =
@@ -563,6 +572,7 @@ mod tests {
                 solid: false,
                 shine: 0.0,
                 reach_m: 0.0,
+                name: None,
             },
         );
         if let Some(parts_wire::shape::Shape::Landmark(landmark)) = unnamed
