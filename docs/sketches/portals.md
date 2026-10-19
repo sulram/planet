@@ -8,17 +8,16 @@ the renderer would gain, and the order a campaign would pull it in.
 
 ## The thread: a portal is a part that leads to a landmark
 
-A portal would be a shape of part, `Portal { to }`, naming a landmark by the
-name the world gave it. The landmark is the address and the portal the door:
-there is no destination to type, no pair to keep in step, and a landmark
-removed leaves a portal that leads nowhere and says so. A standing ring two
-metres across by default, not solid, placed as a picture is, in
-front of the body; its panel row lists the chart to pick the destination from.
-The way back is a second portal placed at the destination; a button "place the
-way back" would place it in one pair of ops, standing on the star and facing
-the way one arrives.
+Decided (DECISIONS portal-is-a-ring): a portal is a shape of part,
+`Portal(to)`, naming a landmark by the name the world gave it. The landmark
+is the address and the portal the door: there is no destination to type, no
+pair to keep in step, and a landmark removed leaves a portal that leads
+nowhere. A standing ring two metres across, lit, not solid, placed as a
+picture is, in front of the body; its panel row lists the chart to pick the
+destination from. A portal is one way: the way back, when wanted, is a
+second portal placed by hand at the destination.
 
-The star's own rotation would be the arrival heading: one lands on the star
+The star's own rotation is the arrival heading: one lands on the star
 facing the way its point toward `+y` points. A landmark turned by its gizmo is
 then a landmark that says which way to look on arrival, with no field added.
 
