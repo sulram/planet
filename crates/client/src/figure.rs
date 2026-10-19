@@ -245,6 +245,7 @@ impl Figure {
             mesh: worn.mesh,
             transform,
             joints,
+            shine: 0.0,
         })
     }
 }

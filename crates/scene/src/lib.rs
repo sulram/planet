@@ -252,6 +252,9 @@ pub struct BoxPart {
     pub transform: DAffine3,
     /// Linear RGB.
     pub color: Vec3,
+    /// How much it shines white with its own light in place of its colour,
+    /// 0 to 1: a body charged by its passage through a portal.
+    pub shine: f32,
 }
 
 /// Stable identity of a volume mesh while it is in the scene: one chunk of
@@ -451,6 +454,9 @@ pub struct SkinnedInstance {
     pub transform: DAffine3,
     /// Mesh space from rest space, per joint: at most [`MAX_JOINTS`].
     pub joints: Vec<Mat4>,
+    /// How much it shines white with its own light in place of its colour,
+    /// 0 to 1: a body charged by its passage through a portal.
+    pub shine: f32,
 }
 
 #[derive(Clone, Copy, Debug)]

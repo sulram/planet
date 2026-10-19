@@ -111,6 +111,7 @@ pub fn parts(motion: &Motion) -> Vec<BoxPart> {
             BoxPart {
                 transform: body * pose * local,
                 color: part.color,
+                shine: 0.0,
             }
         })
         .collect()

@@ -1,17 +1,17 @@
 // A body's passage through a portal: the picture pulled into a point of
-// the screen and streaked along the pull as the body falls in, a black
-// hole opening there with a hot rim and the rest going dark; then, past
-// the portal, the same let go: the picture bursting out of the point, the
-// hole closing, the light coming back. Phase -1 to 0 is the fall, 0 to 1
-// the landing.
+// the screen and streaked along the pull as the body falls in, a hot ring
+// widening from the point and the rest going dark, the body itself left
+// in sight, charged white; then, past the portal, the same let go: the
+// picture bursting out of the point, the ring closing, the light coming
+// back. Phase -1 to 0 is the fall, 0 to 1 the landing.
 
 // How many samples a streak is made of.
-const STREAK: u32 = 8u;
+const STREAK: u32 = 16u;
 // How far the picture is pulled at most, of the distance to the point.
 const PULL: f32 = 2.5;
-// The hole at its widest, in heights of the viewport, and its rim's width.
-const HOLE: f32 = 0.32;
-const RIM: f32 = 0.025;
+// The ring at its widest, in heights of the viewport, and its width.
+const RING: f32 = 0.32;
+const RIM: f32 = 0.02;
 
 @fragment
 fn fs(in: Screen) -> @location(0) vec4<f32> {
@@ -45,12 +45,10 @@ fn fs(in: Screen) -> @location(0) vec4<f32> {
         );
     }
     color /= f32(STREAK);
-    // The hole and its rim.
-    let hole = HOLE * eased;
-    let inside = 1.0 - smoothstep(hole - RIM, hole + RIM, dist);
-    let rim = exp(-pow((dist - hole) / RIM, 2.0)) * eased;
-    // The rest goes dark as the hole opens.
-    let dark = 1.0 - eased * eased * 0.85;
-    color = color * dark * (1.0 - inside) + vec3<f32>(6.0, 5.0, 4.5) * rim;
+    // The ring, and the rest going dark as it widens.
+    let ring = RING * eased;
+    let rim = exp(-pow((dist - ring) / RIM, 2.0)) * eased;
+    let dark = 1.0 - eased * eased * 0.8;
+    color = color * dark + vec3<f32>(4.0, 3.5, 3.0) * rim;
     return vec4<f32>(color, 1.0);
 }

@@ -162,7 +162,8 @@ impl Instances {
                 let relative = DAffine3::from_translation(-camera) * part.transform;
                 Instance {
                     relative_from_box: glam::DMat4::from(relative).as_mat4().to_cols_array_2d(),
-                    color: part.color.extend(1.0).to_array(),
+                    // `a`: how much it shines white with its own light.
+                    color: part.color.extend(part.shine).to_array(),
                 }
             })
             .collect();

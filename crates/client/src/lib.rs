@@ -1226,6 +1226,20 @@ impl Client {
         }
     }
 
+    /// How charged the body is by its passage through a portal, 0 to 1:
+    /// white as it goes through, its own colour again as it lands.
+    fn charge(&self) -> f32 {
+        let Some(passage) = &self.passage else {
+            return 0.0;
+        };
+        let elapsed = self.clock_s - passage.started_s;
+        let charge = match passage.through {
+            false => elapsed / WARP_IN_S,
+            true => 1.0 - (elapsed - WARP_IN_S) / WARP_OUT_S,
+        };
+        charge.clamp(0.0, 1.0) as f32
+    }
+
     /// The warp of the picture this frame: into the portal the body is
     /// falling into, out of the body where it landed.
     fn warp(&self, camera: &scene::Camera) -> Option<scene::Warp> {
@@ -1401,12 +1415,20 @@ impl Client {
         // landed, the box figure until then.
         let mut boxes = Vec::new();
         let mut skinned = Vec::new();
-        let bodies = core::iter::once((&self.figure, self.motion()))
-            .chain(self.peers.bodies(self.moon_position()));
-        for (figure, motion) in bodies {
+        let charge = self.charge();
+        let bodies = core::iter::once((&self.figure, self.motion(), charge)).chain(
+            self.peers
+                .bodies(self.moon_position())
+                .map(|(figure, motion)| (figure, motion, 0.0)),
+        );
+        for (figure, motion, shine) in bodies {
             match figure.instance(&motion, &self.clips) {
-                Some(instance) => skinned.push(instance),
-                None => boxes.extend(box_figure::parts(&motion)),
+                Some(instance) => skinned.push(scene::SkinnedInstance { shine, ..instance }),
+                None => boxes.extend(
+                    box_figure::parts(&motion)
+                        .into_iter()
+                        .map(|part| scene::BoxPart { shine, ..part }),
+                ),
             }
         }
         Frame {

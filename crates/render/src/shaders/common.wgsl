@@ -52,6 +52,13 @@ struct View {
 @group(0) @binding(1) var shadow_map: texture_depth_2d_array;
 @group(0) @binding(2) var shadow_sampler: sampler_comparison;
 
+// A body charged by its passage through a portal: its colour gives way to
+// a white well over a sunlit white, which the bloom takes, by `shine`.
+const CHARGE: vec3<f32> = vec3<f32>(7.0, 6.5, 6.0);
+fn charged(color: vec3<f32>, shine: f32) -> vec3<f32> {
+    return mix(color, CHARGE, clamp(shine, 0.0, 1.0));
+}
+
 fn shadow_sample(relative: vec3<f32>, normal: vec3<f32>, cascade: u32) -> vec2<f32> {
     let texel_m = view.shadow_texel_m[cascade];
     let facing = clamp(dot(normal, view.sun.xyz), 0.0, 1.0);

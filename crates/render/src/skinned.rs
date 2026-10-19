@@ -14,6 +14,8 @@ use crate::{PipelineSpec, Surface, pipeline};
 #[repr(C)]
 struct InstanceUniform {
     relative_from_mesh: [[f32; 4]; 4],
+    /// `x`: how much it shines white with its own light.
+    params: [f32; 4],
     joints: [[[f32; 4]; 4]; MAX_JOINTS],
 }
 
@@ -282,6 +284,7 @@ impl InstanceUniforms {
             let relative = DAffine3::from_translation(-camera) * instance.transform;
             let mut uniform = InstanceUniform {
                 relative_from_mesh: DMat4::from(relative).as_mat4().to_cols_array_2d(),
+                params: [instance.shine, 0.0, 0.0, 0.0],
                 joints: [glam::Mat4::IDENTITY.to_cols_array_2d(); MAX_JOINTS],
             };
             for (out, joint) in uniform.joints.iter_mut().zip(&instance.joints) {
