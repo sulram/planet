@@ -43,6 +43,21 @@ lives in WORLD.md; how the picture is made in RENDER.md.
 - A leap arms the crossing again only once the body stands clear of every
   pane, so a portal on the star one lands on sends nobody straight back.
 
+## The passage
+
+- A body that crosses falls into the portal for 0.35 s, in the falling
+  gait, before it is through; it lands on the star and the picture takes
+  0.65 s to come back: a second in all (`Passage` in `client`, `WARP_IN_S`
+  and `WARP_OUT_S`).
+- The picture is drawn into the portal and out of the body: a compositor
+  stage (`warp.wgsl`) pulls the picture toward a point of the screen and
+  streaks it along the pull, the colours parting a little, while a black
+  hole opens there with a hot rim and the rest goes dark; then the same
+  let go. The point is the pane's middle on the way in and the body's
+  waist on the way out. Before the bloom, which takes the rim's light.
+- The plugin asks `Host::go_through(place, portal)`; the core keeps the
+  time and travels, as a link does, when the fall is done.
+
 ## The view through it
 
 - A portal's pane is a window on the world past it, drawn as Valve's
@@ -63,4 +78,4 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   landmark is known here, held or charted. Every other pane is dark, lit
   with its own faint light. A pane casts no shadow: light passes a portal.
 - What is drawn ahead and not built: the builds seen through it, the
-  oblique near plane, the wobble (sketches/portals.md).
+  oblique near plane (sketches/portals.md).

@@ -123,6 +123,7 @@ fn pictures_are_drawn() {
         ],
         panes: Vec::new(),
         through: None,
+        warp: None,
     };
     let pixels = headless.render(&frame);
     // Beside the other test output, to be looked at: `target/tmp/pictures.png`.
@@ -205,6 +206,7 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
             seen: false,
         }],
         through: None,
+        warp: None,
     };
     let luma = |pixels: &[u8], x: u32, y: u32| {
         let i = ((y * width + x) * 4) as usize;

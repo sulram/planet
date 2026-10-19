@@ -518,6 +518,22 @@ pub struct Frame {
     /// The world seen through one portal this frame, the one its pane says
     /// is seen through: drawn before the views, from the eye past it.
     pub through: Option<Through>,
+    /// The picture drawn into a portal and out of another: a body's passage
+    /// through one, while it lasts.
+    pub warp: Option<Warp>,
+}
+
+/// The picture of a view drawn into a point of the screen as a body falls
+/// into a portal, then out of a point as it lands past it: the picture
+/// pulled toward the point and streaked along the pull, a black hole
+/// opening there with a hot rim, then the same let go.
+#[derive(Clone, Copy, Debug)]
+pub struct Warp {
+    /// The point, fractions of the viewport from the top left.
+    pub centre: [f32; 2],
+    /// How far along: from -1, the fall just begun, to 0, the body gone
+    /// through, to 1, landed past it and the picture whole again.
+    pub phase: f32,
 }
 
 /// A portal's pane in the world: the disc inside a unit quad, `-0.5..=0.5`

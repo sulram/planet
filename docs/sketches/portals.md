@@ -42,6 +42,12 @@ What would follow, in this order:
   closing the window when the star stands on a slope.
 - Every other frame, and the pane holding the last picture between, when
   the frame budget asks for it.
+- A seamless crossing, the body seen through the pane on the far side
+  while the camera is still on this one, the camera carried back through
+  the portal until it passes the pane itself. Tried and put down: a third
+  person camera and a free standing ring leave the camera outside the disc
+  as it passes, and a window that spreads to cover that is a slow, odd
+  passage; the fall into a black hole reads as a door and takes a second.
 
 ## The crossing
 
@@ -58,15 +64,11 @@ lowered for a leap whose ground is not built.
 
 ## The transition
 
-One full screen stage in `Composer::finish`, between the bloom lay and the
-output: the picture's UVs displaced by a damped radial sine, the wobble, driven
-by the clock already in the view's uniform and an amount in a new field of
-`Frame`, set by the client at the leap, 1 to 0 over 0.8 s, the pass skipped at
-0. The settings' `Effects` are the person's and saved; the transition is the
-frame's. Later, the portal quad's own shader: a rim that shimmers, and the
-view refracted at the edge as the sea refracts what is behind it. The veil the
-web page lowers while the ground streams in would stay for a leap across the
-world and lift at once for a portal whose destination is already built.
+Built as the passage (PORTALS.md): the body falls into the portal and the
+picture is drawn into it, a black hole with a hot rim, then bursts out
+past it; a second in all. What stays drawn: a passage seen by the others,
+who get a flag in the stance for a leap and draw the fall and the hole at
+the body that crosses, instead of sliding it through the ground.
 
 ## Agents and the seam
 

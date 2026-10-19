@@ -73,6 +73,9 @@ struct ViewUniform {
     clouds: [f32; 4],
     bloom: [f32; 4],
     grade: [f32; 4],
+    /// The passage's warp: `xy` its point on the screen, `z` its phase, `w`
+    /// 1 while there is one.
+    warp: [f32; 4],
     lamps_on: [f32; 4],
     lamps: [[[f32; 4]; 2]; volumes::LAMPS],
 }
@@ -309,7 +312,7 @@ impl Renderer {
                 whole: true,
             };
             let resources = &mut slots[index];
-            let at = self.draw_world(
+            let mut at = self.draw_world(
                 &mut encoder,
                 resources,
                 frame,
@@ -318,6 +321,13 @@ impl Renderer {
                 through.as_ref(),
             );
             let targets = resources.targets.as_ref().expect("drawn");
+            // A body's passage through a portal draws the picture into it
+            // and out again, before the picture is finished: the bloom
+            // takes the hole's rim.
+            if frame.warp.is_some() {
+                self.composer
+                    .warp(&mut encoder, &resources.bind_group, targets, &mut at);
+            }
             self.composer.finish(
                 &mut encoder,
                 &resources.bind_group,
@@ -634,6 +644,9 @@ impl Renderer {
                 frame.effects.water_clarity,
                 0.0,
             ],
+            warp: frame.warp.map_or([0.0; 4], |warp| {
+                [warp.centre[0], warp.centre[1], warp.phase, 1.0]
+            }),
             lamps_on: [lamps_on, 0.0, 0.0, 0.0],
             lamps,
             bloom: {

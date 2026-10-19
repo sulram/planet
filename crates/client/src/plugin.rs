@@ -20,6 +20,7 @@ use topology::{QuadSphere, SurfacePoint};
 use voxel::{Gesture, Span};
 use worldgen::Generator;
 
+use crate::Passage;
 use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
 use crate::collision;
 use crate::controller::Controller;
@@ -188,6 +189,9 @@ pub(crate) struct Lent<'a> {
     pub level: Option<Level>,
     /// The plugin that has the pointer, while one does.
     pub pointer: &'a mut Option<&'static str>,
+    /// A body's passage through a portal, while it lasts.
+    pub passage: &'a mut Option<Passage>,
+    pub clock_s: f64,
 }
 
 impl<'a> Lent<'a> {
@@ -202,6 +206,8 @@ impl<'a> Lent<'a> {
             controller: self.controller,
             level: self.level,
             pointer: self.pointer,
+            passage: self.passage,
+            clock_s: self.clock_s,
         }
     }
 
@@ -281,6 +287,17 @@ impl Host<'_> {
             chars: topology::CODE_MAX,
         };
         pose.text(grid)
+    }
+
+    /// Takes the body through a portal to a place: the body falls into the
+    /// portal, the picture drawn into it, and lands at the place a moment
+    /// later, the picture bursting out (PORTALS.md). Wrong, the text says
+    /// what is wrong and the body stays.
+    pub fn go_through(&mut self, place: &str, portal: PartId) -> Result<(), String> {
+        let grid = self.sphere().blocks();
+        Pose::parse(grid, place)?;
+        *self.lent.passage = Some(Passage::new(place.to_owned(), portal, self.lent.clock_s));
+        Ok(())
     }
 
     /// Takes the body to a place, as a link does: what a portal's crossing

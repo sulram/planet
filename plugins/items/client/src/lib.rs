@@ -1634,6 +1634,28 @@ mod tests {
         assert_eq!(crossed["to"], star.0);
         let place = crossed["place"].as_str().expect("the place arrived at");
         assert!(place.contains(','), "{place} says which way to face");
+        // The body falls into the portal for a moment, the picture drawn
+        // into it, then is through: the picture bursts out where it stands.
+        let mut input = Input::default();
+        let frame = client.update(1.0 / 60.0, &mut input);
+        let warp = frame.warp.expect("the picture is drawn into the portal");
+        assert!(warp.phase < 0.0, "{warp:?}");
+        let before = client.host("items").feet();
+        assert!(
+            (before.point.v - far.pose.at[1]).abs() > 10.0,
+            "not through yet"
+        );
+        for _ in 0..30 {
+            client.update(1.0 / 60.0, &mut input);
+        }
+        let frame = client.update(1.0 / 60.0, &mut input);
+        let warp = frame.warp.expect("the picture bursts out past the portal");
+        assert!(warp.phase >= 0.0, "{warp:?}");
+        for _ in 0..60 {
+            client.update(1.0 / 60.0, &mut input);
+        }
+        let frame = client.update(1.0 / 60.0, &mut input);
+        assert!(frame.warp.is_none(), "the passage is over in a second");
         let feet = client.host("items").feet();
         assert!(
             (feet.point.u - far.pose.at[0]).abs() < 2.0

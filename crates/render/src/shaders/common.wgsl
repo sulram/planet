@@ -40,6 +40,9 @@ struct View {
     // x: how thick the air is, as a factor. y: which tone map, by index.
     // z: how clear the sea is to a swimmer, as a factor.
     grade: vec4<f32>,
+    // A passage through a portal: xy its point on the screen, z its phase,
+    // -1 to 1, w 1 while there is one.
+    warp: vec4<f32>,
     // x: how many of `lamps` are lit.
     lamps_on: vec4<f32>,
     lamps: array<Lamp, LAMPS>,

@@ -110,6 +110,7 @@ pub struct Composer {
     bloom_down: Stage,
     bloom_up: Stage,
     bloom_lay: Stage,
+    warp: Stage,
     output: Stage,
 }
 
@@ -203,6 +204,15 @@ impl Composer {
             bloom_down: bloom("fs_down", Write::Replace),
             bloom_up: bloom("fs_up", Write::Add),
             bloom_lay: bloom("fs_lay", Write::Replace),
+            warp: Stage::new(
+                device,
+                "warp",
+                include_str!("shaders/warp.wgsl"),
+                "fs",
+                &layouts,
+                SCENE_FORMAT,
+                Write::Replace,
+            ),
             output: Stage::new(
                 device,
                 "output",
@@ -238,6 +248,26 @@ impl Composer {
         Self::pass(
             encoder,
             &self.cloud_lay,
+            view,
+            &targets.inputs[at.0],
+            &targets.color[write],
+        );
+        at.0 = write;
+    }
+
+    /// The picture so far drawn into a point of the screen, or out of one
+    /// (`View::warp`): a body's passage through a portal.
+    pub fn warp(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::BindGroup,
+        targets: &Targets,
+        at: &mut Cursor,
+    ) {
+        let write = 1 - at.0;
+        Self::pass(
+            encoder,
+            &self.warp,
             view,
             &targets.inputs[at.0],
             &targets.color[write],

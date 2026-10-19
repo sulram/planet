@@ -127,6 +127,8 @@ pub struct Client {
     /// them still says so.
     had_anchors: bool,
     had_labels: bool,
+    /// A body's passage through a portal, while it lasts.
+    passage: Option<Passage>,
     /// Whether the last frame's streaming found nothing to build.
     settled: bool,
     entropy: u64,
@@ -193,6 +195,7 @@ impl Client {
             frames_since_stats: 0,
             had_anchors: false,
             had_labels: false,
+            passage: None,
             settled: false,
             entropy: 0,
         };
@@ -428,6 +431,8 @@ impl Client {
             controller: &mut self.controller,
             level: self.level,
             pointer: &mut self.pointer,
+            passage: &mut self.passage,
+            clock_s: self.clock_s,
         };
         (&mut self.plugins, lent)
     }
@@ -1042,7 +1047,8 @@ impl Client {
                 parts: &self.parts,
             },
         );
-        let motion = Motion::of(&self.controller);
+        self.passage_turn();
+        let motion = self.motion();
         self.figure.update(dt, &motion, &self.clips);
         self.peers.update(dt, moon, &self.clips);
         let stance = self.stance();
@@ -1190,6 +1196,68 @@ impl Client {
         self.frame(camera, patches, pictures, through.zip(seen))
     }
 
+    /// The body's motion as the figure shows it: falling, while it passes
+    /// through a portal.
+    fn motion(&self) -> Motion {
+        let mut motion = Motion::of(&self.controller);
+        if self.passage.is_some() {
+            motion.gait = Gait::Fall;
+        }
+        motion
+    }
+
+    /// A passage's turn: the body goes through the portal [`WARP_IN_S`]
+    /// after it fell in, and the passage ends [`WARP_OUT_S`] after that.
+    /// A place that cannot be reached leaves the body where it is, said.
+    fn passage_turn(&mut self) {
+        let Some(passage) = &mut self.passage else {
+            return;
+        };
+        let elapsed = self.clock_s - passage.started_s;
+        if !passage.through && elapsed >= WARP_IN_S {
+            passage.through = true;
+            let place = passage.place.clone();
+            if let Err(message) = self.go_to(&place) {
+                self.events.push(Event::Rejected { message });
+                self.passage = None;
+            }
+        } else if elapsed >= WARP_IN_S + WARP_OUT_S {
+            self.passage = None;
+        }
+    }
+
+    /// The warp of the picture this frame: into the portal the body is
+    /// falling into, out of the body where it landed.
+    fn warp(&self, camera: &scene::Camera) -> Option<scene::Warp> {
+        let passage = self.passage.as_ref()?;
+        let elapsed = self.clock_s - passage.started_s;
+        let projection = Projection::of(camera, self.aspect);
+        let on_screen = |point: DVec3| {
+            projection
+                .project(point)
+                .map_or([0.5, 0.5], |(x, y, _)| [x, y])
+        };
+        Some(match passage.through {
+            false => {
+                let pane = self
+                    .parts
+                    .transform(&self.generator, passage.portal)
+                    .map(|ring| ring.transform_point3(DVec3::new(0.0, 0.0, 0.5)));
+                scene::Warp {
+                    centre: pane.map_or([0.5, 0.5], on_screen),
+                    phase: ((elapsed / WARP_IN_S).min(1.0) - 1.0) as f32,
+                }
+            }
+            true => {
+                let waist = self.controller.drawn_position() + self.controller.up() * 0.9;
+                scene::Warp {
+                    centre: on_screen(waist),
+                    phase: (((elapsed - WARP_IN_S) / WARP_OUT_S).clamp(0.0, 1.0)) as f32,
+                }
+            }
+        })
+    }
+
     /// The portal the view is seen through this frame, and the eye past it:
     /// the nearest portal within [`THROUGH_M`] that leads to a landmark
     /// whose place is known here, and the camera carried from the portal's
@@ -1333,7 +1401,7 @@ impl Client {
         // landed, the box figure until then.
         let mut boxes = Vec::new();
         let mut skinned = Vec::new();
-        let bodies = core::iter::once((&self.figure, Motion::of(&self.controller)))
+        let bodies = core::iter::once((&self.figure, self.motion()))
             .chain(self.peers.bodies(self.moon_position()));
         for (figure, motion) in bodies {
             match figure.instance(&motion, &self.clips) {
@@ -1400,6 +1468,7 @@ impl Client {
                 through.as_ref().map(|((id, _), _)| *id),
             ),
             through: through.map(|((_, camera), patches)| scene::Through { camera, patches }),
+            warp: self.warp(&camera),
         }
     }
 
@@ -1636,6 +1705,34 @@ type Select = fn(&mut Terrain, &Generator, Cover, &[Viewpoint], f32) -> Vec<Vec<
 /// How far from the body a portal is seen through, metres: a plot's width.
 /// One at a time, the nearest.
 const THROUGH_M: f64 = 32.0;
+
+/// How long a body falls into a portal before it is through, and how long
+/// the picture takes to burst out past it, seconds: a passage is under a
+/// second, a blink of the world.
+const WARP_IN_S: f64 = 0.35;
+const WARP_OUT_S: f64 = 0.65;
+
+/// A body's passage through a portal: it falls into the portal, the
+/// picture drawn into it, goes through at [`WARP_IN_S`] and lands at the
+/// place, the picture bursting out of it for [`WARP_OUT_S`].
+pub(crate) struct Passage {
+    place: String,
+    portal: PartId,
+    started_s: f64,
+    /// Whether the body has gone through yet.
+    through: bool,
+}
+
+impl Passage {
+    pub(crate) fn new(place: String, portal: PartId, started_s: f64) -> Passage {
+        Passage {
+            place,
+            portal,
+            started_s,
+            through: false,
+        }
+    }
+}
 
 /// A frame's rigid part: its rotation and translation, its scale taken out,
 /// each axis made unit.

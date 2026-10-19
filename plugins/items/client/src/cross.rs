@@ -98,7 +98,7 @@ impl Items {
     }
 
     fn arrive(&mut self, portal: PartId, to: PartId, place: String, host: &mut Host<'_>) {
-        match host.go_to(&place) {
+        match host.go_through(&place, portal) {
             Ok(()) => {
                 self.feet = None;
                 self.armed = false;
