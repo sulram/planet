@@ -464,6 +464,7 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
                 shift: event.shift_key(),
             };
             let mut state = state.borrow_mut();
+            state.input.chord = chord;
             if !down {
                 state.input.hold(&code, false);
             }

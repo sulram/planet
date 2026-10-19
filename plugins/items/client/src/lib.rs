@@ -172,8 +172,6 @@ mod key {
     pub const SCALE: &str = "scale";
     /// Remove the part picked.
     pub const REMOVE: &str = "remove";
-    /// Held while stretching: every side alike.
-    pub const UNIFORM: &str = "uniform";
 }
 
 /// The colours a hand can pick: as many as the world's palette holds.
@@ -380,7 +378,8 @@ impl Items {
                 return;
             }
         }
-        let uniform = turn.held(key::UNIFORM);
+        // Shift held while stretching: every side alike.
+        let uniform = turn.chord.shift;
         if let Some(gizmo) = &mut self.picked {
             if gizmo.drag.is_some() {
                 if released || turn.interrupted {
@@ -509,8 +508,6 @@ impl Plugin for Items {
             KeyAsk::pressed(key::SCALE, "KeyT"),
             KeyAsk::pressed(key::REMOVE, "Delete"),
             KeyAsk::pressed(key::REMOVE, "Backspace"),
-            KeyAsk::held(key::UNIFORM, "ShiftLeft"),
-            KeyAsk::held(key::UNIFORM, "ShiftRight"),
         ]
     }
 

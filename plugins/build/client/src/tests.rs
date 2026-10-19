@@ -1,7 +1,7 @@
 //! The tool and the platform over a client's cells: the plugin held in hand
 //! and given its turns one by one, with an eye placed where a test wants it.
 
-use client::{Client, Eye, Level, Met, Recipe};
+use client::{Chord, Client, Eye, Level, Met, Recipe};
 use glam::{DMat3, DQuat, DVec3};
 use topology::{QuadSphere, Sector};
 use voxel::{Face, Quad, Span};
@@ -145,6 +145,7 @@ fn update(build: &mut Build, client: &mut Client, eye: &Eye, using: bool, turnin
         keys,
         interrupted: false,
         inspected: false,
+        chord: Chord::default(),
     };
     build.turn(&turn, &mut client.host(NAME));
 }
@@ -809,6 +810,7 @@ fn escape_drops_a_stroke_half_drawn_and_so_does_a_shell_that_lets_go() {
         keys: &[],
         interrupted: true,
         inspected: false,
+        chord: Chord::default(),
     };
     build.turn(&let_go, &mut client.host(NAME));
     assert!(client.cells().cell(point.sector, over).is_air());
