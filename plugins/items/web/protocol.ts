@@ -1,14 +1,15 @@
 /**
  * Items' own part of the seam: the commands `items.edit`, `items.take`,
  * `items.pick`, `items.mode`, `items.set`, `items.remove`, `items.paint`,
- * `items.finish`, `items.edge` and `items.state`, and the events `items.hand`,
- * `items.picked` and `items.refused`, as the plugin's crate writes them.
- * Pure: no WASM, no DOM.
+ * `items.finish`, `items.edge`, `items.state`, `items.list` and
+ * `items.chart`, and the events `items.hand`, `items.picked`,
+ * `items.refused`, `items.near` and `items.landmarks`, as the plugin's
+ * crate writes them. Pure: no WASM, no DOM.
  */
 
 /** What the menu offers to place. A kind another plugin's session adds enters `kinds.ts` under its own name. */
-export type Item = 'cube' | 'model' | 'picture';
-export const items = ['cube', 'model', 'picture'] as const satisfies readonly Item[];
+export type Item = 'cube' | 'model' | 'picture' | 'landmark';
+export const items = ['cube', 'model', 'picture', 'landmark'] as const satisfies readonly Item[];
 
 /** How what is placed takes the light: lit, see-through, or shining and lighting what is near. */
 export type Finish = 'matte' | 'glass' | 'light';
@@ -19,8 +20,8 @@ export type Edge = 'none' | 'black' | 'white';
 export const edges = ['none', 'black', 'white'] as const satisfies readonly Edge[];
 
 /** Why an item was not handed over or a part not placed. */
-export type Refusal = 'level' | 'pose' | 'gone' | 'unread';
-const refusals = ['level', 'pose', 'gone', 'unread'] as const satisfies readonly Refusal[];
+export type Refusal = 'level' | 'pose' | 'gone' | 'unread' | 'name';
+const refusals = ['level', 'pose', 'gone', 'unread', 'name'] as const satisfies readonly Refusal[];
 
 /** What a drag of a handle does to the part picked. */
 export type Mode = 'move' | 'rotate' | 'scale';
@@ -39,6 +40,8 @@ export interface Hand {
 	model: string | null;
 	/** Whether the model in hand is still on its way: it places a glass box until its file arrives. */
 	loading: boolean;
+	/** The name the next landmark bears, once one was given. */
+	name: string | null;
 }
 
 /** `items.picked`: the part picked as it stands: where, in blocks of its seat; how it is turned, degrees about its own axes; how long its sides are, in blocks; whether it is solid. */
@@ -54,8 +57,10 @@ export interface Picked {
 	shine: number;
 	/** How far its light goes, metres; 0 is by its size. */
 	reach_m: number;
-	/** Whether it is a lamp: a cube in the light finish. */
+	/** Whether it is a lamp: a cube in the light finish, or a landmark. */
 	lamp: boolean;
+	/** What a landmark is called. */
+	name?: string;
 }
 
 const isItem = (value: unknown): value is Item => items.some((item) => item === value);
@@ -72,7 +77,8 @@ export function parseHand(event: Record<string, unknown>): Hand | null {
 	if (!mode || !finish || !edge) return null;
 	const model = typeof event.model === 'string' ? event.model : null;
 	const loading = event.loading === true;
-	return { editing, item, mode, paint, finish, edge, model, loading };
+	const name = typeof event.name === 'string' ? event.name : null;
+	return { editing, item, mode, paint, finish, edge, model, loading, name };
 }
 
 const isVector = (value: unknown): value is [number, number, number] =>
@@ -80,10 +86,35 @@ const isVector = (value: unknown): value is [number, number, number] =>
 
 /** Reads a `picked` event: the part picked, or null when none is, or when the event is no part. */
 export function parsePicked(event: Record<string, unknown>): Picked | null {
-	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp } = event;
+	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp, name } = event;
 	if (typeof id !== 'number' || !isItem(item)) return null;
 	if (!isVector(at) || !isVector(rotation) || !isVector(scale) || typeof solid !== 'boolean' || typeof shine !== 'number' || typeof reach_m !== 'number' || typeof lamp !== 'boolean') return null;
-	return { id, item, at, rotation, scale, solid, shine, reach_m, lamp };
+	const picked: Picked = { id, item, at, rotation, scale, solid, shine, reach_m, lamp };
+	if (typeof name === 'string') picked.name = name;
+	return picked;
+}
+
+/** `items.landmarks`: one landmark of the world: its name in the world, what it is called, its paint, how far in metres, null on another body, and the place code that takes a body to it. */
+export interface LandmarkOne {
+	id: number;
+	name: string;
+	paint: number;
+	away_m: number | null;
+	place: string;
+}
+
+/** Reads a `landmarks` event: the landmarks of the world, nearest first. Null for one that is no chart. */
+export function parseLandmarks(event: Record<string, unknown>): LandmarkOne[] | null {
+	const { landmarks } = event;
+	if (!Array.isArray(landmarks)) return null;
+	const rows: LandmarkOne[] = [];
+	for (const row of landmarks) {
+		if (typeof row !== 'object' || row === null) return null;
+		const { id, name, paint, away_m, place } = row as Record<string, unknown>;
+		if (typeof id !== 'number' || typeof name !== 'string' || typeof paint !== 'number' || typeof place !== 'string') return null;
+		rows.push({ id, name, paint, away_m: typeof away_m === 'number' ? away_m : null, place });
+	}
+	return rows;
 }
 
 /** `items.near`: one part near the body: its name, what kind of item it is, how far in metres, its paint and whether it is solid. */

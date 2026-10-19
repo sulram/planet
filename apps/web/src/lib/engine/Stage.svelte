@@ -12,12 +12,14 @@
 	import { replaceState } from '$app/navigation';
 	import EngineView from './EngineView.svelte';
 	import Help from './Help.svelte';
+	import Labels from './Labels.svelte';
 	import Nametags from './Nametags.svelte';
 	import Settings from './Settings.svelte';
 	import {
 		isPluginEvent,
 		NAME_CHARS,
 		type Anchor,
+		type Label,
 		type Effects,
 		type EngineEvent,
 		type Level,
@@ -120,6 +122,7 @@
 	let me = $state<number | null>(null);
 	let peers = $state<PeerInfo[]>([]);
 	let anchors = $state.raw<Anchor[]>([]);
+	let labels = $state.raw<Label[]>([]);
 
 	/** The paints a cell can take: the world's palette, which a plugin's layer shows. */
 	let palette = $state.raw<string[]>([]);
@@ -250,6 +253,7 @@
 		} else if (event.type === 'peers') peers = event.peers;
 		else if (event.type === 'statement') spoken = event.plugins;
 		else if (event.type === 'anchors') anchors = event.anchors;
+		else if (event.type === 'labels') labels = event.labels;
 		else if (event.type === 'palette') palette = event.colors;
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
@@ -269,6 +273,7 @@
 	{#if link}
 		<Nametags {anchors} {peers} {me} />
 	{/if}
+	<Labels {labels} />
 	{#each mounted as plugin (plugin.name)}
 		{#if plugin.Layer}
 			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {palette} {peers} {anchors} />

@@ -104,8 +104,8 @@ this file in the same change.
 | Link (code) | The socket between a client and a world server, as the platform shell holds it. The client owns the protocol, the shell owns the socket. |
 | Volume | An integer address box inside one sector, over one plot. The only place voxels exist. |
 | Gizmo | The handles over the item picked, one a bar along each of its own axes with a tip: dragged, they move, turn or stretch it, as the mode says. Drawn over everything, cast by nothing. |
-| Item | What the items menu offers to place: a cube in a paint, a model from a file, a picture. Taken in hand, a click places it as a part. |
-| Part | A placed thing that is no cell, kept by its seat: a pose, a shape, a paint, whether it is solid, how much it shines and how far its light goes. A cube first; a model, a picture, a light are shapes of it. Rigid in the frame of its anchor, moved in the world and read back. |
+| Item | What the items menu offers to place: a cube in a paint, a model from a file, a picture, a landmark. Taken in hand, a click places it as a part. |
+| Part | A placed thing that is no cell, kept by its seat: a pose, a shape, a paint, whether it is solid, how much it shines and how far its light goes. A cube first; a model, a picture, a landmark, a light are shapes of it. Rigid in the frame of its anchor, moved in the world and read back. |
 | Stamp | A flatten and blend footprint, applied when the ground is sampled. How what is not a volume seats into terrain, at every level, without being an edit. The ground it holds is worked earth, where nothing grows. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
 | Land | The native plugin that gives permission to build by volume, to a person's account or an agent's. It answers the permission hook over the level. |
@@ -152,7 +152,10 @@ this file in the same change.
 | Decoder budget | Max videos decoding at once on a platform. |
 | Gravity field | An entity defining "down" inside a shape, with range and priority. |
 | Scale band | A discrete avatar scale (giant, human, bug) that selects which levels are streamed. |
-| Portal | A link between two (place, scale, world) points. |
+| Landmark | A part whose shape is a five pointed star bearing a name, up to 64 bytes, inline in the record. Lit with its own light whatever its paint, a lamp, so it is seen at night. A place one travels to: its place code is its anchor's, and arriving is standing on it. |
+| Chart | The landmarks of a world, wherever they stand: the parts' answer to `chart`, the nearest the asker first, at most 256, at any level. The star icon beside the cube opens it. |
+| Label | A landmark's name hung over its star, within a nametag's reach, by the core, as a nametag is hung over a head. |
+| Portal | A link between two (place, scale, world) points: drawn in `sketches/portals.md`, leading to a landmark. |
 | Atlas | The 2D map: the quad sphere unfolded as a cube net. |
 | Seam (code) | A single trait where an integration enters the core. Distinct from a sector seam; say "integration seam" when ambiguous. |
 | Shell (code) | A platform entry crate: `shell-desktop`, `shell-web`, `shell-xr`. Distinct from a radial shell; say "platform shell" when ambiguous. |

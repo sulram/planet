@@ -338,6 +338,9 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
             }
             .into(),
         }),
+        part::Shape::Landmark(name) => parts_wire::shape::Shape::Landmark(parts_wire::Landmark {
+            name: name.as_str().to_owned(),
+        }),
     };
     parts_wire::Part {
         seat: Some(seat.wire()),
@@ -362,7 +365,8 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
 }
 
 /// The seat and part a message says, when it says a sound one this version
-/// knows: a seat, a pose that is a pose, a shape, a paint of a byte.
+/// knows: a seat, a pose that is a pose, a shape with a sound name when it
+/// bears one, a paint of a byte.
 pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
     let seat = Seat::from_wire(part.seat.as_ref())?;
     let pose = part.pose.as_ref()?;
@@ -383,6 +387,9 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
                 parts_wire::ImageKind::Unspecified => return None,
             },
         }),
+        parts_wire::shape::Shape::Landmark(landmark) => {
+            part::Shape::Landmark(part::Name::new(&landmark.name)?)
+        }
     };
     let pose = part::Pose {
         at: [pose.u, pose.v, pose.h],
@@ -480,6 +487,7 @@ mod tests {
             part::Shape::Cube,
             part::Shape::Vox([7; 32]),
             part::Shape::Image(media),
+            part::Shape::Landmark(part::Name::new("Praça da Sé").unwrap()),
         ] {
             let sent = part::Part {
                 shape,
@@ -508,6 +516,25 @@ mod tests {
             image.full.truncate(31);
         }
         assert_eq!(part_from_wire(&short), None, "a hash is 32 bytes");
+        let mut unnamed = part_wire(
+            seat,
+            &part::Part {
+                shape: part::Shape::Landmark(part::Name::new("here").unwrap()),
+                pose: part::Pose::upright([1.0, 1.0, 1.0], [2.0, 2.0, 0.2]),
+                paint: 0,
+                solid: false,
+                shine: 0.0,
+                reach_m: 0.0,
+            },
+        );
+        if let Some(parts_wire::shape::Shape::Landmark(landmark)) = unnamed
+            .shape
+            .as_mut()
+            .and_then(|shape| shape.shape.as_mut())
+        {
+            landmark.name = "x".repeat(part::NAME_BYTES + 1);
+        }
+        assert_eq!(part_from_wire(&unnamed), None, "a name is bounded");
     }
 
     #[test]

@@ -262,6 +262,7 @@
 				<Icon name="scale-3d" label="Scale" />
 				<Icon name="rotate-ccw" label="Reset" />
 				<Icon name="package" label="Model" />
+				<Icon name="star" label="Landmark" />
 				<Icon name="lock" label="Locked" />
 				<Icon name="lock-open" label="Open" />
 				<Icon name="list" label="List" />

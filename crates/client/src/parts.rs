@@ -174,10 +174,23 @@ impl Link {
     }
 }
 
+/// A landmark as the chart says it: under the name the world gives it, or
+/// the name here with no world, where it stands and how far from the body.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Landmarked {
+    pub id: u64,
+    pub seat: Seat,
+    pub part: Part,
+    /// From the body, metres; infinite from another body.
+    pub away_m: f64,
+}
+
 /// Every part held, by its name, and what draws them.
 #[derive(Default)]
 pub struct Parts {
     held: BTreeMap<PartId, (Seat, Part)>,
+    /// The chart's answer since last taken: the landmarks of the world.
+    charted: Option<Vec<(u64, Seat, Part)>>,
     /// The next name given here: a hand knows a part by it, in a world or
     /// alone.
     next: u64,
@@ -343,6 +356,45 @@ impl Parts {
         }
     }
 
+    /// Asks the world for its landmarks, wherever they stand; alone, the
+    /// ones held here are the answer at once. What comes is taken with
+    /// [`Parts::take_charted`].
+    pub(crate) fn chart(&mut self) {
+        if let Some(link) = &mut self.link {
+            link.ask(wire::CHART, &wire::Chart {});
+            return;
+        }
+        let landmarks = self
+            .all()
+            .filter(|(_, _, part)| matches!(part.shape, Shape::Landmark(_)))
+            .map(|(id, seat, part)| (id.0, seat, *part))
+            .collect();
+        self.charted = Some(landmarks);
+    }
+
+    /// The chart's answer, once: the landmarks, the nearest the body first,
+    /// those on another body last. `body` is the body the client's own
+    /// stands on and where, from its centre.
+    pub(crate) fn take_charted(
+        &mut self,
+        generator: &Generator,
+        body: (Body, DVec3),
+    ) -> Option<Vec<Landmarked>> {
+        let mut landmarks: Vec<Landmarked> = self
+            .charted
+            .take()?
+            .into_iter()
+            .map(|(id, seat, part)| Landmarked {
+                id,
+                seat,
+                part,
+                away_m: away_m(generator, seat, &part.pose, body),
+            })
+            .collect();
+        landmarks.sort_by(|a, b| a.away_m.total_cmp(&b.away_m).then(a.id.cmp(&b.id)));
+        Some(landmarks)
+    }
+
     /// What to ask the world since the last call, in order.
     pub(crate) fn drain_asks(&mut self) -> Vec<Ask> {
         self.link
@@ -458,6 +510,20 @@ impl Parts {
                 for id in seen.gone {
                     self.gone(id);
                 }
+            }
+            wire::CHARTED => {
+                let Ok(charted) = wire::Charted::decode(payload) else {
+                    return;
+                };
+                let landmarks = charted
+                    .records
+                    .iter()
+                    .filter_map(|record| {
+                        let (seat, part) = seat::part_from_wire(record.part.as_ref()?)?;
+                        Some((record.id, seat, part))
+                    })
+                    .collect();
+                self.charted = Some(landmarks);
             }
             _ => {}
         }
@@ -851,12 +917,15 @@ impl Parts {
             let Some(mesh) = model_of(part) else {
                 continue;
             };
+            // A landmark is solid to the eye whatever its paint says.
+            let glass = Paint::of(part.paint).finish == Finish::Glass
+                && !matches!(part.shape, Shape::Landmark(_));
             drawn.push(ModelDraw {
                 mesh,
                 transform,
-                pass: match Paint::of(part.paint).finish {
-                    Finish::Glass => ModelPass::Glass,
-                    Finish::Matte | Finish::Light => ModelPass::Solid,
+                pass: match glass {
+                    true => ModelPass::Glass,
+                    false => ModelPass::Solid,
                 },
             });
         }
@@ -899,10 +968,11 @@ impl Parts {
             .collect()
     }
 
-    /// The lamps among the parts: a cube in the light finish lights what is
-    /// near, as a cell of that finish does, by its colour, as many sides as
-    /// its box has and as much as it shines. A model has its own colours
-    /// and a picture its own image, so neither is a lamp.
+    /// The lamps among the parts: a cube in the light finish and a landmark
+    /// light what is near, as a cell of that finish does, by their colour,
+    /// as many sides as their box has and as much as they shine. A model
+    /// has its own colours and a picture its own image, so neither is a
+    /// lamp.
     pub fn lamps(&self, generator: &Generator) -> Vec<Lamp> {
         self.all()
             .filter(|(_, _, part)| is_lamp(part))
@@ -952,6 +1022,10 @@ impl Parts {
                 Shape::Cube => {
                     self.meshed.push(id);
                     self.changes.push(ModelChange::Add(id, cube(paint)));
+                }
+                Shape::Landmark(_) => {
+                    self.meshed.push(id);
+                    self.changes.push(ModelChange::Add(id, star(paint)));
                 }
                 Shape::Vox(hash) => {
                     // Until the file arrives, its place is a glass box with
@@ -1042,7 +1116,7 @@ fn waiting_mark(world: &DAffine3, clock_s: f64) -> DAffine3 {
 
 /// How far a body at `body`, from the centre of the body it is on, is from
 /// a part's anchor, metres: infinite from another body.
-fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -> f64 {
+pub(crate) fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -> f64 {
     if seat.body() != body.0 {
         return f64::INFINITY;
     }
@@ -1051,9 +1125,15 @@ fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -
 }
 
 /// Whether a part is a lamp, lighting what is near: a cube in the light
-/// finish. A model has its own colours and a picture its own image.
+/// finish, and a landmark whatever its finish, since it is lit with its own
+/// light to be seen at night. A model has its own colours and a picture
+/// its own image.
 pub fn is_lamp(part: &Part) -> bool {
-    part.shape == Shape::Cube && Paint::of(part.paint).finish == Finish::Light
+    match part.shape {
+        Shape::Cube => Paint::of(part.paint).finish == Finish::Light,
+        Shape::Landmark(_) => true,
+        Shape::Vox(_) | Shape::Image(_) => false,
+    }
 }
 
 /// The model a part is drawn as. `None` for a shape drawn another way, a
@@ -1065,8 +1145,11 @@ fn model_of(part: &Part) -> Option<ModelId> {
 /// The model of one of the core's shapes in a paint, or of a file by its
 /// hash.
 fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
+    // A landmark's name is not in its model: every landmark in a paint
+    // shares one star.
     let shape = match shape {
         Shape::Cube => 0,
+        Shape::Landmark(_) => 1,
         Shape::Vox(hash) => return Some(model_of_file(hash)),
         Shape::Image(_) => return None,
     };
@@ -1253,6 +1336,73 @@ fn cube(paint: u8) -> ModelMesh {
     ModelMesh { vertices, indices }
 }
 
+/// How many points a landmark's star has, and how far in its inner corners
+/// stand, of the box's half width.
+const STAR_POINTS: usize = 5;
+const STAR_INNER: f32 = 0.38;
+
+/// A landmark's star in a paint: a prism of a five pointed star filling the
+/// unit box, a point toward `+y`, its top and bottom fans and a side a rim
+/// edge, wound counter clockwise seen from outside, every corner open to
+/// the sky. It shines with its own light whatever the paint's finish.
+fn star(paint: u8) -> ModelMesh {
+    let (mut color, _) = paint_look(paint);
+    color[3] = u8::MAX;
+    let rim: Vec<[f32; 2]> = (0..STAR_POINTS * 2)
+        .map(|k| {
+            let angle = core::f32::consts::FRAC_PI_2
+                + k as f32 * core::f32::consts::PI / STAR_POINTS as f32;
+            let radius = if k % 2 == 0 { 0.5 } else { 0.5 * STAR_INNER };
+            [radius * angle.cos(), radius * angle.sin()]
+        })
+        .collect();
+    let mut vertices = Vec::with_capacity(2 * (rim.len() + 1) + 4 * rim.len());
+    let mut indices = Vec::with_capacity(6 * rim.len() + 6 * rim.len());
+    let vertex = |position: [f32; 3], normal: [f32; 3], across: [u8; 2]| VolumeVertex {
+        position,
+        normal,
+        color,
+        side: [u8::MAX, across[0], across[1], 0],
+    };
+    // The top and the bottom: a fan from the middle round the rim, the top
+    // seen from above and the bottom from below.
+    for (z, normal, forward) in [(1.0, [0.0, 0.0, 1.0], true), (0.0, [0.0, 0.0, -1.0], false)] {
+        let base = vertices.len() as u32;
+        vertices.push(vertex([0.0, 0.0, z], normal, [0, 0]));
+        for &[x, y] in &rim {
+            vertices.push(vertex([x, y, z], normal, [u8::MAX, u8::MAX]));
+        }
+        let n = rim.len() as u32;
+        for k in 0..n {
+            let (a, b) = (base + 1 + k, base + 1 + (k + 1) % n);
+            match forward {
+                true => indices.extend([base, a, b]),
+                false => indices.extend([base, b, a]),
+            }
+        }
+    }
+    // The sides: a quad an edge of the rim, facing out of it.
+    let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
+    for k in 0..rim.len() {
+        let (a, b) = (rim[k], rim[(k + 1) % rim.len()]);
+        let d = [b[0] - a[0], b[1] - a[1]];
+        let length = (d[0] * d[0] + d[1] * d[1]).sqrt();
+        let normal = [d[1] / length, -d[0] / length, 0.0];
+        let base = vertices.len() as u32;
+        let corners = [
+            [a[0], a[1], 0.0],
+            [b[0], b[1], 0.0],
+            [b[0], b[1], 1.0],
+            [a[0], a[1], 1.0],
+        ];
+        for (position, uv) in corners.into_iter().zip(across) {
+            vertices.push(vertex(position, normal, uv));
+        }
+        indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
+    }
+    ModelMesh { vertices, indices }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1271,6 +1421,39 @@ mod tests {
             let centre = Vec3::new(0.0, 0.0, 0.5);
             assert!(((a - centre).dot(normal) - 0.5).abs() < 1e-6);
         }
+    }
+
+    #[test]
+    fn a_star_is_wound_outward_and_shines_whatever_its_paint() {
+        let mesh = star(5);
+        assert_eq!((mesh.vertices.len(), mesh.indices.len()), (62, 120));
+        for side in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|i| Vec3::from(mesh.vertices[side[i] as usize].position));
+            let normal = Vec3::from(mesh.vertices[side[0] as usize].normal);
+            let wound = (b - a).cross(c - a);
+            assert!(wound.dot(normal) > 0.0, "{side:?} winds against its normal");
+            // Every corner is in the unit box, and a side's corners are on
+            // the plane its normal names.
+            for p in [a, b, c] {
+                assert!(p.x.abs() <= 0.5 + 1e-6 && p.y.abs() <= 0.5 + 1e-6);
+                assert!((0.0..=1.0).contains(&p.z));
+                assert!(((p - a).dot(normal)).abs() < 1e-6);
+            }
+        }
+        assert!(mesh.vertices.iter().all(|v| v.color[3] == u8::MAX));
+        // A point toward +y reaches the box's side.
+        assert!(
+            mesh.vertices
+                .iter()
+                .any(|v| (v.position[1] - 0.5).abs() < 1e-6)
+        );
+        let name = part::Name::new("here").unwrap();
+        assert_eq!(
+            model_id(Shape::Landmark(name), 5),
+            model_id(Shape::Landmark(part::Name::new("there").unwrap()), 5),
+            "every landmark in a paint shares one star"
+        );
+        assert_ne!(model_id(Shape::Landmark(name), 5), model_id(Shape::Cube, 5));
     }
 
     #[test]

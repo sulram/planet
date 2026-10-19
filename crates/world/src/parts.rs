@@ -1,7 +1,8 @@
 //! The parts of a world where the world is decided (DECISIONS 111): a
 //! system of the core, an owner as a plugin is. It names a part a session
 //! places, keeps it in its store, sets and removes it, tells whoever is
-//! near, and shows a client that looks the parts near it that it lacks.
+//! near, shows a client that looks the parts near it that it lacks, and
+//! charts the landmarks of the world for whoever asks.
 //!
 //! A part is one row: its record under its name. What is held in memory is
 //! read again by a new instance: every record, and the next name to give.
@@ -24,6 +25,8 @@ pub const VERSION: u32 = 1;
 pub const HOLD_M: f64 = 8192.0;
 /// The most records one look is answered with.
 const LOOK_RECORDS: usize = 4096;
+/// The most landmarks a chart says.
+const CHART_RECORDS: usize = 256;
 
 /// The key a part's record is kept under: a tag and its name.
 fn record_key(id: u64) -> Vec<u8> {
@@ -347,6 +350,34 @@ impl Parts {
         };
         room.tell(wire::SEEN, seen.encode_to_vec(), &[who.session]);
     }
+
+    /// Answers the asker with the landmarks of the world, wherever they
+    /// stand, the nearest first and those on another body last: what a
+    /// list to travel by shows. Always answered, empty with none.
+    fn chart(&mut self, who: &Who, room: &mut dyn Room) {
+        let measure = room.measure();
+        let from = who
+            .stance
+            .as_ref()
+            .and_then(|stance| place(&measure, stance));
+        let index = self.index(room);
+        let mut found: Vec<(f64, u64, wire::Record)> = index
+            .iter()
+            .filter(|(_, kept)| matches!(kept.part.shape, part::Shape::Landmark(_)))
+            .map(|(&id, kept)| {
+                let away_m = from
+                    .and_then(|from| away_m(&measure, kept.seat, &kept.part, from))
+                    .unwrap_or(f64::INFINITY);
+                (away_m, id, kept.record(id))
+            })
+            .collect();
+        found.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        found.truncate(CHART_RECORDS);
+        let charted = wire::Charted {
+            records: found.into_iter().map(|(_, _, record)| record).collect(),
+        };
+        room.tell(wire::CHARTED, charted.encode_to_vec(), &[who.session]);
+    }
 }
 
 /// Where a stance is: the body it is on, and metres from that body's centre.
@@ -398,7 +429,7 @@ impl Plugin for Parts {
     }
 
     /// Placing, setting and removing a part is a builder's and an admin's,
-    /// and taking that back. Anyone looks.
+    /// and taking that back. Anyone looks, and anyone asks for the chart.
     fn ops(&self) -> Vec<Op> {
         let builder = [
             wire::PLACE,
@@ -414,10 +445,12 @@ impl Plugin for Parts {
                 level: Level::Builder,
             })
             .collect();
-        ops.push(Op {
-            kind: wire::LOOK,
-            level: Level::Anonymous,
-        });
+        for kind in [wire::LOOK, wire::CHART] {
+            ops.push(Op {
+                kind,
+                level: Level::Anonymous,
+            });
+        }
         ops
     }
 
@@ -432,6 +465,7 @@ impl Plugin for Parts {
                 }
             }
             wire::LOOK => self.look(payload, who, room),
+            wire::CHART => self.chart(who, room),
             _ => {}
         }
     }

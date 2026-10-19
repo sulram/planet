@@ -2,8 +2,9 @@
 // them and what the world says of them, each the payload of an Envelope
 // whose owner is `parts`.
 //
-// Up, the ops: `place`, `set`, `remove`, `take_back`, `put_back`, `look`.
-// Down, the events: `placed`, `changed`, `removed`, `seen`.
+// Up, the ops: `place`, `set`, `remove`, `take_back`, `put_back`, `look`,
+// `chart`. Down, the events: `placed`, `changed`, `removed`, `seen`,
+// `charted`.
 syntax = "proto3";
 
 package planet.parts.v1;
@@ -21,11 +22,19 @@ message Shape {
     // the file named `asset://<hex>.vox`.
     bytes vox = 2;
     Media image = 3;
+    Landmark landmark = 4;
   }
 }
 
 // The unit box, in one paint.
 message Cube {}
+
+// A landmark: a star lying in the box, bearing a name: trimmed, never
+// empty, no control character, at most 64 bytes of UTF-8. Lit with its own
+// light whatever its paint's finish; a place one travels to.
+message Landmark {
+  string name = 1;
+}
 
 // A picture: its size in texels and the three files its owner's client made
 // when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
@@ -151,4 +160,15 @@ message Removed {
 message Seen {
   repeated Record records = 1;
   repeated uint64 gone = 2;
+}
+
+// `chart`: the landmarks of the world, wherever they stand. The world
+// answers the asker with `charted`.
+message Chart {}
+
+// `charted`: the landmarks of the world as they stand, the nearest the
+// asker first, at most 256. The answer to `chart`, always given, empty when
+// the world has none.
+message Charted {
+  repeated Record records = 1;
 }

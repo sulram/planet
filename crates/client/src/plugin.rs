@@ -25,7 +25,7 @@ use crate::collision;
 use crate::controller::Controller;
 use crate::history::{History, Owner};
 use crate::input::{Chord, Input, Key, KeyAsk};
-use crate::parts::{Mark, PartRefusal, Parts};
+use crate::parts::{Landmarked, Mark, PartRefusal, Parts};
 use crate::place::Pose;
 use crate::seam::{Event, Level, PluginOn};
 use crate::session::Session;
@@ -250,6 +250,26 @@ impl Host<'_> {
         Pose::of_stance(grid, stance).map(|pose| pose.place(grid))
     }
 
+    /// A point of a seat, in blocks along it and over the datum, as a place:
+    /// the code `GoTo` takes to stand there. On the ground the height is
+    /// left out, as a stance's is; over it by more than a step, a tower's
+    /// top, it is kept, so arriving there arrives flying, onto the floor.
+    pub fn place_at(&self, seat: Seat, at: [f64; 3]) -> String {
+        let grid = self.sphere().blocks();
+        let point = SurfacePoint::new(seat.sector(), at[0], at[1]);
+        let step = collision::STEP_M / topology::BLOCK_M;
+        let over = at[2] - self.ground(seat, point) > step;
+        let pose = Pose {
+            on_moon: seat.body() == Body::Moon,
+            column: grid.column_of(point),
+            h: over.then(|| at[2] as i16),
+            bearing_deg: None,
+            pitch_deg: None,
+            chars: topology::CODE_MAX,
+        };
+        pose.place(grid)
+    }
+
     /// The body of the world: how an address is a place on it.
     pub fn sphere(&self) -> QuadSphere {
         self.lent.generator.sphere()
@@ -463,6 +483,20 @@ impl Host<'_> {
     /// The parts, to read: what stands where.
     pub fn parts(&self) -> &Parts {
         self.lent.parts
+    }
+
+    /// Asks for the chart: the landmarks of the world, wherever they stand.
+    /// In a world the world answers; alone, what is held here does, at
+    /// once. The answer comes through [`Host::take_charted`].
+    pub fn chart(&mut self) {
+        self.lent.parts.chart();
+    }
+
+    /// The chart's answer since last taken, the nearest the body first.
+    pub fn take_charted(&mut self) -> Option<Vec<Landmarked>> {
+        self.lent
+            .parts
+            .take_charted(self.lent.generator, self.lent.controller.held_by())
     }
 
     /// The nearest part a line from a point of the world along a direction,

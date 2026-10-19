@@ -12,7 +12,7 @@ doc each decision points to; a superseded decision stays, linked to the one
 that replaced it. A decision is cited by a fragment of its id: `DECISIONS 81`
 for the entries that carry a number, `DECISIONS <slug>` for the rest.
 
-Agents: `bun kb search <terms>` finds a decision, `bun kb decision new "<title>"`
-records one (`bun kb --help`).
-
-<DecisionList />
+The list is read, never kept: `bun kb decision list`, `bun kb search <terms>`,
+`bun kb why <doc.md#section>`; `bun kb decision new "<title>" --id <slug>`
+records one (`bun kb --help`). A site that lists them is an adapter over the
+same files, when one is wanted.

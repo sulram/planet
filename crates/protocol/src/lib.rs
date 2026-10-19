@@ -78,11 +78,13 @@ pub mod parts {
     pub const TAKE_BACK: &str = "take_back";
     pub const PUT_BACK: &str = "put_back";
     pub const LOOK: &str = "look";
+    pub const CHART: &str = "chart";
     /// The events the world says of them.
     pub const PLACED: &str = "placed";
     pub const CHANGED: &str = "changed";
     pub const REMOVED: &str = "removed";
     pub const SEEN: &str = "seen";
+    pub const CHARTED: &str = "charted";
 }
 
 /// One message as one WebSocket frame.

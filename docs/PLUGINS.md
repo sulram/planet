@@ -93,10 +93,10 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   plugin of how a hand arrives at gestures: tools, kinds of construction,
   modifiers, keys, a panel. With building off, what stands, stands.
 - The parts are the core's (111): a placed thing that is no cell, kept by the
-  world under the name it gives, one row a part, with a seat, a pose, a shape,
-  a paint and a solid flag; placed, set and removed as ops under the owner
-  `parts`, told to whoever is near, shown to a client that looks. Items is the
-  hand: the menu, one gizmo and panel for every kind, a picture with its file.
+  world under the name it gives, one row a part: seat, pose, shape, paint,
+  solid; placed, set and removed as ops under the owner `parts`, told to
+  whoever is near, shown to a client that looks, charted for whoever asks
+  (116). Items is the hand: the menu, one gizmo and panel for every kind.
 
 ## Where a plugin lives
 
