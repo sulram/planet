@@ -229,9 +229,17 @@ fn fetch_assets(state: &Rc<RefCell<State>>) {
     }
 }
 
-/// An asset reference as a URL: absolute ones (a user's own avatar) pass
-/// through, relative ones live under the asset root.
+/// Where the world's files are read from: `asset://x` is `<FILES>/x`
+/// (docs/ARCHITECTURE.md § Files).
+const FILES: &str = "/files/";
+
+/// An asset reference as a URL: a world's file is under its files, absolute
+/// ones (a user's own avatar) pass through, relative ones live under the
+/// asset root.
 fn resolve(reference: &str) -> String {
+    if let Some(name) = reference.strip_prefix("asset://") {
+        return format!("{FILES}{name}");
+    }
     let absolute = reference.starts_with('/') || reference.contains("://");
     if absolute {
         reference.to_owned()

@@ -36,7 +36,7 @@ pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{Part, PartId, Pose as PartPose, Shape};
-pub use parts::{CUBE, Parts};
+pub use parts::{CUBE, Parts, VOXEL};
 use peers::Peers;
 pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, Plugin, Turn};
@@ -516,6 +516,11 @@ impl Client {
     /// Files the client wants. The shell fetches each one and answers with
     /// [`Client::asset_loaded`].
     pub fn drain_asset_requests(&mut self) -> Vec<AssetRequest> {
+        for hash in self.parts.wanted() {
+            if let Some(name) = part::Shape::Vox(hash).asset() {
+                self.requests.ask(name, Purpose::Model(hash));
+            }
+        }
         self.requests.drain()
     }
 
@@ -539,6 +544,9 @@ impl Client {
                     self.clips.insert(*gait, clip);
                 })
                 .map_err(|e| e.to_string()),
+            Purpose::Model(hash) => vox::parse(&bytes)
+                .map(|model| self.parts.arrived(*hash, model))
+                .map_err(|e| format!("{e:?}")),
         });
         if let Err(message) = outcome {
             self.events.push(Event::Rejected {

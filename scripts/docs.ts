@@ -120,7 +120,7 @@ const ALLOWED: Record<string, string[]> = {
 	worldgen: ['topology'],
 	avatar: ['scene'],
 	render: ['scene'],
-	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'part', 'seat', 'protocol'],
+	client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'vox', 'part', 'seat', 'protocol'],
 	'ui-native': ['client', 'scene'],
 	// What a plugin's world half stands on, and the host of world halves. It
 	// never imports `client`, and neither does the module that is its shell.
