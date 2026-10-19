@@ -152,6 +152,19 @@ pub struct Standing {
     pub facing: DVec3,
 }
 
+/// Where a line of the world meets a part.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct PartHit {
+    pub id: PartId,
+    /// Along the line, metres.
+    pub away_m: f64,
+    /// Which way the side met faces, in the world, unit.
+    pub outward: DVec3,
+    /// Which side of the part's own box it is, unit along one axis: `+z` is
+    /// its top, `-z` its underside, the rest its sides.
+    pub side: DVec3,
+}
+
 /// Where the feet of this client's own body are.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Feet {
@@ -456,6 +469,19 @@ impl Host<'_> {
     /// unit, meets, and how far along, metres.
     pub fn pick(&self, from: DVec3, toward: DVec3) -> Option<(PartId, f64)> {
         self.lent.parts.pick(self.lent.generator, from, toward)
+    }
+
+    /// The first part a line of the world meets, and the side it meets.
+    pub fn hit_part(&self, from: DVec3, toward: DVec3) -> Option<PartHit> {
+        self.lent
+            .parts
+            .hit(self.lent.generator, from, toward)
+            .map(|(id, away_m, outward, side)| PartHit {
+                id,
+                away_m,
+                outward,
+                side,
+            })
     }
 
     /// Whether this session may change the parts, in the parts' words.

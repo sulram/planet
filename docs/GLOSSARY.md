@@ -98,7 +98,7 @@ this file in the same change.
 | Volume | An integer address box inside one sector, over one plot. The only place voxels exist. |
 | Gizmo | The handles over the item picked, one a bar along each of its own axes with a tip: dragged, they move, turn or stretch it, as the mode says. Drawn over everything, cast by nothing. |
 | Item | What the items menu offers to place: a cube in a paint, a model from a file, a picture. Taken in hand, a click places it as a part. |
-| Part | A placed thing that is no cell, kept by its seat: a pose, a shape, a paint, whether it is solid and how much it shines. A cube first; a model, a picture, a light are shapes of it. Rigid in the frame of its anchor, moved in the world and read back. |
+| Part | A placed thing that is no cell, kept by its seat: a pose, a shape, a paint, whether it is solid, how much it shines and how far its light goes. A cube first; a model, a picture, a light are shapes of it. Rigid in the frame of its anchor, moved in the world and read back. |
 | Stamp | A flatten and blend footprint, applied when the ground is sampled. How what is not a volume seats into terrain, at every level, without being an edit. The ground it holds is worked earth, where nothing grows. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
 | Land | The native plugin that gives permission to build by volume, to a person's account or an agent's. It answers the permission hook over the level. |

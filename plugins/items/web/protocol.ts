@@ -52,6 +52,10 @@ export interface Picked {
 	solid: boolean;
 	/** How much it shines with its own colour: 0 lit, 1 a screen, more a lamp. */
 	shine: number;
+	/** How far its light goes, metres; 0 is by its size. */
+	reach_m: number;
+	/** Whether it is a lamp: a cube in the light finish. */
+	lamp: boolean;
 }
 
 const isItem = (value: unknown): value is Item => items.some((item) => item === value);
@@ -76,10 +80,10 @@ const isVector = (value: unknown): value is [number, number, number] =>
 
 /** Reads a `picked` event: the part picked, or null when none is, or when the event is no part. */
 export function parsePicked(event: Record<string, unknown>): Picked | null {
-	const { id, item, at, rotation, scale, solid, shine } = event;
+	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp } = event;
 	if (typeof id !== 'number' || !isItem(item)) return null;
-	if (!isVector(at) || !isVector(rotation) || !isVector(scale) || typeof solid !== 'boolean' || typeof shine !== 'number') return null;
-	return { id, item, at, rotation, scale, solid, shine };
+	if (!isVector(at) || !isVector(rotation) || !isVector(scale) || typeof solid !== 'boolean' || typeof shine !== 'number' || typeof reach_m !== 'number' || typeof lamp !== 'boolean') return null;
+	return { id, item, at, rotation, scale, solid, shine, reach_m, lamp };
 }
 
 /** `items.near`: one part near the body: its name, what kind of item it is, how far in metres, its paint and whether it is solid. */

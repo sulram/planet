@@ -357,6 +357,7 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
         paint: u32::from(part.paint),
         solid: part.solid,
         shine: part.shine,
+        reach_m: part.reach_m,
     }
 }
 
@@ -395,6 +396,7 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
         paint,
         solid: part.solid,
         shine: part.shine,
+        reach_m: part.reach_m,
     };
     read.is_sound().then_some((seat, read))
 }
@@ -485,6 +487,7 @@ mod tests {
                 paint: 5,
                 solid: false,
                 shine: 0.0,
+                reach_m: 0.0,
             };
             assert_eq!(part_from_wire(&part_wire(seat, &sent)), Some((seat, sent)));
         }
@@ -496,6 +499,7 @@ mod tests {
                 paint: 0,
                 solid: true,
                 shine: 0.0,
+                reach_m: 0.0,
             },
         );
         if let Some(parts_wire::shape::Shape::Image(image)) =

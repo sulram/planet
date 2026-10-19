@@ -255,16 +255,25 @@ pub struct Part {
     /// How much it shines with its own colour: 0 lit by what falls on it, 1
     /// its own colour as a screen shows it, more a lamp, up to [`MAX_SHINE`].
     pub shine: f32,
+    /// How far the light of a part that is a lamp goes, metres, up to
+    /// [`MAX_REACH_M`]. 0 is by its size.
+    pub reach_m: f32,
 }
 
 /// The most a part shines with its own colour.
 pub const MAX_SHINE: f32 = 8.0;
+/// The furthest a part's light goes.
+pub const MAX_REACH_M: f32 = 256.0;
 
 impl Part {
     /// Whether what is said of the part beside its pose is sound: a shine
-    /// that is a number within its reach.
+    /// and a reach that are numbers within theirs.
     pub fn is_sound(&self) -> bool {
-        self.pose.is_sound() && self.shine.is_finite() && (0.0..=MAX_SHINE).contains(&self.shine)
+        self.pose.is_sound()
+            && self.shine.is_finite()
+            && (0.0..=MAX_SHINE).contains(&self.shine)
+            && self.reach_m.is_finite()
+            && (0.0..=MAX_REACH_M).contains(&self.reach_m)
     }
 }
 
@@ -281,13 +290,20 @@ impl Part {
     /// flat frame, the line goes into this part. `None` when it misses, or
     /// starts inside.
     pub fn hit(&self, from: DVec3, toward: DVec3) -> Option<f64> {
+        self.hit_side(from, toward).map(|(blocks, _)| blocks)
+    }
+
+    /// Where a line in the flat frame first meets the part's box, blocks
+    /// along the line, and which way the side it meets faces in the part's
+    /// own space: `+z` is its top. `None` past it or from inside it.
+    pub fn hit_side(&self, from: DVec3, toward: DVec3) -> Option<(f64, DVec3)> {
         let inward = self.pose.inward();
         let (from, toward) = (
             inward.transform_point3(from),
             inward.transform_vector3(toward),
         );
-        let (near, far) = slab(from, toward)?;
-        (near > 0.0 && far >= near).then_some(near)
+        let (near, far, side) = slab(from, toward)?;
+        (near > 0.0 && far >= near).then_some((near, side))
     }
 
     /// What a body standing in a column has under its feet and over its
@@ -352,7 +368,7 @@ pub fn gap_along(
     let mut gap: Option<Gap> = None;
     for &at in feet {
         let foot_in = inward.transform_point3(foot + at);
-        let Some((low, high)) = slab(foot_in, up_in) else {
+        let Some((low, high, _)) = slab(foot_in, up_in) else {
             continue;
         };
         let found = if (low <= reach && reach <= high) || high <= reach {
@@ -390,12 +406,15 @@ fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
 /// grid of its own walks between, and what a handle drawn as a box is
 /// picked by.
 pub fn through(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
-    slab(from, toward)
+    slab(from, toward).map(|(near, far, _)| (near, far))
 }
 
-fn slab(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
+/// Where a line enters and leaves the unit box, and which way the side it
+/// enters by faces.
+fn slab(from: DVec3, toward: DVec3) -> Option<(f64, f64, DVec3)> {
     let (low, high) = (DVec3::new(-0.5, -0.5, 0.0), DVec3::new(0.5, 0.5, 1.0));
     let (mut near, mut far) = (f64::NEG_INFINITY, f64::INFINITY);
+    let mut side = DVec3::Z;
     for axis in 0..3 {
         let (d, f) = (toward[axis], from[axis]);
         if d.abs() < 1e-12 {
@@ -405,15 +424,31 @@ fn slab(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
             continue;
         }
         let (a, b) = ((low[axis] - f) / d, (high[axis] - f) / d);
-        near = near.max(a.min(b));
+        if a.min(b) > near {
+            near = a.min(b);
+            let mut normal = DVec3::ZERO;
+            // Entering by the low side, the normal points down the axis.
+            normal[axis] = if a < b { -1.0 } else { 1.0 };
+            side = normal;
+        }
         far = far.min(a.max(b));
     }
-    (near <= far).then_some((near, far))
+    (near <= far).then_some((near, far, side))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_says_which_side_of_the_box_it_meets() {
+        let (near, _, side) = slab(DVec3::new(0.0, 0.0, 3.0), -DVec3::Z).unwrap();
+        assert_eq!((near, side), (2.0, DVec3::Z), "the top from above");
+        let (_, _, side) = slab(DVec3::new(-3.0, 0.0, 0.5), DVec3::X).unwrap();
+        assert_eq!(side, -DVec3::X, "the low x side from the left");
+        let (_, _, side) = slab(DVec3::new(0.0, 2.0, 0.5), -DVec3::Y).unwrap();
+        assert_eq!(side, DVec3::Y, "the high y side from beyond it");
+    }
 
     #[test]
     fn a_media_names_its_files_and_reads_them_back() {
@@ -441,6 +476,7 @@ mod tests {
             paint: 0,
             solid: true,
             shine: 0.0,
+            reach_m: 0.0,
         }
     }
 

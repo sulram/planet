@@ -115,6 +115,7 @@ fn cube(point: SurfacePoint, h: f64) -> wire::Part {
         paint: 11,
         solid: true,
         shine: 0.0,
+        reach_m: 0.0,
     };
     seat::part_wire(Seat::Sector(point.sector), &part)
 }
@@ -305,8 +306,8 @@ fn a_look_is_answered_with_what_is_lacking_near_and_what_is_gone() {
         };
         parts.op(wire::PLACE, &place.encode_to_vec(), &who, &mut stage);
     }
-    // Far along the sector, past holding distance.
-    let far = SurfacePoint::new(point.sector, point.u + 3.0 * HOLD_M / BLOCK_M, point.v);
+    // Along the sector, past holding distance.
+    let far = SurfacePoint::new(point.sector, point.u + (HOLD_M + 512.0) / BLOCK_M, point.v);
     let place = wire::Place {
         part: Some(cube(far, 4.0)),
     };

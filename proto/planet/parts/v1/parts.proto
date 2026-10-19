@@ -74,6 +74,9 @@ message Part {
   // How much it shines with its own colour: 0 lit by what falls on it, 1
   // its own colour as a screen shows it, more a lamp.
   float shine = 6;
+  // How far the light of a part that is a lamp goes, metres. 0 is by its
+  // size.
+  float reach_m = 7;
 }
 
 // A part as the world keeps it: under the name it gave, one more for each

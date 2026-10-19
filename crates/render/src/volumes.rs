@@ -40,7 +40,7 @@ pub fn lamps(lamps: &[Lamp], camera: DVec3) -> ([[[f32; 4]; 2]; LAMPS], f32) {
         let at = (lamp.position - camera).as_vec3();
         *slot = [
             at.extend(lamp.reach_m).to_array(),
-            lamp.color.extend(0.0).to_array(),
+            lamp.color.extend(lamp.size_m).to_array(),
         ];
     }
     (lit, near.len().min(LAMPS) as f32)

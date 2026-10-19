@@ -50,6 +50,7 @@ impl Items {
                 paint: self.made_of(),
                 solid: true,
                 shine: 0.0,
+                reach_m: 0.0,
             },
             Item::Model => {
                 // With no file taken there is nothing to place yet.
@@ -65,6 +66,7 @@ impl Items {
                     paint: self.made_of(),
                     solid: true,
                     shine: 0.0,
+                    reach_m: 0.0,
                 }
             }
             Item::Picture => {
@@ -87,6 +89,7 @@ impl Items {
                     paint: self.made_of(),
                     solid: false,
                     shine: 0.0,
+                    reach_m: 0.0,
                 }
             }
         };
@@ -141,8 +144,15 @@ fn met(host: &Host<'_>, from: DVec3, toward: DVec3) -> Option<Feet> {
             offer(away_m, host.feet_at(from + toward * away_m + off));
         }
     }
-    if let Some((_, away_m)) = host.pick(from, toward) {
-        offer(away_m, host.feet_at(from + toward * away_m));
+    // On the top of a part the item stands; under it, it hangs; on a side,
+    // it stands off by half its width, as on a cell's side.
+    if let Some(hit) = host.hit_part(from, toward) {
+        let off = match (hit.side.z > 0.5, hit.side.z < -0.5) {
+            (true, _) => DVec3::ZERO,
+            (_, true) => hit.outward * (CUBE[2] * BLOCK_M),
+            _ => hit.outward * (CUBE[0] / 2.0 * BLOCK_M),
+        };
+        offer(hit.away_m, host.feet_at(from + toward * hit.away_m + off));
     }
     if let Some((feet, away_m)) = host.ground_hit(from, toward, REACH_M) {
         offer(away_m, feet);

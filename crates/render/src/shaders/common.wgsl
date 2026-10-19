@@ -2,9 +2,10 @@
 // encoding. Positions named `relative` are metres from the camera; nothing on
 // the GPU is ever in planet space except the camera itself.
 
-// A light among the cells. `at.xyz`: where, relative to the camera. `at.w`:
-// how far it reaches, metres. `color.rgb`: what it gives a side that faces
-// it from a metre away.
+// A light among the cells or a part. `at.xyz`: where, relative to the
+// camera. `at.w`: how far it reaches, metres. `color.rgb`: what it gives a
+// side that faces it from a metre away. `color.a`: how wide it is, metres:
+// nearer than that it is a patch, not a point, and fades gently.
 struct Lamp {
     at: vec4<f32>,
     color: vec4<f32>,
@@ -272,9 +273,6 @@ fn moonlight(up: vec3<f32>) -> vec3<f32> {
     return moon_up * moon_lit * vec3<f32>(0.10, 0.12, 0.16);
 }
 
-// Metres from a lamp at which its light is half what it is beside it: a lamp
-// is a patch of cells, not a point, and fades gently near.
-const LAMP_M: f32 = 2.0;
 
 // What the lamps near give a side: each falls off with the square of the
 // distance, ends at its reach, and wraps a little round a side turned away,
@@ -291,7 +289,7 @@ fn lamplight(relative: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
             continue;
         }
         let facing = clamp((dot(normal, to * inverseSqrt(max(d2, 1e-4))) + 0.5) / 1.5, 0.0, 1.0);
-        light += lamp.color.rgb * facing * near * near / (1.0 + d2 / (LAMP_M * LAMP_M));
+        light += lamp.color.rgb * facing * near * near / (1.0 + d2 / (lamp.color.w * lamp.color.w));
     }
     return light;
 }

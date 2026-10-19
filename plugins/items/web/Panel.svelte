@@ -177,8 +177,19 @@
 					locked
 				/>
 				<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
-				{#if picked.item === 'picture'}
+				{#if picked.item === 'picture' || picked.lamp}
 					<Slider label={t('shine')} value={picked.shine} min={0} max={8} step={0.1} format={(n) => n.toFixed(1)} oninput={(shine) => onset({ shine })} />
+				{/if}
+				{#if picked.lamp}
+					<Slider
+						label={t('reach')}
+						value={picked.reach_m}
+						min={0}
+						max={128}
+						step={1}
+						format={(n) => (n === 0 ? t('reach.bySize') : t('near.away', { m: n.toFixed(0) }))}
+						oninput={(reach_m) => onset({ reach_m })}
+					/>
 				{/if}
 				<Button variant="danger" type="button" onclick={onremove}>{t('remove')} <kbd>Del</kbd></Button>
 			</section>

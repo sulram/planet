@@ -186,6 +186,8 @@ struct Set {
     solid: Option<bool>,
     /// How much the part shines with its own colour.
     shine: Option<f32>,
+    /// How far its light goes, metres; 0 is by its size.
+    reach_m: Option<f32>,
     /// Another picture in the place of the one picked: its width follows
     /// the new aspect, its height stays.
     #[serde(default)]
@@ -238,6 +240,11 @@ struct Picked {
     solid: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     shine: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reach_m: Option<f32>,
+    /// Whether it is a lamp: a cube in the light finish.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lamp: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -417,6 +424,9 @@ impl Items {
         if let Some(shine) = set.shine {
             part.shine = shine;
         }
+        if let Some(reach_m) = set.reach_m {
+            part.reach_m = reach_m;
+        }
         if let Some(body) = &set.media {
             let Some(media) = body.media() else {
                 return host.reject("a picture names three asset:// files".into());
@@ -543,6 +553,8 @@ impl Items {
                 scale: Some(gizmo.part.pose.scale),
                 solid: Some(gizmo.part.solid),
                 shine: Some(gizmo.part.shine),
+                reach_m: Some(gizmo.part.reach_m),
+                lamp: Some(client::is_lamp(&gizmo.part)),
             },
             None => Picked {
                 id: None,
@@ -552,6 +564,8 @@ impl Items {
                 scale: None,
                 solid: None,
                 shine: None,
+                reach_m: None,
+                lamp: None,
             },
         };
         host.emit(PICKED, &picked);
@@ -1147,6 +1161,29 @@ mod tests {
         ];
         let away = (du * du + dv * dv).sqrt();
         assert!((3.0..8.0).contains(&away), "{away} blocks ahead");
+    }
+
+    #[test]
+    fn a_part_placed_over_another_stands_on_its_top() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        client.command_json(r#"{"type":"items.set","scale":[6,6,6]}"#);
+        let (_, _, under) = client.parts().all().next().unwrap();
+        let under_top = under.pose.at[2] + 6.0;
+        // The line down from over the body's front meets the big cube's
+        // top first, and the next cube stands there, not on the ground.
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        assert_eq!(client.parts().all().count(), 2);
+        let (_, _, over) = client
+            .parts()
+            .all()
+            .max_by(|a, b| a.2.pose.at[2].total_cmp(&b.2.pose.at[2]))
+            .unwrap();
+        assert!(
+            (over.pose.at[2] - under_top).abs() < 1e-6,
+            "{} on {under_top}",
+            over.pose.at[2]
+        );
     }
 
     #[test]

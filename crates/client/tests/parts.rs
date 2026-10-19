@@ -89,6 +89,7 @@ fn cube(client: &mut Client, along: f64) -> (Seat, Part) {
         paint: 5,
         solid: true,
         shine: 0.0,
+        reach_m: 0.0,
     };
     (feet.seat, part)
 }
@@ -268,6 +269,7 @@ fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
         paint: 0,
         solid: false,
         shine: 0.0,
+        reach_m: 0.0,
     };
     let placed = wire::Placed {
         session: 2,

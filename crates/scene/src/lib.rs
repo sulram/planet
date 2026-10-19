@@ -334,6 +334,9 @@ pub struct Lamp {
     pub color: Vec3,
     /// How far its light goes, metres.
     pub reach_m: f32,
+    /// How wide it is, metres: nearer than that its light fades gently, as
+    /// light from a patch does, not a point's.
+    pub size_m: f32,
 }
 
 /// A change to the set of volume meshes a renderer holds.

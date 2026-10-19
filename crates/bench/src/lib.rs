@@ -286,6 +286,7 @@ pub fn parts_start(count: i32) {
             paint: (i % 16) as u8,
             solid: true,
             shine: 0.0,
+            reach_m: 0.0,
         };
         client
             .host("bench")

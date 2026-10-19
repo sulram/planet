@@ -259,6 +259,7 @@ mod tests {
                 paint: 0,
                 solid: true,
                 shine: 0.0,
+                reach_m: 0.0,
             },
             world,
             hot: None,

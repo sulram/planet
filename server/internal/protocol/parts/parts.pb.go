@@ -438,7 +438,10 @@ type Part struct {
 	Solid bool `protobuf:"varint,5,opt,name=solid,proto3" json:"solid,omitempty"`
 	// How much it shines with its own colour: 0 lit by what falls on it, 1
 	// its own colour as a screen shows it, more a lamp.
-	Shine         float32 `protobuf:"fixed32,6,opt,name=shine,proto3" json:"shine,omitempty"`
+	Shine float32 `protobuf:"fixed32,6,opt,name=shine,proto3" json:"shine,omitempty"`
+	// How far the light of a part that is a lamp goes, metres. 0 is by its
+	// size.
+	ReachM        float32 `protobuf:"fixed32,7,opt,name=reach_m,json=reachM,proto3" json:"reach_m,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -511,6 +514,13 @@ func (x *Part) GetSolid() bool {
 func (x *Part) GetShine() float32 {
 	if x != nil {
 		return x.Shine
+	}
+	return 0
+}
+
+func (x *Part) GetReachM() float32 {
+	if x != nil {
+		return x.ReachM
 	}
 	return 0
 }
@@ -1142,14 +1152,15 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x02sx\x18\b \x01(\x01R\x02sx\x12\x0e\n" +
 	"\x02sy\x18\t \x01(\x01R\x02sy\x12\x0e\n" +
 	"\x02sz\x18\n" +
-	" \x01(\x01R\x02sz\"\xcc\x01\n" +
+	" \x01(\x01R\x02sz\"\xe5\x01\n" +
 	"\x04Part\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12)\n" +
 	"\x04pose\x18\x02 \x01(\v2\x15.planet.parts.v1.PoseR\x04pose\x12,\n" +
 	"\x05shape\x18\x03 \x01(\v2\x16.planet.parts.v1.ShapeR\x05shape\x12\x14\n" +
 	"\x05paint\x18\x04 \x01(\rR\x05paint\x12\x14\n" +
 	"\x05solid\x18\x05 \x01(\bR\x05solid\x12\x14\n" +
-	"\x05shine\x18\x06 \x01(\x02R\x05shine\"]\n" +
+	"\x05shine\x18\x06 \x01(\x02R\x05shine\x12\x17\n" +
+	"\areach_m\x18\a \x01(\x02R\x06reachM\"]\n" +
 	"\x06Record\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12)\n" +
 	"\x04part\x18\x02 \x01(\v2\x15.planet.parts.v1.PartR\x04part\x12\x18\n" +

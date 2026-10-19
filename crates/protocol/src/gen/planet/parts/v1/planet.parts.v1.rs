@@ -88,6 +88,10 @@ pub struct Part {
     /// its own colour as a screen shows it, more a lamp.
     #[prost(float, tag="6")]
     pub shine: f32,
+    /// How far the light of a part that is a lamp goes, metres. 0 is by its
+    /// size.
+    #[prost(float, tag="7")]
+    pub reach_m: f32,
 }
 /// A part as the world keeps it: under the name it gave, one more for each
 /// change that landed in it.

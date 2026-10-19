@@ -107,6 +107,8 @@ pub(crate) const LAMP_SIDES: f32 = 64.0;
 pub(crate) const LAMP_REACH_M: f32 = 8.0;
 pub(crate) const LAMP_GROWS_M: f32 = 3.0;
 pub(crate) const LAMP_FAR_M: f32 = 32.0;
+/// How wide a lamp of cells is to its light, metres: a patch, not a point.
+const LAMP_SIZE_M: f32 = 2.0;
 /// Changes kept to take back.
 const HISTORY: usize = 100;
 /// Seconds between two looks at what the world holds near the body.
@@ -1979,6 +1981,7 @@ fn lamp(sector: Sector, sphere: QuadSphere, quads: &[Quad]) -> Option<Lamp> {
         position: DVec3::from(sphere.position(point, middle.z * BLOCK_M)),
         color: color / sides * LAMP_GAIN * many,
         reach_m: (LAMP_REACH_M + LAMP_GROWS_M * (many - 1.0)).min(LAMP_FAR_M),
+        size_m: LAMP_SIZE_M,
     })
 }
 

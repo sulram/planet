@@ -728,6 +728,19 @@ impl Parts {
     /// The nearest part a line from `from` toward `toward`, unit, meets,
     /// and how far along, metres.
     pub fn pick(&self, generator: &Generator, from: DVec3, toward: DVec3) -> Option<(PartId, f64)> {
+        self.hit(generator, from, toward)
+            .map(|(id, away_m, _, _)| (id, away_m))
+    }
+
+    /// The first part a line of the world meets: which, how far along the
+    /// line in metres, which way the side it meets faces in the world, and
+    /// which side of the part's own box that is (`+z` its top).
+    pub fn hit(
+        &self,
+        generator: &Generator,
+        from: DVec3,
+        toward: DVec3,
+    ) -> Option<(PartId, f64, DVec3, DVec3)> {
         self.all()
             .filter_map(|(id, seat, part)| {
                 // The line in the flat frame of the part's anchor, in blocks.
@@ -736,8 +749,11 @@ impl Parts {
                 let flat_from = inward.transform_point3(from - self.centre(seat.body()))
                     + DVec3::from(part.pose.at);
                 let flat_toward = inward.transform_vector3(toward).normalize();
-                let blocks = part.hit(flat_from, flat_toward)?;
-                Some((id, blocks * BLOCK_M))
+                let (blocks, side) = part.hit_side(flat_from, flat_toward)?;
+                let outward = frame
+                    .transform_vector3(part.pose.inward().inverse().transform_vector3(side))
+                    .normalize();
+                Some((id, blocks * BLOCK_M, outward, side))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
     }
@@ -889,9 +905,7 @@ impl Parts {
     /// and a picture its own image, so neither is a lamp.
     pub fn lamps(&self, generator: &Generator) -> Vec<Lamp> {
         self.all()
-            .filter(|(_, _, part)| {
-                part.shape == Shape::Cube && Paint::of(part.paint).finish == Finish::Light
-            })
+            .filter(|(_, _, part)| is_lamp(part))
             .map(|(_, seat, part)| {
                 let placed = self.place_of(generator, seat, &part.pose);
                 let [sx, sy, sz] = part.pose.scale.map(|n| n as f32);
@@ -902,10 +916,17 @@ impl Parts {
                 let color = glam::Vec3::from(
                     paint_rgb(part.paint).map(|c| (f32::from(c) / 255.0).powf(2.2)),
                 );
+                let reach_m = match part.reach_m > 0.0 {
+                    true => part.reach_m,
+                    false => (LAMP_REACH_M + LAMP_GROWS_M * (many - 1.0)).min(LAMP_FAR_M),
+                };
                 Lamp {
                     position: placed.transform_point3(DVec3::new(0.0, 0.0, 0.5)),
                     color: color * LAMP_GAIN * many * shine,
-                    reach_m: (LAMP_REACH_M + LAMP_GROWS_M * (many - 1.0)).min(LAMP_FAR_M),
+                    reach_m,
+                    // Half its mean side: nearer than that it is a patch, not
+                    // a point, and its light fades gently.
+                    size_m: (sx * sy * sz).cbrt() * BLOCK_M as f32 / 2.0,
                 }
             })
             .collect()
@@ -1027,6 +1048,12 @@ fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body, DVec3)) -
     }
     let anchor = seat::seated(seat.sphere(generator), seat.sector(), pose).translation;
     anchor.distance(body.1)
+}
+
+/// Whether a part is a lamp, lighting what is near: a cube in the light
+/// finish. A model has its own colours and a picture its own image.
+pub fn is_lamp(part: &Part) -> bool {
+    part.shape == Shape::Cube && Paint::of(part.paint).finish == Finish::Light
 }
 
 /// The model a part is drawn as. `None` for a shape drawn another way, a
@@ -1261,6 +1288,7 @@ mod tests {
             paint: 0,
             solid: true,
             shine: 0.0,
+            reach_m: 0.0,
         };
         parts.place(&generator, seat, part);
         // A body a block past the seam, on the next sector, at the top.
@@ -1290,6 +1318,7 @@ mod tests {
             paint: 0,
             solid: true,
             shine: 0.0,
+            reach_m: 0.0,
         };
         let id = parts.place(&generator, seat, part);
         let point = SurfacePoint::new(seat.sector(), 1000.3, 999.8);
@@ -1355,6 +1384,7 @@ mod tests {
             paint: 0,
             solid: true,
             shine: 0.0,
+            reach_m: 0.0,
         };
         parts.place(&generator, seat, part);
         parts.place(&generator, seat, part);
