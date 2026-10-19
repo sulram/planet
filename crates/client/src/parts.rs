@@ -36,14 +36,19 @@ use glam::{DAffine3, DMat3, DVec3};
 use part::{Gap, Part, PartId, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
-use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex};
+use scene::{
+    Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex,
+};
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
 use voxel::{Finish, Paint};
 use worldgen::Generator;
 
 use crate::assets::Requests;
-use crate::cells::{Ask, PALETTE, paint_look};
+use crate::cells::{
+    Ask, LAMP_FAR_M, LAMP_GAIN, LAMP_GROWS_M, LAMP_REACH_M, LAMP_SIDES, PALETTE, paint_look,
+    paint_rgb,
+};
 use crate::collision::{BODY_HALF, Footing, STEP_M};
 use crate::pictures::{Pictures, Screen};
 
@@ -878,6 +883,34 @@ impl Parts {
                     (false, false) => 0.0,
                 };
                 Some(pictures.draw(&media, world_from_quad, shine, true, screen, requests))
+            })
+            .collect()
+    }
+
+    /// The lamps among the parts: a cube in the light finish lights what is
+    /// near, as a cell of that finish does, by its colour, as many sides as
+    /// its box has and as much as it shines. A model has its own colours
+    /// and a picture its own image, so neither is a lamp.
+    pub fn lamps(&self, generator: &Generator) -> Vec<Lamp> {
+        self.all()
+            .filter(|(_, _, part)| {
+                part.shape == Shape::Cube && Paint::of(part.paint).finish == Finish::Light
+            })
+            .map(|(_, seat, part)| {
+                let placed = self.place_of(generator, seat, &part.pose);
+                let [sx, sy, sz] = part.pose.scale.map(|n| n as f32);
+                // The sides of its box, in a cell's sides.
+                let sides = 2.0 * (sx * sy + sy * sz + sz * sx);
+                let many = sides.min(LAMP_SIDES).sqrt();
+                let shine = if part.shine > 0.0 { part.shine } else { 1.0 };
+                let color = glam::Vec3::from(
+                    paint_rgb(part.paint).map(|c| (f32::from(c) / 255.0).powf(2.2)),
+                );
+                Lamp {
+                    position: placed.transform_point3(DVec3::new(0.0, 0.0, 0.5)),
+                    color: color * LAMP_GAIN * many * shine,
+                    reach_m: (LAMP_REACH_M + LAMP_GROWS_M * (many - 1.0)).min(LAMP_FAR_M),
+                }
             })
             .collect()
     }

@@ -100,13 +100,13 @@ const GHOST_INK: u8 = 170;
 /// How brightly a lamp of one side shines on what faces it from a metre
 /// away, as a share of its colour: a lamp of more sides shines by the root
 /// of how many, up to [`LAMP_SIDES`].
-const LAMP_GAIN: f32 = 0.7;
-const LAMP_SIDES: f32 = 64.0;
+pub(crate) const LAMP_GAIN: f32 = 0.7;
+pub(crate) const LAMP_SIDES: f32 = 64.0;
 /// How far a lamp of one side reaches, metres, how much further for the root
 /// of each side more, and the furthest any does.
-const LAMP_REACH_M: f32 = 8.0;
-const LAMP_GROWS_M: f32 = 3.0;
-const LAMP_FAR_M: f32 = 32.0;
+pub(crate) const LAMP_REACH_M: f32 = 8.0;
+pub(crate) const LAMP_GROWS_M: f32 = 3.0;
+pub(crate) const LAMP_FAR_M: f32 = 32.0;
 /// Changes kept to take back.
 const HISTORY: usize = 100;
 /// Seconds between two looks at what the world holds near the body.
@@ -1926,7 +1926,7 @@ impl Cells {
 const _: () = assert!(PALETTE.len() == Paint::COLORS as usize);
 
 /// The colour of a paint.
-fn paint_rgb(paint: u8) -> [u8; 3] {
+pub(crate) fn paint_rgb(paint: u8) -> [u8; 3] {
     PALETTE[usize::from(Paint::of(paint).color)]
 }
 

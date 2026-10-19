@@ -1316,7 +1316,11 @@ impl Client {
             skinned,
             volumes: self.cells.drawn(),
             glass: self.cells.glazed(),
-            lamps: self.cells.lamps(),
+            lamps: {
+                let mut lamps = self.cells.lamps();
+                lamps.extend(self.parts.lamps(&self.generator));
+                lamps
+            },
             models: self
                 .parts
                 .drawn(&self.generator, self.controller.held_by(), self.clock_s),
