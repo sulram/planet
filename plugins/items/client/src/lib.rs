@@ -3,20 +3,22 @@
 //! gizmo that moves, turns and stretches a part picked (DECISIONS 111).
 //! Building is the cells; this is everything placed that is no cell.
 //!
-//! An item is what the menu offers: a cube in a paint today. A model from a
-//! file and a picture are items of their own, each a shape of part, and
-//! each enters here as a kind with the words it needs. The parts are the
-//! core's: this plugin asks its host to place and set them and holds no
-//! part.
+//! An item is what the menu offers: a cube in a paint, and a model from a
+//! `.vox` file, named by its asset. A picture is an item of its own to come,
+//! each a shape of part, and each enters here as a kind with the words it
+//! needs. The parts are the core's: this plugin asks its host to place and
+//! set them and holds no part.
 //!
 //! The seam, under `items.`: the commands `edit`, `take`, `pick`, `mode`,
 //! `set`, `remove`, `paint`, `finish`, `edge` and `state`; the events
-//! `hand`, `picked` and `refused`.
+//! `hand`, `picked` and `refused`. `take` with a model carries its file:
+//! `{"type":"items.take","item":"model","asset":"asset://<sha256>.vox"}`,
+//! and the file is asked for at once, so its size is known when it is placed.
 
 mod gizmo;
 mod place;
 
-use client::{Host, KeyAsk, Part, PartId, Plugin, Turn};
+use client::{Host, KeyAsk, Part, PartId, Plugin, Shape, Turn};
 use glam::{DQuat, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,6 +34,9 @@ pub use items_world::{NAME, VERSION};
 pub enum Item {
     /// A cube of a metre, in the paint in hand.
     Cube,
+    /// A model from a `.vox` file, the one taken in hand, a voxel an eighth
+    /// of a cell (`client::VOXEL`).
+    Model,
 }
 
 /// Why an item was not handed over, or a part not placed or set. A front
@@ -46,6 +51,8 @@ pub enum Refusal {
     Pose,
     /// The part asked about is gone.
     Gone,
+    /// The model in hand is still on its way: its size is not known yet.
+    Unread,
 }
 
 impl From<client::PartRefusal> for Refusal {
@@ -60,7 +67,8 @@ impl From<client::PartRefusal> for Refusal {
 
 /// `items.edit`: open the menu, the pointer picking parts, or close it.
 pub const EDIT: &str = "edit";
-/// `items.take`: take an item in hand, or `null` to put it down.
+/// `items.take`: take an item in hand, or `null` to put it down. With
+/// `asset`, the file of the model taken in hand, `asset://<sha256>.vox`.
 pub const TAKE: &str = "take";
 /// `items.pick`: pick a part by its name, or `null` to let it go.
 pub const PICK: &str = "pick";
@@ -82,7 +90,8 @@ pub const EDGE: &str = "edge";
 /// `items.state`: say what is in hand, for a layer that just mounted.
 pub const STATE: &str = "state";
 /// `items.hand`: whether the menu is open, the item in hand, `null` when
-/// none, the mode and the paint in hand.
+/// none, the mode, the paint in hand, and the model's asset when one is in
+/// hand, `null` otherwise.
 pub const HAND: &str = "hand";
 /// `items.picked`: the part picked, as it stands, or `null` when none.
 pub const PICKED: &str = "picked";
@@ -97,6 +106,8 @@ struct Edit {
 #[derive(Deserialize)]
 struct Take {
     item: Option<Item>,
+    #[serde(default)]
+    asset: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +151,7 @@ struct Hand {
     paint: u8,
     finish: Finish,
     edge: Edge,
+    model: Option<String>,
 }
 
 /// A part as the panel shows it.
@@ -189,6 +201,9 @@ pub struct Items {
     finish: Finish,
     edge: Edge,
     picked: Option<Gizmo>,
+    /// The model in hand, by the hash of its file: what the model item
+    /// places. None until a file is taken.
+    model: Option<[u8; 32]>,
     /// Whether the pointer's button was down last turn.
     using: bool,
 }
@@ -203,6 +218,7 @@ impl Default for Items {
             finish: Finish::Matte,
             edge: Edge::None,
             picked: None,
+            model: None,
             using: false,
         }
     }
@@ -261,6 +277,22 @@ impl Items {
         }
         self.item = item;
         self.say_hand(host);
+    }
+
+    /// Takes an item in hand, with the file of a model when one is named:
+    /// the file is asked for at once, so its size is known by the click.
+    fn take_with(&mut self, item: Option<Item>, asset: Option<String>, host: &mut Host<'_>) {
+        if let Some(name) = asset {
+            let Some(Shape::Vox(hash)) = Shape::of_asset(&name) else {
+                return host.reject(format!("`{name}` is no model's asset"));
+            };
+            if !host.may_change() {
+                return refuse(host, Refusal::Level);
+            }
+            self.model = Some(hash);
+            host.want_model(hash);
+        }
+        self.take(item, host);
     }
 
     /// Picks a part, or lets the one picked go.
@@ -342,6 +374,7 @@ impl Items {
                 paint: self.paint,
                 finish: self.finish,
                 edge: self.edge,
+                model: self.model.and_then(|hash| Shape::Vox(hash).asset()),
             },
         );
     }
@@ -449,8 +482,8 @@ impl Plugin for Items {
                 }
             }
             TAKE => {
-                if let Some(Take { item }) = read(body, host) {
-                    self.take(item, host);
+                if let Some(Take { item, asset }) = read(body, host) {
+                    self.take_with(item, asset, host);
                 }
             }
             PICK => {
@@ -681,6 +714,86 @@ mod tests {
         assert_eq!(client.parts().all().count(), 0);
         let said = events(&mut client);
         assert!(said.last().unwrap()["id"].is_null());
+    }
+
+    /// A `.vox` of one voxel, as MagicaVoxel writes one: `SIZE` and `XYZI`
+    /// under `MAIN`, the default palette.
+    fn one_voxel() -> Vec<u8> {
+        let chunk = |id: &[u8; 4], content: &[u8]| {
+            let mut out = id.to_vec();
+            out.extend((content.len() as u32).to_le_bytes());
+            out.extend(0u32.to_le_bytes());
+            out.extend(content);
+            out
+        };
+        let mut size = Vec::new();
+        for n in [1u32, 1, 1] {
+            size.extend(n.to_le_bytes());
+        }
+        let mut xyzi = 1u32.to_le_bytes().to_vec();
+        xyzi.extend([0, 0, 0, 1]);
+        let children = [chunk(b"SIZE", &size), chunk(b"XYZI", &xyzi)].concat();
+        let mut main = b"MAIN".to_vec();
+        main.extend(0u32.to_le_bytes());
+        main.extend((children.len() as u32).to_le_bytes());
+        main.extend(children);
+        let mut file = b"VOX ".to_vec();
+        file.extend(150u32.to_le_bytes());
+        file.extend(main);
+        file
+    }
+
+    #[test]
+    fn a_model_taken_in_hand_is_fetched_and_placed_by_a_click() {
+        let mut client = client();
+        let asset = format!("asset://{}.vox", "ab".repeat(32));
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"model","asset":"{asset}"}}"#
+        ));
+        let hand = events(&mut client);
+        let hand = hand.last().unwrap();
+        assert_eq!(hand["item"], "model");
+        assert_eq!(hand["model"], asset);
+        // The file is asked for at once, by its asset name.
+        let asked = client.drain_asset_requests();
+        let asked = asked
+            .iter()
+            .find(|request| request.path == asset)
+            .expect("the model is asked for");
+        // A click before it arrives places nothing: its size is unknown.
+        click(&mut client, [0.5, 0.7]);
+        assert_eq!(events(&mut client).last().unwrap()["reason"], "unread");
+        assert_eq!(client.parts().all().count(), 0);
+        // The file arrives: the next click places it, a voxel an eighth of
+        // a cell, its mesh is announced, and the part is picked.
+        client.asset_loaded(asked.id, Ok(one_voxel()));
+        assert!(!client.drain_model_changes().is_empty());
+        click(&mut client, [0.5, 0.7]);
+        let said = events(&mut client);
+        assert!(said.iter().all(|e| e["type"] != "items.refused"));
+        let placed: Vec<Part> = client.parts().all().map(|(_, _, part)| *part).collect();
+        assert_eq!(placed.len(), 1);
+        assert!(matches!(placed[0].shape, Shape::Vox(_)));
+        assert_eq!(placed[0].pose.scale, [0.125, 0.125, 0.125]);
+        assert!(
+            said.iter()
+                .any(|e| e["type"] == "items.picked" && !e["id"].is_null())
+        );
+        // A name that is no model's is rejected and leaves the hand as it is.
+        client.command_json(r#"{"type":"items.take","item":"model","asset":"asset://nope.png"}"#);
+        assert!(
+            client
+                .drain_events()
+                .iter()
+                .any(|event| matches!(event, Event::Rejected { .. }))
+        );
+        // A model with none picked places nothing and refuses nothing.
+        let mut fresh = self::client();
+        fresh.command_json(r#"{"type":"items.take","item":"model"}"#);
+        assert_eq!(events(&mut fresh).last().unwrap()["model"], Value::Null);
+        click(&mut fresh, [0.5, 0.7]);
+        assert!(events(&mut fresh).is_empty());
+        assert_eq!(fresh.parts().all().count(), 0);
     }
 
     #[test]

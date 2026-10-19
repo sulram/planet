@@ -8,6 +8,7 @@
 import type { Component } from 'svelte';
 import type { IconName } from '$lib/ds';
 import type { Seam } from '$lib/plugins/plugin';
+import Model from './Model.svelte';
 import type { Item } from './protocol';
 import { t } from './words';
 
@@ -24,4 +25,7 @@ export interface Kind {
 	Extra?: Component<KindProps>;
 }
 
-export const kinds: readonly Kind[] = [{ name: 'cube', icon: 'box', label: () => t('kind.cube') }];
+export const kinds: readonly Kind[] = [
+	{ name: 'cube', icon: 'box', label: () => t('kind.cube') },
+	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model }
+];
