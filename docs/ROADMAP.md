@@ -23,6 +23,7 @@ end to end.
 - [ ] Generator as WASM inside Go (wazero), when the server has to read the ground (09, 97)
 - [ ] Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
 - [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
+- [ ] More planets between the planet and the moon, each a body walked, built on and lit by the one sun (113): a sketch of the recipe's list of bodies and their orbits first, then the first body pulls the code
 
 ### What an admin picks when a world is founded
 
