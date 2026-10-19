@@ -138,6 +138,59 @@ fn a_part_placed_is_asked_of_the_world_and_set_under_the_name_it_gives() {
     assert_eq!(client.parts().all().count(), 0);
 }
 
+/// With no world, one history takes back a stroke of cells and a part
+/// placed in the order they were made, and puts them back (DECISIONS 115).
+#[test]
+fn one_history_takes_back_cells_and_parts_in_order() {
+    use client::{Key, Level};
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.rehearse(Level::Admin);
+    client.set_view([1600, 900]);
+    // A part, then a cell in a volume opened under the feet, then the part
+    // set twice as a drag does.
+    let (seat, part) = cube(20000.0);
+    let id = client.host("test").place_part(seat, part).unwrap();
+    let feet = client.host("test").feet();
+    client.host("test").open(feet.seat, feet.point).unwrap();
+    let room = client.host("test").room(feet.seat, feet.point).unwrap();
+    let cell = [room.min[0] + 2, room.min[1] + 2, room.min[2] + 4];
+    let gesture = voxel::Gesture::Create {
+        span: voxel::Span::cell(cell),
+        paint: 1,
+    };
+    assert!(client.host("test").apply(feet.seat, &[gesture]).unwrap());
+    let solid = |client: &Client| !client.cells().cell(feet.seat, cell).is_air();
+    assert!(solid(&client));
+    let mut moved = part;
+    for h in [11.0, 12.0] {
+        moved.pose.at[2] = h;
+        client.host("test").set_part(id, seat, moved).unwrap();
+    }
+    assert_eq!(client.parts().get(id).unwrap().1.pose.at[2], 12.0);
+    assert_eq!(client.history().state(), (true, false));
+    let key = |client: &mut Client, key: Key| {
+        let mut input = client::Input::default();
+        input.key(key, true);
+        client.update(1.0 / 60.0, &mut input);
+    };
+    // Back: the two sets as one, then the cell, then the part.
+    key(&mut client, Key::Undo);
+    assert_eq!(client.parts().get(id).unwrap().1.pose.at[2], 10.0);
+    key(&mut client, Key::Undo);
+    assert!(!solid(&client));
+    key(&mut client, Key::Undo);
+    assert!(client.parts().get(id).is_none());
+    assert_eq!(client.history().state(), (false, true));
+    // Forward again, in order.
+    key(&mut client, Key::Redo);
+    assert!(client.parts().get(id).is_some());
+    key(&mut client, Key::Redo);
+    assert!(solid(&client));
+    key(&mut client, Key::Redo);
+    assert_eq!(client.parts().get(id).unwrap().1.pose.at[2], 12.0);
+    assert_eq!(client.history().state(), (true, false));
+}
+
 #[test]
 fn what_others_place_arrives_and_what_is_refused_is_taken_back() {
     let mut client = welcomed();

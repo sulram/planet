@@ -340,6 +340,16 @@ impl ApplicationHandler for App {
                 if code == KeyCode::Escape && down && stage.looking {
                     // A captured pointer goes back first.
                     stage.set_looking(false);
+                } else if chord.command && matches!(code, KeyCode::KeyZ | KeyCode::KeyY) {
+                    // The core's chords: take back, and with Shift or Y put
+                    // back. No plugin asks for them.
+                    if down && !event.repeat {
+                        let key = match code == KeyCode::KeyY || chord.shift {
+                            true => Key::Redo,
+                            false => Key::Undo,
+                        };
+                        self.input.key(key, true);
+                    }
                 } else if self.client.asks(&name, chord) {
                     if down && !event.repeat {
                         self.input.code(&name, chord, true);

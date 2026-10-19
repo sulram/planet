@@ -782,6 +782,14 @@ impl Cells {
         }
     }
 
+    /// The number the last change made here was asked of the world under,
+    /// while it waits for the answer. `None` with no world.
+    pub(crate) fn last_ask(&self) -> Option<u32> {
+        self.link
+            .as_ref()
+            .and_then(|link| link.pending.last().map(|made| made.id))
+    }
+
     /// Whether there is a change to take back, and one to put back. In a
     /// world, a change of this session's that the world can.
     pub fn history(&self) -> (bool, bool) {

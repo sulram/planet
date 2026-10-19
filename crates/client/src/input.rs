@@ -28,6 +28,10 @@ pub enum Key {
     /// The pointer's button while a plugin has the pointer: what its hand
     /// does is the plugin's.
     Use,
+    /// Take back the last change, of whatever owner, and put it back
+    /// (DECISIONS 115).
+    Undo,
+    Redo,
 }
 
 /// What is held with a key as it goes down.
@@ -232,6 +236,7 @@ fn held_slot(key: Key) -> Option<usize> {
         Key::Down => Some(5),
         Key::Sprint => Some(6),
         Key::Use => Some(7),
+        Key::Undo | Key::Redo => None,
         Key::ToggleMode | Key::NewSeed | Key::NextAvatar => None,
     }
 }

@@ -119,6 +119,17 @@ pub struct Remove {
     #[prost(uint64, tag="1")]
     pub id: u64,
 }
+/// `take_back`: takes back the last change of this session's to the parts
+/// that landed: a part placed is taken out, one set goes back to how it was,
+/// one removed stands again, each told as the change was. Sets of one part
+/// in a row are one change.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TakeBack {
+}
+/// `put_back`: puts back the last change this session took back.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PutBack {
+}
 /// `look`: what this client holds of the parts near it, each at the version
 /// it holds it. The world answers with `seen`.
 #[derive(Clone, PartialEq, ::prost::Message)]

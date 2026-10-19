@@ -46,7 +46,7 @@ func TestTheModuleSaysWhatItCarries(t *testing.T) {
 	}
 	// Then the parts, the second system of the core: placed things.
 	parts := carried[1]
-	if parts.Plugin.Name() != "parts" || !parts.Core || !parts.On || len(parts.Plugin.Ops()) != 4 {
+	if parts.Plugin.Name() != "parts" || !parts.Core || !parts.On || len(parts.Plugin.Ops()) != 6 {
 		t.Fatalf("the core's parts are carried as an owner: %v %v", parts, parts.Plugin.Ops())
 	}
 	plugins := carried[2:]

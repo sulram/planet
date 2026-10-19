@@ -13,6 +13,7 @@ pub mod collision;
 mod controller;
 mod figure;
 mod grass;
+mod history;
 mod input;
 mod parts;
 mod peers;
@@ -35,6 +36,7 @@ use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use cells::{Aim, Cells, Guide, Met, PALETTE, REACH_M, Refusal, Seat, Sight};
 pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
+pub use history::{History, Owner};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{ContentId, ImageKind, Media, Part, PartId, PictureLevel, Pose as PartPose, Shape};
 pub use parts::{CUBE, Mark, PartRefusal, Parts, VOXEL};
@@ -72,6 +74,9 @@ pub struct Client {
     cells: Cells,
     /// The parts of the world: what is placed that is no cell.
     parts: Parts,
+    /// Every change a hand made here, in order, of whatever owner, to take
+    /// back and put back as one list (DECISIONS 115).
+    history: History,
     /// What the last world to welcome this client said it may do. `None`
     /// until one has: with no world, nothing is changed (DECISIONS 104).
     level: Option<Level>,
@@ -147,6 +152,7 @@ impl Client {
             moon_terrain: Terrain::new(Body::new(terrain::Kind::Moon, sphere)),
             cells: Cells::default(),
             parts: Parts::default(),
+            history: History::default(),
             level: None,
             pointer: None,
             figure: Figure::default(),
@@ -443,6 +449,7 @@ impl Client {
             generator: &self.generator,
             cells: &mut self.cells,
             parts: &mut self.parts,
+            history: &mut self.history,
             controller: &mut self.controller,
             level: self.level,
             pointer: &mut self.pointer,
@@ -765,6 +772,7 @@ impl Client {
                 // The world keeps the cells from here on.
                 self.cells.link(welcome.session);
                 self.parts.link(welcome.session);
+                self.history.clear();
                 for peer in &welcome.peers {
                     self.peers.add(peer, &self.generator);
                 }
@@ -821,6 +829,9 @@ impl Client {
                 plugins.receive(&envelope, lent);
             }
             Some(Message::Answer(answer)) => {
+                if !answer.code.is_empty() {
+                    self.history.refused(answer.id);
+                }
                 let cells = self
                     .cells
                     .answered(&self.generator, answer.id, &answer.code);
@@ -877,6 +888,7 @@ impl Client {
         // What the world kept went with it.
         self.cells.unlink();
         self.parts.unlink();
+        self.history.clear();
         self.peers.clear();
         self.dress_all();
         self.events.push(Event::Session {
@@ -950,6 +962,31 @@ impl Client {
         &self.parts
     }
 
+    /// What a hand changed, to read: whether there is a change to take
+    /// back, and one to put back.
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// Takes back the last change a hand made here, whatever owner it was
+    /// of: the owner takes its own back, here or in the world.
+    pub fn take_back(&mut self) {
+        match self.history.take_back() {
+            Some(Owner::Cells) => self.cells.take_back(&self.generator),
+            Some(Owner::Parts) => self.parts.restore(true),
+            None => {}
+        }
+    }
+
+    /// Puts back the last change taken back.
+    pub fn put_back(&mut self) {
+        match self.history.put_back() {
+            Some(Owner::Cells) => self.cells.put_back(&self.generator),
+            Some(Owner::Parts) => self.parts.restore(false),
+            None => {}
+        }
+    }
+
     pub fn drain_terrain_changes(&mut self) -> Vec<TerrainChange> {
         let mut changes = self.terrain.drain_changes();
         changes.extend(self.moon_terrain.drain_changes());
@@ -977,6 +1014,8 @@ impl Client {
                     self.command(Command::SetRecipe { recipe });
                 }
                 Key::NextAvatar => self.next_avatar(),
+                Key::Undo => self.take_back(),
+                Key::Redo => self.put_back(),
                 _ => {}
             }
         }

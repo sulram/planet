@@ -249,9 +249,6 @@ mod key {
     pub const TURN: &str = "turn";
     /// Drop the stroke being drawn, or else stop building.
     pub const CANCEL: &str = "cancel";
-    /// Take back the last change, or put it back.
-    pub const UNDO: &str = "undo";
-    pub const REDO: &str = "redo";
 }
 
 /// The colours a hand can pick: as many as the world's palette holds.
@@ -633,7 +630,7 @@ impl Build {
     /// Says whether there is a change to take back or to put back, when that
     /// changed.
     fn say_history(&mut self, host: &mut Host<'_>) {
-        let history = host.cells().history();
+        let history = host.history();
         if history != self.history {
             self.history = history;
             let (undo, redo) = history;
@@ -779,7 +776,7 @@ impl Plugin for Build {
                 self.say_hand(host);
                 self.over = Build::is_over(host);
                 host.emit(OVER, &Over { volume: self.over });
-                let (undo, redo) = host.cells().history();
+                let (undo, redo) = host.history();
                 self.history = (undo, redo);
                 host.emit(HISTORY, &History { undo, redo });
             }
@@ -797,9 +794,6 @@ impl Plugin for Build {
             KeyAsk::pressed(key::CANCEL, "Escape"),
             KeyAsk::held(key::TURN, "AltLeft"),
             KeyAsk::held(key::TURN, "AltRight"),
-            KeyAsk::command(key::UNDO, "KeyZ", false),
-            KeyAsk::command(key::REDO, "KeyZ", true),
-            KeyAsk::command(key::REDO, "KeyY", false),
         ]
     }
 
@@ -817,13 +811,7 @@ impl Plugin for Build {
             key::PAINT => self.take(Some(Tool::Paint), host),
             key::VOLUME => self.take(Some(Tool::Volume), host),
             // A stroke half drawn goes first, then the tool itself.
-            key::CANCEL => {
-                if !self.cancel() && self.tool.is_some() {
-                    self.take(None, host);
-                }
-            }
-            key::UNDO => self.undo(host),
-            key::REDO => self.redo(host),
+            key::CANCEL if !self.cancel() && self.tool.is_some() => self.take(None, host),
             _ => {}
         }
     }

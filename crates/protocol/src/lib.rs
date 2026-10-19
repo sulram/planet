@@ -75,6 +75,8 @@ pub mod parts {
     pub const PLACE: &str = "place";
     pub const SET: &str = "set";
     pub const REMOVE: &str = "remove";
+    pub const TAKE_BACK: &str = "take_back";
+    pub const PUT_BACK: &str = "put_back";
     pub const LOOK: &str = "look";
     /// The events the world says of them.
     pub const PLACED: &str = "placed";

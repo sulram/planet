@@ -48,6 +48,8 @@ export const en = {
 	'engine.hint.sprint': 'run',
 	'engine.hint.mode': 'walk or fly',
 	'engine.hint.avatar': 'next avatar',
+	'engine.hint.undo.keys': 'Ctrl Z, Ctrl Shift Z',
+	'engine.hint.undo': 'undo and redo, whatever was changed',
 	'engine.hint.zoom.keys': 'Wheel',
 	'engine.hint.zoom': 'zoom',
 	'engine.hint.release': 'release the pointer',

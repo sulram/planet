@@ -12,7 +12,6 @@ const build: WebPlugin = {
 		{ keys: '1 2 3 4', does: () => t('hint.tools') },
 		{ keys: () => t('hint.look.keys'), does: () => t('hint.look') },
 		{ keys: () => t('hint.turn.keys'), does: () => t('hint.turn') },
-		{ keys: () => t('hint.undo.keys'), does: () => t('hint.undo') },
 		{ keys: 'Esc', does: () => t('hint.cancel') }
 	]
 };

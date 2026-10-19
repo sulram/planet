@@ -566,7 +566,18 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             if !down {
                 state.input.hold(&code, false);
             }
-            if state.client.asks(&code, chord) {
+            // Command Z takes back, with Shift puts back, as Command Y does:
+            // the core's chords, which no plugin asks for.
+            if chord.command && (code == "KeyZ" || code == "KeyY") {
+                event.prevent_default();
+                if down && !event.repeat() {
+                    let key = match code == "KeyY" || chord.shift {
+                        true => Key::Redo,
+                        false => Key::Undo,
+                    };
+                    state.input.key(key, true);
+                }
+            } else if state.client.asks(&code, chord) {
                 // A key a plugin asked for is the plugin's, and the page has
                 // nothing of its own to do with it here.
                 event.prevent_default();

@@ -246,20 +246,25 @@ fn building_hears_the_keys_it_asked_for_by_name() {
     press(&mut client, "Escape", plain);
     assert!(!client.pointing());
 
-    // The chord takes back a platform, and puts it back.
+    // Taking back is the core's, not building's (DECISIONS 115): the chord
+    // is no key of building, and the core's key takes a platform back and
+    // puts it back, as the one history counts it.
     client.command_json(LAY);
     laid(&mut client);
     let command = |shift| Chord {
         command: true,
         shift,
     };
-    assert!(client.asks("KeyZ", command(false)) && !client.asks("KeyZ", plain));
-    press(&mut client, "KeyZ", command(false));
-    assert_eq!(client.cells().history(), (false, true));
-    press(&mut client, "KeyZ", command(true));
-    assert_eq!(client.cells().history(), (true, false));
-    press(&mut client, "KeyZ", command(false));
-    press(&mut client, "KeyY", command(false));
+    assert!(!client.asks("KeyZ", command(false)) && !client.asks("KeyZ", plain));
+    let key = |client: &mut Client, key: Key| {
+        let mut input = Input::default();
+        input.key(key, true);
+        client.update(1.0 / 60.0, &mut input);
+    };
+    key(&mut client, Key::Undo);
+    assert_eq!(client.history().state(), (false, true));
+    key(&mut client, Key::Redo);
+    assert_eq!(client.history().state(), (true, false));
     assert_eq!(client.cells().history(), (true, false));
 }
 

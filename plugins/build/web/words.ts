@@ -50,7 +50,6 @@ const en = {
 	'hint.turn': 'turn the stroke: on its side, standing one way, then the other',
 	'hint.undo.keys': 'Ctrl Z',
 	'hint.redo.keys': 'Ctrl Shift Z',
-	'hint.undo': 'undo; with Shift, redo',
 	'hint.cancel': 'drop the stroke, then the tool'
 };
 
@@ -102,7 +101,6 @@ const pt: typeof en = {
 	'hint.turn': 'vira o traço: deitado na face, em pé para um lado, depois para o outro',
 	'hint.undo.keys': 'Ctrl Z',
 	'hint.redo.keys': 'Ctrl Shift Z',
-	'hint.undo': 'desfazer; com Shift, refazer',
 	'hint.cancel': 'larga o traço, depois a ferramenta'
 };
 
@@ -154,7 +152,6 @@ const zh: typeof en = {
 	'hint.turn': '旋转笔画：平放，朝一侧竖起，再朝另一侧',
 	'hint.undo.keys': 'Ctrl Z',
 	'hint.redo.keys': 'Ctrl Shift Z',
-	'hint.undo': '撤销；按住 Shift 重做',
 	'hint.cancel': '先放下笔画，再放下工具'
 };
 

@@ -86,6 +86,16 @@ enum Deferred {
     Remove,
 }
 
+/// A change made here with no world, as what takes it back and puts it
+/// back (DECISIONS 115). In a world the world keeps these.
+enum Change {
+    Placed(PartId),
+    /// A part set: as it was before.
+    Set(PartId, Seat, Part),
+    /// A part removed: as it was.
+    Removed(PartId, Seat, Part),
+}
+
 /// The parts as a world keeps them, from where this client stands.
 #[derive(Default)]
 struct Link {
@@ -138,6 +148,9 @@ pub struct Parts {
     next: u64,
     /// The world that keeps the parts, while one does.
     link: Option<Link>,
+    /// With no world: the changes made here to take back and put back.
+    done: Vec<Change>,
+    undone: Vec<Change>,
     /// The models announced, by id.
     meshed: Vec<ModelId>,
     changes: Vec<ModelChange>,
@@ -173,6 +186,8 @@ impl Parts {
     /// and what the world holds near the body is asked for at once.
     pub(crate) fn link(&mut self, me: u32) {
         self.held.clear();
+        self.done.clear();
+        self.undone.clear();
         self.link = Some(Link {
             me,
             since_look_s: LOOK_S,
@@ -183,7 +198,60 @@ impl Parts {
     /// The world is gone, and what it kept with it.
     pub(crate) fn unlink(&mut self) {
         self.held.clear();
+        self.done.clear();
+        self.undone.clear();
         self.link = None;
+    }
+
+    /// The number the last op was asked of the world under. `None` with no
+    /// world, or when nothing went out.
+    pub(crate) fn last_ask(&self) -> Option<u32> {
+        self.link
+            .as_ref()
+            .and_then(|link| link.asks.last().map(|ask| ask.id))
+    }
+
+    /// Takes back the last change made here, or puts back the last taken
+    /// back. In a world, the world is asked to, and says what the parts are
+    /// then; alone, the stacks here say.
+    pub(crate) fn restore(&mut self, back: bool) {
+        if let Some(link) = &mut self.link {
+            let asked = match back {
+                true => link.ask(wire::TAKE_BACK, &wire::TakeBack {}),
+                false => link.ask(wire::PUT_BACK, &wire::PutBack {}),
+            };
+            link.waiting.insert(asked, 0);
+            return;
+        }
+        let change = match back {
+            true => self.done.pop(),
+            false => self.undone.pop(),
+        };
+        let Some(change) = change else {
+            return;
+        };
+        let inverse = match change {
+            Change::Placed(id) => self
+                .held
+                .remove(&id)
+                .map(|(seat, part)| Change::Removed(id, seat, part)),
+            Change::Removed(id, seat, part) => {
+                self.held.insert(id, (seat, part));
+                self.mesh(&part);
+                Some(Change::Placed(id))
+            }
+            Change::Set(id, seat, part) => {
+                let before = self.held.insert(id, (seat, part));
+                self.mesh(&part);
+                before.map(|(seat, part)| Change::Set(id, seat, part))
+            }
+        };
+        if let Some(inverse) = inverse {
+            match back {
+                true => self.undone.push(inverse),
+                false => self.done.push(inverse),
+            }
+        }
     }
 
     /// What to ask the world since the last call, in order.
@@ -256,11 +324,16 @@ impl Parts {
                 let Some(record) = &changed.record else {
                     return;
                 };
-                // A change of this session's own is held already; the
-                // version is what is new of it.
-                match changed.session == me {
+                // A change of this session's own is held already while a
+                // set of it is on its way; otherwise it is the world moving
+                // the part, a change taken back, and it lands.
+                let link = self.link.as_mut().expect("linked");
+                let on_its_way = link.local_of.get(&record.id).is_some_and(|local| {
+                    link.dirty.contains_key(local)
+                        || link.waiting.values().any(|id| id == &record.id)
+                });
+                match changed.session == me && on_its_way {
                     true => {
-                        let link = self.link.as_mut().expect("linked");
                         link.versions.insert(record.id, record.version);
                     }
                     false => self.arrived(record),
@@ -458,12 +531,18 @@ impl Parts {
         let id = PartId(self.next);
         self.held.insert(id, (seat, part));
         self.mesh(&part);
-        if let Some(link) = &mut self.link {
-            let place = wire::Place {
-                part: Some(seat::part_wire(seat, &part)),
-            };
-            let asked = link.ask(wire::PLACE, &place);
-            link.placing.push((asked, id));
+        match &mut self.link {
+            Some(link) => {
+                let place = wire::Place {
+                    part: Some(seat::part_wire(seat, &part)),
+                };
+                let asked = link.ask(wire::PLACE, &place);
+                link.placing.push((asked, id));
+            }
+            None => {
+                self.undone.clear();
+                self.done.push(Change::Placed(id));
+            }
         }
         id
     }
@@ -474,25 +553,40 @@ impl Parts {
         let Some(held) = self.held.get_mut(&id) else {
             return false;
         };
-        *held = (seat, part);
+        let before = core::mem::replace(held, (seat, part));
         self.mesh(&part);
         // The latest set of a part goes at the cadence: a drag sets it every
-        // frame.
-        if let Some(link) = &mut self.link {
-            link.dirty.insert(id, (seat, part));
+        // frame. Alone, sets of one part in a row are one change.
+        match &mut self.link {
+            Some(link) => {
+                link.dirty.insert(id, (seat, part));
+            }
+            None => {
+                self.undone.clear();
+                let same = matches!(self.done.last(), Some(Change::Set(last, _, _)) if *last == id);
+                if !same {
+                    self.done.push(Change::Set(id, before.0, before.1));
+                }
+            }
         }
         true
     }
 
     /// Removes a part by its name. False for a name nothing holds.
     pub(crate) fn remove(&mut self, id: PartId) -> bool {
-        if self.held.remove(&id).is_none() {
+        let Some((seat, part)) = self.held.remove(&id) else {
             return false;
+        };
+        match &mut self.link {
+            Some(link) => {
+                link.dirty.remove(&id);
+                self.send(id, Deferred::Remove);
+            }
+            None => {
+                self.undone.clear();
+                self.done.push(Change::Removed(id, seat, part));
+            }
         }
-        if let Some(link) = &mut self.link {
-            link.dirty.remove(&id);
-        }
-        self.send(id, Deferred::Remove);
         true
     }
 

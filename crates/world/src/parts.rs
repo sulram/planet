@@ -6,7 +6,7 @@
 //! A part is one row: its record under its name. What is held in memory is
 //! read again by a new instance: every record, and the next name to give.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use prost::Message;
 use protocol::parts as wire;
@@ -61,6 +61,44 @@ impl Kept {
     }
 }
 
+/// A change that landed, as what takes it back and puts it back.
+enum Change {
+    /// A part placed, by name.
+    Placed(u64),
+    /// A part set: as it was before.
+    Set(u64, Kept),
+    /// A part removed: as it was.
+    Removed(u64, Kept),
+}
+
+/// Changes a session may take back, and the most of them kept.
+const HISTORY: usize = 100;
+
+/// What a session may take back, the last change last, and put back.
+#[derive(Default)]
+struct History {
+    done: Vec<Change>,
+    undone: Vec<Change>,
+}
+
+impl History {
+    /// Keeps a change that landed as the last to take back. Sets of one part
+    /// in a row are one change, back to how it stood before the first: a
+    /// drag sets a part many times a second.
+    fn did(&mut self, change: Change) {
+        self.undone.clear();
+        if let (Change::Set(id, _), Some(Change::Set(last, _))) = (&change, self.done.last())
+            && id == last
+        {
+            return;
+        }
+        self.done.push(change);
+        if self.done.len() > HISTORY {
+            self.done.remove(0);
+        }
+    }
+}
+
 /// The system. The host calls it one op at a time.
 #[derive(Default)]
 pub struct Parts {
@@ -69,6 +107,7 @@ pub struct Parts {
     index: Option<BTreeMap<u64, Kept>>,
     /// The next name to give, read with the index. Never one given before.
     next: u64,
+    histories: HashMap<u32, History>,
 }
 
 /// The system as the server's module holds it.
@@ -126,8 +165,17 @@ impl Parts {
             version: 0,
         };
         self.keep(room, id, &kept);
-        // The asker hears it whether near or not: it is waiting for the name.
-        let mut to = near(room, seat, &part, TELL_M);
+        self.tell_placed(room, who, id, &kept);
+        self.histories
+            .entry(who.session)
+            .or_default()
+            .did(Change::Placed(id));
+    }
+
+    /// Says a part placed to whoever is near, and to the asker whether
+    /// near or not: it is waiting for the name.
+    fn tell_placed(&self, room: &mut dyn Room, who: &Who, id: u64, kept: &Kept) {
+        let mut to = near(room, kept.seat, &kept.part, TELL_M);
         if !to.contains(&who.session) {
             to.push(who.session);
         }
@@ -136,6 +184,36 @@ impl Parts {
             record: Some(kept.record(id)),
         };
         room.tell(wire::PLACED, placed.encode_to_vec(), &to);
+    }
+
+    /// Sets a part as `kept` says, one version on, and tells whoever is near
+    /// where it stood and where it stands.
+    fn apply_set(&mut self, room: &mut dyn Room, who: &Who, id: u64, before: &Kept, kept: Kept) {
+        self.keep(room, id, &kept);
+        let mut to = near(room, before.seat, &before.part, TELL_M);
+        for session in near(room, kept.seat, &kept.part, TELL_M) {
+            if !to.contains(&session) {
+                to.push(session);
+            }
+        }
+        let changed = wire::Changed {
+            session: who.session,
+            record: Some(kept.record(id)),
+        };
+        room.tell(wire::CHANGED, changed.encode_to_vec(), &to);
+    }
+
+    /// Takes a part out of the world and tells whoever is near. What it was.
+    fn take_out(&mut self, room: &mut dyn Room, who: &Who, id: u64) -> Option<Kept> {
+        let kept = self.index(room).remove(&id)?;
+        room.forget(&record_key(id));
+        let removed = wire::Removed {
+            session: who.session,
+            id,
+        };
+        let to = near(room, kept.seat, &kept.part, TELL_M);
+        room.tell(wire::REMOVED, removed.encode_to_vec(), &to);
+        Some(kept)
     }
 
     fn set(&mut self, payload: &[u8], who: &Who, room: &mut dyn Room) {
@@ -156,35 +234,78 @@ impl Parts {
             part,
             version: before.version + 1,
         };
-        self.keep(room, set.id, &kept);
-        // Told where it stood and where it stands, in case it moved far.
-        let mut to = near(room, before.seat, &before.part, TELL_M);
-        for session in near(room, seat, &part, TELL_M) {
-            if !to.contains(&session) {
-                to.push(session);
-            }
-        }
-        let changed = wire::Changed {
-            session: who.session,
-            record: Some(kept.record(set.id)),
-        };
-        room.tell(wire::CHANGED, changed.encode_to_vec(), &to);
+        self.apply_set(room, who, set.id, &before, kept);
+        self.histories
+            .entry(who.session)
+            .or_default()
+            .did(Change::Set(set.id, before));
     }
 
     fn remove(&mut self, payload: &[u8], who: &Who, room: &mut dyn Room) {
         let Ok(remove) = wire::Remove::decode(payload) else {
             return room.refuse("message");
         };
-        let Some(kept) = self.index(room).remove(&remove.id) else {
+        let Some(kept) = self.take_out(room, who, remove.id) else {
             return room.refuse("gone");
         };
-        room.forget(&record_key(remove.id));
-        let removed = wire::Removed {
-            session: who.session,
-            id: remove.id,
+        self.histories
+            .entry(who.session)
+            .or_default()
+            .did(Change::Removed(remove.id, kept));
+    }
+
+    /// Takes back the last change of a session, or puts back the last it
+    /// took back. A part placed is taken out and stands again under the
+    /// same name; a part set goes back to how it was, one version on; a
+    /// part removed stands again as it was. A part someone else removed
+    /// since, or set since, is left as they left it: the change is then
+    /// gone from the history and nothing is done. False with nothing to
+    /// take back.
+    fn restore(&mut self, back: bool, who: &Who, room: &mut dyn Room) -> bool {
+        let history = self.histories.entry(who.session).or_default();
+        let change = match back {
+            true => history.done.pop(),
+            false => history.undone.pop(),
         };
-        let to = near(room, kept.seat, &kept.part, TELL_M);
-        room.tell(wire::REMOVED, removed.encode_to_vec(), &to);
+        let Some(change) = change else {
+            return false;
+        };
+        let inverse = match change {
+            Change::Placed(id) => self
+                .take_out(room, who, id)
+                .map(|kept| Change::Removed(id, kept)),
+            Change::Removed(id, kept) => {
+                if self.index(room).contains_key(&id) {
+                    None
+                } else {
+                    let kept = Kept {
+                        version: kept.version + 1,
+                        ..kept
+                    };
+                    self.keep(room, id, &kept);
+                    self.tell_placed(room, who, id, &kept);
+                    Some(Change::Placed(id))
+                }
+            }
+            Change::Set(id, before) => match self.index(room).get(&id).cloned() {
+                Some(now) => {
+                    let kept = Kept {
+                        version: now.version + 1,
+                        ..before
+                    };
+                    self.apply_set(room, who, id, &now, kept);
+                    Some(Change::Set(id, now))
+                }
+                None => None,
+            },
+        };
+        let history = self.histories.entry(who.session).or_default();
+        match (inverse, back) {
+            (Some(inverse), true) => history.undone.push(inverse),
+            (Some(inverse), false) => history.done.push(inverse),
+            (None, _) => return false,
+        }
+        true
     }
 
     /// Answers what a client holds with what it lacks: every part near its
@@ -275,27 +396,28 @@ impl Plugin for Parts {
         VERSION
     }
 
-    /// Placing, setting and removing a part is a builder's and an admin's.
-    /// Anyone looks.
+    /// Placing, setting and removing a part is a builder's and an admin's,
+    /// and taking that back. Anyone looks.
     fn ops(&self) -> Vec<Op> {
-        vec![
-            Op {
-                kind: wire::PLACE,
+        let builder = [
+            wire::PLACE,
+            wire::SET,
+            wire::REMOVE,
+            wire::TAKE_BACK,
+            wire::PUT_BACK,
+        ];
+        let mut ops: Vec<Op> = builder
+            .into_iter()
+            .map(|kind| Op {
+                kind,
                 level: Level::Builder,
-            },
-            Op {
-                kind: wire::SET,
-                level: Level::Builder,
-            },
-            Op {
-                kind: wire::REMOVE,
-                level: Level::Builder,
-            },
-            Op {
-                kind: wire::LOOK,
-                level: Level::Anonymous,
-            },
-        ]
+            })
+            .collect();
+        ops.push(Op {
+            kind: wire::LOOK,
+            level: Level::Anonymous,
+        });
+        ops
     }
 
     fn op(&mut self, kind: &str, payload: &[u8], who: &Who, room: &mut dyn Room) {
@@ -303,12 +425,19 @@ impl Plugin for Parts {
             wire::PLACE => self.place(payload, who, room),
             wire::SET => self.set(payload, who, room),
             wire::REMOVE => self.remove(payload, who, room),
+            wire::TAKE_BACK | wire::PUT_BACK => {
+                if !self.restore(kind == wire::TAKE_BACK, who, room) {
+                    room.refuse("none");
+                }
+            }
             wire::LOOK => self.look(payload, who, room),
             _ => {}
         }
     }
 
-    fn gone(&mut self, _session: u32) {}
+    fn gone(&mut self, session: u32) {
+        self.histories.remove(&session);
+    }
 }
 
 #[cfg(test)]

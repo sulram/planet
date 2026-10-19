@@ -2,8 +2,8 @@
 // them and what the world says of them, each the payload of an Envelope
 // whose owner is `parts`.
 //
-// Up, the ops: `place`, `set`, `remove`, `look`. Down, the events:
-// `placed`, `changed`, `removed`, `seen`.
+// Up, the ops: `place`, `set`, `remove`, `take_back`, `put_back`, `look`.
+// Down, the events: `placed`, `changed`, `removed`, `seen`.
 syntax = "proto3";
 
 package planet.parts.v1;
@@ -99,6 +99,15 @@ message Set {
 message Remove {
   uint64 id = 1;
 }
+
+// `take_back`: takes back the last change of this session's to the parts
+// that landed: a part placed is taken out, one set goes back to how it was,
+// one removed stands again, each told as the change was. Sets of one part
+// in a row are one change.
+message TakeBack {}
+
+// `put_back`: puts back the last change this session took back.
+message PutBack {}
 
 // `look`: what this client holds of the parts near it, each at the version
 // it holds it. The world answers with `seen`.

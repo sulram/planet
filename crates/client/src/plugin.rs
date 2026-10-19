@@ -23,6 +23,7 @@ use worldgen::Generator;
 use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
 use crate::collision;
 use crate::controller::Controller;
+use crate::history::{History, Owner};
 use crate::input::{Chord, Input, Key, KeyAsk};
 use crate::parts::{Mark, PartRefusal, Parts};
 use crate::place::Pose;
@@ -159,6 +160,7 @@ pub(crate) struct Lent<'a> {
     pub generator: &'a Generator,
     pub cells: &'a mut Cells,
     pub parts: &'a mut Parts,
+    pub history: &'a mut History,
     pub controller: &'a mut Controller,
     pub level: Option<Level>,
     /// The plugin that has the pointer, while one does.
@@ -173,6 +175,7 @@ impl<'a> Lent<'a> {
             generator: self.generator,
             cells: self.cells,
             parts: self.parts,
+            history: self.history,
             controller: self.controller,
             level: self.level,
             pointer: self.pointer,
@@ -382,19 +385,33 @@ impl Host<'_> {
         self.lent.cells.open(self.lent.generator, seat, point)
     }
 
+    /// A change of the cells landed here: it enters the one history.
+    fn did_cells(&mut self) {
+        let ask = self.lent.cells.last_ask();
+        self.lent.history.did(Owner::Cells, ask);
+    }
+
     /// Closes the volume over a column of a seat: what was built in it goes
     /// with it, and its plot is nature again. A change like any other, taken
     /// back as one. `Ok(false)` where no volume stands.
     pub fn close(&mut self, seat: Seat, point: SurfacePoint) -> Result<bool, Refusal> {
         self.permitted()?;
-        Ok(self.lent.cells.close(seat, point))
+        let closed = self.lent.cells.close(seat, point);
+        if closed {
+            self.did_cells();
+        }
+        Ok(closed)
     }
 
     /// Applies gestures to the cells of a seat as one change, taken back as
     /// one. `Ok(false)` when no cell changed.
     pub fn apply(&mut self, seat: impl Into<Seat>, gestures: &[Gesture]) -> Result<bool, Refusal> {
         self.permitted()?;
-        Ok(self.lent.cells.apply(self.lent.generator, seat, gestures))
+        let changed = self.lent.cells.apply(self.lent.generator, seat, gestures);
+        if changed {
+            self.did_cells();
+        }
+        Ok(changed)
     }
 
     /// Shows the ghost of a gesture over a seat's cells, or of none: exactly
@@ -462,7 +479,10 @@ impl Host<'_> {
     pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, PartRefusal> {
         self.may_place()?;
         self.sound(seat, &part.pose)?;
-        Ok(self.lent.parts.place(seat, part))
+        let id = self.lent.parts.place(seat, part);
+        let ask = self.lent.parts.last_ask();
+        self.lent.history.did(Owner::Parts, ask);
+        Ok(id)
     }
 
     /// Sets a part by its name: moved, turned, stretched, repainted, made
@@ -471,7 +491,11 @@ impl Host<'_> {
         self.may_place()?;
         self.sound(seat, &part.pose)?;
         match self.lent.parts.set(id, seat, part) {
-            true => Ok(()),
+            true => {
+                // A set goes to the world at a cadence, under no number yet.
+                self.lent.history.set(id.0, None);
+                Ok(())
+            }
             false => Err(PartRefusal::Gone),
         }
     }
@@ -492,22 +516,40 @@ impl Host<'_> {
     pub fn remove_part(&mut self, id: PartId) -> Result<(), PartRefusal> {
         self.may_place()?;
         match self.lent.parts.remove(id) {
-            true => Ok(()),
+            true => {
+                let ask = self.lent.parts.last_ask();
+                self.lent.history.did(Owner::Parts, ask);
+                Ok(())
+            }
             false => Err(PartRefusal::Gone),
         }
     }
 
-    /// Takes back the last change that landed.
+    /// Whether there is a change to take back, and one to put back, of
+    /// whatever owner (DECISIONS 115).
+    pub fn history(&self) -> (bool, bool) {
+        self.lent.history.state()
+    }
+
+    /// Takes back the last change that landed, whatever owner it was of.
     pub fn take_back(&mut self) -> Result<(), Refusal> {
         self.permitted()?;
-        self.lent.cells.take_back(self.lent.generator);
+        match self.lent.history.take_back() {
+            Some(Owner::Cells) => self.lent.cells.take_back(self.lent.generator),
+            Some(Owner::Parts) => self.lent.parts.restore(true),
+            None => {}
+        }
         Ok(())
     }
 
     /// Puts back the last change taken back.
     pub fn put_back(&mut self) -> Result<(), Refusal> {
         self.permitted()?;
-        self.lent.cells.put_back(self.lent.generator);
+        match self.lent.history.put_back() {
+            Some(Owner::Cells) => self.lent.cells.put_back(self.lent.generator),
+            Some(Owner::Parts) => self.lent.parts.restore(false),
+            None => {}
+        }
         Ok(())
     }
 }

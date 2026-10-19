@@ -49,6 +49,8 @@ export const pt: Messages = {
 	'engine.hint.sprint': 'correr',
 	'engine.hint.mode': 'andar ou voar',
 	'engine.hint.avatar': 'próximo avatar',
+	'engine.hint.undo.keys': 'Ctrl Z, Ctrl Shift Z',
+	'engine.hint.undo': 'desfazer e refazer, seja o que for',
 	'engine.hint.zoom.keys': 'Roda',
 	'engine.hint.zoom': 'zoom',
 	'engine.hint.release': 'soltar o ponteiro',

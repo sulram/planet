@@ -48,9 +48,8 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
 
 - A question is a hook when the core asks its plugins, and a reading when
   anyone asks an owner what it holds.
-- A hook has a default answer. A plugin over it answers in its place, with
-  the default to fall back on: the level answers who may do what and where,
-  and land answers over it.
+- A hook has a default answer, and a plugin over it answers in its place:
+  the level says who may do what and where, and land answers over it.
 - A message is one of the three. What is two of them is two messages.
 - At the seam they are `client::Command` and `client::Event`, JSON tagged by
   `type`, and a `type` with a dot is a plugin's: `chat.say`. On the wire they
@@ -67,6 +66,8 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
 
 - The rule is written once, in Rust: the client predicts with it, and the
   server decides with it, run as a WASM module through wazero (97).
+- Taking back is one history (115): the client's host keeps which owner each
+  change was of, in order; Ctrl Z goes through that owner's own `take_back`.
 - A constraint lives in the rule. One held by a panel alone is one an agent
   and a macro walk past.
 
@@ -78,9 +79,8 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
 - **Where**: the address. A box of it, or a plot, which is the address less
   six bits (77).
 - **What**: the name of the action, the plugin's before it: `build.create`.
-- A volume is the unit the cells and land share (95): cells and their history
-  are kept by volume, permission is given by volume, and a rollback restores
-  a volume.
+- A volume is the unit the cells and land share (95): cells are kept by
+  volume, permission is given by volume, and a rollback restores a volume.
 - The cells are the core's (106): the volumes, their picture, the footing on
   them and the op that changes them, a gesture over a box. Building is a
   plugin of how a hand arrives at gestures: tools, kinds of construction,

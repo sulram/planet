@@ -118,6 +118,27 @@ fn cube(point: SurfacePoint, h: f64) -> wire::Part {
     seat::part_wire(Seat::Sector(point.sector), &part)
 }
 
+/// Takes back or puts back a session's last change through the owner's op.
+/// Whether it landed.
+fn restore(parts: &mut Parts, stage: &mut Stage, who: &Who, back: bool) -> bool {
+    stage.refused = None;
+    match back {
+        true => parts.op(
+            wire::TAKE_BACK,
+            &wire::TakeBack {}.encode_to_vec(),
+            who,
+            stage,
+        ),
+        false => parts.op(
+            wire::PUT_BACK,
+            &wire::PutBack {}.encode_to_vec(),
+            who,
+            stage,
+        ),
+    }
+    stage.refused.is_none()
+}
+
 fn told<M: Message + Default>(stage: &mut Stage, kind: &str) -> Vec<(M, Vec<u32>)> {
     let told = core::mem::take(&mut stage.told);
     told.into_iter()
@@ -211,6 +232,65 @@ fn a_part_set_counts_a_version_and_a_pose_outside_its_sector_is_refused() {
     let place = wire::Place { part: Some(flat) };
     parts.op(wire::PLACE, &place.encode_to_vec(), &who, &mut stage);
     assert_eq!(stage.refused.take(), Some("message".into()));
+}
+
+#[test]
+fn a_change_is_taken_back_through_the_owner_and_put_back() {
+    let (mut stage, point) = stage();
+    let mut parts = Parts::default();
+    let who = stage.here[0].clone();
+    let place = wire::Place {
+        part: Some(cube(point, 4.0)),
+    };
+    parts.op(wire::PLACE, &place.encode_to_vec(), &who, &mut stage);
+    let mut moved = cube(point, 9.0);
+    moved.paint = 3;
+    let set = wire::Set {
+        id: 1,
+        part: Some(moved),
+    };
+    parts.op(wire::SET, &set.encode_to_vec(), &who, &mut stage);
+    stage.told.clear();
+    // The set goes back: the part is as placed, one version on, and told.
+    assert!(restore(&mut parts, &mut stage, &who, true));
+    let changed = told::<wire::Changed>(&mut stage, wire::CHANGED);
+    let record = changed[0].0.record.as_ref().unwrap();
+    assert_eq!(
+        (record.version, record.part.as_ref().unwrap().paint),
+        (2, 11)
+    );
+    // The place goes back: the part is gone and told so.
+    assert!(restore(&mut parts, &mut stage, &who, true));
+    assert_eq!(told::<wire::Removed>(&mut stage, wire::REMOVED)[0].0.id, 1);
+    assert!(stage.scan(b"p").is_empty());
+    // Nothing more to take back.
+    assert!(!restore(&mut parts, &mut stage, &who, true));
+    // Put back: it stands again under its name, then the set is put back.
+    assert!(restore(&mut parts, &mut stage, &who, false));
+    let placed = told::<wire::Placed>(&mut stage, wire::PLACED);
+    assert_eq!(placed[0].0.record.as_ref().unwrap().id, 1);
+    assert!(restore(&mut parts, &mut stage, &who, false));
+    let changed = told::<wire::Changed>(&mut stage, wire::CHANGED);
+    assert_eq!(
+        changed[0]
+            .0
+            .record
+            .as_ref()
+            .unwrap()
+            .part
+            .as_ref()
+            .unwrap()
+            .paint,
+        3
+    );
+    assert!(!restore(&mut parts, &mut stage, &who, false));
+    // Removed by someone else since: the change is gone and nothing is done.
+    let other = stage.here[1].clone();
+    let remove = wire::Remove { id: 1 };
+    parts.op(wire::REMOVE, &remove.encode_to_vec(), &other, &mut stage);
+    stage.told.clear();
+    assert!(!restore(&mut parts, &mut stage, &who, true));
+    assert!(stage.told.is_empty());
 }
 
 #[test]

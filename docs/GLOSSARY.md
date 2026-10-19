@@ -85,7 +85,8 @@ this file in the same change.
 | Op | One permission-checked request to an owner to change what it holds. The only way world state changes. |
 | Rule | What an op does to what its owner holds: one piece of Rust, compiled into the client and run by the server as WASM. |
 | Op log | Append-only record of ops: who, when, address, before, after. |
-| Rollback | A volume restored to how it stood at an earlier moment, whoever built in it since. Undo is a person taking back their own strokes. |
+| Rollback | A volume restored to how it stood at an earlier moment, whoever built in it since. |
+| Undo | A person taking back the last change they made, whatever owner it was of, cells or parts, in one history; put back puts it back. The core's keys, Ctrl Z and Ctrl Shift Z. |
 | World actor | The single goroutine that owns the world's state and writes. Started by the hub on the first session, gone after the last. |
 | Hub | Holds the world's actor. The socket route hands every connection to it. |
 | Session | One connection inside a world: a person or agent, from Hello to Left. Numbered by the actor, with one level for its life. |
