@@ -77,7 +77,7 @@ end to end.
 
 - [ ] The gizmo's handles sized by the view, so a part far off is still taken by its handle; a drag snapped to blocks and to right angles with a key held
 - [ ] A part picked by one hand shown picked to the others near
-- [ ] One history: a change of the cells and a change of the parts taken back in the order they landed
+- [ ] **Undo is universal**: one history of every change that landed, the cells', the parts' and every owner's to come, taken back and put back in order as one list, never a history per owner; the cells' own history today is the first member of it
 - [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
 - [ ] A client lets go of parts far behind it, as it does volumes
 - [ ] A light part lights what is near, as a lamp among the cells does

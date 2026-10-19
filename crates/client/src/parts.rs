@@ -49,6 +49,9 @@ use crate::pictures::{Pictures, Screen};
 
 /// Seconds between two looks at what the world holds near the body.
 const LOOK_S: f64 = 1.0;
+/// Seconds between two sets of one part sent to the world: a drag sets a
+/// part every frame, and the world hears the latest ten times a second.
+const SET_S: f64 = 0.1;
 
 /// The size of a cube as a hand places it, in blocks: a metre.
 pub const CUBE: [f64; 3] = [2.0, 2.0, 2.0];
@@ -105,7 +108,10 @@ struct Link {
     versions: HashMap<u64, u64>,
     /// What was asked of a part before the world named it, in order.
     deferred: Vec<(PartId, Deferred)>,
+    /// The latest set of each part since the last cadence, waiting to go.
+    dirty: BTreeMap<PartId, (Seat, Part)>,
     since_look_s: f64,
+    since_set_s: f64,
 }
 
 impl Link {
@@ -187,9 +193,20 @@ impl Parts {
             .unwrap_or_default()
     }
 
-    /// Asks the world, every second, for the parts near the body this
-    /// client lacks or holds stale.
+    /// Sends the world the sets that waited for the cadence, and asks it,
+    /// every second, for the parts near the body this client lacks or
+    /// holds stale.
     pub(crate) fn look(&mut self, dt: f64) {
+        let Some(link) = &mut self.link else {
+            return;
+        };
+        link.since_set_s += dt;
+        if link.since_set_s >= SET_S {
+            link.since_set_s = 0.0;
+            for (local, (seat, part)) in core::mem::take(&mut link.dirty) {
+                self.send(local, Deferred::Set(seat, part));
+            }
+        }
         let Some(link) = &mut self.link else {
             return;
         };
@@ -286,6 +303,7 @@ impl Parts {
             self.send(local, deferred);
         }
     }
+
 
     /// Asks the world for a set or a remove of a part it has named, or
     /// keeps it for when it has.
@@ -453,7 +471,11 @@ impl Parts {
         };
         *held = (seat, part);
         self.mesh(&part);
-        self.send(id, Deferred::Set(seat, part));
+        // The latest set of a part goes at the cadence: a drag sets it every
+        // frame.
+        if let Some(link) = &mut self.link {
+            link.dirty.insert(id, (seat, part));
+        }
         true
     }
 
@@ -461,6 +483,9 @@ impl Parts {
     pub(crate) fn remove(&mut self, id: PartId) -> bool {
         if self.held.remove(&id).is_none() {
             return false;
+        }
+        if let Some(link) = &mut self.link {
+            link.dirty.remove(&id);
         }
         self.send(id, Deferred::Remove);
         true

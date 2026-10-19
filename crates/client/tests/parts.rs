@@ -99,24 +99,35 @@ fn a_part_placed_is_asked_of_the_world_and_set_under_the_name_it_gives() {
     let place = asked(&mut client);
     assert_eq!(place.len(), 1);
     assert_eq!(place[0].kind, wire::PLACE);
-    // Set before the world named it: nothing goes out yet.
+    // Set twice before the world named it: nothing goes out yet, and the
+    // part here is as the last set left it.
     let mut moved = part;
-    moved.pose.at[2] = 12.0;
-    client.host("test").set_part(local, seat, moved).unwrap();
+    for h in [11.0, 12.0] {
+        moved.pose.at[2] = h;
+        client.host("test").set_part(local, seat, moved).unwrap();
+    }
     assert!(asked(&mut client).is_empty());
     assert_eq!(client.parts().get(local).unwrap().1.pose.at[2], 12.0);
-    // The world names it: the set goes out under that name, and the part
-    // keeps the name it has here.
+    // The world names it, and the cadence comes: one set goes out under
+    // that name, the latest, and the part keeps the name it has here.
     let placed = wire::Placed {
         session: 1,
         record: Some(record(77, 0, seat, &part)),
     };
     client.receive(&said(wire::PLACED, placed.encode_to_vec()));
     client.receive(&answer(place[0].id, ""));
-    let set = asked(&mut client);
-    assert_eq!(set.len(), 1);
-    assert_eq!(set[0].kind, wire::SET);
-    assert_eq!(wire::Set::decode(&set[0].payload[..]).unwrap().id, 77);
+    let mut input = client::Input::default();
+    for _ in 0..8 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    let set: Vec<_> = asked(&mut client)
+        .into_iter()
+        .filter(|ask| ask.kind == wire::SET)
+        .collect();
+    assert_eq!(set.len(), 1, "one set, the latest, beside the look");
+    let set = wire::Set::decode(&set[0].payload[..]).unwrap();
+    assert_eq!(set.id, 77);
+    assert_eq!(set.part.unwrap().pose.unwrap().h, 12.0);
     assert!(client.parts().get(local).is_some());
     assert_eq!(client.parts().all().count(), 1);
     // Removed here, removed there.
