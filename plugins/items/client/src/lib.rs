@@ -19,7 +19,7 @@ mod cross;
 mod gizmo;
 mod place;
 
-use client::{Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Shape, Turn};
+use client::{Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Portal, Shape, Turn};
 
 use glam::{DQuat, DVec3, EulerRot};
 use serde::{Deserialize, Serialize};
@@ -209,6 +209,10 @@ struct Take {
     /// leads nowhere.
     #[serde(default)]
     to: Option<u64>,
+    /// How wide the next portal's rim is, of its width: 0 is no rim, the
+    /// pane alone; a half is the rim to the middle.
+    #[serde(default)]
+    rim: Option<f32>,
 }
 
 /// A picture's record as the seam says it.
@@ -258,6 +262,9 @@ struct Set {
     /// leads nowhere.
     #[serde(default)]
     to: Option<u64>,
+    /// How wide the portal picked's rim is, of its width.
+    #[serde(default)]
+    rim: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -291,6 +298,8 @@ struct Hand {
     name: Option<String>,
     /// The landmark the next portal leads to, when one was chosen.
     to: Option<u64>,
+    /// How wide the next portal's rim is, of its width.
+    rim: f32,
 }
 
 /// A part as the panel shows it.
@@ -322,6 +331,9 @@ struct Picked {
     /// it leads nowhere.
     #[serde(skip_serializing_if = "Option::is_none")]
     to: Option<Option<u64>>,
+    /// How wide a portal's rim is, of its width.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rim: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -368,6 +380,8 @@ pub struct Items {
     name: Option<Name>,
     /// The landmark the next portal leads to. None until one is chosen.
     to: Option<PartId>,
+    /// How wide the next portal's rim is, in the part's units.
+    rim: u8,
     /// Where the body stood last turn, from the planet's centre: what a
     /// walk through a pane is read from. None right after a leap.
     feet: Option<DVec3>,
@@ -400,6 +414,7 @@ impl Default for Items {
             loading: false,
             name: None,
             to: None,
+            rim: Portal::RIM,
             feet: None,
             armed: true,
             pending: None,
@@ -560,11 +575,17 @@ impl Items {
             };
             part.shape = Shape::Landmark(name);
         }
-        if let Some(to) = set.to {
-            let Shape::Portal(_) = part.shape else {
+        if set.to.is_some() || set.rim.is_some() {
+            let Shape::Portal(mut portal) = part.shape else {
                 return refuse(host, Refusal::Nowhere);
             };
-            part.shape = Shape::Portal(destination(to));
+            if let Some(to) = set.to {
+                portal.to = destination(to);
+            }
+            if let Some(rim) = set.rim {
+                portal.rim = rim_units(rim);
+            }
+            part.shape = Shape::Portal(portal);
         }
         let (id, seat) = (gizmo.id, gizmo.seat);
         self.apply(id, seat, part, host);
@@ -615,6 +636,7 @@ impl Items {
                 loading: self.loading,
                 name: self.name.map(|name| name.to_string()),
                 to: self.to.map(|to| to.0),
+                rim: rim_of_width(self.rim),
             },
         );
     }
@@ -707,7 +729,11 @@ impl Items {
                     _ => None,
                 },
                 to: match gizmo.part.shape {
-                    Shape::Portal(to) => Some(to.map(|to| to.0)),
+                    Shape::Portal(portal) => Some(portal.to.map(|to| to.0)),
+                    _ => None,
+                },
+                rim: match gizmo.part.shape {
+                    Shape::Portal(portal) => Some(rim_of_width(portal.rim)),
                     _ => None,
                 },
             },
@@ -723,6 +749,7 @@ impl Items {
                 lamp: None,
                 name: None,
                 to: None,
+                rim: None,
             },
         };
         host.emit(PICKED, &picked);
@@ -811,6 +838,18 @@ fn destination(to: u64) -> Option<PartId> {
     (to != 0).then_some(PartId(to))
 }
 
+/// A rim's width as the seam says it, of the portal's width, in the part's
+/// units: none under nothing, the middle at most.
+fn rim_units(rim: f32) -> u8 {
+    let units = (rim.max(0.0) * f32::from(Portal::RIM_UNITS)).round();
+    units.min(f32::from(Portal::RIM_MAX)) as u8
+}
+
+/// A rim's width in the part's units, of the portal's width.
+fn rim_of_width(rim: u8) -> f32 {
+    Portal { to: None, rim }.rim_of_width()
+}
+
 impl Plugin for Items {
     fn name(&self) -> &'static str {
         NAME
@@ -840,6 +879,7 @@ impl Plugin for Items {
                     ahead,
                     name,
                     to,
+                    rim,
                 }) = read(body, host)
                 {
                     if let Some(text) = name {
@@ -850,6 +890,9 @@ impl Plugin for Items {
                     }
                     if let Some(to) = to {
                         self.to = destination(to);
+                    }
+                    if let Some(rim) = rim {
+                        self.rim = rim_units(rim);
                     }
                     if item == Some(Item::Picture) {
                         match media.as_ref().map(MediaBody::media) {
@@ -1561,7 +1604,13 @@ mod tests {
             .all()
             .find(|(id, _, _)| *id != star)
             .expect("a portal placed ahead");
-        assert_eq!(part.shape, Shape::Portal(Some(star)));
+        assert_eq!(
+            part.shape,
+            Shape::Portal(Portal {
+                to: Some(star),
+                rim: Portal::RIM
+            })
+        );
         assert!(!part.solid);
         assert_eq!(part.pose.scale, [4.0, 0.1, 4.0], "two metres across");
         let said = events(&mut client);
@@ -1602,7 +1651,13 @@ mod tests {
         let mut client = client();
         client.command_json(r#"{"type":"items.take","item":"portal","ahead":true}"#);
         let (portal, _, part) = client.parts().all().next().unwrap();
-        assert_eq!(part.shape, Shape::Portal(None));
+        assert_eq!(
+            part.shape,
+            Shape::Portal(Portal {
+                to: None,
+                rim: Portal::RIM
+            })
+        );
         let said = events(&mut client);
         let picked = said
             .iter()
@@ -1637,7 +1692,10 @@ mod tests {
         client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
         assert_eq!(
             client.parts().get(portal).unwrap().1.shape,
-            Shape::Portal(Some(star))
+            Shape::Portal(Portal {
+                to: Some(star),
+                rim: Portal::RIM
+            })
         );
         let picked = events(&mut client)
             .into_iter()
@@ -1645,6 +1703,35 @@ mod tests {
             .find(|e| e["type"] == "items.picked")
             .unwrap();
         assert_eq!(picked["to"], star.0);
+        // The rim is the hand's: none at all, or to the middle at most.
+        client.command_json(r#"{"type":"items.set","rim":0}"#);
+        assert!(matches!(
+            client.parts().get(portal).unwrap().1.shape,
+            Shape::Portal(Portal { rim: 0, .. })
+        ));
+        assert_eq!(
+            events(&mut client)
+                .into_iter()
+                .rev()
+                .find(|e| e["type"] == "items.picked")
+                .unwrap()["rim"],
+            0.0
+        );
+        client.command_json(r#"{"type":"items.set","rim":0.9}"#);
+        assert!(matches!(
+            client.parts().get(portal).unwrap().1.shape,
+            Shape::Portal(Portal {
+                rim: Portal::RIM_MAX,
+                ..
+            })
+        ));
+        client.command_json(r#"{"type":"items.take","item":"portal","rim":0.25,"ahead":true}"#);
+        let (_, _, part) = client.parts().all().last().unwrap();
+        assert!(
+            matches!(part.shape, Shape::Portal(Portal { rim: 50, .. })),
+            "{:?}",
+            part.shape
+        );
     }
 
     #[test]

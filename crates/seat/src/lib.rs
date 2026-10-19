@@ -341,8 +341,9 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
         part::Shape::Landmark(name) => parts_wire::shape::Shape::Landmark(parts_wire::Landmark {
             name: name.as_str().to_owned(),
         }),
-        part::Shape::Portal(to) => parts_wire::shape::Shape::Portal(parts_wire::Portal {
-            to: to.map_or(0, |to| to.0),
+        part::Shape::Portal(portal) => parts_wire::shape::Shape::Portal(parts_wire::Portal {
+            to: portal.to.map_or(0, |to| to.0),
+            rim: u32::from(portal.rim),
         }),
     };
     parts_wire::Part {
@@ -394,7 +395,14 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
             part::Shape::Landmark(part::Name::new(&landmark.name)?)
         }
         parts_wire::shape::Shape::Portal(portal) => {
-            part::Shape::Portal((portal.to != 0).then_some(part::PartId(portal.to)))
+            let rim = u8::try_from(portal.rim).ok()?;
+            if rim > part::Portal::RIM_MAX {
+                return None;
+            }
+            part::Shape::Portal(part::Portal {
+                to: (portal.to != 0).then_some(part::PartId(portal.to)),
+                rim,
+            })
         }
     };
     let pose = part::Pose {
@@ -494,8 +502,11 @@ mod tests {
             part::Shape::Vox([7; 32]),
             part::Shape::Image(media),
             part::Shape::Landmark(part::Name::new("Praça da Sé").unwrap()),
-            part::Shape::Portal(Some(part::PartId(9))),
-            part::Shape::Portal(None),
+            part::Shape::Portal(part::Portal {
+                to: Some(part::PartId(9)),
+                rim: part::Portal::RIM,
+            }),
+            part::Shape::Portal(part::Portal { to: None, rim: 0 }),
         ] {
             let sent = part::Part {
                 shape,

@@ -37,13 +37,16 @@ pub struct Landmark {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
-/// A portal: a standing doorway leading to a landmark by the name the world
+/// A portal: a standing ring leading to a landmark by the name the world
 /// gave it; 0 leads nowhere. A body that passes through its pane is taken to
-/// stand on that star, facing the way it points.
+/// stand on that star, facing the way it points. `rim` is the rim's width in
+/// two hundredths of the ring's width: none at 0, at most 100, the middle.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Portal {
     #[prost(uint64, tag="1")]
     pub to: u64,
+    #[prost(uint32, tag="2")]
+    pub rim: u32,
 }
 /// A picture: its size in texels and the three files its owner's client made
 /// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS

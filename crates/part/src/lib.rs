@@ -43,10 +43,36 @@ pub enum Shape {
     /// A portal: a standing ring, a rim round the circle that fills the box
     /// along `x` and `z`, lit with its own light whatever its paint's finish,
     /// with a dark pane in its middle, leading to a landmark by the name
-    /// the world gave it. A body that passes through
-    /// the pane is taken to stand on that star, facing the way it points.
-    /// `None` leads nowhere: the landmark was never chosen, or is gone.
-    Portal(Option<PartId>),
+    /// the world gave it. A body that passes through the pane is taken to
+    /// stand on that star, facing the way it points.
+    Portal(Portal),
+}
+
+/// Where a portal leads and how wide its rim is.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Portal {
+    /// The landmark it leads to. `None` leads nowhere: the landmark was
+    /// never chosen, or is gone.
+    pub to: Option<PartId>,
+    /// The rim's width, in [`Portal::RIM_UNITS`]ths of the box's width: none
+    /// at 0, the pane alone; at most [`Portal::RIM_MAX`], the rim to the
+    /// middle, which the world refuses to go past.
+    pub rim: u8,
+}
+
+impl Portal {
+    /// How many of a rim's units make the box's width.
+    pub const RIM_UNITS: u8 = 200;
+    /// The widest rim: to the middle of the box, no pane left.
+    pub const RIM_MAX: u8 = Self::RIM_UNITS / 2;
+    /// A rim as a hand first makes it: six hundredths of the width, twelve
+    /// centimetres on a ring two metres across.
+    pub const RIM: u8 = 12;
+
+    /// The rim's width, of the box's width.
+    pub fn rim_of_width(self) -> f32 {
+        f32::from(self.rim) / f32::from(Self::RIM_UNITS)
+    }
 }
 
 /// The most bytes a name is, UTF-8.
@@ -529,7 +555,25 @@ mod tests {
         assert!(Name::new(&"\u{1F30D}".repeat(16)).is_some());
         assert!(Name::new(&"\u{1F30D}".repeat(17)).is_none());
         assert_eq!(Shape::Landmark(name).asset(), None);
-        assert_eq!(Shape::Portal(Some(PartId(7))).asset(), None);
+        assert_eq!(
+            Shape::Portal(Portal {
+                to: Some(PartId(7)),
+                rim: Portal::RIM
+            })
+            .asset(),
+            None
+        );
+        assert_eq!(Portal::RIM_MAX, 100);
+        assert!(
+            (Portal {
+                to: None,
+                rim: Portal::RIM
+            }
+            .rim_of_width()
+                - 0.06)
+                .abs()
+                < 1e-6
+        );
     }
 
     #[test]

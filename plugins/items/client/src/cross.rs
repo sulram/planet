@@ -31,9 +31,10 @@ impl Items {
             .parts()
             .all()
             .filter_map(|(id, _, part)| {
-                let Shape::Portal(to) = part.shape else {
+                let Shape::Portal(portal) = part.shape else {
                     return None;
                 };
+                let to = portal.to;
                 let world = host.part_transform(id)?;
                 ((world.translation - now).length() <= NEAR_M).then_some((id, to, world))
             })

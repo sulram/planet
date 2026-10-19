@@ -33,7 +33,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use glam::{DAffine3, DMat3, DVec3};
-use part::{Gap, Part, PartId, Pose, Shape};
+use part::{Gap, Part, PartId, Portal, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
 use scene::{
@@ -111,7 +111,9 @@ pub enum PartRefusal {
 
 /// The models of the core's own shapes have ids under this; a model of a
 /// file is named by the hash of its content, over it.
-const SHAPES: u64 = 1 << 16;
+const SHAPES: u64 = 1 << 24;
+/// The shape numbers of the rings: one a width of rim, over the others'.
+const RINGS: u64 = 1 << 8;
 /// The bit that marks the model of a file.
 const FILE: u64 = 1 << 63;
 
@@ -429,18 +431,23 @@ impl Parts {
     ) -> Vec<PaneDraw> {
         // The quad's `x` along the box's, its `y` up the box, its front out
         // of the box's front (`-y`), the disc as wide as the rim leaves.
-        let across = f64::from(1.0 - 2.0 * RIM);
-        let quad_in_box = DAffine3::from_cols(
-            DVec3::new(across, 0.0, 0.0),
-            DVec3::new(0.0, 0.0, across),
-            DVec3::new(0.0, -1.0, 0.0),
-            DVec3::new(0.0, 0.0, 0.5),
-        );
+        let quad_in_box = |portal: Portal| {
+            let across = f64::from(1.0 - 2.0 * portal.rim_of_width());
+            DAffine3::from_cols(
+                DVec3::new(across, 0.0, 0.0),
+                DVec3::new(0.0, 0.0, across),
+                DVec3::new(0.0, -1.0, 0.0),
+                DVec3::new(0.0, 0.0, 0.5),
+            )
+        };
         self.all()
-            .filter(|(_, _, part)| matches!(part.shape, Shape::Portal(_)))
-            .filter(|(_, seat, part)| away_m(generator, *seat, &part.pose, body) <= reach_m)
-            .map(|(id, seat, part)| PaneDraw {
-                transform: self.place_of(generator, seat, &part.pose) * quad_in_box,
+            .filter_map(|(id, seat, part)| match part.shape {
+                Shape::Portal(portal) => Some((id, seat, part, portal)),
+                _ => None,
+            })
+            .filter(|(_, seat, part, _)| away_m(generator, *seat, &part.pose, body) <= reach_m)
+            .map(|(id, seat, part, portal)| PaneDraw {
+                transform: self.place_of(generator, seat, &part.pose) * quad_in_box(portal),
                 seen: seen == Some(id),
             })
             .collect()
@@ -1104,9 +1111,10 @@ impl Parts {
                     self.meshed.push(id);
                     self.changes.push(ModelChange::Add(id, star(paint)));
                 }
-                Shape::Portal(_) => {
+                Shape::Portal(portal) => {
                     self.meshed.push(id);
-                    self.changes.push(ModelChange::Add(id, ring(paint)));
+                    self.changes
+                        .push(ModelChange::Add(id, ring(paint, portal.rim_of_width())));
                 }
                 Shape::Vox(hash) => {
                     // Until the file arrives, its place is a glass box with
@@ -1206,13 +1214,15 @@ pub(crate) fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body
 }
 
 /// Whether a part is a lamp, lighting what is near: a cube in the light
-/// finish, and a landmark and a portal whatever their finish, since they
-/// are lit with their own light to be seen at night. A model has its own
-/// colours and a picture its own image.
+/// finish, and a landmark and a portal's rim whatever their finish, since
+/// they are lit with their own light to be seen at night. A model has its
+/// own colours and a picture its own image.
 pub fn is_lamp(part: &Part) -> bool {
     match part.shape {
         Shape::Cube => Paint::of(part.paint).finish == Finish::Light,
-        Shape::Landmark(_) | Shape::Portal(_) => true,
+        Shape::Landmark(_) => true,
+        // A portal with no rim has nothing to shine.
+        Shape::Portal(portal) => portal.rim > 0,
         Shape::Vox(_) | Shape::Image(_) => false,
     }
 }
@@ -1227,12 +1237,14 @@ fn model_of(part: &Part) -> Option<ModelId> {
 /// hash.
 fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
     // A landmark's name and a portal's destination are not in their
-    // models: every landmark in a paint shares one star, every portal one
-    // ring.
+    // models: every landmark in a paint shares one star, every portal with
+    // a rim of one width one ring. A portal with no rim has no model: its
+    // pane is drawn on its own.
     let shape = match shape {
         Shape::Cube => 0,
         Shape::Landmark(_) => 1,
-        Shape::Portal(_) => 2,
+        Shape::Portal(Portal { rim: 0, .. }) => return None,
+        Shape::Portal(portal) => RINGS | u64::from(portal.rim),
         Shape::Vox(hash) => return Some(model_of_file(hash)),
         Shape::Image(_) => return None,
     };
@@ -1400,18 +1412,17 @@ fn block(mesh: &mut ModelMesh, min: [f32; 3], max: [f32; 3], color: [u8; 4], edg
     }
 }
 
-/// How many segments a portal's ring is drawn in, and how wide its rim is,
-/// of the box's width. The pane inside it is the renderer's
-/// ([`Parts::panes`]): a window on the world seen through the portal.
+/// How many segments a portal's ring is drawn in. The pane inside it is
+/// the renderer's ([`Parts::panes`]): a window on the world seen through
+/// the portal.
 const RING_SEGMENTS: usize = 32;
-pub(crate) const RIM: f32 = 0.06;
 
-/// A portal's ring in a paint: a rim as thick as the box along `y`, round
-/// the circle that fills the box along `x` and `z`. Each face of the rim
-/// is a quad a segment, flat, wound counter clockwise seen from where it
-/// faces. The rim shines with its own light whatever the paint's finish,
-/// so a portal is seen at night.
-fn ring(paint: u8) -> ModelMesh {
+/// A portal's ring in a paint: a rim `rim` of the box's width wide and as
+/// thick as the box along `y`, round the circle that fills the box along
+/// `x` and `z`. Each face of the rim is a quad a segment, flat, wound
+/// counter clockwise seen from where it faces. The rim shines with its own
+/// light whatever the paint's finish, so a portal is seen at night.
+fn ring(paint: u8, rim: f32) -> ModelMesh {
     let (mut color, edge) = paint_look(paint);
     color[3] = u8::MAX;
     let mut mesh = ModelMesh {
@@ -1419,7 +1430,7 @@ fn ring(paint: u8) -> ModelMesh {
         indices: Vec::with_capacity(RING_SEGMENTS * 24),
     };
     let centre = [0.0, 0.5];
-    let (outer, inner) = (0.5, 0.5 - RIM);
+    let (outer, inner) = (0.5, 0.5 - rim);
     let round = |k: usize, radius: f32| -> [f32; 2] {
         let angle = k as f32 * core::f32::consts::TAU / RING_SEGMENTS as f32;
         [
@@ -1605,7 +1616,8 @@ mod tests {
 
     #[test]
     fn a_ring_is_a_rim_round_an_open_pane() {
-        let mesh = ring(5);
+        let rim = 0.06;
+        let mesh = ring(5, rim);
         let n = RING_SEGMENTS;
         assert_eq!((mesh.vertices.len(), mesh.indices.len()), (16 * n, 24 * n));
         for side in mesh.indices.chunks(3) {
@@ -1630,18 +1642,29 @@ mod tests {
         // The rim is the paint's and leaves the pane open inside it.
         assert!(mesh.vertices.iter().all(|v| {
             let [x, _, z] = v.position;
-            (x * x + (z - 0.5) * (z - 0.5)).sqrt() >= 0.5 - RIM - 1e-6
+            (x * x + (z - 0.5) * (z - 0.5)).sqrt() >= 0.5 - rim - 1e-6
         }));
         assert!(
             mesh.vertices.iter().all(|v| v.color[3] == u8::MAX),
             "the rim shines whatever its paint"
         );
+        let portal = |to: Option<PartId>, rim: u8| Shape::Portal(Portal { to, rim });
         assert_eq!(
-            model_id(Shape::Portal(Some(PartId(1))), 5),
-            model_id(Shape::Portal(None), 5),
-            "every portal in a paint shares one ring"
+            model_id(portal(Some(PartId(1)), 12), 5),
+            model_id(portal(None, 12), 5),
+            "every portal in a paint with a rim of one width shares one ring"
         );
-        assert_ne!(model_id(Shape::Portal(None), 5), model_id(Shape::Cube, 5));
+        assert_ne!(model_id(portal(None, 12), 5), model_id(portal(None, 13), 5));
+        assert_ne!(model_id(portal(None, 12), 5), model_id(Shape::Cube, 5));
+        assert_eq!(model_id(portal(None, 0), 5), None, "no rim, no ring");
+        assert!(!is_lamp(&Part {
+            shape: portal(None, 0),
+            pose: Pose::upright([0.0; 3], [4.0, 0.1, 4.0]),
+            paint: 5,
+            solid: false,
+            shine: 0.0,
+            reach_m: 0.0,
+        }));
         // The cube is still the unit box.
         let cube = cube(5);
         assert_eq!((cube.vertices.len(), cube.indices.len()), (24, 36));

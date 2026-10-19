@@ -300,12 +300,14 @@ func (x *Landmark) GetName() string {
 	return ""
 }
 
-// A portal: a standing doorway leading to a landmark by the name the world
+// A portal: a standing ring leading to a landmark by the name the world
 // gave it; 0 leads nowhere. A body that passes through its pane is taken to
-// stand on that star, facing the way it points.
+// stand on that star, facing the way it points. `rim` is the rim's width in
+// two hundredths of the ring's width: none at 0, at most 100, the middle.
 type Portal struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	To            uint64                 `protobuf:"varint,1,opt,name=to,proto3" json:"to,omitempty"`
+	Rim           uint32                 `protobuf:"varint,2,opt,name=rim,proto3" json:"rim,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -343,6 +345,13 @@ func (*Portal) Descriptor() ([]byte, []int) {
 func (x *Portal) GetTo() uint64 {
 	if x != nil {
 		return x.To
+	}
+	return 0
+}
+
+func (x *Portal) GetRim() uint32 {
+	if x != nil {
+		return x.Rim
 	}
 	return 0
 }
@@ -1349,9 +1358,10 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x05shape\"\x06\n" +
 	"\x04Cube\"\x1e\n" +
 	"\bLandmark\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\x18\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"*\n" +
 	"\x06Portal\x12\x0e\n" +
-	"\x02to\x18\x01 \x01(\x04R\x02to\"\xa1\x01\n" +
+	"\x02to\x18\x01 \x01(\x04R\x02to\x12\x10\n" +
+	"\x03rim\x18\x02 \x01(\rR\x03rim\"\xa1\x01\n" +
 	"\x05Media\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\rR\x05width\x12\x16\n" +
 	"\x06height\x18\x02 \x01(\rR\x06height\x12\x14\n" +

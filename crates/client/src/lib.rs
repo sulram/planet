@@ -40,8 +40,8 @@ use figure::{Clips, Figure, Gait, Motion};
 pub use history::{History, Owner};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{
-    ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel, Pose as PartPose,
-    Shape,
+    ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel, Portal,
+    Pose as PartPose, Shape,
 };
 pub use parts::is_lamp;
 pub use parts::{CUBE, Landmarked, Mark, PartRefusal, Parts, VOXEL};
@@ -1201,7 +1201,7 @@ impl Client {
             .parts
             .all()
             .filter_map(|(id, seat, part)| {
-                let Shape::Portal(Some(to)) = part.shape else {
+                let Shape::Portal(Portal { to: Some(to), .. }) = part.shape else {
                     return None;
                 };
                 let away_m = parts::away_m(&self.generator, seat, &part.pose, body);

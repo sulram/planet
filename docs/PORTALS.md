@@ -18,11 +18,13 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   name the world gave it. `None` leads nowhere: a landmark never chosen,
   or gone.
 - The rim shines with its own light whatever the paint's finish and is a
-  lamp, as a landmark's star is, so a portal is found at night. The panel
-  offers its colour alone.
+  lamp, as a landmark's star is, so a portal is found at night. Its width
+  is the hand's, of the ring's width: none at 0, the pane alone and no
+  lamp; the middle at most. The panel offers its colour and its width.
 - Placed by the items plugin as a picture is: in front of the body, facing
   it, not solid. The panel lists the chart to pick where it leads;
-  `items.take { item: 'portal', to }` and `items.set { to }` on the seam.
+  `items.take { item: 'portal', to, rim }` and `items.set { to, rim }` on
+  the seam, `rim` of the ring's width.
 - A portal is one way. The way back, when wanted, is a second portal placed
   by hand at the destination.
 

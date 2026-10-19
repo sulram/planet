@@ -124,7 +124,10 @@ impl Items {
                 let eye = host.feet_at(from);
                 let toward = [eye.point.u - at[0], eye.point.v - at[1]];
                 let yaw = libm::atan2(toward[0], -toward[1]);
-                let shape = Shape::Portal(self.to);
+                let shape = Shape::Portal(client::Portal {
+                    to: self.to,
+                    rim: self.rim,
+                });
                 client::Part {
                     shape,
                     pose: PartPose {
