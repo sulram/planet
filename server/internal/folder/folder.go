@@ -89,6 +89,11 @@ func Open(dir string) (*Folder, error) {
 }
 
 // Recipe is the world's recipe, or world.ErrUnfounded while it awaits one.
+// Dir is where the folder is: what keeps a file beside the recipe asks it.
+func (f *Folder) Dir() string {
+	return f.dir
+}
+
 func (f *Folder) Recipe(context.Context) (world.Recipe, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

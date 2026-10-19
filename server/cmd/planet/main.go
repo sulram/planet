@@ -75,9 +75,13 @@ func serve() error {
 	}
 	defer hosted.Close(context.Background())
 
+	instance, err := api.New(cfg, kept, hosted.Plugins())
+	if err != nil {
+		return err
+	}
 	server := &http.Server{
 		Addr:              net.JoinHostPort(envOr("HOST", "127.0.0.1"), envOr("PORT", "8090")),
-		Handler:           api.New(cfg, kept, hosted.Plugins()).Handler(),
+		Handler:           instance.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	// mundos stops a world with SIGTERM: stop listening, let the requests in

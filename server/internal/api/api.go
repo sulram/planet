@@ -11,9 +11,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/sulram/planet/server/internal/files"
 	"github.com/sulram/planet/server/internal/folder"
 	"github.com/sulram/planet/server/internal/mundos"
 	"github.com/sulram/planet/server/internal/world"
@@ -42,15 +44,20 @@ type Config struct {
 type Server struct {
 	cfg    Config
 	folder *folder.Folder
+	files  *files.Files
 	hub    *world.Hub
 	keys   *world.Keys
 	now    func() time.Time
 }
 
 // New is an instance over a world folder and the plugins its version
-// carries.
-func New(cfg Config, f *folder.Folder, installed []world.Installed) *Server {
-	return &Server{cfg: cfg, folder: f, hub: world.NewHub(f, installed, f.Switches()), keys: world.NewKeys(), now: time.Now}
+// carries. The world's files are kept under the folder (DECISIONS 89).
+func New(cfg Config, f *folder.Folder, installed []world.Installed) (*Server, error) {
+	kept, err := files.Open(filepath.Join(f.Dir(), filesDir))
+	if err != nil {
+		return nil, err
+	}
+	return &Server{cfg: cfg, folder: f, files: kept, hub: world.NewHub(f, installed, f.Switches()), keys: world.NewKeys(), now: time.Now}, nil
 }
 
 // Handler is every route of the instance. A path under /api that is no route
@@ -64,8 +71,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/enter", s.enter)
 	mux.HandleFunc("GET /api/me", s.me)
 	mux.HandleFunc("GET /api/socket", s.socket)
+	mux.HandleFunc("POST /api/files", s.upload)
+	mux.HandleFunc("GET /api/files", s.held)
 	mux.Handle("/api/", http.NotFoundHandler())
-	mux.Handle("/", files(s.cfg.WebDir))
+	mux.HandleFunc("GET /files/{name}", s.file)
+	mux.Handle("/", frontEnd(s.cfg.WebDir))
 	return mux
 }
 
@@ -91,6 +101,8 @@ type description struct {
 	// mundos's door, which every load passes through. Empty for a world that
 	// runs alone.
 	Door string `json:"door"`
+	// Where the world's files are read from: `asset://x` is `<files>/x`.
+	Files string `json:"files"`
 }
 
 // recipe has the wire's shape, as the page and the engine read it.
@@ -101,7 +113,7 @@ type recipe struct {
 }
 
 func (s *Server) describe(w http.ResponseWriter, r *http.Request) {
-	about := description{Name: s.cfg.Name, Protocol: world.Protocol, Version: s.cfg.Version, Plugins: s.hub.Speaks()}
+	about := description{Name: s.cfg.Name, Protocol: world.Protocol, Version: s.cfg.Version, Plugins: s.hub.Speaks(), Files: filesRoute}
 	if s.cfg.MundosURL != "" {
 		about.Door = s.cfg.MundosURL + "/enter"
 	}

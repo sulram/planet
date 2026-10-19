@@ -19,6 +19,8 @@ export interface About {
 	plugins: { name: string; version: number }[];
 	/** mundos's door, which every load passes through. Empty for a world that runs alone. */
 	door: string;
+	/** Where the world's files are read from: `asset://x` is `<files>/x` ($lib/files). */
+	files: string;
 }
 
 /** Who the server takes this page's visitor for. */
