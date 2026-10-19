@@ -1,12 +1,13 @@
 //! The renderer. All of wgpu lives here.
 //!
-//! It draws a [`scene::Frame`]: terrain patches, volumes, boxes, pictures, sky. It knows nothing
+//! It draws a [`scene::Frame`]: terrain patches, volumes, boxes, pictures, portal panes, sky. It knows nothing
 //! about recipes, addresses or input. Rules it keeps (CLAUDE.md invariants):
 //! - **camera-relative**: the GPU never sees a planet space position. Every
 //!   `f64` origin is subtracted from the camera on the CPU, per frame.
 //! - **reversed infinite depth**: `Depth32Float`, near is 1, far is 0.
 //! - **N views**: every per view resource lives in [`ViewResources`]; desktop
-//!   passes one [`View`], a headset will pass two.
+//!   passes one [`View`], a headset will pass two. The world past a portal
+//!   is a sight of its own, drawn before them into a slot of its own.
 
 mod boxes;
 mod clouds;
@@ -15,6 +16,7 @@ mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
 mod models;
+mod panes;
 mod pictures;
 mod shadow;
 mod skinned;
@@ -24,7 +26,8 @@ mod volumes;
 use bytemuck::{Pod, Zeroable};
 use glam::{DVec3, Mat4, Vec3};
 use scene::{
-    Camera, Frame, ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange,
+    Camera, Frame, ModelChange, PatchDraw, PictureChange, SkinnedChange, TerrainChange,
+    VolumeChange,
 };
 
 pub use gpu::{Gpu, surface_configuration};
@@ -35,6 +38,16 @@ pub use wgpu;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Top of the atmosphere above sea level, metres.
 const ATMOSPHERE_M: f64 = 3600.0;
+/// What one draw of the world sees: a camera, the patches in its view, and
+/// whether the whole world is drawn, or the ground, the sea and the sky
+/// alone, as the world past a portal is.
+struct Sight<'a> {
+    camera: Camera,
+    size: [u32; 2],
+    patches: &'a [PatchDraw],
+    whole: bool,
+}
+
 /// One camera drawing into one target.
 pub struct View<'a> {
     pub camera: Camera,
@@ -75,6 +88,7 @@ struct ViewResources {
     boxes: boxes::Instances,
     skinned: skinned::InstanceUniforms,
     pictures: pictures::Instances,
+    panes: panes::Instances,
     volumes: terrain::PatchUniforms,
     models: models::InstanceUniforms,
 }
@@ -87,11 +101,14 @@ pub struct Renderer {
     view_layout: wgpu::BindGroupLayout,
     shadow_layout: wgpu::BindGroupLayout,
     views: Vec<ViewResources>,
+    /// The slot the world past a portal is drawn in, once one has been.
+    through: Option<ViewResources>,
     terrain: terrain::Terrain,
     volumes: volumes::Volumes,
     boxes: boxes::Boxes,
     skinned: skinned::Skinned,
     pictures: pictures::Pictures,
+    panes: panes::Panes,
     models: models::Models,
     sky: wgpu::RenderPipeline,
     composer: compose::Composer,
@@ -184,6 +201,7 @@ impl Renderer {
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
         let pictures =
             pictures::Pictures::new(&device, &gpu.queue, &view_layout, &shadow_layout, scene);
+        let panes = panes::Panes::new(&device, &gpu.queue, &view_layout, scene);
         let models = models::Models::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
@@ -195,11 +213,13 @@ impl Renderer {
             view_layout,
             shadow_layout,
             views: Vec::new(),
+            through: None,
             terrain,
             volumes,
             boxes,
             skinned,
             pictures,
+            panes,
             models,
             sky,
             composer,
@@ -243,7 +263,9 @@ impl Renderer {
         }
     }
 
-    /// Draws the frame once per view and submits.
+    /// Draws the frame once per view and submits. The world past a portal
+    /// is drawn first, from the eye carried through it, at a quarter of the
+    /// first view's height: every view's panes sample it.
     pub fn render(&mut self, frame: &Frame, views: &[View<'_>]) {
         while self.views.len() < views.len() {
             let resources = self.view_resources();
@@ -258,126 +280,180 @@ impl Renderer {
         let weather = self
             .weather
             .advance(frame.clock_s, &frame.effects, frame.planet_radius_m);
+        // The views' resources step out of `self` while the subsystems draw
+        // into them.
+        let mut slots = core::mem::take(&mut self.views);
+        let mut through_slot = self.through.take();
+        let through = frame
+            .through
+            .as_ref()
+            .zip(views.first())
+            .map(|(through, view)| {
+                let resources = through_slot.get_or_insert_with(|| self.view_resources());
+                let sight = Sight {
+                    camera: through.camera,
+                    size: view.size.map(|n| n.div_ceil(4)),
+                    patches: &through.patches,
+                    whole: false,
+                };
+                let at = self.draw_world(&mut encoder, resources, frame, &weather, &sight, None);
+                let targets = resources.targets.as_ref().expect("drawn");
+                self.panes
+                    .through_group(&self.device, self.composer.picture(targets, &at))
+            });
         for (index, view) in views.iter().enumerate() {
-            self.render_view(&mut encoder, frame, &weather, view, index);
+            let sight = Sight {
+                camera: view.camera,
+                size: view.size,
+                patches: &frame.patches,
+                whole: true,
+            };
+            let resources = &mut slots[index];
+            let at = self.draw_world(
+                &mut encoder,
+                resources,
+                frame,
+                &weather,
+                &sight,
+                through.as_ref(),
+            );
+            let targets = resources.targets.as_ref().expect("drawn");
+            self.composer.finish(
+                &mut encoder,
+                &resources.bind_group,
+                targets,
+                at,
+                frame.effects.bloom > 0.0,
+                view.target,
+            );
         }
+        self.views = slots;
+        self.through = through_slot;
         self.queue.submit([encoder.finish()]);
     }
 
-    fn render_view(
-        &mut self,
+    /// Draws the world one sight sees into its resources' targets, up to
+    /// the stages that finish a picture: the sun's shadows, the opaque
+    /// world and the sky, then the sea and the clouds, then what goes over
+    /// them. Returns where the picture so far is.
+    fn draw_world(
+        &self,
         encoder: &mut wgpu::CommandEncoder,
+        resources: &mut ViewResources,
         frame: &Frame,
         weather: &clouds::WeatherNow,
-        view: &View<'_>,
-        index: usize,
-    ) {
-        let [width, height] = view.size.map(|n| n.max(1));
-        let uniform = self.view_uniform(frame, weather, &view.camera, width as f32 / height as f32);
-
-        let resources = &mut self.views[index];
+        sight: &Sight<'_>,
+        through: Option<&wgpu::BindGroup>,
+    ) -> compose::Cursor {
+        let [width, height] = sight.size.map(|n| n.max(1));
+        let camera = &sight.camera;
+        let shadows = sight.whole && frame.effects.shadows;
+        let uniform = self.view_uniform(
+            frame,
+            weather,
+            camera,
+            width as f32 / height as f32,
+            shadows,
+        );
         self.queue
             .write_buffer(&resources.uniform, 0, bytemuck::bytes_of(&uniform));
         let drawn = resources.patches.write(
             &self.device,
             &self.queue,
             &self.terrain,
-            &frame.patches,
-            view.camera.position,
+            sight.patches,
+            camera.position,
         );
-        let volumes = self.volumes.place(
-            &self.device,
-            &self.queue,
-            &mut resources.volumes,
-            frame,
-            view.camera.position,
-        );
-        let box_count = resources.boxes.write(
-            &self.device,
-            &self.queue,
-            &frame.boxes,
-            view.camera.position,
-        );
-        let skinned_drawn = resources.skinned.write(
-            &self.device,
-            &self.queue,
-            &self.skinned,
-            &frame.skinned,
-            view.camera.position,
-        );
-        resources.pictures.write(
-            &self.device,
-            &self.queue,
-            &frame.pictures,
-            view.camera.position,
-        );
-        let models = resources.models.write(
-            &self.device,
-            &self.queue,
-            &self.models,
-            &frame.models,
-            view.camera.position,
-        );
-
-        let matrices = shadow::matrices(frame, &view.camera);
-        let wanted: Vec<_> = frame
-            .shadow_patches
-            .iter()
-            .copied()
-            .filter(|draw| {
-                frame.effects.shadows
-                    && self
-                        .terrain
-                        .casts_into(draw, view.camera.position, &matrices)
-            })
-            .collect();
-        let casters = resources.casters.write(
-            &self.device,
-            &self.queue,
-            &self.terrain,
-            &wanted,
-            view.camera.position,
-        );
-        for (cascade, matrix) in matrices
-            .iter()
-            .enumerate()
-            .filter(|_| frame.effects.shadows)
-        {
-            let mut light = uniform;
-            light.clip_from_relative = matrix.to_cols_array_2d();
-            self.queue.write_buffer(
-                &resources.shadows.uniforms[cascade],
-                0,
-                bytemuck::bytes_of(&light),
+        // What stands on the ground is the whole world's: the world past a
+        // portal is its ground, sea and sky alone.
+        let placed = sight.whole.then(|| {
+            let volumes = self.volumes.place(
+                &self.device,
+                &self.queue,
+                &mut resources.volumes,
+                frame,
+                camera.position,
             );
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("sun shadows"),
-                color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &resources.shadows.layers[cascade],
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Store,
+            let box_count =
+                resources
+                    .boxes
+                    .write(&self.device, &self.queue, &frame.boxes, camera.position);
+            let skinned = resources.skinned.write(
+                &self.device,
+                &self.queue,
+                &self.skinned,
+                &frame.skinned,
+                camera.position,
+            );
+            resources
+                .pictures
+                .write(&self.device, &self.queue, &frame.pictures, camera.position);
+            resources
+                .panes
+                .write(&self.device, &self.queue, &frame.panes, camera.position);
+            let models = resources.models.write(
+                &self.device,
+                &self.queue,
+                &self.models,
+                &frame.models,
+                camera.position,
+            );
+            (volumes, box_count, skinned, models)
+        });
+
+        if shadows {
+            let matrices = shadow::matrices(frame, camera);
+            let wanted: Vec<_> = frame
+                .shadow_patches
+                .iter()
+                .copied()
+                .filter(|draw| self.terrain.casts_into(draw, camera.position, &matrices))
+                .collect();
+            let casters = resources.casters.write(
+                &self.device,
+                &self.queue,
+                &self.terrain,
+                &wanted,
+                camera.position,
+            );
+            let (volumes, box_count, skinned, models) = placed.as_ref().expect("whole");
+            for (cascade, matrix) in matrices.iter().enumerate() {
+                let mut light = uniform;
+                light.clip_from_relative = matrix.to_cols_array_2d();
+                self.queue.write_buffer(
+                    &resources.shadows.uniforms[cascade],
+                    0,
+                    bytemuck::bytes_of(&light),
+                );
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("sun shadows"),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &resources.shadows.layers[cascade],
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_bind_group(0, &resources.shadows.groups[cascade], &[]);
-            self.terrain
-                .draw_shadow(&mut pass, &resources.casters, &casters, *matrix);
-            self.volumes
-                .draw_shadow(&mut pass, &resources.volumes, &volumes, *matrix);
-            self.boxes
-                .draw_shadow(&mut pass, &resources.boxes, box_count);
-            self.skinned
-                .draw_shadow(&mut pass, &resources.skinned, &skinned_drawn);
-            self.pictures
-                .draw_shadow(&mut pass, &resources.pictures, &frame.pictures);
-            self.models
-                .draw_shadow(&mut pass, &resources.models, &models, *matrix);
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_bind_group(0, &resources.shadows.groups[cascade], &[]);
+                self.terrain
+                    .draw_shadow(&mut pass, &resources.casters, &casters, *matrix);
+                self.volumes
+                    .draw_shadow(&mut pass, &resources.volumes, volumes, *matrix);
+                self.boxes
+                    .draw_shadow(&mut pass, &resources.boxes, *box_count);
+                self.skinned
+                    .draw_shadow(&mut pass, &resources.skinned, skinned);
+                self.pictures
+                    .draw_shadow(&mut pass, &resources.pictures, &frame.pictures);
+                self.models
+                    .draw_shadow(&mut pass, &resources.models, models, *matrix);
+            }
         }
 
         if resources
@@ -415,17 +491,20 @@ impl Renderer {
         });
         pass.set_bind_group(0, &resources.bind_group, &[]);
         self.terrain.draw(&mut pass, &resources.patches, &drawn);
-        if frame.effects.grass {
-            self.terrain
-                .draw_grass(&mut pass, &resources.patches, &drawn);
+        if let Some((volumes, box_count, skinned, models)) = &placed {
+            if frame.effects.grass {
+                self.terrain
+                    .draw_grass(&mut pass, &resources.patches, &drawn);
+            }
+            self.volumes.draw(&mut pass, &resources.volumes, volumes);
+            self.models.draw(&mut pass, &resources.models, models);
+            self.boxes.draw(&mut pass, &resources.boxes, *box_count);
+            self.skinned.draw(&mut pass, &resources.skinned, skinned);
+            self.pictures
+                .draw(&mut pass, &resources.pictures, &frame.pictures);
+            self.panes
+                .draw(&mut pass, &resources.panes, &frame.panes, through);
         }
-        self.volumes.draw(&mut pass, &resources.volumes, &volumes);
-        self.models.draw(&mut pass, &resources.models, &models);
-        self.boxes.draw(&mut pass, &resources.boxes, box_count);
-        self.skinned
-            .draw(&mut pass, &resources.skinned, &skinned_drawn);
-        self.pictures
-            .draw(&mut pass, &resources.pictures, &frame.pictures);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
         drop(pass);
@@ -470,7 +549,9 @@ impl Renderer {
         // Glass, and what only a builder sees, go over the sea and the
         // clouds, tested against the depth of what is solid: drawn before
         // them, the sea behind a pane would be laid over it.
-        if volumes.over() || models.over() {
+        if let Some((volumes, _, _, models)) = &placed
+            && (volumes.over() || models.over())
+        {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("over"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -496,17 +577,10 @@ impl Renderer {
             });
             pass.set_bind_group(0, &resources.bind_group, &[]);
             self.volumes
-                .draw_over(&mut pass, &resources.volumes, &volumes);
-            self.models.draw_over(&mut pass, &resources.models, &models);
+                .draw_over(&mut pass, &resources.volumes, volumes);
+            self.models.draw_over(&mut pass, &resources.models, models);
         }
-        self.composer.finish(
-            encoder,
-            &resources.bind_group,
-            targets,
-            at,
-            frame.effects.bloom > 0.0,
-            view.target,
-        );
+        at
     }
 
     fn view_uniform(
@@ -515,6 +589,7 @@ impl Renderer {
         weather: &clouds::WeatherNow,
         camera: &Camera,
         aspect: f32,
+        shadows: bool,
     ) -> ViewUniform {
         let projection = Mat4::perspective_infinite_reverse_rh(camera.fov_y, aspect, camera.near);
         let view_from_relative = Mat4::from_quat(camera.rotation.inverse().as_quat());
@@ -577,7 +652,7 @@ impl Renderer {
                 // Wrapped so f32 keeps sub millisecond steps all day.
                 (frame.clock_s % 3600.0) as f32,
                 (camera.position.length() - radius) as f32,
-                f32::from(u8::from(frame.effects.shadows)),
+                f32::from(u8::from(shadows)),
             ],
         }
     }
@@ -626,6 +701,7 @@ impl Renderer {
             boxes: boxes::Instances::new(&self.device),
             skinned: skinned::InstanceUniforms::default(),
             pictures: pictures::Instances::new(&self.device),
+            panes: panes::Instances::new(&self.device),
             volumes: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             models: models::InstanceUniforms::default(),
         }

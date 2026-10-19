@@ -14,7 +14,7 @@ use crate::{PipelineSpec, Surface, pipeline};
 
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
-struct QuadVertex {
+pub(crate) struct QuadVertex {
     position: [f32; 3],
     normal: [f32; 3],
     uv: [f32; 2],
@@ -30,7 +30,7 @@ struct Instance {
 
 /// Indices of the front of the quad, then of its back.
 const FRONT: u32 = 6;
-const BOTH: u32 = 12;
+pub(crate) const BOTH: u32 = 12;
 
 /// The format every picture is kept in: sRGB bytes, read as linear light.
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -532,7 +532,7 @@ fn halve(image: &Image) -> Image {
 
 /// A unit quad in the `xy` plane: its front facing `+z`, then its back facing
 /// `-z` with the image reading the right way round from behind.
-fn quad() -> (Vec<QuadVertex>, Vec<u16>) {
+pub(crate) fn quad() -> (Vec<QuadVertex>, Vec<u16>) {
     let mut vertices = Vec::with_capacity(8);
     let mut indices = Vec::with_capacity(BOTH as usize);
     for sign in [1.0f32, -1.0] {

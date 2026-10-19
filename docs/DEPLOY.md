@@ -2,7 +2,7 @@
 title: Deploy
 group: Shape
 summary: "How a world is hosted: by mundos, from one image, with one folder"
-order: 24
+order: 25
 ---
 
 # DEPLOY

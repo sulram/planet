@@ -28,8 +28,18 @@ use scene::{
 use topology::{Grid, QuadSphere, Sector, SurfacePoint};
 use worldgen::{Generator, MOON_RADIUS_M, Material, Sample};
 
-/// A node splits when the camera is closer than this many node widths.
+/// A node splits when an eye is closer than this many node widths.
 const SPLIT_DISTANCE: f64 = 2.4;
+
+/// An eye the terrain is streamed for: a camera, and how much coarser its
+/// ground may be than the view's own: 1 for the view, 4 for a sight drawn
+/// at a quarter of its height, the world seen through a portal. A node
+/// splits for the nearest eye, each as far as its coarseness makes it.
+#[derive(Clone, Copy, Debug)]
+pub struct Viewpoint {
+    pub camera: Camera,
+    pub coarseness: f64,
+}
 /// Patches generated per update. Each costs about a millisecond or two.
 const BUILDS_PER_UPDATE: usize = 6;
 /// Of those, patches built again because what stands over their grass
@@ -254,21 +264,21 @@ impl Terrain {
         core::mem::take(&mut self.changes)
     }
 
-    /// Picks the patches to draw from `camera`, building missing ones within
-    /// the per update budget. The camera is relative to the body's centre;
-    /// `aspect` is width over height.
+    /// Picks the patches to draw from each eye, the view's first, building
+    /// missing ones within the per update budget. Every camera is relative
+    /// to the body's centre; `aspect` is width over height. One list an eye.
     pub fn update(
         &mut self,
         generator: &Generator,
         cover: Cover,
-        camera: &Camera,
+        eyes: &[Viewpoint],
         aspect: f32,
-    ) -> Vec<PatchId> {
+    ) -> Vec<Vec<PatchId>> {
         let budget = Budget {
             builds: BUILDS_PER_UPDATE,
             regrows: REGROWS_PER_UPDATE,
         };
-        self.select(generator, cover, camera, aspect, budget)
+        self.select(generator, cover, eyes, aspect, budget)
     }
 
     /// Like [`Terrain::update`], but builds until nothing is missing. For
@@ -277,15 +287,15 @@ impl Terrain {
         &mut self,
         generator: &Generator,
         cover: Cover,
-        camera: &Camera,
+        eyes: &[Viewpoint],
         aspect: f32,
-    ) -> Vec<PatchId> {
+    ) -> Vec<Vec<PatchId>> {
         loop {
             let everything = Budget {
                 builds: usize::MAX,
                 regrows: usize::MAX,
             };
-            let patches = self.select(generator, cover, camera, aspect, everything);
+            let patches = self.select(generator, cover, eyes, aspect, everything);
             if self.settled {
                 return patches;
             }
@@ -303,13 +313,20 @@ impl Terrain {
         &mut self,
         generator: &Generator,
         cover: Cover,
-        camera: &Camera,
+        eyes: &[Viewpoint],
         aspect: f32,
         budget: Budget,
-    ) -> Vec<PatchId> {
+    ) -> Vec<Vec<PatchId>> {
         self.frame += 1;
         self.casters.clear();
-        let mut draw = Vec::new();
+        let mut draw: Vec<Vec<PatchId>> = eyes.iter().map(|_| Vec::new()).collect();
+        // How near a node is: to the nearest eye, each as far as its
+        // coarseness makes it.
+        let nearness = |center: DVec3| {
+            eyes.iter()
+                .map(|eye| (center - eye.camera.position).length() * eye.coarseness)
+                .fold(f64::INFINITY, f64::min)
+        };
         let mut missing: Vec<(f64, Node)> = Vec::new();
         let mut regrown: Vec<(f64, Node)> = Vec::new();
 
@@ -333,7 +350,7 @@ impl Terrain {
             built.last_used = self.frame;
             let (center, radius_m) = (built.center, built.radius_m);
 
-            let distance = (center - camera.position).length();
+            let distance = nearness(center);
             if self.stale.contains(&node) {
                 regrown.push((distance, node));
             }
@@ -355,8 +372,10 @@ impl Terrain {
                     continue;
                 }
             }
-            if visible(body, camera, aspect, center, radius_m) {
-                draw.push(node.id());
+            for (eye, drawn) in eyes.iter().zip(&mut draw) {
+                if visible(body, &eye.camera, aspect, center, radius_m) {
+                    drawn.push(node.id());
+                }
             }
         }
 
@@ -390,7 +409,10 @@ impl Terrain {
             self.stale.remove(&node);
             self.changes.push(TerrainChange::Add(node.id(), mesh));
         }
-        self.select_shadow_lod(camera.position);
+        // The sun's shadows are the view's own.
+        if let Some(eye) = eyes.first() {
+            self.select_shadow_lod(eye.camera.position);
+        }
         self.evict();
         draw
     }

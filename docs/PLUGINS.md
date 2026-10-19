@@ -2,7 +2,7 @@
 title: Plugins
 group: Shape
 summary: How the core and a plugin are cut, what each owns and how they speak
-order: 23
+order: 24
 ---
 
 # PLUGINS

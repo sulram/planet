@@ -1,7 +1,7 @@
 # Portals: a door from one place to another
 
-Drawn 2026-10-19, with the landmark placed (116). The ring and the
-crossing stand in the items plugin: `Shape::Portal(to)`, a pane that leads
+Drawn 2026-10-19, with the landmark placed (116). The ring, the crossing
+and the view through it stand: `Shape::Portal(to)`, a pane that leads
 to a landmark by the name the world gave it. Nothing else here is decided.
 It is the whole a portal is measured against: what it stands on today, what
 the renderer would gain, and the order a campaign would pull it in.
@@ -23,32 +23,25 @@ then a landmark that says which way to look on arrival, with no field added.
 
 ## The view through it
 
-A second eye standing on the destination's star, facing its heading, drawn at
-a quarter of the screen's height every other frame into a target the portal's
-quad samples as a picture (`PictureDraw` with `shine` 1, so it reads as a
-screen and is not lit twice). What the renderer has: `Renderer::render`
-takes any number of views of one `Frame`, camera relative each, built for a
-headset's two eyes; a headless path draws into a texture and reads it back;
-every point of every body is drawable from anywhere, since the six roots of
-the far field are always built. What it lacks, and would gain in this order:
+Built, in part: a second eye standing where the camera would be past the
+portal, the view's camera carried from the ring's frame to the star's,
+drawn at a quarter of the screen's height into a target the pane samples
+where it stands on the screen, with the view's own projection, so the
+window has parallax (PORTALS.md). The picture is HDR, before the
+one tone map. What the renderer gained for it: a sight of its own per draw
+of the world, a patch list per eye, and the streamer splitting for the
+nearest of two eyes, the one past the portal four times as far.
 
-- A frame per view, or `render_into(frame, view, slot)`: today every view
-  shares one patch list, selected and culled for the main eye, so a view from
-  elsewhere sees the ground the main eye streamed and nothing nearer.
-- A render target that is a `PictureId`: HDR, so the one tone map runs once,
-  over the main scene with the portal in it. The picture pipeline takes
-  uploaded `Rgba8UnormSrgb` images alone today.
-- `Terrain::select` by the nearest of two eyes, with a share of the six builds
-  a frame, and its own looser split so a quarter height view costs a quarter.
-- A `look` from the destination too, or the portal shows bare nature: the
-  server answers what is near the body's stance, and nothing of the cells or
-  the parts 8 km away reaches a client.
+What would follow, in this order:
 
-The first cut would be the far field alone through the portal, a view of
-mountains and sea from where the star stands, which costs one patch list and
-no server change; the builds through it come after. One portal view at a
-time, the nearest in view within 32 m, none past it, and the portal drawn as
-a dark pane with its rim when no view is given.
+- The builds through it: the cells and the parts near the destination,
+  which the server tells nobody 8 km away. A `look` from the destination
+  too, a room of its own, answered as the body's is.
+- An oblique near plane for the eye past the portal, Lengyel's, so the
+  ground between that eye and the star's plane is clipped instead of
+  closing the window when the star stands on a slope.
+- Every other frame, and the pane holding the last picture between, when
+  the frame budget asks for it.
 
 ## The crossing
 

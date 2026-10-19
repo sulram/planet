@@ -97,8 +97,9 @@ Several agents work at once, each feature in its own git worktree and branch; ne
 
 - Why: [VISION.md](docs/VISION.md)
 - Shape: [ARCHITECTURE.md](docs/ARCHITECTURE.md); per theme,
-  [WORLD.md](docs/WORLD.md), [RENDER.md](docs/RENDER.md), [PLUGINS.md](docs/PLUGINS.md)
-  (how plugins speak) and [DEPLOY.md](docs/DEPLOY.md) (how an instance is hosted)
+  [WORLD.md](docs/WORLD.md), [RENDER.md](docs/RENDER.md), [PORTALS.md](docs/PORTALS.md),
+  [PLUGINS.md](docs/PLUGINS.md) (how plugins speak) and [DEPLOY.md](docs/DEPLOY.md)
+  (how an instance is hosted)
 - The one current campaign: [BRIEF.md](docs/BRIEF.md); it dissolves when it ships
 - Decisions and what was rejected: `docs/decisions/`, one file each
   (`bun kb decision list`, `bun kb search <terms>`)

@@ -512,6 +512,36 @@ pub struct Frame {
     /// The pictures in reach, each at the level the client picked. Every
     /// level drawn was announced by a [`PictureChange::Add`].
     pub pictures: Vec<PictureDraw>,
+    /// The panes of the portals in reach: a window each on the world seen
+    /// through it, or dark.
+    pub panes: Vec<PaneDraw>,
+    /// The world seen through one portal this frame, the one its pane says
+    /// is seen through: drawn before the views, from the eye past it.
+    pub through: Option<Through>,
+}
+
+/// A portal's pane in the world: the disc inside a unit quad, `-0.5..=0.5`
+/// across `x` and `y`, facing `+z`, placed by its transform, which carries
+/// the pane's size in metres as a scale; seen from both sides.
+#[derive(Clone, Copy, Debug)]
+pub struct PaneDraw {
+    /// World from the quad.
+    pub transform: DAffine3,
+    /// Whether the world seen through the portal, [`Frame::through`], shows
+    /// in it: a window, else a dark pane lit with its own faint light.
+    pub seen: bool,
+}
+
+/// The world past a portal, as seen from the eye carried through it: the
+/// view's camera moved from the pane to where the portal leads, as a body
+/// that walked through would be. It is drawn with the view's own
+/// projection, so a point of the pane and the point seen through it fall
+/// on the same pixel, and the pane is a window, with parallax.
+#[derive(Clone, Debug)]
+pub struct Through {
+    pub camera: Camera,
+    /// The patches in its view. All were announced by a [`TerrainChange::Add`].
+    pub patches: Vec<PatchDraw>,
 }
 
 /// Stable identity of a picture while a renderer holds it: one image of one

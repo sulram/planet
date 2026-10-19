@@ -144,7 +144,7 @@ end to end.
 - [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
-- [ ] Portals between places, scales and worlds, each leading to a landmark (sketches/portals.md); the ring and the crossing stand (portal-is-a-ring): the view through it, the wobble; magic as a capability
+- [ ] Portals between places, scales and worlds, each leading to a landmark (sketches/portals.md); the ring, the crossing and the view through it stand (portal-is-a-ring): the builds seen through it, the wobble; magic as a capability
 - [ ] Gravity fields as placeable entities (19)
 - [ ] Scripts, server side
 - [ ] Agents (94): headless clients with a door of their own in mundos, permitted by volume as a person is

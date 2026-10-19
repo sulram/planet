@@ -37,7 +37,8 @@ use part::{Gap, Part, PartId, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
 use scene::{
-    Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex,
+    Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PaneDraw, PictureDraw,
+    VolumeVertex,
 };
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
@@ -174,6 +175,10 @@ impl Link {
     }
 }
 
+/// How long before the chart is asked again for a landmark not held here,
+/// seconds.
+const CHART_AGAIN_S: f64 = 2.0;
+
 /// A landmark as the chart says it: under the name the world gives it, or
 /// the name here with no world, where it stands and how far from the body.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -191,6 +196,12 @@ pub struct Parts {
     held: BTreeMap<PartId, (Seat, Part)>,
     /// The chart's answer since last taken: the landmarks of the world.
     charted: Option<Vec<(u64, Seat, Part)>>,
+    /// The landmarks of the world as last charted, by name: where a portal
+    /// leads when its star is not held here.
+    known: BTreeMap<u64, (Seat, Part)>,
+    /// When the chart was last asked for a landmark not held here, seconds
+    /// of the clock.
+    asked_s: Option<f64>,
     /// The next name given here: a hand knows a part by it, in a world or
     /// alone.
     next: u64,
@@ -364,12 +375,75 @@ impl Parts {
             link.ask(wire::CHART, &wire::Chart {});
             return;
         }
-        let landmarks = self
+        let landmarks: Vec<(u64, Seat, Part)> = self
             .all()
             .filter(|(_, _, part)| matches!(part.shape, Shape::Landmark(_)))
             .map(|(id, seat, part)| (id.0, seat, *part))
             .collect();
+        self.know(&landmarks);
         self.charted = Some(landmarks);
+    }
+
+    /// Asks for the chart for a landmark not held here, at most once every
+    /// [`CHART_AGAIN_S`]: what a portal near the body leads to.
+    pub(crate) fn chart_for(&mut self, clock_s: f64) {
+        if self
+            .asked_s
+            .is_none_or(|asked_s| clock_s - asked_s >= CHART_AGAIN_S)
+        {
+            self.asked_s = Some(clock_s);
+            self.chart();
+        }
+    }
+
+    fn know(&mut self, landmarks: &[(u64, Seat, Part)]) {
+        self.known = landmarks
+            .iter()
+            .map(|&(id, seat, part)| (id, (seat, part)))
+            .collect();
+    }
+
+    /// A landmark by its name: held here, else as the chart last said it.
+    pub(crate) fn landmark(&self, id: PartId) -> Option<(Seat, Part)> {
+        match self.get(id) {
+            Some((seat, part)) if matches!(part.shape, Shape::Landmark(_)) => Some((seat, *part)),
+            _ => self.known.get(&id.0).copied(),
+        }
+    }
+
+    /// Where a landmark stands in the world: its star's frame.
+    pub(crate) fn landmark_transform(&self, generator: &Generator, id: PartId) -> Option<DAffine3> {
+        let (seat, part) = self.landmark(id)?;
+        Some(self.place_of(generator, seat, &part.pose))
+    }
+
+    /// The panes of the portals in reach: the disc inside each ring, placed
+    /// as a picture's quad is, facing the ring's front. `seen` names the
+    /// portal the world is seen through this frame.
+    pub fn panes(
+        &self,
+        generator: &Generator,
+        body: (Body, DVec3),
+        reach_m: f64,
+        seen: Option<PartId>,
+    ) -> Vec<PaneDraw> {
+        // The quad's `x` along the box's, its `y` up the box, its front out
+        // of the box's front (`-y`), the disc as wide as the rim leaves.
+        let across = f64::from(1.0 - 2.0 * RIM);
+        let quad_in_box = DAffine3::from_cols(
+            DVec3::new(across, 0.0, 0.0),
+            DVec3::new(0.0, 0.0, across),
+            DVec3::new(0.0, -1.0, 0.0),
+            DVec3::new(0.0, 0.0, 0.5),
+        );
+        self.all()
+            .filter(|(_, _, part)| matches!(part.shape, Shape::Portal(_)))
+            .filter(|(_, seat, part)| away_m(generator, *seat, &part.pose, body) <= reach_m)
+            .map(|(id, seat, part)| PaneDraw {
+                transform: self.place_of(generator, seat, &part.pose) * quad_in_box,
+                seen: seen == Some(id),
+            })
+            .collect()
     }
 
     /// The chart's answer, once: the landmarks, the nearest the body first,
@@ -515,7 +589,7 @@ impl Parts {
                 let Ok(charted) = wire::Charted::decode(payload) else {
                     return;
                 };
-                let landmarks = charted
+                let landmarks: Vec<(u64, Seat, Part)> = charted
                     .records
                     .iter()
                     .filter_map(|record| {
@@ -523,6 +597,7 @@ impl Parts {
                         Some((record.id, seat, part))
                     })
                     .collect();
+                self.know(&landmarks);
                 self.charted = Some(landmarks);
             }
             _ => {}
@@ -1325,26 +1400,23 @@ fn block(mesh: &mut ModelMesh, min: [f32; 3], max: [f32; 3], color: [u8; 4], edg
     }
 }
 
-/// How many segments a portal's ring is drawn in, how wide its rim is, of
-/// the box's width, and what its pane is drawn as while nothing is seen
-/// through it: dark, lit with its own faint light, so a portal reads as a
-/// portal at night too.
+/// How many segments a portal's ring is drawn in, and how wide its rim is,
+/// of the box's width. The pane inside it is the renderer's
+/// ([`Parts::panes`]): a window on the world seen through the portal.
 const RING_SEGMENTS: usize = 32;
-const RIM: f32 = 0.06;
-const PANE_COLOR: [u8; 4] = [14, 8, 28, u8::MAX];
+pub(crate) const RIM: f32 = 0.06;
 
 /// A portal's ring in a paint: a rim as thick as the box along `y`, round
-/// the circle that fills the box along `x` and `z`, with a pane, a disc on
-/// the box's middle plane (`y = 0`), seen from both sides. Each face of the
-/// rim is a quad a segment, flat, wound counter clockwise seen from where
-/// it faces. The rim shines with its own light whatever the paint's finish,
+/// the circle that fills the box along `x` and `z`. Each face of the rim
+/// is a quad a segment, flat, wound counter clockwise seen from where it
+/// faces. The rim shines with its own light whatever the paint's finish,
 /// so a portal is seen at night.
 fn ring(paint: u8) -> ModelMesh {
     let (mut color, edge) = paint_look(paint);
     color[3] = u8::MAX;
     let mut mesh = ModelMesh {
-        vertices: Vec::with_capacity(RING_SEGMENTS * 16 + 2 * (RING_SEGMENTS + 1)),
-        indices: Vec::with_capacity(RING_SEGMENTS * 24 + 6 * RING_SEGMENTS),
+        vertices: Vec::with_capacity(RING_SEGMENTS * 16),
+        indices: Vec::with_capacity(RING_SEGMENTS * 24),
     };
     let centre = [0.0, 0.5];
     let (outer, inner) = (0.5, 0.5 - RIM);
@@ -1407,30 +1479,6 @@ fn ring(paint: u8) -> ModelMesh {
             color,
             edge,
         );
-    }
-    // The pane: a fan facing each way, so it is seen from both sides.
-    for (normal, forward) in [([0.0, -1.0, 0.0], true), ([0.0, 1.0, 0.0], false)] {
-        let base = mesh.vertices.len() as u32;
-        let vertex = |position: [f32; 3], across: [u8; 2]| VolumeVertex {
-            position,
-            normal,
-            color: PANE_COLOR,
-            side: [u8::MAX, across[0], across[1], 0],
-        };
-        mesh.vertices
-            .push(vertex([centre[0], 0.0, centre[1]], [0, 0]));
-        for k in 0..RING_SEGMENTS {
-            let [x, z] = round(k, inner);
-            mesh.vertices.push(vertex([x, 0.0, z], [u8::MAX, u8::MAX]));
-        }
-        let n = RING_SEGMENTS as u32;
-        for k in 0..n {
-            let (a, b) = (base + 1 + k, base + 1 + (k + 1) % n);
-            match forward {
-                true => mesh.indices.extend([base, a, b]),
-                false => mesh.indices.extend([base, b, a]),
-            }
-        }
     }
     mesh
 }
@@ -1556,13 +1604,10 @@ mod tests {
     }
 
     #[test]
-    fn a_ring_is_a_rim_round_a_pane_seen_from_both_sides() {
+    fn a_ring_is_a_rim_round_an_open_pane() {
         let mesh = ring(5);
         let n = RING_SEGMENTS;
-        assert_eq!(
-            (mesh.vertices.len(), mesh.indices.len()),
-            (16 * n + 2 * (n + 1), 24 * n + 6 * n)
-        );
+        assert_eq!((mesh.vertices.len(), mesh.indices.len()), (16 * n, 24 * n));
         for side in mesh.indices.chunks(3) {
             let [a, b, c] = [0, 1, 2].map(|i| Vec3::from(mesh.vertices[side[i] as usize].position));
             let normal = Vec3::from(mesh.vertices[side[0] as usize].normal);
@@ -1582,20 +1627,11 @@ mod tests {
                     .any(|v| (v.position[axis] - end).abs() < 1e-6)
             );
         }
-        // The pane is dark and lit on its own, on the middle plane, inside
-        // the rim, facing both ways; the rim is the paint's.
-        let pane: Vec<&VolumeVertex> = mesh
-            .vertices
-            .iter()
-            .filter(|v| v.color == PANE_COLOR)
-            .collect();
-        assert_eq!(pane.len(), 2 * (n + 1));
-        assert!(pane.iter().all(|v| v.position[1] == 0.0));
-        assert!(pane.iter().all(|v| {
+        // The rim is the paint's and leaves the pane open inside it.
+        assert!(mesh.vertices.iter().all(|v| {
             let [x, _, z] = v.position;
-            (x * x + (z - 0.5) * (z - 0.5)).sqrt() <= 0.5 - RIM + 1e-6
+            (x * x + (z - 0.5) * (z - 0.5)).sqrt() >= 0.5 - RIM - 1e-6
         }));
-        assert!(pane.iter().any(|v| v.normal[1] < 0.0) && pane.iter().any(|v| v.normal[1] > 0.0));
         assert!(
             mesh.vertices.iter().all(|v| v.color[3] == u8::MAX),
             "the rim shines whatever its paint"

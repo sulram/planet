@@ -25,7 +25,7 @@ mod session;
 mod terrain;
 mod wardrobe;
 
-use glam::{DQuat, DVec3};
+use glam::{DAffine3, DMat3, DQuat, DVec3};
 use scene::{ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
@@ -55,7 +55,7 @@ pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Anchor, Command, Event, Label, Level, Mode, PeerInfo, PluginOn, SessionStatus};
 pub use session::Outbound;
 use session::Session;
-use terrain::{Body, Cover, Terrain};
+use terrain::{Body, Cover, Terrain, Viewpoint};
 use wardrobe::Wardrobe;
 
 /// Seconds for the sun to go around once.
@@ -1075,7 +1075,8 @@ impl Client {
             .look(&self.generator, self.controller.held_by(), dt);
         self.parts
             .look(&self.generator, self.controller.held_by(), dt);
-        let patches = self.stream(&camera, Terrain::update);
+        let through = self.through(&camera);
+        let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
         let settled = self.terrain.settled()
@@ -1087,7 +1088,7 @@ impl Client {
         }
         self.settled = settled;
         let pictures = self.pictures_drawn(&camera);
-        self.frame(camera, patches, pictures)
+        self.frame(camera, patches, pictures, through.zip(seen))
     }
 
     /// Where every head in view lands on the screen, own body first, with
@@ -1183,9 +1184,47 @@ impl Client {
         plugins.settle(lent);
         self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
-        let patches = self.stream(&camera, Terrain::settle);
+        let through = self.through(&camera);
+        let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::settle);
         let pictures = self.pictures_drawn(&camera);
-        self.frame(camera, patches, pictures)
+        self.frame(camera, patches, pictures, through.zip(seen))
+    }
+
+    /// The portal the view is seen through this frame, and the eye past it:
+    /// the nearest portal within [`THROUGH_M`] that leads to a landmark
+    /// whose place is known here, and the camera carried from the portal's
+    /// frame to the landmark's, as a body that walked through would be. A
+    /// landmark this client does not hold is asked of the chart.
+    fn through(&mut self, camera: &scene::Camera) -> Option<(PartId, scene::Camera)> {
+        let body = self.controller.held_by();
+        let (_, id, to) = self
+            .parts
+            .all()
+            .filter_map(|(id, seat, part)| {
+                let Shape::Portal(Some(to)) = part.shape else {
+                    return None;
+                };
+                let away_m = parts::away_m(&self.generator, seat, &part.pose, body);
+                (away_m <= THROUGH_M).then_some((away_m, id, to))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))?;
+        let ring = self.parts.transform(&self.generator, id)?;
+        let Some(star) = self.parts.landmark_transform(&self.generator, to) else {
+            self.parts.chart_for(self.clock_s);
+            return None;
+        };
+        // The pane is the ring's `y = 0` plane and its heading `+y`; the star
+        // lies on the ground with its heading `+y` too: frame to frame, the
+        // rigid part alone, since a portal is a door, not a lens.
+        let carried = rigid(&star) * rigid(&ring).inverse();
+        Some((
+            id,
+            scene::Camera {
+                position: carried.transform_point3(camera.position),
+                rotation: DQuat::from_mat3(&carried.matrix3) * camera.rotation,
+                ..*camera
+            },
+        ))
     }
 
     /// Where the moon is now: an orbit on rails, a function of the clock. It
@@ -1204,13 +1243,31 @@ impl Client {
     fn stream(
         &mut self,
         camera: &scene::Camera,
-        select: fn(&mut Terrain, &Generator, Cover, &scene::Camera, f32) -> Vec<scene::PatchId>,
-    ) -> Vec<scene::PatchDraw> {
+        through: Option<&(PartId, scene::Camera)>,
+        select: Select,
+    ) -> (Vec<scene::PatchDraw>, Option<Vec<scene::PatchDraw>>) {
         let moon = self.moon_position();
-        let from_moon = scene::Camera {
-            position: camera.position - moon,
-            ..*camera
-        };
+        // The view's eye first, then the eye past a portal, which sees at a
+        // quarter of the view's height and asks for a quarter of its detail.
+        let eyes: Vec<Viewpoint> = core::iter::once(Viewpoint {
+            camera: *camera,
+            coarseness: 1.0,
+        })
+        .chain(through.map(|(_, camera)| Viewpoint {
+            camera: *camera,
+            coarseness: 4.0,
+        }))
+        .collect();
+        let from_moon: Vec<Viewpoint> = eyes
+            .iter()
+            .map(|eye| Viewpoint {
+                camera: scene::Camera {
+                    position: eye.camera.position - moon,
+                    ..eye.camera
+                },
+                coarseness: eye.coarseness,
+            })
+            .collect();
         // Grass grows again where what is built over it changed.
         for (middle, angle) in self.cells.drain_touched() {
             self.terrain.regrow(middle, angle);
@@ -1220,7 +1277,7 @@ impl Client {
             &mut self.terrain,
             &self.generator,
             &|sector, column, heights| build.covered(sector, column, heights),
-            camera,
+            &eyes,
             self.aspect,
         );
         // No grass grows on the moon for what is built there to cover.
@@ -1232,8 +1289,14 @@ impl Client {
             self.aspect,
         );
         let at = |body_center: DVec3| move |id| scene::PatchDraw { id, body_center };
-        let planet = on_planet.into_iter().map(at(DVec3::ZERO));
-        planet.chain(on_moon.into_iter().map(at(moon))).collect()
+        let mut lists = on_planet.into_iter().zip(on_moon).map(|(planet, on_moon)| {
+            let planet = planet.into_iter().map(at(DVec3::ZERO));
+            planet
+                .chain(on_moon.into_iter().map(at(moon)))
+                .collect::<Vec<_>>()
+        });
+        let view = lists.next().expect("the view's eye");
+        (view, lists.next())
     }
 
     /// Every picture placed, at the level it is seen at from the camera,
@@ -1261,6 +1324,7 @@ impl Client {
         camera: scene::Camera,
         patches: Vec<scene::PatchDraw>,
         pictures: Vec<scene::PictureDraw>,
+        through: Option<((PartId, scene::Camera), Vec<scene::PatchDraw>)>,
     ) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
@@ -1329,6 +1393,13 @@ impl Client {
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
             pictures,
+            panes: self.parts.panes(
+                &self.generator,
+                self.controller.held_by(),
+                f64::from(self.effects.parts_reach_m),
+                through.as_ref().map(|((id, _), _)| *id),
+            ),
+            through: through.map(|((_, camera), patches)| scene::Through { camera, patches }),
         }
     }
 
@@ -1557,6 +1628,26 @@ pub(crate) fn travel(
 /// How far from the body a landmark's name is hung over it, metres: as far
 /// as a nametag is read.
 const LABEL_M: f64 = 120.0;
+
+/// How a streamer picks the patches each eye draws: [`Terrain::update`]
+/// within a frame's budget, or [`Terrain::settle`] until nothing is missing.
+type Select = fn(&mut Terrain, &Generator, Cover, &[Viewpoint], f32) -> Vec<Vec<scene::PatchId>>;
+
+/// How far from the body a portal is seen through, metres: a plot's width.
+/// One at a time, the nearest.
+const THROUGH_M: f64 = 32.0;
+
+/// A frame's rigid part: its rotation and translation, its scale taken out,
+/// each axis made unit.
+fn rigid(frame: &DAffine3) -> DAffine3 {
+    let m = frame.matrix3;
+    let axes = DMat3::from_cols(
+        m.x_axis.normalize(),
+        m.y_axis.normalize(),
+        m.z_axis.normalize(),
+    );
+    DAffine3::from_mat3_translation(axes, frame.translation)
+}
 
 /// The renderer's own projection of a point of the world onto the screen:
 /// reversed infinite depth has no far plane, so only what is behind the
