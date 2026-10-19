@@ -12,6 +12,10 @@ describe('kindOf', () => {
 		expect(kindOf(bytes('RIFF\0\0\0\0WEBPVP8 '))).toBe('webp');
 		expect(kindOf(bytes('GIF89a\x10\0\x10\0'))).toBe('gif');
 		expect(kindOf(bytes('\0\0\0\x18ftypisom'))).toBe('mp4');
+		expect(kindOf(bytes('\0\0\0\x18ftypM4A '))).toBe('m4a');
+		expect(kindOf(bytes('ID3\x04\0\0'))).toBe('mp3');
+		expect(kindOf(new Uint8Array([0xff, 0xfb, 0x90, 0x00]))).toBe('mp3');
+		expect(kindOf(bytes('OggS\0\x02'))).toBe('ogg');
 	});
 
 	test('and nothing else', () => {

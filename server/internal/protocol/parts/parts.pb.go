@@ -30,6 +30,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ClipKind int32
+
+const (
+	ClipKind_CLIP_KIND_UNSPECIFIED ClipKind = 0
+	ClipKind_CLIP_KIND_MP3         ClipKind = 1
+	ClipKind_CLIP_KIND_M4A         ClipKind = 2
+	ClipKind_CLIP_KIND_OGG         ClipKind = 3
+)
+
+// Enum value maps for ClipKind.
+var (
+	ClipKind_name = map[int32]string{
+		0: "CLIP_KIND_UNSPECIFIED",
+		1: "CLIP_KIND_MP3",
+		2: "CLIP_KIND_M4A",
+		3: "CLIP_KIND_OGG",
+	}
+	ClipKind_value = map[string]int32{
+		"CLIP_KIND_UNSPECIFIED": 0,
+		"CLIP_KIND_MP3":         1,
+		"CLIP_KIND_M4A":         2,
+		"CLIP_KIND_OGG":         3,
+	}
+)
+
+func (x ClipKind) Enum() *ClipKind {
+	p := new(ClipKind)
+	*p = x
+	return p
+}
+
+func (x ClipKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ClipKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_planet_parts_v1_parts_proto_enumTypes[0].Descriptor()
+}
+
+func (ClipKind) Type() protoreflect.EnumType {
+	return &file_planet_parts_v1_parts_proto_enumTypes[0]
+}
+
+func (x ClipKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ClipKind.Descriptor instead.
+func (ClipKind) EnumDescriptor() ([]byte, []int) {
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{0}
+}
+
 type ImageKind int32
 
 const (
@@ -72,11 +124,11 @@ func (x ImageKind) String() string {
 }
 
 func (ImageKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_planet_parts_v1_parts_proto_enumTypes[0].Descriptor()
+	return file_planet_parts_v1_parts_proto_enumTypes[1].Descriptor()
 }
 
 func (ImageKind) Type() protoreflect.EnumType {
-	return &file_planet_parts_v1_parts_proto_enumTypes[0]
+	return &file_planet_parts_v1_parts_proto_enumTypes[1]
 }
 
 func (x ImageKind) Number() protoreflect.EnumNumber {
@@ -85,7 +137,7 @@ func (x ImageKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ImageKind.Descriptor instead.
 func (ImageKind) EnumDescriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{0}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{1}
 }
 
 // What a part is. A shape a file gives is named by the hash of its content,
@@ -98,6 +150,7 @@ type Shape struct {
 	//	*Shape_Vox
 	//	*Shape_Image
 	//	*Shape_Landmark
+	//	*Shape_Clip
 	Shape         isShape_Shape `protobuf_oneof:"shape"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -176,6 +229,15 @@ func (x *Shape) GetLandmark() *Landmark {
 	return nil
 }
 
+func (x *Shape) GetClip() *Clip {
+	if x != nil {
+		if x, ok := x.Shape.(*Shape_Clip); ok {
+			return x.Clip
+		}
+	}
+	return nil
+}
+
 type isShape_Shape interface {
 	isShape_Shape()
 }
@@ -198,6 +260,10 @@ type Shape_Landmark struct {
 	Landmark *Landmark `protobuf:"bytes,4,opt,name=landmark,proto3,oneof"`
 }
 
+type Shape_Clip struct {
+	Clip *Clip `protobuf:"bytes,5,opt,name=clip,proto3,oneof"`
+}
+
 func (*Shape_Cube) isShape_Shape() {}
 
 func (*Shape_Vox) isShape_Shape() {}
@@ -205,6 +271,71 @@ func (*Shape_Vox) isShape_Shape() {}
 func (*Shape_Image) isShape_Shape() {}
 
 func (*Shape_Landmark) isShape_Shape() {}
+
+func (*Shape_Clip) isShape_Shape() {}
+
+// A sound: a file played where the part stands, looping, heard within the
+// part's reach, nothing drawn of it but its gizmo when picked. The SHA-256
+// of the file, 32 bytes, its kind, and how long it plays in milliseconds.
+type Clip struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	File          []byte                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Kind          ClipKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=planet.parts.v1.ClipKind" json:"kind,omitempty"`
+	Millis        uint32                 `protobuf:"varint,3,opt,name=millis,proto3" json:"millis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Clip) Reset() {
+	*x = Clip{}
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Clip) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Clip) ProtoMessage() {}
+
+func (x *Clip) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Clip.ProtoReflect.Descriptor instead.
+func (*Clip) Descriptor() ([]byte, []int) {
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Clip) GetFile() []byte {
+	if x != nil {
+		return x.File
+	}
+	return nil
+}
+
+func (x *Clip) GetKind() ClipKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ClipKind_CLIP_KIND_UNSPECIFIED
+}
+
+func (x *Clip) GetMillis() uint32 {
+	if x != nil {
+		return x.Millis
+	}
+	return 0
+}
 
 // The unit box, in one paint.
 type Cube struct {
@@ -215,7 +346,7 @@ type Cube struct {
 
 func (x *Cube) Reset() {
 	*x = Cube{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[1]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -227,7 +358,7 @@ func (x *Cube) String() string {
 func (*Cube) ProtoMessage() {}
 
 func (x *Cube) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[1]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -240,7 +371,7 @@ func (x *Cube) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cube.ProtoReflect.Descriptor instead.
 func (*Cube) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{1}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{2}
 }
 
 // A landmark: a star lying in the box, bearing a name: trimmed, never
@@ -255,7 +386,7 @@ type Landmark struct {
 
 func (x *Landmark) Reset() {
 	*x = Landmark{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[2]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +398,7 @@ func (x *Landmark) String() string {
 func (*Landmark) ProtoMessage() {}
 
 func (x *Landmark) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[2]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +411,7 @@ func (x *Landmark) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Landmark.ProtoReflect.Descriptor instead.
 func (*Landmark) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{2}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Landmark) GetName() string {
@@ -310,7 +441,7 @@ type Media struct {
 
 func (x *Media) Reset() {
 	*x = Media{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[3]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +453,7 @@ func (x *Media) String() string {
 func (*Media) ProtoMessage() {}
 
 func (x *Media) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[3]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +466,7 @@ func (x *Media) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Media.ProtoReflect.Descriptor instead.
 func (*Media) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{3}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Media) GetWidth() uint32 {
@@ -408,7 +539,7 @@ type Pose struct {
 
 func (x *Pose) Reset() {
 	*x = Pose{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[4]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -420,7 +551,7 @@ func (x *Pose) String() string {
 func (*Pose) ProtoMessage() {}
 
 func (x *Pose) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[4]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -433,7 +564,7 @@ func (x *Pose) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pose.ProtoReflect.Descriptor instead.
 func (*Pose) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{4}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Pose) GetU() float64 {
@@ -528,7 +659,7 @@ type Part struct {
 
 func (x *Part) Reset() {
 	*x = Part{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[5]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -540,7 +671,7 @@ func (x *Part) String() string {
 func (*Part) ProtoMessage() {}
 
 func (x *Part) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[5]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -553,7 +684,7 @@ func (x *Part) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Part.ProtoReflect.Descriptor instead.
 func (*Part) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{5}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Part) GetSeat() *cells.Seat {
@@ -618,7 +749,7 @@ type Record struct {
 
 func (x *Record) Reset() {
 	*x = Record{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[6]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -630,7 +761,7 @@ func (x *Record) String() string {
 func (*Record) ProtoMessage() {}
 
 func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[6]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,7 +774,7 @@ func (x *Record) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Record.ProtoReflect.Descriptor instead.
 func (*Record) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{6}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Record) GetId() uint64 {
@@ -679,7 +810,7 @@ type Place struct {
 
 func (x *Place) Reset() {
 	*x = Place{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[7]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -691,7 +822,7 @@ func (x *Place) String() string {
 func (*Place) ProtoMessage() {}
 
 func (x *Place) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[7]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -704,7 +835,7 @@ func (x *Place) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Place.ProtoReflect.Descriptor instead.
 func (*Place) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{7}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Place) GetPart() *Part {
@@ -726,7 +857,7 @@ type Set struct {
 
 func (x *Set) Reset() {
 	*x = Set{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[8]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -738,7 +869,7 @@ func (x *Set) String() string {
 func (*Set) ProtoMessage() {}
 
 func (x *Set) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[8]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -751,7 +882,7 @@ func (x *Set) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Set.ProtoReflect.Descriptor instead.
 func (*Set) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{8}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Set) GetId() uint64 {
@@ -778,7 +909,7 @@ type Remove struct {
 
 func (x *Remove) Reset() {
 	*x = Remove{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[9]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +921,7 @@ func (x *Remove) String() string {
 func (*Remove) ProtoMessage() {}
 
 func (x *Remove) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[9]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +934,7 @@ func (x *Remove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Remove.ProtoReflect.Descriptor instead.
 func (*Remove) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{9}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Remove) GetId() uint64 {
@@ -825,7 +956,7 @@ type TakeBack struct {
 
 func (x *TakeBack) Reset() {
 	*x = TakeBack{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[10]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -837,7 +968,7 @@ func (x *TakeBack) String() string {
 func (*TakeBack) ProtoMessage() {}
 
 func (x *TakeBack) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[10]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -850,7 +981,7 @@ func (x *TakeBack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TakeBack.ProtoReflect.Descriptor instead.
 func (*TakeBack) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{10}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{11}
 }
 
 // `put_back`: puts back the last change this session took back.
@@ -862,7 +993,7 @@ type PutBack struct {
 
 func (x *PutBack) Reset() {
 	*x = PutBack{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[11]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -874,7 +1005,7 @@ func (x *PutBack) String() string {
 func (*PutBack) ProtoMessage() {}
 
 func (x *PutBack) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[11]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -887,7 +1018,7 @@ func (x *PutBack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutBack.ProtoReflect.Descriptor instead.
 func (*PutBack) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{11}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{12}
 }
 
 // `look`: what this client holds of the parts near it, each at the version
@@ -901,7 +1032,7 @@ type Look struct {
 
 func (x *Look) Reset() {
 	*x = Look{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[12]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -913,7 +1044,7 @@ func (x *Look) String() string {
 func (*Look) ProtoMessage() {}
 
 func (x *Look) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[12]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -926,7 +1057,7 @@ func (x *Look) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Look.ProtoReflect.Descriptor instead.
 func (*Look) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{12}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Look) GetHeld() []*Held {
@@ -946,7 +1077,7 @@ type Held struct {
 
 func (x *Held) Reset() {
 	*x = Held{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[13]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -958,7 +1089,7 @@ func (x *Held) String() string {
 func (*Held) ProtoMessage() {}
 
 func (x *Held) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[13]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -971,7 +1102,7 @@ func (x *Held) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Held.ProtoReflect.Descriptor instead.
 func (*Held) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{13}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Held) GetId() uint64 {
@@ -1000,7 +1131,7 @@ type Placed struct {
 
 func (x *Placed) Reset() {
 	*x = Placed{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[14]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1012,7 +1143,7 @@ func (x *Placed) String() string {
 func (*Placed) ProtoMessage() {}
 
 func (x *Placed) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[14]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1025,7 +1156,7 @@ func (x *Placed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Placed.ProtoReflect.Descriptor instead.
 func (*Placed) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{14}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Placed) GetSession() uint32 {
@@ -1053,7 +1184,7 @@ type Changed struct {
 
 func (x *Changed) Reset() {
 	*x = Changed{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[15]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1065,7 +1196,7 @@ func (x *Changed) String() string {
 func (*Changed) ProtoMessage() {}
 
 func (x *Changed) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[15]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1078,7 +1209,7 @@ func (x *Changed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Changed.ProtoReflect.Descriptor instead.
 func (*Changed) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{15}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Changed) GetSession() uint32 {
@@ -1106,7 +1237,7 @@ type Removed struct {
 
 func (x *Removed) Reset() {
 	*x = Removed{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[16]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1118,7 +1249,7 @@ func (x *Removed) String() string {
 func (*Removed) ProtoMessage() {}
 
 func (x *Removed) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[16]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1131,7 +1262,7 @@ func (x *Removed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Removed.ProtoReflect.Descriptor instead.
 func (*Removed) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{16}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Removed) GetSession() uint32 {
@@ -1161,7 +1292,7 @@ type Seen struct {
 
 func (x *Seen) Reset() {
 	*x = Seen{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[17]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1173,7 +1304,7 @@ func (x *Seen) String() string {
 func (*Seen) ProtoMessage() {}
 
 func (x *Seen) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[17]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1186,7 +1317,7 @@ func (x *Seen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Seen.ProtoReflect.Descriptor instead.
 func (*Seen) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{17}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Seen) GetRecords() []*Record {
@@ -1213,7 +1344,7 @@ type Chart struct {
 
 func (x *Chart) Reset() {
 	*x = Chart{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[18]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1225,7 +1356,7 @@ func (x *Chart) String() string {
 func (*Chart) ProtoMessage() {}
 
 func (x *Chart) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[18]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1369,7 @@ func (x *Chart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chart.ProtoReflect.Descriptor instead.
 func (*Chart) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{18}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{19}
 }
 
 // `charted`: the landmarks of the world as they stand, the nearest the
@@ -1253,7 +1384,7 @@ type Charted struct {
 
 func (x *Charted) Reset() {
 	*x = Charted{}
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[19]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1265,7 +1396,7 @@ func (x *Charted) String() string {
 func (*Charted) ProtoMessage() {}
 
 func (x *Charted) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_parts_v1_parts_proto_msgTypes[19]
+	mi := &file_planet_parts_v1_parts_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1278,7 +1409,7 @@ func (x *Charted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Charted.ProtoReflect.Descriptor instead.
 func (*Charted) Descriptor() ([]byte, []int) {
-	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{19}
+	return file_planet_parts_v1_parts_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Charted) GetRecords() []*Record {
@@ -1292,13 +1423,18 @@ var File_planet_parts_v1_parts_proto protoreflect.FileDescriptor
 
 const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\n" +
-	"\x1bplanet/parts/v1/parts.proto\x12\x0fplanet.parts.v1\x1a\x1bplanet/cells/v1/cells.proto\"\xba\x01\n" +
+	"\x1bplanet/parts/v1/parts.proto\x12\x0fplanet.parts.v1\x1a\x1bplanet/cells/v1/cells.proto\"\xe7\x01\n" +
 	"\x05Shape\x12+\n" +
 	"\x04cube\x18\x01 \x01(\v2\x15.planet.parts.v1.CubeH\x00R\x04cube\x12\x12\n" +
 	"\x03vox\x18\x02 \x01(\fH\x00R\x03vox\x12.\n" +
 	"\x05image\x18\x03 \x01(\v2\x16.planet.parts.v1.MediaH\x00R\x05image\x127\n" +
-	"\blandmark\x18\x04 \x01(\v2\x19.planet.parts.v1.LandmarkH\x00R\blandmarkB\a\n" +
-	"\x05shape\"\x06\n" +
+	"\blandmark\x18\x04 \x01(\v2\x19.planet.parts.v1.LandmarkH\x00R\blandmark\x12+\n" +
+	"\x04clip\x18\x05 \x01(\v2\x15.planet.parts.v1.ClipH\x00R\x04clipB\a\n" +
+	"\x05shape\"a\n" +
+	"\x04Clip\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\fR\x04file\x12-\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x19.planet.parts.v1.ClipKindR\x04kind\x12\x16\n" +
+	"\x06millis\x18\x03 \x01(\rR\x06millis\"\x06\n" +
 	"\x04Cube\"\x1e\n" +
 	"\bLandmark\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"\xb9\x01\n" +
@@ -1363,7 +1499,12 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x04gone\x18\x02 \x03(\x04R\x04gone\"\a\n" +
 	"\x05Chart\"<\n" +
 	"\aCharted\x121\n" +
-	"\arecords\x18\x01 \x03(\v2\x17.planet.parts.v1.RecordR\arecords*\x8c\x01\n" +
+	"\arecords\x18\x01 \x03(\v2\x17.planet.parts.v1.RecordR\arecords*^\n" +
+	"\bClipKind\x12\x19\n" +
+	"\x15CLIP_KIND_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rCLIP_KIND_MP3\x10\x01\x12\x11\n" +
+	"\rCLIP_KIND_M4A\x10\x02\x12\x11\n" +
+	"\rCLIP_KIND_OGG\x10\x03*\x8c\x01\n" +
 	"\tImageKind\x12\x1a\n" +
 	"\x16IMAGE_KIND_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eIMAGE_KIND_PNG\x10\x01\x12\x12\n" +
@@ -1384,53 +1525,57 @@ func file_planet_parts_v1_parts_proto_rawDescGZIP() []byte {
 	return file_planet_parts_v1_parts_proto_rawDescData
 }
 
-var file_planet_parts_v1_parts_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_planet_parts_v1_parts_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_planet_parts_v1_parts_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_planet_parts_v1_parts_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_planet_parts_v1_parts_proto_goTypes = []any{
-	(ImageKind)(0),     // 0: planet.parts.v1.ImageKind
-	(*Shape)(nil),      // 1: planet.parts.v1.Shape
-	(*Cube)(nil),       // 2: planet.parts.v1.Cube
-	(*Landmark)(nil),   // 3: planet.parts.v1.Landmark
-	(*Media)(nil),      // 4: planet.parts.v1.Media
-	(*Pose)(nil),       // 5: planet.parts.v1.Pose
-	(*Part)(nil),       // 6: planet.parts.v1.Part
-	(*Record)(nil),     // 7: planet.parts.v1.Record
-	(*Place)(nil),      // 8: planet.parts.v1.Place
-	(*Set)(nil),        // 9: planet.parts.v1.Set
-	(*Remove)(nil),     // 10: planet.parts.v1.Remove
-	(*TakeBack)(nil),   // 11: planet.parts.v1.TakeBack
-	(*PutBack)(nil),    // 12: planet.parts.v1.PutBack
-	(*Look)(nil),       // 13: planet.parts.v1.Look
-	(*Held)(nil),       // 14: planet.parts.v1.Held
-	(*Placed)(nil),     // 15: planet.parts.v1.Placed
-	(*Changed)(nil),    // 16: planet.parts.v1.Changed
-	(*Removed)(nil),    // 17: planet.parts.v1.Removed
-	(*Seen)(nil),       // 18: planet.parts.v1.Seen
-	(*Chart)(nil),      // 19: planet.parts.v1.Chart
-	(*Charted)(nil),    // 20: planet.parts.v1.Charted
-	(*cells.Seat)(nil), // 21: planet.cells.v1.Seat
+	(ClipKind)(0),      // 0: planet.parts.v1.ClipKind
+	(ImageKind)(0),     // 1: planet.parts.v1.ImageKind
+	(*Shape)(nil),      // 2: planet.parts.v1.Shape
+	(*Clip)(nil),       // 3: planet.parts.v1.Clip
+	(*Cube)(nil),       // 4: planet.parts.v1.Cube
+	(*Landmark)(nil),   // 5: planet.parts.v1.Landmark
+	(*Media)(nil),      // 6: planet.parts.v1.Media
+	(*Pose)(nil),       // 7: planet.parts.v1.Pose
+	(*Part)(nil),       // 8: planet.parts.v1.Part
+	(*Record)(nil),     // 9: planet.parts.v1.Record
+	(*Place)(nil),      // 10: planet.parts.v1.Place
+	(*Set)(nil),        // 11: planet.parts.v1.Set
+	(*Remove)(nil),     // 12: planet.parts.v1.Remove
+	(*TakeBack)(nil),   // 13: planet.parts.v1.TakeBack
+	(*PutBack)(nil),    // 14: planet.parts.v1.PutBack
+	(*Look)(nil),       // 15: planet.parts.v1.Look
+	(*Held)(nil),       // 16: planet.parts.v1.Held
+	(*Placed)(nil),     // 17: planet.parts.v1.Placed
+	(*Changed)(nil),    // 18: planet.parts.v1.Changed
+	(*Removed)(nil),    // 19: planet.parts.v1.Removed
+	(*Seen)(nil),       // 20: planet.parts.v1.Seen
+	(*Chart)(nil),      // 21: planet.parts.v1.Chart
+	(*Charted)(nil),    // 22: planet.parts.v1.Charted
+	(*cells.Seat)(nil), // 23: planet.cells.v1.Seat
 }
 var file_planet_parts_v1_parts_proto_depIdxs = []int32{
-	2,  // 0: planet.parts.v1.Shape.cube:type_name -> planet.parts.v1.Cube
-	4,  // 1: planet.parts.v1.Shape.image:type_name -> planet.parts.v1.Media
-	3,  // 2: planet.parts.v1.Shape.landmark:type_name -> planet.parts.v1.Landmark
-	0,  // 3: planet.parts.v1.Media.kind:type_name -> planet.parts.v1.ImageKind
-	21, // 4: planet.parts.v1.Part.seat:type_name -> planet.cells.v1.Seat
-	5,  // 5: planet.parts.v1.Part.pose:type_name -> planet.parts.v1.Pose
-	1,  // 6: planet.parts.v1.Part.shape:type_name -> planet.parts.v1.Shape
-	6,  // 7: planet.parts.v1.Record.part:type_name -> planet.parts.v1.Part
-	6,  // 8: planet.parts.v1.Place.part:type_name -> planet.parts.v1.Part
-	6,  // 9: planet.parts.v1.Set.part:type_name -> planet.parts.v1.Part
-	14, // 10: planet.parts.v1.Look.held:type_name -> planet.parts.v1.Held
-	7,  // 11: planet.parts.v1.Placed.record:type_name -> planet.parts.v1.Record
-	7,  // 12: planet.parts.v1.Changed.record:type_name -> planet.parts.v1.Record
-	7,  // 13: planet.parts.v1.Seen.records:type_name -> planet.parts.v1.Record
-	7,  // 14: planet.parts.v1.Charted.records:type_name -> planet.parts.v1.Record
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	4,  // 0: planet.parts.v1.Shape.cube:type_name -> planet.parts.v1.Cube
+	6,  // 1: planet.parts.v1.Shape.image:type_name -> planet.parts.v1.Media
+	5,  // 2: planet.parts.v1.Shape.landmark:type_name -> planet.parts.v1.Landmark
+	3,  // 3: planet.parts.v1.Shape.clip:type_name -> planet.parts.v1.Clip
+	0,  // 4: planet.parts.v1.Clip.kind:type_name -> planet.parts.v1.ClipKind
+	1,  // 5: planet.parts.v1.Media.kind:type_name -> planet.parts.v1.ImageKind
+	23, // 6: planet.parts.v1.Part.seat:type_name -> planet.cells.v1.Seat
+	7,  // 7: planet.parts.v1.Part.pose:type_name -> planet.parts.v1.Pose
+	2,  // 8: planet.parts.v1.Part.shape:type_name -> planet.parts.v1.Shape
+	8,  // 9: planet.parts.v1.Record.part:type_name -> planet.parts.v1.Part
+	8,  // 10: planet.parts.v1.Place.part:type_name -> planet.parts.v1.Part
+	8,  // 11: planet.parts.v1.Set.part:type_name -> planet.parts.v1.Part
+	16, // 12: planet.parts.v1.Look.held:type_name -> planet.parts.v1.Held
+	9,  // 13: planet.parts.v1.Placed.record:type_name -> planet.parts.v1.Record
+	9,  // 14: planet.parts.v1.Changed.record:type_name -> planet.parts.v1.Record
+	9,  // 15: planet.parts.v1.Seen.records:type_name -> planet.parts.v1.Record
+	9,  // 16: planet.parts.v1.Charted.records:type_name -> planet.parts.v1.Record
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_planet_parts_v1_parts_proto_init() }
@@ -1443,14 +1588,15 @@ func file_planet_parts_v1_parts_proto_init() {
 		(*Shape_Vox)(nil),
 		(*Shape_Image)(nil),
 		(*Shape_Landmark)(nil),
+		(*Shape_Clip)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_planet_parts_v1_parts_proto_rawDesc), len(file_planet_parts_v1_parts_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   20,
+			NumEnums:      2,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

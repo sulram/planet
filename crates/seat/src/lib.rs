@@ -344,6 +344,16 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
         part::Shape::Landmark(name) => parts_wire::shape::Shape::Landmark(parts_wire::Landmark {
             name: name.as_str().to_owned(),
         }),
+        part::Shape::Sound(clip) => parts_wire::shape::Shape::Clip(parts_wire::Clip {
+            file: clip.file.0.to_vec(),
+            kind: match clip.kind {
+                part::ClipKind::Mp3 => parts_wire::ClipKind::Mp3,
+                part::ClipKind::M4a => parts_wire::ClipKind::M4a,
+                part::ClipKind::Ogg => parts_wire::ClipKind::Ogg,
+            }
+            .into(),
+            millis: clip.millis,
+        }),
     };
     parts_wire::Part {
         seat: Some(seat.wire()),
@@ -396,6 +406,16 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
         parts_wire::shape::Shape::Landmark(landmark) => {
             part::Shape::Landmark(part::Name::new(&landmark.name)?)
         }
+        parts_wire::shape::Shape::Clip(clip) => part::Shape::Sound(part::Clip {
+            file: part::ContentId(hash(&clip.file)?),
+            kind: match clip.kind() {
+                parts_wire::ClipKind::Mp3 => part::ClipKind::Mp3,
+                parts_wire::ClipKind::M4a => part::ClipKind::M4a,
+                parts_wire::ClipKind::Ogg => part::ClipKind::Ogg,
+                parts_wire::ClipKind::Unspecified => return None,
+            },
+            millis: clip.millis,
+        }),
     };
     let pose = part::Pose {
         at: [pose.u, pose.v, pose.h],
@@ -501,6 +521,11 @@ mod tests {
             part::Shape::Image(media),
             part::Shape::Image(video),
             part::Shape::Landmark(part::Name::new("Praça da Sé").unwrap()),
+            part::Shape::Sound(part::Clip {
+                file: part::ContentId([9; 32]),
+                kind: part::ClipKind::Ogg,
+                millis: 4000,
+            }),
         ] {
             let sent = part::Part {
                 shape,

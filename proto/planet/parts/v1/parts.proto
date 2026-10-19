@@ -23,7 +23,24 @@ message Shape {
     bytes vox = 2;
     Media image = 3;
     Landmark landmark = 4;
+    Clip clip = 5;
   }
+}
+
+// A sound: a file played where the part stands, looping, heard within the
+// part's reach, nothing drawn of it but its gizmo when picked. The SHA-256
+// of the file, 32 bytes, its kind, and how long it plays in milliseconds.
+message Clip {
+  bytes file = 1;
+  ClipKind kind = 2;
+  uint32 millis = 3;
+}
+
+enum ClipKind {
+  CLIP_KIND_UNSPECIFIED = 0;
+  CLIP_KIND_MP3 = 1;
+  CLIP_KIND_M4A = 2;
+  CLIP_KIND_OGG = 3;
 }
 
 // The unit box, in one paint.

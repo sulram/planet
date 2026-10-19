@@ -39,6 +39,9 @@ pub enum Shape {
     /// it is seen at night, and it is a place one travels to: arriving at
     /// it is standing on it.
     Landmark(Name),
+    /// A sound: a file played where the box stands, looping, heard within
+    /// the part's reach. Nothing is drawn of it but its gizmo when picked.
+    Sound(Clip),
 }
 
 /// The most bytes a name is, UTF-8.
@@ -108,8 +111,64 @@ impl Shape {
                 let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
                 Some(format!("asset://{hex}.vox"))
             }
-            Shape::Cube | Shape::Image(_) | Shape::Landmark(_) => None,
+            Shape::Cube | Shape::Image(_) | Shape::Landmark(_) | Shape::Sound(_) => None,
         }
+    }
+}
+
+/// The file kinds a sound is kept in, by the extension the world names them
+/// with: the three every browser plays.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ClipKind {
+    Mp3,
+    M4a,
+    Ogg,
+}
+
+impl ClipKind {
+    pub fn ext(self) -> &'static str {
+        match self {
+            ClipKind::Mp3 => "mp3",
+            ClipKind::M4a => "m4a",
+            ClipKind::Ogg => "ogg",
+        }
+    }
+
+    pub fn from_ext(ext: &str) -> Option<ClipKind> {
+        match ext {
+            "mp3" => Some(ClipKind::Mp3),
+            "m4a" => Some(ClipKind::M4a),
+            "ogg" => Some(ClipKind::Ogg),
+            _ => None,
+        }
+    }
+}
+
+/// What a sound is, and nothing else: its file and how long it plays.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Clip {
+    pub file: ContentId,
+    pub kind: ClipKind,
+    /// How long it plays before it loops, in milliseconds.
+    pub millis: u32,
+}
+
+impl Clip {
+    /// The asset reference of the file, as a record names it:
+    /// `asset://<hash>.<ext>`.
+    pub fn name(&self) -> String {
+        format!("asset://{}.{}", self.file.hex(), self.kind.ext())
+    }
+
+    /// A clip read back from its asset name and length. `None` when the
+    /// name is no `asset://<hash>.<ext>` of a sound.
+    pub fn parse(name: &str, millis: u32) -> Option<Clip> {
+        let (hex, ext) = name.strip_prefix("asset://")?.split_once('.')?;
+        Some(Clip {
+            file: ContentId::parse(hex)?,
+            kind: ClipKind::from_ext(ext)?,
+            millis,
+        })
     }
 }
 
@@ -551,6 +610,26 @@ mod tests {
         assert!(Name::new(&"\u{1F30D}".repeat(16)).is_some());
         assert!(Name::new(&"\u{1F30D}".repeat(17)).is_none());
         assert_eq!(Shape::Landmark(name).asset(), None);
+    }
+
+    #[test]
+    fn a_clip_names_its_file_and_reads_it_back() {
+        let hex = "0123456789abcdef".repeat(4);
+        let clip = Clip::parse(&format!("asset://{hex}.mp3"), 4000).unwrap();
+        assert_eq!(clip.kind, ClipKind::Mp3);
+        assert_eq!(clip.millis, 4000);
+        assert_eq!(clip.name(), format!("asset://{hex}.mp3"));
+        assert_eq!(
+            Clip::parse(&format!("asset://{hex}.ogg"), 1).unwrap().kind,
+            ClipKind::Ogg
+        );
+        assert_eq!(
+            Clip::parse(&format!("asset://{hex}.m4a"), 1).unwrap().kind,
+            ClipKind::M4a
+        );
+        assert!(Clip::parse(&format!("asset://{hex}.wav"), 1).is_none());
+        assert!(Clip::parse("asset://abc.mp3", 1).is_none());
+        assert_eq!(Shape::Sound(clip).asset(), None);
     }
 
     #[test]

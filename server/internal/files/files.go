@@ -44,9 +44,17 @@ func Kind(head []byte) (string, bool) {
 		return "webp", true
 	case bytes.HasPrefix(head, []byte("GIF87a")), bytes.HasPrefix(head, []byte("GIF89a")):
 		return "gif", true
-	// An MP4 opens with a box whose type is `ftyp`, after its four byte size.
+	// An MP4 and an M4A open with a box whose type is `ftyp`, after its four
+	// byte size; the brand after says which.
+	case len(head) >= 12 && bytes.Equal(head[4:8], []byte("ftyp")) && bytes.Equal(head[8:12], []byte("M4A ")):
+		return "m4a", true
 	case len(head) >= 8 && bytes.Equal(head[4:8], []byte("ftyp")):
 		return "mp4", true
+	// An MP3 opens with an ID3 tag, or straight with a frame's sync bits.
+	case bytes.HasPrefix(head, []byte("ID3")), len(head) >= 2 && head[0] == 0xff && head[1]&0xe0 == 0xe0:
+		return "mp3", true
+	case bytes.HasPrefix(head, []byte("OggS")):
+		return "ogg", true
 	}
 	return "", false
 }

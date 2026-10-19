@@ -4,7 +4,7 @@
 /// a variant beside the cube.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Shape {
-    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4")]
+    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4, 5")]
     pub shape: ::core::option::Option<shape::Shape>,
 }
 /// Nested message and enum types in `Shape`.
@@ -21,7 +21,21 @@ pub mod shape {
         Image(super::Media),
         #[prost(message, tag="4")]
         Landmark(super::Landmark),
+        #[prost(message, tag="5")]
+        Clip(super::Clip),
     }
+}
+/// A sound: a file played where the part stands, looping, heard within the
+/// part's reach, nothing drawn of it but its gizmo when picked. The SHA-256
+/// of the file, 32 bytes, its kind, and how long it plays in milliseconds.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Clip {
+    #[prost(bytes="vec", tag="1")]
+    pub file: ::prost::alloc::vec::Vec<u8>,
+    #[prost(enumeration="ClipKind", tag="2")]
+    pub kind: i32,
+    #[prost(uint32, tag="3")]
+    pub millis: u32,
 }
 /// The unit box, in one paint.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -213,6 +227,38 @@ pub struct Chart {
 pub struct Charted {
     #[prost(message, repeated, tag="1")]
     pub records: ::prost::alloc::vec::Vec<Record>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ClipKind {
+    Unspecified = 0,
+    Mp3 = 1,
+    M4a = 2,
+    Ogg = 3,
+}
+impl ClipKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CLIP_KIND_UNSPECIFIED",
+            Self::Mp3 => "CLIP_KIND_MP3",
+            Self::M4a => "CLIP_KIND_M4A",
+            Self::Ogg => "CLIP_KIND_OGG",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CLIP_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "CLIP_KIND_MP3" => Some(Self::Mp3),
+            "CLIP_KIND_M4A" => Some(Self::M4a),
+            "CLIP_KIND_OGG" => Some(Self::Ogg),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
