@@ -20,6 +20,8 @@
 		item: Item | null;
 		mode: Mode;
 		picked: Picked | null;
+		/** The part picked as it stood when it was picked: what reset goes back to. */
+		origin: Picked | null;
 		/** Index into `palette`. */
 		paint: number;
 		finish: Finish;
@@ -39,7 +41,7 @@
 		onedge: (edge: Edge) => void;
 	}
 
-	let { editing, item, mode, picked, paint, finish, edge, palette, refused, seam, onedit, ontake, onmode, onset, onremove, onpaint, onfinish, onedge }: Props =
+	let { editing, item, mode, picked, origin, paint, finish, edge, palette, refused, seam, onedit, ontake, onmode, onset, onremove, onpaint, onfinish, onedge }: Props =
 		$props();
 
 	const modeIcons = { move: 'move-3d', rotate: 'rotate-3d', scale: 'scale-3d' } as const;
@@ -78,9 +80,38 @@
 					<Icon name={modeIcons[mode]} />
 				</header>
 				<Segmented options={modeOptions} value={mode} label={t('mode')} onselect={onmode} />
-				<VectorInput label={t('position')} axes={['u', 'v', 'h']} values={picked.at} step={0.5} decimals={1} onchange={(at) => onset({ at: vector(at) })} />
-				<VectorInput label={t('rotation')} axes={['x', 'y', 'z']} values={picked.rotation} step={1} decimals={0} min={-180} max={180} onchange={(rotation) => onset({ rotation: vector(rotation) })} />
-				<VectorInput label={t('scale')} axes={['x', 'y', 'z']} values={picked.scale} step={0.5} min={0.01} onchange={(scale) => onset({ scale: vector(scale) })} />
+				<VectorInput
+					label={t('position')}
+					axes={['u', 'v', 'h']}
+					values={picked.at}
+					step={0.5}
+					decimals={1}
+					onchange={(at) => onset({ at: vector(at) })}
+					onreset={() => origin && onset({ at: origin.at })}
+					resetLabel={t('reset')}
+				/>
+				<VectorInput
+					label={t('rotation')}
+					axes={['x', 'y', 'z']}
+					values={picked.rotation}
+					step={1}
+					decimals={0}
+					min={-180}
+					max={180}
+					onchange={(rotation) => onset({ rotation: vector(rotation) })}
+					onreset={() => onset({ rotation: [0, 0, 0] })}
+					resetLabel={t('reset')}
+				/>
+				<VectorInput
+					label={t('scale')}
+					axes={['x', 'y', 'z']}
+					values={picked.scale}
+					step={0.5}
+					min={0.01}
+					onchange={(scale) => onset({ scale: vector(scale) })}
+					onreset={() => origin && onset({ scale: origin.scale })}
+					resetLabel={t('reset')}
+				/>
 				<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
 				<Button variant="danger" type="button" onclick={onremove}>{t('remove')} <kbd>Del</kbd></Button>
 			</section>

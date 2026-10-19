@@ -2,7 +2,10 @@
 	// A vector of numbers, one field an axis, each a scrubber too: dragging
 	// a field sideways changes its value, clicking it types one. Shift
 	// multiplies the step by ten. The way an editor's inspector says a
-	// position, a rotation or a size, after tatil-tim-platform.
+	// position, a rotation or a size, after tatil-tim-platform. With
+	// `onreset`, a small button beside the label puts the vector back.
+	import Icon from './Icon.svelte';
+
 	interface Props {
 		/** Accessible name of the group, shown before the fields. */
 		label: string;
@@ -17,9 +20,13 @@
 		max?: number;
 		/** The vector as it is now, after any one axis changed. */
 		onchange: (values: number[]) => void;
+		/** Puts the vector back to what it was: shown as a button beside the label. */
+		onreset?: () => void;
+		/** The reset button's name. Required with `onreset`. */
+		resetLabel?: string;
 	}
 
-	let { label, axes, values, step = 0.1, decimals = 2, min = -Infinity, max = Infinity, onchange }: Props = $props();
+	let { label, axes, values, step = 0.1, decimals = 2, min = -Infinity, max = Infinity, onchange, onreset, resetLabel }: Props = $props();
 
 	/** Steps a pixel of drag is worth. */
 	const SENSITIVITY = 0.5;
@@ -98,7 +105,14 @@
 </script>
 
 <div class="vector" role="group" aria-label={label}>
-	<span class="label">{label}</span>
+	<span class="label">
+		{label}
+		{#if onreset}
+			<button type="button" class="reset" aria-label={resetLabel} title={resetLabel} onclick={onreset}>
+				<Icon name="rotate-ccw" />
+			</button>
+		{/if}
+	</span>
 	{#each axes as axis, index (axis)}
 		<div class="axis" class:dragging={dragging === index}>
 			<span class="name">{axis}</span>
@@ -133,6 +147,22 @@
 	}
 	.label {
 		grid-column: 1 / -1;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.reset {
+		display: inline-grid;
+		place-items: center;
+		width: var(--control-h);
+		height: var(--control-h);
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.reset:hover {
+		color: var(--text);
 	}
 	.axis {
 		position: relative;

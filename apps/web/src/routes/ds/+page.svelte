@@ -259,6 +259,7 @@
 				<Icon name="move-3d" label="Move" />
 				<Icon name="rotate-3d" label="Rotate" />
 				<Icon name="scale-3d" label="Scale" />
+				<Icon name="rotate-ccw" label="Reset" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
 			</div>
 			<p class="muted">IconButton: an action said by its icon alone, square, for a corner where words do not fit. The label is required; it is the accessible name and the tooltip.</p>
@@ -278,7 +279,7 @@
 			<h2>VectorInput</h2>
 			<p>A vector, one field an axis: drag a field sideways to scrub its value, Shift for ten times the step, click to type.</p>
 			<VectorInput label="Position" axes={['u', 'v', 'h']} values={[1024.5, 980.25, 12]} step={0.5} onchange={() => {}} />
-			<VectorInput label="Rotation" axes={['x', 'y', 'z']} values={[0, 0, 45]} step={1} decimals={0} min={-180} max={180} onchange={() => {}} />
+			<VectorInput label="Rotation" axes={['x', 'y', 'z']} values={[0, 0, 45]} step={1} decimals={0} min={-180} max={180} onchange={() => {}} onreset={() => {}} resetLabel="Reset" />
 		</section>
 
 		<section>
