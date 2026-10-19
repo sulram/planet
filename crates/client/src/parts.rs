@@ -33,7 +33,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use glam::{DAffine3, DMat3, DVec3};
-use part::{Part, PartId, Pose, Shape};
+use part::{Gap, Part, PartId, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
 use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex};
@@ -559,7 +559,7 @@ impl Parts {
                 if across > part.reach() * BLOCK_M + half_m {
                     return None;
                 }
-                part::gap_along(&placed.inverse(), foot, up, &feet, STEP_M)
+                self.gap_of(part, &placed.inverse(), foot, up, &feet)
             })
             .map(|gap| Footing {
                 floor_m: gap.floor.map(|t| feet_m + t),
@@ -636,7 +636,6 @@ impl Parts {
         }
         Some(id)
     }
-
     /// Asks for a model's file, once: what a hand wants before it places
     /// the model, to know its size.
     pub(crate) fn want(&mut self, hash: [u8; 32]) {
@@ -669,6 +668,28 @@ impl Parts {
     pub fn size_of(&self, hash: [u8; 32]) -> Option<[u32; 3]> {
         self.grids.get(&hash).map(|grid| grid.size)
     }
+
+    /// What a body standing at `foot` in the world has under and over it of
+    /// one part, along `up`, as `part::gap_along` says it: its box, and for
+    /// a model whose file arrived, its own voxels. `inward` is the part's
+    /// own space from the world.
+    fn gap_of(
+        &self,
+        part: &Part,
+        inward: &DAffine3,
+        foot: DVec3,
+        up: DVec3,
+        feet: &[DVec3],
+    ) -> Option<Gap> {
+        let boxed = part::gap_along(inward, foot, up, feet, STEP_M)?;
+        let Shape::Vox(hash) = part.shape else {
+            return Some(boxed);
+        };
+        match self.grids.get(&hash) {
+            Some(grid) => model_gap(grid, inward, foot, up, feet, STEP_M),
+            None => Some(boxed),
+        }
+    }
 }
 
 /// The model a part is drawn as. `None` for a shape drawn another way, a
@@ -692,6 +713,66 @@ fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
 fn model_of_file(hash: [u8; 32]) -> ModelId {
     let head: [u8; 8] = hash[..8].try_into().expect("eight of thirty two");
     ModelId(u64::from_be_bytes(head) | FILE)
+}
+
+/// What a body standing at `foot` has under its feet and over its head of
+/// a model's own voxels, along `up`, read through the part's pose: up each
+/// foot's line through the part's box, the solid runs of the grid along it.
+/// Solid at the height of the step is a wall whose top is the floor
+/// offered, below it a floor, above it a roof, as a box answers
+/// (`part::gap_along`), in the same frame and units.
+fn model_gap(
+    grid: &vox::Grid,
+    inward: &DAffine3,
+    foot: DVec3,
+    up: DVec3,
+    feet: &[DVec3],
+    reach: f64,
+) -> Option<Gap> {
+    let up_in = inward.transform_vector3(up);
+    let size = grid.size.map(f64::from);
+    let to_grid = |p: DVec3| [(p.x + 0.5) * size[0], (p.y + 0.5) * size[1], p.z * size[2]];
+    let mut gap: Option<Gap> = None;
+    for &at in feet {
+        let foot_in = inward.transform_point3(foot + at);
+        let Some((low, high)) = part::through(foot_in, up_in) else {
+            continue;
+        };
+        let runs = grid.solid_runs(
+            to_grid(foot_in + up_in * low),
+            to_grid(foot_in + up_in * high),
+        );
+        let mut found = Gap {
+            floor: None,
+            ceiling: None,
+        };
+        for (a, b) in runs {
+            let (h0, h1) = (low + a * (high - low), low + b * (high - low));
+            if h0 <= reach && reach <= h1 || h1 <= reach {
+                found.floor = Some(found.floor.map_or(h1, |floor| floor.max(h1)));
+            } else {
+                found.ceiling = Some(found.ceiling.map_or(h0, |roof| roof.min(h0)));
+            }
+        }
+        if found.floor.is_none() && found.ceiling.is_none() {
+            continue;
+        }
+        gap = Some(match gap {
+            None => found,
+            Some(gap) => Gap {
+                floor: pick(gap.floor, found.floor, f64::max),
+                ceiling: pick(gap.ceiling, found.ceiling, f64::min),
+            },
+        });
+    }
+    gap
+}
+
+fn pick(a: Option<f64>, b: Option<f64>, f: fn(f64, f64) -> f64) -> Option<f64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(f(a, b)),
+        (a, b) => a.or(b),
+    }
 }
 
 /// A model's voxels meshed into the unit box: `vox` meshes them in voxels
@@ -908,5 +989,77 @@ mod tests {
         // One model for every cube in a paint.
         parts.place(seat, part);
         assert_eq!(parts.drain_changes().len(), 1);
+    }
+
+    #[test]
+    fn a_model_is_asked_for_once_and_stood_on_by_its_own_voxels() {
+        // A shelter of four voxels across and four up: a pillar at one end
+        // and a roof over air wide and high enough for a body.
+        let grid = vox::Grid {
+            size: [4, 1, 4],
+            voxels: vec![1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1],
+        };
+        let model = vox::Model {
+            grid,
+            palette: vox::default_palette(),
+        };
+        let hash = [7; 32];
+        let mut parts = Parts::default();
+        let seat = Seat::Sector(topology::Sector::new(0).unwrap());
+        // A block a voxel: the box is 4 by 1 by 4 blocks, from 998 to 1002
+        // across and 10 to 14 up.
+        let part = Part {
+            shape: Shape::Vox(hash),
+            pose: Pose::upright([1000.0, 1000.0, 10.0], [4.0, 1.0, 4.0]),
+            paint: 0,
+            solid: true,
+        };
+        parts.place(seat, part);
+        parts.place(seat, part);
+        assert_eq!(parts.wanted(), vec![hash]);
+        assert!(parts.wanted().is_empty());
+        assert!(
+            parts.drain_changes().is_empty(),
+            "nothing is drawn before the file comes"
+        );
+        // Until it comes, the box holds a body up: on top of it.
+        let generator = Generator::new(worldgen::Recipe::new(1)).unwrap();
+        let near = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-4);
+        let under_arch = SurfacePoint::new(seat.sector(), 1000.6, 1000.0);
+        let boxed = parts
+            .footing(&generator, seat, under_arch, 14.0 * BLOCK_M)
+            .unwrap();
+        assert!(near(boxed.floor_m, 14.0 * BLOCK_M), "{boxed:?}");
+
+        parts.model_arrived(hash, model);
+        assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
+        let changes = parts.drain_changes();
+        assert_eq!(changes.len(), 1);
+        let ModelChange::Add(_, mesh) = &changes[0] else {
+            panic!("a mesh is added");
+        };
+        // Seven voxels, of which some sides touch: fewer than 42 sides, all
+        // inside the unit box.
+        assert!(mesh.vertices.len() < 42 * 4 && !mesh.vertices.is_empty());
+        for v in &mesh.vertices {
+            assert!(v.position[0].abs() <= 0.5 && v.position[1].abs() <= 0.5);
+            assert!((0.0..=1.0).contains(&v.position[2]));
+        }
+        // Standing on top: the top of the roof, four blocks up.
+        let on_top = parts
+            .footing(&generator, seat, under_arch, 14.0 * BLOCK_M)
+            .unwrap();
+        assert!(near(on_top.floor_m, 14.0 * BLOCK_M), "{on_top:?}");
+        // Under the roof, where the box said floor, the voxels say a roof
+        // three blocks over the anchor and no floor of the part.
+        let feet_m = 10.0 * BLOCK_M;
+        let under = parts.footing(&generator, seat, under_arch, feet_m).unwrap();
+        assert_eq!(under.floor_m, None, "{under:?}");
+        assert!(near(under.ceiling_m, 13.0 * BLOCK_M), "{under:?}");
+        // Over the pillar, feet at the anchor: a wall, whose top is the
+        // floor offered.
+        let pillar = SurfacePoint::new(seat.sector(), 998.5, 1000.0);
+        let wall = parts.footing(&generator, seat, pillar, feet_m).unwrap();
+        assert!(near(wall.floor_m, 14.0 * BLOCK_M), "{wall:?}");
     }
 }
