@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use client::{Chord, Client, Input, Key, Outbound};
+use client::{Chord, Client, Form, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, PointerEvent, WheelEvent};
@@ -36,10 +36,15 @@ struct State {
     link: Option<Link>,
     /// Building, the right button is held: the pointer turns the camera.
     looking: bool,
+    /// Where the world's files are read from: what `asset://` stands for.
+    files: String,
 }
 
 /// Where the web app serves the asset root.
 const ASSET_ROOT: &str = "/assets/";
+/// Where a world's files are until the page says: the world serves them
+/// itself when no bucket is set (DECISIONS 89).
+const FILES: &str = "/files";
 
 #[wasm_bindgen]
 impl Engine {
@@ -78,6 +83,7 @@ impl Engine {
             last_frame_ms: now_ms(),
             link: None,
             looking: false,
+            files: FILES.to_owned(),
         }));
         let alive = Rc::new(RefCell::new(true));
         let listeners = listen(&canvas, &state);
@@ -113,6 +119,12 @@ impl Engine {
         let link = Link::open(url, &self.state).map_err(|e| JsError::new(&e))?;
         self.state.borrow_mut().link = Some(link);
         Ok(())
+    }
+
+    /// Where the world's files are: the base an `asset://` reference is read
+    /// under, as `GET /api/world` says it.
+    pub fn set_files(&self, base: &str) {
+        self.state.borrow_mut().files = base.trim_end_matches('/').to_owned();
     }
 
     /// Closes the link, if one is open.
@@ -216,52 +228,128 @@ impl Drop for Engine {
 }
 
 /// The browser side of the asset seam: one `fetch` per request, answered
-/// whenever it lands. A dropped engine simply never hears the answer.
+/// whenever it lands, decoded by the browser when pixels were asked for. A
+/// dropped engine simply never hears the answer.
 fn fetch_assets(state: &Rc<RefCell<State>>) {
-    for request in state.borrow_mut().client.drain_asset_requests() {
+    let requests = state.borrow_mut().client.drain_asset_requests();
+    for request in requests {
+        let url = resolve(&request.path, &state.borrow().files);
         let state = Rc::downgrade(state);
         wasm_bindgen_futures::spawn_local(async move {
-            let bytes = fetch(&resolve(&request.path)).await;
-            if let Some(state) = state.upgrade() {
-                state.borrow_mut().client.asset_loaded(request.id, bytes);
+            match request.form {
+                Form::Bytes => {
+                    let bytes = fetch(&url).await;
+                    if let Some(state) = state.upgrade() {
+                        state.borrow_mut().client.asset_loaded(request.id, bytes);
+                    }
+                }
+                Form::Picture { max_side } => {
+                    let image = decode(&url, max_side).await;
+                    if let Some(state) = state.upgrade() {
+                        state.borrow_mut().client.picture_loaded(request.id, image);
+                    }
+                }
             }
         });
     }
 }
 
-/// Where the world's files are read from: `asset://x` is `<FILES>/x`
-/// (docs/ARCHITECTURE.md § Files).
-const FILES: &str = "/files/";
-
-/// An asset reference as a URL: a world's file is under its files, absolute
-/// ones (a user's own avatar) pass through, relative ones live under the
-/// asset root.
-fn resolve(reference: &str) -> String {
+/// An asset reference as a URL: a world's file (`asset://`) is under the
+/// files base, an absolute one (a user's own avatar) passes through, a
+/// relative one lives under the asset root.
+fn resolve(reference: &str, files: &str) -> String {
     if let Some(name) = reference.strip_prefix("asset://") {
-        return format!("{FILES}{name}");
-    }
-    let absolute = reference.starts_with('/') || reference.contains("://");
-    if absolute {
+        format!("{files}/{name}")
+    } else if reference.starts_with('/') || reference.contains("://") {
         reference.to_owned()
     } else {
         format!("{ASSET_ROOT}{reference}")
     }
 }
 
-async fn fetch(url: &str) -> Result<Vec<u8>, String> {
-    let describe = |error: JsValue| format!("{url}: {error:?}");
+async fn respond(url: &str) -> Result<web_sys::Response, String> {
     let window = web_sys::window().ok_or("no window")?;
     let response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
         .await
-        .map_err(describe)?;
+        .map_err(|error| format!("{url}: {error:?}"))?;
     let response: web_sys::Response = response.unchecked_into();
     if !response.ok() {
         return Err(format!("{url}: HTTP {}", response.status()));
     }
+    Ok(response)
+}
+
+async fn fetch(url: &str) -> Result<Vec<u8>, String> {
+    let describe = |error: JsValue| format!("{url}: {error:?}");
+    let response = respond(url).await?;
     let buffer = wasm_bindgen_futures::JsFuture::from(response.array_buffer().map_err(describe)?)
         .await
         .map_err(describe)?;
     Ok(js_sys::Uint8Array::new(&buffer).to_vec())
+}
+
+/// A picture as the browser decodes it, off the frame's thread, no wider
+/// than `max_side` on a side: RGBA, sRGB, straight alpha, top row first.
+async fn decode(url: &str, max_side: u32) -> Result<scene::Image, String> {
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{
+        ImageBitmap, ImageBitmapOptions, OffscreenCanvas, OffscreenCanvasRenderingContext2d,
+        PremultiplyAlpha, ResizeQuality,
+    };
+    let describe = |error: JsValue| format!("{url}: {error:?}");
+    let window = web_sys::window().ok_or("no window")?;
+    let response = respond(url).await?;
+    let blob: web_sys::Blob = JsFuture::from(response.blob().map_err(describe)?)
+        .await
+        .map_err(describe)?
+        .unchecked_into();
+    let options = ImageBitmapOptions::new();
+    options.set_premultiply_alpha(PremultiplyAlpha::None);
+    let bitmap: ImageBitmap = JsFuture::from(
+        window
+            .create_image_bitmap_with_blob_and_image_bitmap_options(&blob, &options)
+            .map_err(describe)?,
+    )
+    .await
+    .map_err(describe)?
+    .unchecked_into();
+    let (mut width, mut height) = (bitmap.width(), bitmap.height());
+    let longest = width.max(height);
+    let bitmap = if longest > max_side {
+        let scale = f64::from(max_side) / f64::from(longest);
+        width = ((f64::from(width) * scale).round() as u32).max(1);
+        height = ((f64::from(height) * scale).round() as u32).max(1);
+        options.set_resize_width(width);
+        options.set_resize_height(height);
+        options.set_resize_quality(ResizeQuality::High);
+        JsFuture::from(
+            window
+                .create_image_bitmap_with_image_bitmap_and_image_bitmap_options(&bitmap, &options)
+                .map_err(describe)?,
+        )
+        .await
+        .map_err(describe)?
+        .unchecked_into()
+    } else {
+        bitmap
+    };
+    let canvas = OffscreenCanvas::new(width, height).map_err(describe)?;
+    let context: OffscreenCanvasRenderingContext2d = canvas
+        .get_context("2d")
+        .map_err(describe)?
+        .ok_or_else(|| format!("{url}: no 2d context to read pixels with"))?
+        .unchecked_into();
+    context
+        .draw_image_with_image_bitmap(&bitmap, 0.0, 0.0)
+        .map_err(describe)?;
+    let data = context
+        .get_image_data(0.0, 0.0, f64::from(width), f64::from(height))
+        .map_err(describe)?;
+    Ok(scene::Image {
+        width,
+        height,
+        rgba: data.data().0,
+    })
 }
 
 impl State {
@@ -288,7 +376,7 @@ impl State {
             self.surface.configure(&self.gpu.device, &self.config);
         }
 
-        self.client.set_aspect(width as f32 / height as f32);
+        self.client.set_view([width, height]);
         let frame = self.client.update(dt, &mut self.input);
         // A tool aims with a free pointer: taking one lets a captured one go.
         if self.client.pointing() && locked(&self.canvas) {

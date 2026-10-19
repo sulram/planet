@@ -16,6 +16,7 @@ mod grass;
 mod input;
 mod parts;
 mod peers;
+mod pictures;
 mod place;
 mod plugin;
 mod seam;
@@ -24,20 +25,22 @@ mod terrain;
 mod wardrobe;
 
 use glam::DVec3;
-use scene::{ModelChange, SkinnedChange, TerrainChange, VolumeChange};
+use scene::{ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
 use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 
-pub use assets::AssetRequest;
+pub use assets::{AssetRequest, Form};
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use cells::{Aim, Cells, Guide, Met, PALETTE, REACH_M, Refusal, Seat, Sight};
 pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use input::{Chord, Input, Key, KeyAsk};
-pub use part::{Part, PartId, Pose as PartPose, Shape};
+pub use part::{ContentId, ImageKind, Media, Part, PartId, PictureLevel, Pose as PartPose, Shape};
 pub use parts::{CUBE, Parts, VOXEL};
 use peers::Peers;
+use pictures::Pictures;
+pub use pictures::{FULL_SIDE, LOW_SIDE, Screen, THUMB_SIDE};
 pub use place::Pose;
 pub use plugin::{Eye, Feet, Host, Plugin, Turn};
 use plugin::{Lent, Plugins};
@@ -81,6 +84,7 @@ pub struct Client {
     clips: Clips,
     /// Every avatar loaded, by asset reference, worn by any number of bodies.
     wardrobe: Wardrobe,
+    pictures: Pictures,
     session: Session,
     peers: Peers,
     /// What a shell plugged in, and which of it the world has on.
@@ -97,6 +101,9 @@ pub struct Client {
     effects: Effects,
     /// Width over height of the view, for culling.
     aspect: f32,
+    /// The view's height in pixels: what a picture's size on the screen is
+    /// measured in.
+    view_height_px: f32,
     clock_s: f64,
     /// Sun angle at `clock_s = 0`, chosen so every spawn starts in daylight.
     noon_offset: f64,
@@ -141,6 +148,7 @@ impl Client {
             figure: Figure::default(),
             clips: Clips::new(),
             wardrobe: Wardrobe::default(),
+            pictures: Pictures::default(),
             session: Session::default(),
             peers: Peers::default(),
             plugins: Plugins::default(),
@@ -162,6 +170,7 @@ impl Client {
             ],
             effects: Effects::default(),
             aspect: 16.0 / 9.0,
+            view_height_px: 1080.0,
             clock_s: 0.0,
             noon_offset: 0.0,
             stats_timer_s: 0.0,
@@ -236,8 +245,12 @@ impl Client {
         self.generator.recipe()
     }
 
-    pub fn set_aspect(&mut self, aspect: f32) {
-        self.aspect = aspect;
+    /// The size of the view in pixels: its aspect, and how tall a picture
+    /// stands on it.
+    pub fn set_view(&mut self, size: [u32; 2]) {
+        let [width, height] = size.map(|n| n.max(1) as f32);
+        self.aspect = width / height;
+        self.view_height_px = height;
     }
 
     /// Stirs in randomness only a platform has (a clock, the browser). Without
@@ -524,6 +537,20 @@ impl Client {
         self.requests.drain()
     }
 
+    /// The answer to an [`AssetRequest`] for a picture: its pixels, or why
+    /// there are none. A level that fails is logged and asked for again
+    /// when wanted.
+    pub fn picture_loaded(&mut self, id: u64, image: Result<scene::Image, String>) {
+        let Some(Purpose::Picture(content)) = self.requests.answer(id) else {
+            return;
+        };
+        if let Err(message) = self.pictures.arrived(content, image) {
+            self.events.push(Event::Rejected {
+                message: format!("picture {}: {message}", content.hex()),
+            });
+        }
+    }
+
     /// The answer to an [`AssetRequest`]: the bytes, or why there are none.
     /// A bad or missing file is logged as a rejection; the box figure and the
     /// rest pose are the fallbacks, so nothing breaks.
@@ -547,6 +574,7 @@ impl Client {
             Purpose::Model(hash) => vox::parse(&bytes)
                 .map(|model| self.parts.arrived(*hash, model))
                 .map_err(|e| format!("{e:?}")),
+            Purpose::Picture(id) => Err(format!("{}: a picture is answered as pixels", id.hex())),
         });
         if let Err(message) = outcome {
             self.events.push(Event::Rejected {
@@ -674,6 +702,11 @@ impl Client {
 
     pub fn drain_skinned_changes(&mut self) -> Vec<SkinnedChange> {
         self.wardrobe.drain_changes()
+    }
+
+    /// Pictures to upload or drop, in the order the client produced them.
+    pub fn drain_picture_changes(&mut self) -> Vec<PictureChange> {
+        self.pictures.drain_changes()
     }
 
     /// The shell opened the link to the world server: the client says hello.
@@ -1005,7 +1038,8 @@ impl Client {
             self.events.push(Event::Settled);
         }
         self.settled = settled;
-        self.frame(camera, patches)
+        let pictures = self.pictures_drawn(&camera);
+        self.frame(camera, patches, pictures)
     }
 
     /// Where every head in view lands on the screen, own body first, with
@@ -1081,7 +1115,8 @@ impl Client {
         self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
         let patches = self.stream(&camera, Terrain::settle);
-        self.frame(camera, patches)
+        let pictures = self.pictures_drawn(&camera);
+        self.frame(camera, patches, pictures)
     }
 
     /// Where the moon is now: an orbit on rails, a function of the clock. It
@@ -1132,7 +1167,30 @@ impl Client {
         planet.chain(on_moon.into_iter().map(at(moon))).collect()
     }
 
-    fn frame(&self, camera: scene::Camera, patches: Vec<scene::PatchDraw>) -> Frame {
+    /// Every picture placed, at the level it is seen at from the camera,
+    /// and the frame closed for the pictures: what went unseen is dropped.
+    fn pictures_drawn(&mut self, camera: &scene::Camera) -> Vec<scene::PictureDraw> {
+        let screen = Screen {
+            camera: *camera,
+            aspect: f64::from(self.aspect),
+            height_px: f64::from(self.view_height_px),
+        };
+        let drawn = self.parts.pictures(
+            &self.generator,
+            &mut self.pictures,
+            &screen,
+            &mut self.requests,
+        );
+        self.pictures.end_frame();
+        drawn
+    }
+
+    fn frame(
+        &self,
+        camera: scene::Camera,
+        patches: Vec<scene::PatchDraw>,
+        pictures: Vec<scene::PictureDraw>,
+    ) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
 
@@ -1190,6 +1248,7 @@ impl Client {
             models: self.parts.drawn(&self.generator),
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
+            pictures,
         }
     }
 
@@ -1223,6 +1282,7 @@ impl Client {
         let (plugins, lent) = self.lend();
         plugins.rest(lent);
         self.cells.clear();
+        self.pictures.clear();
         if keep {
             // A flyer keeps its altitude, which `stand_at` lifts if the new
             // ground rose through it; a walker lands on whatever is there now.

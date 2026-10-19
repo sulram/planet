@@ -33,6 +33,7 @@
 		const door = world?.door ?? '';
 		return {
 			url: socket(key),
+			files: world?.files ?? '/files',
 			// The socket opens for a key the server holds. Past its life the
 			// page goes through the door for a new one.
 			again: async () => {

@@ -32,10 +32,12 @@ export interface Entered {
 	key: string;
 }
 
-/** The world's socket, as the page hands it to the engine. */
+/** The world's socket and its files, as the page hands them to the engine. */
 export interface Link {
 	/** The socket's address, the key in it. */
 	url: string;
+	/** Where the world's files are read from: what `asset://` stands for. */
+	files: string;
 	/**
 	 * Asked before the link is opened again after a drop. The page checks its
 	 * key here, and goes through the door for a new one when the old expired.

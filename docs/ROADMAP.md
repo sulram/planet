@@ -80,7 +80,8 @@ end to end.
 - [ ] One history: a change of the cells and a change of the parts taken back in the order they landed
 - [ ] The op on the wire and the owner in the module: a part placed in one browser stands in another, kept by the seat, told to whoever is near (110); permission asked for every plot its box covers
 - [ ] A light part lights what is near, as a lamp among the cells does
-- [ ] Shapes beside the cube: a `.vox` model (its session: `crates/vox`, the upload route) and a picture (its session), each a variant and a draw of its own
+- [ ] Shapes beside the cube: a `.vox` model (its session: `crates/vox`, the upload route), each a variant and a draw of its own. A picture stands (`Shape::Image`): what is left of it is below, under Plugins
+- [ ] A picture's knobs in the panel: one side or both, a screen or a print, now read off its paint's finish; the picker mounted in the part section (`plugins/build/web/Picture.svelte`)
 - [ ] Measure: parts in a frame against the budget, `bun run bench`
 
 ### Bodies (108)
@@ -132,8 +133,8 @@ end to end.
 - [ ] Files: `POST /api/files` from a builder's session into the bucket folder (89), named by content hash, listed and served by the world; `.vox` first, GLB and images after (sketches/entities.md)
 - [ ] Models: a `.vox` file as a shape of a part, read and meshed by `crates/vox` with its own palette, solid or passable, placed with the one gizmo (sketches/entities.md)
 - [ ] Entities: GLB as a shape of a part, with budgets
-- [ ] Images: URL or upload, client-made thumbnail and low version, proximity LOD, texture budget
-- [ ] Video on the web (browser decoder), decoder budget, posters
+- [ ] Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL
+- [ ] Video: the same record with a poster for its thumb, played near and in view alone, under a decoder budget; `VideoSource` one seam, the browser's decoder on the web, GStreamer native
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
 - [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)

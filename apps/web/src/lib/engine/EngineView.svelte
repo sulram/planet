@@ -148,6 +148,12 @@
 		here.connect(link.url);
 	}
 
+	// A world's files are read under its own base, told before any picture
+	// is asked for: with the engine, and again with a world.
+	$effect(() => {
+		if (engine && link) engine.set_files(link.files);
+	});
+
 	function receive(event: EngineEvent | PluginEvent) {
 		// A plugin's event is its panel's to read: the view passes it on.
 		if (isPluginEvent(event)) return onevent?.(event);

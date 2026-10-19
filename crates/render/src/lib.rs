@@ -1,6 +1,6 @@
 //! The renderer. All of wgpu lives here.
 //!
-//! It draws a [`scene::Frame`]: terrain patches, volumes, boxes, sky. It knows nothing
+//! It draws a [`scene::Frame`]: terrain patches, volumes, boxes, pictures, sky. It knows nothing
 //! about recipes, addresses or input. Rules it keeps (CLAUDE.md invariants):
 //! - **camera-relative**: the GPU never sees a planet space position. Every
 //!   `f64` origin is subtracted from the camera on the CPU, per frame.
@@ -15,6 +15,7 @@ mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
 mod models;
+mod pictures;
 mod shadow;
 mod skinned;
 mod terrain;
@@ -22,7 +23,9 @@ mod volumes;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DVec3, Mat4, Vec3};
-use scene::{Camera, Frame, ModelChange, SkinnedChange, TerrainChange, VolumeChange};
+use scene::{
+    Camera, Frame, ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange,
+};
 
 pub use gpu::{Gpu, surface_configuration};
 #[cfg(not(target_arch = "wasm32"))]
@@ -71,6 +74,7 @@ struct ViewResources {
     shadows: shadow::Maps,
     boxes: boxes::Instances,
     skinned: skinned::InstanceUniforms,
+    pictures: pictures::Instances,
     volumes: terrain::PatchUniforms,
     models: models::InstanceUniforms,
 }
@@ -87,6 +91,7 @@ pub struct Renderer {
     volumes: volumes::Volumes,
     boxes: boxes::Boxes,
     skinned: skinned::Skinned,
+    pictures: pictures::Pictures,
     models: models::Models,
     sky: wgpu::RenderPipeline,
     composer: compose::Composer,
@@ -177,6 +182,8 @@ impl Renderer {
         );
         let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, scene);
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
+        let pictures =
+            pictures::Pictures::new(&device, &gpu.queue, &view_layout, &shadow_layout, scene);
         let models = models::Models::new(&device, &view_layout, &shadow_layout, scene);
         let sky = sky_pipeline(&device, &view_layout, scene);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
@@ -192,6 +199,7 @@ impl Renderer {
             volumes,
             boxes,
             skinned,
+            pictures,
             models,
             sky,
             composer,
@@ -218,6 +226,13 @@ impl Renderer {
     pub fn apply_skinned(&mut self, changes: Vec<SkinnedChange>) {
         for change in changes {
             self.skinned.apply(&self.device, &self.queue, change);
+        }
+    }
+
+    /// Uploads and drops pictures, each with its mip chain.
+    pub fn apply_pictures(&mut self, changes: Vec<PictureChange>) {
+        for change in changes {
+            self.pictures.apply(&self.device, &self.queue, change);
         }
     }
 
@@ -290,6 +305,12 @@ impl Renderer {
             &frame.skinned,
             view.camera.position,
         );
+        resources.pictures.write(
+            &self.device,
+            &self.queue,
+            &frame.pictures,
+            view.camera.position,
+        );
         let models = resources.models.write(
             &self.device,
             &self.queue,
@@ -353,6 +374,8 @@ impl Renderer {
                 .draw_shadow(&mut pass, &resources.boxes, box_count);
             self.skinned
                 .draw_shadow(&mut pass, &resources.skinned, &skinned_drawn);
+            self.pictures
+                .draw_shadow(&mut pass, &resources.pictures, &frame.pictures);
             self.models
                 .draw_shadow(&mut pass, &resources.models, &models, *matrix);
         }
@@ -401,6 +424,8 @@ impl Renderer {
         self.boxes.draw(&mut pass, &resources.boxes, box_count);
         self.skinned
             .draw(&mut pass, &resources.skinned, &skinned_drawn);
+        self.pictures
+            .draw(&mut pass, &resources.pictures, &frame.pictures);
         pass.set_pipeline(&self.sky);
         pass.draw(0..3, 0..1);
         drop(pass);
@@ -600,6 +625,7 @@ impl Renderer {
             patches: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             boxes: boxes::Instances::new(&self.device),
             skinned: skinned::InstanceUniforms::default(),
+            pictures: pictures::Instances::new(&self.device),
             volumes: terrain::PatchUniforms::new(&self.device, self.terrain.patch_layout()),
             models: models::InstanceUniforms::default(),
         }

@@ -13,6 +13,8 @@ export interface Engine {
 	command(command: Command | PluginCommand): void;
 	/** The ground a recipe names. Sent before the recipe that names it. */
 	set_field(bytes: Uint8Array): void;
+	/** Where the world's files are: the base an `asset://` reference is read under. */
+	set_files(base: string): void;
 	/** Opens the link to a world server at a socket URL, the key included. */
 	connect(url: string): void;
 	disconnect(): void;
@@ -29,6 +31,7 @@ export interface EngineModule {
 interface RawEngine {
 	command(json: string): void;
 	set_field(bytes: Uint8Array): void;
+	set_files(base: string): void;
 	connect(url: string): void;
 	disconnect(): void;
 	free(): void;
@@ -58,6 +61,7 @@ async function load(): Promise<EngineModule | null> {
 			return {
 				command: (command) => engine.command(JSON.stringify(command)),
 				set_field: (bytes) => engine.set_field(bytes),
+				set_files: (base) => engine.set_files(base),
 				connect: (url) => engine.connect(url),
 				disconnect: () => engine.disconnect(),
 				free: () => engine.free()

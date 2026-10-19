@@ -38,7 +38,7 @@ mod place;
 mod stroke;
 
 use build_world::Platform;
-use client::{Aim, Feet, Guide, Host, KeyAsk, Plugin, Seat, Turn};
+use client::{Aim, Feet, Guide, Host, KeyAsk, Media, Plugin, Seat, Turn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use topology::{BLOCK_M, SurfacePoint};
@@ -177,6 +177,12 @@ pub const CLOSE: &str = "close";
 pub const UNDO: &str = "undo";
 /// `build.redo`: puts back the last change taken back.
 pub const REDO: &str = "redo";
+/// `build.picture`: puts a picture in hand for the part tool, or takes it
+/// out with `null`: the next click places it, a metre tall in its own
+/// aspect, facing the eye, as a pane nobody collides with. `media` is what
+/// the owner's client made of the file: its size in texels and three asset
+/// names, `asset://<hash>.<ext>`, the original, a low version and a thumb.
+pub const PICTURE: &str = "picture";
 /// `build.state`: asks what is in hand, what the body is over and what there
 /// is to take back. It changes nothing, and is answered with [`HAND`],
 /// [`OVER`] and [`HISTORY`].
@@ -229,6 +235,27 @@ struct Side {
 struct Lay {
     #[serde(default)]
     base: Base,
+}
+
+#[derive(Deserialize)]
+struct Picture {
+    media: Option<MediaBody>,
+}
+
+/// A picture's record as the seam says it.
+#[derive(Deserialize)]
+struct MediaBody {
+    width: u32,
+    height: u32,
+    thumb: String,
+    low: String,
+    full: String,
+}
+
+impl MediaBody {
+    fn media(&self) -> Option<Media> {
+        Media::parse(self.width, self.height, &self.thumb, &self.low, &self.full)
+    }
 }
 
 #[derive(Serialize)]
@@ -429,6 +456,8 @@ pub struct Build {
     /// Whether there was a change to take back and one to put back, as last
     /// said.
     history: (bool, bool),
+    /// The picture the part tool places next, while one is in hand.
+    picture: Option<Media>,
 }
 
 impl Default for Build {
@@ -451,6 +480,7 @@ impl Default for Build {
             over: false,
             drawn: None,
             history: (false, false),
+            picture: None,
         }
     }
 }
@@ -807,6 +837,17 @@ impl Plugin for Build {
             CLOSE => {
                 if let Err(reason) = self.close(host) {
                     refuse(host, reason);
+                }
+            }
+            PICTURE => {
+                if let Some(Picture { media }) = read::<Picture>(body, host) {
+                    match media {
+                        None => self.picture = None,
+                        Some(body) => match body.media() {
+                            Some(media) => self.picture = Some(media),
+                            None => host.reject("a picture names three asset:// files".into()),
+                        },
+                    }
                 }
             }
             UNDO => self.undo(host),

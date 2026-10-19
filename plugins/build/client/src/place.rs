@@ -1,10 +1,15 @@
 //! Placing a part: a click puts a cube where the pointer meets the world,
 //! on a side of a cell, on a part or on the ground, standing up, a metre a
-//! side, in the paint in hand (DECISIONS 111).
+//! side, in the paint in hand (DECISIONS 111). With a picture in hand it
+//! puts the picture there instead, a metre tall in its own aspect, its face
+//! turned to the eye.
 
 use client::{CUBE, Feet, Host, PartPose, REACH_M, Shape, Turn};
-use glam::DVec3;
+use glam::{DQuat, DVec3};
 use topology::BLOCK_M;
+
+/// How thick a picture's pane is, in blocks: enough to pick, nothing to see.
+const PANE: f64 = 0.1;
 
 use crate::{Build, refuse};
 
@@ -25,11 +30,30 @@ impl Build {
             return;
         };
         let at = [feet.point.u, feet.point.v, feet.height_m / BLOCK_M];
-        let part = client::Part {
-            shape: Shape::Cube,
-            pose: PartPose::upright(at, CUBE),
-            paint: self.made_of(),
-            solid: true,
+        let part = match self.picture {
+            None => client::Part {
+                shape: Shape::Cube,
+                pose: PartPose::upright(at, CUBE),
+                paint: self.made_of(),
+                solid: true,
+            },
+            Some(media) => {
+                // The picture's front, its box's `-y` side, turned to face
+                // where the eye stands, by the eye's column of the seat.
+                let eye = host.feet_at(from);
+                let toward = [eye.point.u - at[0], eye.point.v - at[1]];
+                let yaw = libm::atan2(toward[0], -toward[1]);
+                client::Part {
+                    shape: Shape::Image(media),
+                    pose: PartPose {
+                        at,
+                        rotation: DQuat::from_rotation_z(yaw),
+                        scale: [CUBE[2] * media.aspect(), PANE, CUBE[2]],
+                    },
+                    paint: self.made_of(),
+                    solid: false,
+                }
+            }
         };
         if let Err(refusal) = host.place_part(feet.seat, part) {
             refuse(host, refusal.into());

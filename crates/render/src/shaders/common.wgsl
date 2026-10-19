@@ -199,6 +199,13 @@ fn night_sky(air: vec3<f32>) -> f32 {
 // be: what glows is what is bright. Not the moon one stands on, nor the moon
 // by day.
 const MOON_SHINE: f32 = 6.0;
+// A surface that is its own colour whatever falls on it, by night as by day,
+// seen through the air between it and the camera. `color` is the light it
+// gives: a lamp's albedo times over, a screen's as it is.
+fn own_light(color: vec3<f32>, relative: vec3<f32>) -> vec3<f32> {
+    let distance = length(relative);
+    return through_medium(color, relative / distance, distance);
+}
 
 fn moon_shine(relative: vec3<f32>) -> f32 {
     if !on_moon(relative) {

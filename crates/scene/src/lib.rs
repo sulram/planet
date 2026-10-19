@@ -490,4 +490,39 @@ pub struct Frame {
     /// The guides to draw over the world. All were announced by a
     /// [`VolumeChange::Guide`].
     pub guides: Vec<VolumeDraw>,
+    /// The pictures in reach, each at the level the client picked. Every
+    /// level drawn was announced by a [`PictureChange::Add`].
+    pub pictures: Vec<PictureDraw>,
+}
+
+/// Stable identity of a picture while a renderer holds it: one image of one
+/// level of detail, resident as a texture. The client picks which level a
+/// quad shows; a renderer draws whichever it is handed.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct PictureId(pub u64);
+
+/// A change to the set of pictures a renderer holds. An added picture gets
+/// its mip chain from the renderer: an image arrives as its one full level.
+#[derive(Clone, Debug)]
+pub enum PictureChange {
+    Add(PictureId, Arc<Image>),
+    Remove(PictureId),
+}
+
+/// One picture in the world: a unit quad, `-0.5..=0.5` across `x` and `y`,
+/// facing `+z`, placed by its transform, which carries the quad's size in
+/// metres as a scale. The texture's top row is the quad's `+y` edge.
+#[derive(Clone, Copy, Debug)]
+pub struct PictureDraw {
+    /// The level of detail to show. `None` draws a blank card of the quad's
+    /// size: what a picture is before its first byte lands.
+    pub picture: Option<PictureId>,
+    /// World from the quad.
+    pub transform: DAffine3,
+    /// How much it shines with its own colour, 0 lit by what falls on it up
+    /// to 1 for a screen, as a cell's side does.
+    pub shine: f32,
+    /// Whether its back is drawn too: a free standing picture is seen from
+    /// both sides, a poster on a wall from one.
+    pub both_sides: bool,
 }

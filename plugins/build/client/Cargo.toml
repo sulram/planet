@@ -12,6 +12,7 @@ client.workspace = true
 topology.workspace = true
 voxel.workspace = true
 glam.workspace = true
+libm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

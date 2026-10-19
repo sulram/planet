@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 client.workspace = true
 plugins-client.workspace = true
 render.workspace = true
+scene.workspace = true
 log.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -35,6 +36,14 @@ web-sys = { version = "0.3", features = [
     "Window",
     "Performance",
     "Response",
+    "Blob",
+    "ImageBitmap",
+    "ImageBitmapOptions",
+    "PremultiplyAlpha",
+    "ResizeQuality",
+    "OffscreenCanvas",
+    "OffscreenCanvasRenderingContext2d",
+    "ImageData",
     "AddEventListenerOptions",
     "WebSocket",
     "BinaryType",

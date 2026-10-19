@@ -23,17 +23,19 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use glam::{DAffine3, DVec3};
+use glam::{DAffine3, DMat3, DVec3};
 use part::{Gap, Part, PartId, Pose, Shape};
 use protocol::Body;
-use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, VolumeVertex};
+use scene::{ModelChange, ModelDraw, ModelId, ModelMesh, PictureDraw, VolumeVertex};
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
 use voxel::{Finish, Paint};
 use worldgen::Generator;
 
+use crate::assets::Requests;
 use crate::cells::paint_look;
 use crate::collision::{BODY_HALF, Footing, STEP_M};
+use crate::pictures::{Pictures, Screen};
 
 /// The size of a cube as a hand places it, in blocks: a metre.
 pub const CUBE: [f64; 3] = [2.0, 2.0, 2.0];
@@ -175,13 +177,37 @@ impl Parts {
             .reduce(Footing::with)
     }
 
-    /// Every part, placed in the world this frame.
+    /// Every part drawn as a model, placed in the world this frame.
     pub fn drawn(&self, generator: &Generator) -> Vec<ModelDraw> {
         self.all()
-            .map(|(_, seat, part)| ModelDraw {
-                mesh: model_of(part),
-                transform: self.place_of(generator, seat, &part.pose),
-                glass: Paint::of(part.paint).finish == Finish::Glass,
+            .filter_map(|(_, seat, part)| {
+                Some(ModelDraw {
+                    mesh: model_of(part)?,
+                    transform: self.place_of(generator, seat, &part.pose),
+                    glass: Paint::of(part.paint).finish == Finish::Glass,
+                })
+            })
+            .collect()
+    }
+
+    /// Every part that is a picture, placed in the world this frame at the
+    /// level it is seen at from the screen. A picture in a light finish is
+    /// a screen, shining with its own colour; any other is lit as a print.
+    pub(crate) fn pictures(
+        &self,
+        generator: &Generator,
+        pictures: &mut Pictures,
+        screen: &Screen,
+        requests: &mut Requests,
+    ) -> Vec<PictureDraw> {
+        self.all()
+            .filter_map(|(_, seat, part)| {
+                let Shape::Image(media) = part.shape else {
+                    return None;
+                };
+                let world_from_quad = self.place_of(generator, seat, &part.pose) * FRONT;
+                let shine = f32::from(u8::from(Paint::of(part.paint).finish == Finish::Light));
+                Some(pictures.draw(&media, world_from_quad, shine, true, screen, requests))
             })
             .collect()
     }
@@ -193,7 +219,9 @@ impl Parts {
     /// Announces the model of a part, once. A file's is asked for instead,
     /// and announced when it arrives.
     fn mesh(&mut self, part: &Part) {
-        let id = model_of(part);
+        let Some(id) = model_of(part) else {
+            return;
+        };
         if self.meshed.contains(&id) {
             return;
         }
@@ -203,6 +231,8 @@ impl Parts {
                 self.changes.push(ModelChange::Add(id, cube(part.paint)));
             }
             Shape::Vox(hash) => self.want(hash),
+            // A picture is no model: drawn by `pictures`.
+            Shape::Image(_) => {}
         }
     }
 
@@ -254,14 +284,15 @@ impl Parts {
 }
 
 /// The model a part is drawn as: the core's shapes in a paint each, a file
-/// by its hash.
-fn model_of(part: &Part) -> ModelId {
+/// by its hash. `None` for a shape drawn another way, a picture.
+fn model_of(part: &Part) -> Option<ModelId> {
     let shape = match part.shape {
         Shape::Cube => 0,
-        Shape::Vox(hash) => return model_of_file(hash),
+        Shape::Vox(hash) => return Some(model_of_file(hash)),
+        Shape::Image(_) => return None,
     };
     debug_assert!(shape < SHAPES >> 8);
-    ModelId((shape << 8) | u64::from(part.paint))
+    Some(ModelId((shape << 8) | u64::from(part.paint)))
 }
 
 fn model_of_file(hash: [u8; 32]) -> ModelId {
@@ -356,6 +387,13 @@ fn boxed(grid: &vox::Grid, palette: &vox::Palette) -> ModelMesh {
         indices: mesh.indices,
     }
 }
+/// The front of a part's box as the picture's quad: the unit quad, `x`
+/// across and `y` up, facing `+z`, laid on the box's `y = -0.5` side with
+/// its bottom at the anchor, facing `-y`.
+const FRONT: DAffine3 = DAffine3 {
+    matrix3: DMat3::from_cols(DVec3::X, DVec3::Z, DVec3::NEG_Y),
+    translation: DVec3::new(0.0, -0.5, 0.5),
+};
 
 /// A cube of one voxel in a paint: the unit box, its sides wound counter
 /// clockwise seen from outside, every corner open to the sky.

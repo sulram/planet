@@ -40,6 +40,31 @@ compositor. What the world *is* lives in WORLD.md.
   the clouds, blended, tested against depth and writing none. Red over what
   a delete takes (76).
 
+## Pictures
+
+- A picture is one textured quad a draw, instanced per view, camera
+  relative, with its own texture: sRGB bytes read as linear light, a mip
+  chain made on the GPU as it lands, so a picture seen small or aslant does
+  not shimmer. Alpha under a half is cut out, in the picture and in its
+  shadow.
+- Lit as a matte print, or shining with its own colour as a screen (`shine`),
+  as a cell's side does; a screen's white is a sunlit white.
+- Both sides, or the front alone: the back is the same quad wound the other
+  way, left still left, so a poster seen from behind is not drawn and a free
+  standing picture is.
+- A picture not yet landed is a light grey card of its size.
+- Three files a picture, the owner's client's work at placement: the
+  original, a low version at most 1024 px on its long side and a thumb at
+  most 128 px, both WebP. Far draws the thumb, mid the low version, near and
+  in view the original: the level is picked by the quad's height on the
+  screen in texels, with hysteresis, asked for over the asset seam when
+  first wanted, at most four in flight, and dropped when unseen for ten
+  seconds or when 96 MB of texels are resident, the longest unseen first.
+- Decoding is the shell's, as fetching is: the browser's own decoder off
+  the frame's thread on the web, a codec crate on desktop, so the engine
+  carries none. A texture wider than the device takes is halved until it
+  fits; the client asks for no more than 2048 texels a side.
+
 ## Sea, sky and light
 
 - The terrain mesh is the real ground, sea floor included. A patch that dips

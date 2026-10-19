@@ -48,10 +48,7 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     // A shut corner darkens along a curve, the way light falls off into one.
     let open = in.side.x * in.side.x;
     let lit = lit_occluded(albedo, normal, 0.0, in.relative, normal, mix(0.25, 1.0, open));
-    // A light is its own colour whatever falls on it, by night as by day.
-    let distance = length(in.relative);
-    let own = through_medium(albedo * SHINE, in.relative / distance, distance);
-    return vec4<f32>(mix(lit, own, in.color.a), 1.0);
+    return vec4<f32>(mix(lit, own_light(albedo * SHINE, in.relative), in.color.a), 1.0);
 }
 
 // Glass: its tint over what stands behind it, more of it the more it is seen

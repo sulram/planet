@@ -30,7 +30,7 @@ pub fn run(shot: Shot) -> Result<(), String> {
         client.plug(plugin);
     }
     client.rehearse(client::Level::Admin);
-    client.set_aspect(width as f32 / height as f32);
+    client.set_view([width, height]);
     client.set_clock(shot.clock_s);
     if let Some(effects) = &shot.effects {
         client.command_json(&format!(r#"{{"type":"set_effects","effects":{effects}}}"#));
@@ -81,6 +81,8 @@ pub fn run(shot: Shot) -> Result<(), String> {
             _ => {}
         }
     }
+    // What the steps asked for, a picture placed, lands before the shot.
+    assets::serve(&mut client);
     input.key(client::Key::Forward, true);
     for _ in 0..(shot.walk_s * 60.0) as u32 {
         client.update(1.0 / 60.0, &mut input);
@@ -96,6 +98,9 @@ pub fn run(shot: Shot) -> Result<(), String> {
     headless
         .renderer
         .apply_skinned(client.drain_skinned_changes());
+    headless
+        .renderer
+        .apply_pictures(client.drain_picture_changes());
     headless.renderer.apply_models(client.drain_model_changes());
     if shot.measure > 0 {
         for (label, shadows, grass, clouds, bloom) in [

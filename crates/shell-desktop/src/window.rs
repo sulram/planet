@@ -136,7 +136,7 @@ impl Stage {
         let dt = now.duration_since(self.last_frame).as_secs_f64();
         self.last_frame = now;
 
-        client.set_aspect(self.config.width as f32 / self.config.height as f32);
+        client.set_view([self.config.width, self.config.height]);
         assets::serve(client);
         let frame = client.update(dt, input);
         // A tool aims with a free pointer: taking one lets a captured one go.
@@ -146,6 +146,7 @@ impl Stage {
         self.renderer.apply(client.drain_terrain_changes());
         self.renderer.apply_volumes(client.drain_volume_changes());
         self.renderer.apply_skinned(client.drain_skinned_changes());
+        self.renderer.apply_pictures(client.drain_picture_changes());
         self.renderer.apply_models(client.drain_model_changes());
         for event in client.drain_events() {
             self.panel.event(&event);

@@ -210,6 +210,22 @@ for (const file of [...docs, 'CLAUDE.md', 'apps/web/CLAUDE.md', 'server/CLAUDE.m
 	}
 }
 
+/* ---------------------- a picture's versions are the same size on both sides */
+
+// The owner's client makes a picture's thumb and low version in the browser
+// and the engine picks a level by their sides: one number each, said in Rust
+// and in TypeScript, held to each other here.
+{
+	const rust = read('crates/client/src/pictures.rs');
+	const web = read('plugins/build/web/image.ts');
+	for (const side of ['THUMB_SIDE', 'LOW_SIDE']) {
+		const inRust = rust.match(new RegExp(`^pub const ${side}: u32 = (\\d+);`, 'm'))?.[1];
+		const inWeb = web.match(new RegExp(`^export const ${side} = (\\d+);`, 'm'))?.[1];
+		if (!inRust || !inWeb) problems.push(`${side}: not found in both crates/client/src/pictures.rs and plugins/build/web/image.ts`);
+		else if (inRust !== inWeb) problems.push(`${side}: ${inRust} in crates/client/src/pictures.rs, ${inWeb} in plugins/build/web/image.ts`);
+	}
+}
+
 /* ------------------------------------------------------------ no em dash */
 
 for (const file of files) {

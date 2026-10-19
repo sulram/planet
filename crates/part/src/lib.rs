@@ -29,6 +29,10 @@ pub enum Shape {
     /// is nobody's. What a body meets of it is its own grid, read through
     /// the pose by whoever holds the file; here it is its box.
     Vox([u8; 32]),
+    /// A picture: the box's front, its `y = -0.5` side, drawn with an image
+    /// and seen from both sides. Wide as the box is along `x`, tall as it is
+    /// along `z`; a hand places it in the picture's own aspect.
+    Image(Media),
 }
 
 impl Shape {
@@ -53,8 +57,131 @@ impl Shape {
                 let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
                 Some(format!("asset://{hex}.vox"))
             }
-            Shape::Cube => None,
+            Shape::Cube | Shape::Image(_) => None,
         }
+    }
+}
+
+/// The content id of a heavy file, the SHA-256 of its bytes: how a record
+/// names it (DECISIONS 89).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct ContentId(pub [u8; 32]);
+
+impl ContentId {
+    /// The id as it is written: lower case hex.
+    pub fn hex(&self) -> String {
+        self.0.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    /// An id read back from its hex. `None` for anything else.
+    pub fn parse(hex: &str) -> Option<ContentId> {
+        let hex = hex.as_bytes();
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut bytes = [0; 32];
+        for (byte, pair) in bytes.iter_mut().zip(hex.chunks(2)) {
+            let digit = |c: u8| (c as char).to_digit(16);
+            *byte = (digit(pair[0])? * 16 + digit(pair[1])?) as u8;
+        }
+        Some(ContentId(bytes))
+    }
+}
+
+/// The file kinds a picture is kept in, by the extension the world names
+/// them with.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ImageKind {
+    Png,
+    Jpg,
+    Webp,
+}
+
+impl ImageKind {
+    pub fn ext(self) -> &'static str {
+        match self {
+            ImageKind::Png => "png",
+            ImageKind::Jpg => "jpg",
+            ImageKind::Webp => "webp",
+        }
+    }
+
+    pub fn from_ext(ext: &str) -> Option<ImageKind> {
+        match ext {
+            "png" => Some(ImageKind::Png),
+            "jpg" => Some(ImageKind::Jpg),
+            "webp" => Some(ImageKind::Webp),
+            _ => None,
+        }
+    }
+}
+
+/// The level of detail of a picture: which of its three files is shown.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum PictureLevel {
+    /// At most 128 texels on its longest side, for what is far.
+    Thumb,
+    /// At most 1024, for what is near.
+    Low,
+    /// The original, for what is in view and close.
+    Full,
+}
+
+/// What a picture is at every distance, and nothing else: its size in
+/// texels and the three files its owner's client made when it was placed
+/// (ARCHITECTURE § Files). The thumb and the low version are WebP.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Media {
+    pub width: u32,
+    pub height: u32,
+    pub thumb: ContentId,
+    pub low: ContentId,
+    pub full: ContentId,
+    /// What the original is kept as.
+    pub kind: ImageKind,
+}
+
+impl Media {
+    /// Width over height.
+    pub fn aspect(&self) -> f64 {
+        f64::from(self.width.max(1)) / f64::from(self.height.max(1))
+    }
+
+    /// The content id of a level.
+    pub fn id(&self, level: PictureLevel) -> ContentId {
+        match level {
+            PictureLevel::Thumb => self.thumb,
+            PictureLevel::Low => self.low,
+            PictureLevel::Full => self.full,
+        }
+    }
+
+    /// The asset reference of a level, as a record names a file:
+    /// `asset://<hash>.<ext>`.
+    pub fn name(&self, level: PictureLevel) -> String {
+        let ext = match level {
+            PictureLevel::Full => self.kind.ext(),
+            _ => ImageKind::Webp.ext(),
+        };
+        format!("asset://{}.{ext}", self.id(level).hex())
+    }
+
+    /// A media read back from three asset names and a size. `None` when a
+    /// name is no `asset://<hash>.<ext>` of a picture.
+    pub fn parse(width: u32, height: u32, thumb: &str, low: &str, full: &str) -> Option<Media> {
+        let split = |name: &str| -> Option<(ContentId, ImageKind)> {
+            let (hex, ext) = name.strip_prefix("asset://")?.split_once('.')?;
+            Some((ContentId::parse(hex)?, ImageKind::from_ext(ext)?))
+        };
+        let (full, kind) = split(full)?;
+        Some(Media {
+            width,
+            height,
+            thumb: split(thumb)?.0,
+            low: split(low)?.0,
+            full,
+            kind,
+        })
     }
 }
 
@@ -238,6 +365,23 @@ fn slab(from: DVec3, toward: DVec3) -> Option<(f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_media_names_its_files_and_reads_them_back() {
+        let hex = "0123456789abcdef".repeat(4);
+        let thumb = format!("asset://{hex}.webp");
+        let low = format!("asset://{}.webp", "ff".repeat(32));
+        let full = format!("asset://{}.jpg", "00".repeat(32));
+        let media = Media::parse(300, 200, &thumb, &low, &full).unwrap();
+        assert_eq!(media.name(PictureLevel::Thumb), thumb);
+        assert_eq!(media.name(PictureLevel::Low), low);
+        assert_eq!(media.name(PictureLevel::Full), full);
+        assert_eq!(media.kind, ImageKind::Jpg);
+        assert!((media.aspect() - 1.5).abs() < 1e-12);
+        assert!(Media::parse(1, 1, &thumb, &low, "asset://abc.jpg").is_none());
+        assert!(Media::parse(1, 1, &thumb, &low, &format!("asset://{hex}.gif")).is_none());
+        assert!(ContentId::parse(&"zz".repeat(32)).is_none());
+    }
     use core::f64::consts::FRAC_PI_4;
     use proptest::prelude::*;
 

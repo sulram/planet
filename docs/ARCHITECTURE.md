@@ -115,10 +115,10 @@ not yet confirmed.
   browser for good. On start a world deletes what no record names.
 - The default asset set (avatars, clips, fields) is part of a version, served
   from the image; `assets/manifest.json` says what is in it.
-- What is placed in a world, a cube, a model, a GLB, a picture, is drawn in
-  `sketches/entities.md`: one part with a pose, a scale and a shape. The
-  owner's client makes a picture's thumbnail and low version at placement;
-  the server fetches no third-party URL and runs no ffmpeg.
+- What is placed, a cube, a model, a GLB, a picture, is one part with a pose,
+  a scale and a shape (111); the rest is drawn in `sketches/entities.md`. A
+  picture names three files its owner's client made at placement (RENDER.md
+  § Pictures); the server fetches no third-party URL and runs no ffmpeg.
 - Video rule: MP4, H.264, faststart, a host with range requests. `VideoSource`
   is one seam with a backend for each platform.
 
@@ -152,7 +152,7 @@ not yet confirmed.
   web keeps the choice in the browser, since it belongs to the machine.
 - Building is a plugin (106, 109): `build.take` takes a tool or `null`, then
   `build.paint`, `.finish`, `.edge`, `.platform`, `.lay` with its base,
-  `.open`, `.close`, `.undo`, `.redo`; it says `build.hand`, `.over`, `.refused`,
+  `.open`, `.close`, `.picture`, `.undo`, `.redo`; it says `build.hand`, `.over`, `.refused`,
   `.history`, and the core says `palette`. With a tool in hand the plugin has
   the pointer: it is free, the primary button is the tool's, the secondary
   one looks. Each shell binds the keys it asks for by name: B, 1 2 3 4 take a

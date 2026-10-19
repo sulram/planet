@@ -136,7 +136,8 @@ this file in the same change.
 | Asset | A heavy file, named by the hash of its content, in the world's bucket folder. |
 | Placement | The use of an asset by an entity. Counts against budgets. |
 | Budget | Per-volume limit on triangles, texture size and bytes. |
-| Media LOD | Thumbnail far, low version mid, original near. |
+| Picture | A part whose shape is an image: the front of its box, drawn with a texture, seen from both sides, a screen in a light finish. Its record is a `Media`: its size in texels and three content ids. |
+| Media LOD | Thumb far, low version mid, original near and in view: picked by the quad's height on the screen, with hysteresis, under a budget of resident texels. |
 | Decoder budget | Max videos decoding at once on a platform. |
 | Gravity field | An entity defining "down" inside a shape, with range and priority. |
 | Scale band | A discrete avatar scale (giant, human, bug) that selects which levels are streamed. |

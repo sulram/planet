@@ -10,11 +10,24 @@
 //! whatever reference it was handed, and the manifest is only the set an
 //! instance offers to those who have none of their own.
 
-/// A file the client wants, by asset reference.
+/// A file the client wants, by asset reference, and in what form.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct AssetRequest {
     pub id: u64,
     pub path: String,
+    pub form: Form,
+}
+
+/// What form an answer takes. Decoding a picture is the shell's, as
+/// fetching is: the browser decodes with its own codecs off the frame's
+/// thread, the desktop with a codec crate, and the engine carries none.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Form {
+    /// The file's bytes, answered with [`crate::Client::asset_loaded`].
+    Bytes,
+    /// The file decoded as RGBA pixels, no wider than `max_side` texels on
+    /// either side, answered with [`crate::Client::picture_loaded`].
+    Picture { max_side: u32 },
 }
 
 /// What a pending request is for.
@@ -26,6 +39,8 @@ pub(crate) enum Purpose {
     Clip(crate::figure::Gait),
     /// A model's file, by the hash of its content (`part::Shape::Vox`).
     Model([u8; 32]),
+    /// A level of a picture, by the content id of its file.
+    Picture(part::ContentId),
 }
 
 /// `manifest.json` at the asset root: the one place that says which avatars
@@ -50,11 +65,21 @@ pub(crate) struct Requests {
 
 impl Requests {
     pub fn ask(&mut self, path: String, purpose: Purpose) {
+        self.ask_for(path, purpose, Form::Bytes);
+    }
+
+    /// Asks for a picture as pixels, decoded no wider than `max_side`.
+    pub fn ask_picture(&mut self, path: String, id: part::ContentId, max_side: u32) {
+        self.ask_for(path, Purpose::Picture(id), Form::Picture { max_side });
+    }
+
+    fn ask_for(&mut self, path: String, purpose: Purpose, form: Form) {
         self.next_id += 1;
         self.pending.push((self.next_id, purpose));
         self.outbox.push(AssetRequest {
             id: self.next_id,
             path,
+            form,
         });
     }
 
