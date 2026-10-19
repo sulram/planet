@@ -147,9 +147,10 @@ this file in the same change.
 | Asset | A heavy file, named by the hash of its content, in the world's bucket folder. |
 | Placement | The use of an asset by an entity. Counts against budgets. |
 | Budget | Per-volume limit on triangles, texture size and bytes. |
-| Picture | A part whose shape is an image: the front of its box, drawn with a texture, seen from both sides, a screen in a light finish. Its record is a `Media`: its size in texels and three content ids. |
-| Media LOD | Thumb far, low version mid, original near and in view: picked by the quad's height on the screen, with hysteresis, under a budget of resident texels. |
-| Decoder budget | Max videos decoding at once on a platform. |
+| Picture | A part whose shape is an image: the front of its box, drawn with a texture, seen from both sides, a screen in a light finish. Its record is a `Media`: its size in texels, how long it plays, and three content ids. |
+| Moving picture | A picture whose original plays: a GIF, an animated WebP or a video, its record saying how long. A poster out of view; in view the shell plays it into a live texture, under the decoder budget. |
+| Media LOD | Thumb far, low version mid, original near and in view: picked by the quad's height on the screen, with hysteresis, under a budget of resident texels. A moving picture has two levels: its poster, and playing. |
+| Decoder budget | How many moving pictures play at once, a decoder each: four, the tallest on the screen first. |
 | Gravity field | An entity defining "down" inside a shape, with range and priority. |
 | Scale band | A discrete avatar scale (giant, human, bug) that selects which levels are streamed. |
 | Landmark | A part whose shape is a five pointed star bearing a name, up to 64 bytes, inline in the record. Lit with its own light whatever its paint, a lamp, so it is seen at night. A place one travels to: its place code is its anchor's, and arriving is standing on it. |

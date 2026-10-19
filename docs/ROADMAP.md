@@ -139,7 +139,7 @@ end to end.
 - [ ] Models: a `.vox` file as a shape of a part, read and meshed by `crates/vox` with its own palette, solid or passable, placed with the one gizmo (sketches/entities.md)
 - [ ] Entities: GLB as a shape of a part, with budgets
 - [ ] Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL
-- [ ] Video: the same record with a poster for its thumb, played near and in view alone, under a decoder budget; `VideoSource` one seam, the browser's decoder on the web, GStreamer native
+- [ ] Sound for a video: muted today. Spatial on the web through Web Audio, the camera the listener, each video a panner; native audio from nothing. Playback in step between clients waits on the server's clock
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
 - [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
@@ -164,7 +164,7 @@ end to end.
 - [ ] Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - [ ] The desktop remembers its settings
 - [ ] Raspberry Pi 5 build (KMS/DRM)
-- [ ] Native video through GStreamer (shared with the vybe work)
+- [ ] Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
 - [ ] Quest and Pico: OpenXR, two views
 
 ## Wishes (unordered)

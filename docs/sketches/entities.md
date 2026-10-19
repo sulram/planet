@@ -147,9 +147,7 @@ A level is asked for over the asset seam when first needed and dropped when
 the part leaves reach, under a texture budget that drops the longest unseen
 first. Decoding is the shell's, as fetching is: the browser's own decoder on
 the web, a codec crate on desktop, so the engine's WASM carries no codec and
-the client is handed pixels. A video is the same record with a poster for its
-thumb, plays only near and in view, under a decoder budget, and `VideoSource`
-is one seam with a backend for each platform.
+the client is handed pixels.
 
 ## Budgets
 

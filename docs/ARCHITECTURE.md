@@ -113,9 +113,9 @@ not yet confirmed.
 
 - A heavy file, an image, a video, a GLB, is named by the hash of its content
   and never changes (89). A record names it `asset://<hash>.<ext>`.
-- A builder sends it to `POST /api/files`, the bytes as the body: the kind
-  is read off them, `.vox`, `.png`, `.jpg`, `.webp`, 20 MB at most, and the
-  answer is the asset's name. `GET /api/files` lists what a world holds.
+- A builder sends it to `POST /api/files`, the bytes as the body: the kind is
+  read off them, `.vox`, `.png`, `.jpg`, `.webp`, `.gif`, `.mp4`, 20 MB at most,
+  and the answer is the asset's name. `GET /api/files` lists what a world holds.
 - It goes to the bucket folder mundos named for this generation, and is read
   from the address `GET /api/world` says as `files`. Alone, the world folder
   holds it under `files/` and `GET /files/<hash>.<ext>` serves it, kept by a
@@ -126,8 +126,8 @@ not yet confirmed.
   a scale and a shape (111); the rest is drawn in `sketches/entities.md`. A
   picture names three files its owner's client made at placement (RENDER.md
   § Pictures); the server fetches no third-party URL and runs no ffmpeg.
-- Video rule: MP4, H.264, faststart, a host with range requests. `VideoSource`
-  is one seam with a backend for each platform.
+- A GIF, an animated WebP or an MP4 goes up as it is and the shell plays it
+  (PICTURES.md). Video: MP4, H.264, faststart, served with range requests.
 
 ## Clients and UI
 
