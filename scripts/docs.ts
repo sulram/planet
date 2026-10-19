@@ -115,6 +115,7 @@ const ALLOWED: Record<string, string[]> = {
 	protocol: [],
 	voxel: [],
 	part: [],
+	vox: [],
 	seat: ['topology', 'worldgen', 'voxel', 'part', 'protocol'],
 	worldgen: ['topology'],
 	avatar: ['scene'],
