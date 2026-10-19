@@ -550,10 +550,19 @@ fn typing() -> bool {
 
 fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listener> {
     let target: &web_sys::EventTarget = canvas.as_ref();
+    let window = web_sys::window().expect("a window");
+    let page: &web_sys::EventTarget = window.as_ref();
 
+    // The keys are the page's wherever its focus is, a button of a panel
+    // clicked last included, and a field typed into alone keeps them. A
+    // key the world takes brings the focus back to the canvas, so the
+    // button does not act on it too.
     let key = |down: bool| {
-        let state = state.clone();
+        let (state, canvas) = (state.clone(), canvas.clone());
         move |event: web_sys::Event| {
+            if typing() {
+                return;
+            }
             let event: KeyboardEvent = event.unchecked_into();
             let code = event.code();
             // Command on a Mac, Control elsewhere.
@@ -568,8 +577,7 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             }
             // Command Z takes back, with Shift puts back, as Command Y does:
             // the core's chords, which no plugin asks for.
-            if chord.command && (code == "KeyZ" || code == "KeyY") {
-                event.prevent_default();
+            let taken = if chord.command && (code == "KeyZ" || code == "KeyY") {
                 if down && !event.repeat() {
                     let key = match code == "KeyY" || chord.shift {
                         true => Key::Redo,
@@ -577,19 +585,26 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
                     };
                     state.input.key(key, true);
                 }
+                true
             } else if state.client.asks(&code, chord) {
                 // A key a plugin asked for is the plugin's, and the page has
                 // nothing of its own to do with it here.
-                event.prevent_default();
                 if down && !event.repeat() {
                     state.input.code(&code, chord, true);
                 }
+                true
             } else if let Some(key) = binding(&code) {
-                event.prevent_default();
                 // One shot keys must not fire again while held.
                 if !(down && event.repeat()) {
                     state.input.key(key, down);
                 }
+                true
+            } else {
+                false
+            };
+            if taken {
+                event.prevent_default();
+                let _ = canvas.focus();
             }
         }
     };
@@ -683,6 +698,8 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             state.borrow_mut().input.zoom -= (event.delta_y() / 100.0) as f32;
         }
     };
+    // The canvas or the page losing focus lets every key go: what was held
+    // cannot be heard up again.
     let blur = {
         let state = state.clone();
         move |_: web_sys::Event| {
@@ -694,8 +711,9 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
     };
 
     vec![
-        Listener::add(target, "keydown", key(true)),
-        Listener::add(target, "keyup", key(false)),
+        Listener::add(page, "keydown", key(true)),
+        Listener::add(page, "keyup", key(false)),
+        Listener::add(page, "blur", blur.clone()),
         Listener::add(target, "pointerdown", press),
         Listener::add(target, "pointerup", release),
         Listener::add(target, "pointermove", motion),
