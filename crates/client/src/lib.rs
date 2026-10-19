@@ -1317,7 +1317,9 @@ impl Client {
             volumes: self.cells.drawn(),
             glass: self.cells.glazed(),
             lamps: self.cells.lamps(),
-            models: self.parts.drawn(&self.generator, self.controller.held_by()),
+            models: self
+                .parts
+                .drawn(&self.generator, self.controller.held_by(), self.clock_s),
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
             pictures,

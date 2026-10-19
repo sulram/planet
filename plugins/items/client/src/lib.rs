@@ -184,6 +184,9 @@ struct Hand {
     finish: Finish,
     edge: Edge,
     model: Option<String>,
+    /// Whether the model in hand is still on its way: its file has not
+    /// arrived, so what it places is a glass box until it does.
+    loading: bool,
 }
 
 /// A part as the panel shows it.
@@ -241,6 +244,8 @@ pub struct Items {
     /// The model in hand, by the hash of its file: what the model item
     /// places. None until a file is taken.
     model: Option<[u8; 32]>,
+    /// Whether the model in hand was still on its way, as last said.
+    loading: bool,
     /// Whether the pointer's button was down last turn.
     using: bool,
 }
@@ -257,6 +262,7 @@ impl Default for Items {
             picked: None,
             picture: None,
             model: None,
+            loading: false,
             using: false,
         }
     }
@@ -420,8 +426,15 @@ impl Items {
                 finish: self.finish,
                 edge: self.edge,
                 model: self.model.and_then(|hash| Shape::Vox(hash).asset()),
+                loading: self.loading,
             },
         );
+    }
+
+    /// Whether the model in hand is still on its way.
+    fn is_loading(&self, host: &Host<'_>) -> bool {
+        self.model
+            .is_some_and(|hash| host.model_size(hash).is_none())
     }
 
     fn say_picked(&self, host: &mut Host<'_>) {
@@ -638,6 +651,13 @@ impl Plugin for Items {
     /// anywhere, and opens the menu on it; with an item in hand a click
     /// places it; with the menu open the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
+        // The model in hand arrived, or a new one is on its way: the hand
+        // says so.
+        let loading = self.is_loading(host);
+        if loading != self.loading {
+            self.loading = loading;
+            self.say_hand(host);
+        }
         if turn.inspected && host.may_change() {
             let (from, toward) = turn.eye.sight();
             if let Some((id, _)) = host.pick(from, toward) {

@@ -56,6 +56,27 @@ const DROP_M: f64 = 2304.0;
 /// How far off a part is drawn as its box in one paint instead of its
 /// model, metres: where a volume is seen whole, a part is seen whole.
 pub const AFAR_M: f64 = seat::HOLD_M;
+/// What a part whose file is still on its way is drawn as: its box in white
+/// glass with a white edge, and over it a white light turning once a
+/// second, so the place it will fill is seen and seen to be waiting.
+const LOADING_PAINT: u8 = Paint {
+    color: 0,
+    finish: Finish::Glass,
+    edge: voxel::Edge::White,
+}
+.byte();
+const WAITING_PAINT: u8 = Paint {
+    color: 0,
+    finish: Finish::Light,
+    edge: voxel::Edge::None,
+}
+.byte();
+/// The mark turning over a loading part: how long and how thick, metres,
+/// how high over the box, and turns a second.
+const WAITING_BAR_M: f64 = 0.5;
+const WAITING_THICK_M: f64 = 0.06;
+const WAITING_OVER_M: f64 = 0.25;
+const WAITING_TURNS_HZ: f64 = 1.0;
 /// Blocks along the side of a bucket of a seat's grid: a part is in every
 /// bucket its box and a body's width reach, so a body's column asks the
 /// parts of its own bucket and no other.
@@ -776,28 +797,59 @@ impl Parts {
     /// box in one paint: a cube is that already, a model shows the colour
     /// most of its voxels have. `body` is where the client's own body is,
     /// from the centre of the body it stands on.
-    pub fn drawn(&self, generator: &Generator, body: (Body, DVec3)) -> Vec<ModelDraw> {
-        self.all()
-            .filter_map(|(_, seat, part)| {
-                let afar = away_m(generator, seat, &part.pose, body) > AFAR_M;
-                let mesh = match (afar, part.shape) {
-                    (true, Shape::Vox(hash)) => {
-                        let paint = self.afar.get(&hash).copied().unwrap_or(part.paint);
-                        model_id(Shape::Cube, paint)?
-                    }
-                    _ => model_of(part)?,
+    pub fn drawn(
+        &self,
+        generator: &Generator,
+        body: (Body, DVec3),
+        clock_s: f64,
+    ) -> Vec<ModelDraw> {
+        let mut drawn = Vec::new();
+        for (_, seat, part) in self.all() {
+            let transform = self.place_of(generator, seat, &part.pose);
+            // A model whose file is still on its way: its box in glass, and
+            // a mark turning over it.
+            if let Shape::Vox(hash) = part.shape
+                && !self.grids.contains_key(&hash)
+            {
+                let Some(mesh) = model_id(Shape::Cube, LOADING_PAINT) else {
+                    continue;
                 };
-                Some(ModelDraw {
+                drawn.push(ModelDraw {
                     mesh,
-                    transform: self.place_of(generator, seat, &part.pose),
-                    pass: match Paint::of(part.paint).finish {
-                        Finish::Glass => ModelPass::Glass,
-                        Finish::Matte | Finish::Light => ModelPass::Solid,
-                    },
-                })
-            })
-            .chain(self.marks.iter().copied())
-            .collect()
+                    transform,
+                    pass: ModelPass::Glass,
+                });
+                if let Some(mesh) = model_id(Shape::Cube, WAITING_PAINT) {
+                    drawn.push(ModelDraw {
+                        mesh,
+                        transform: waiting_mark(&transform, clock_s),
+                        pass: ModelPass::Over,
+                    });
+                }
+                continue;
+            }
+            let afar = away_m(generator, seat, &part.pose, body) > AFAR_M;
+            let mesh = match (afar, part.shape) {
+                (true, Shape::Vox(hash)) => {
+                    let paint = self.afar.get(&hash).copied().unwrap_or(part.paint);
+                    model_id(Shape::Cube, paint)
+                }
+                _ => model_of(part),
+            };
+            let Some(mesh) = mesh else {
+                continue;
+            };
+            drawn.push(ModelDraw {
+                mesh,
+                transform,
+                pass: match Paint::of(part.paint).finish {
+                    Finish::Glass => ModelPass::Glass,
+                    Finish::Matte | Finish::Light => ModelPass::Solid,
+                },
+            });
+        }
+        drawn.extend(self.marks.iter().copied());
+        drawn
     }
 
     /// Every part that is a picture, placed in the world this frame at the
@@ -843,7 +895,13 @@ impl Parts {
                     self.meshed.push(id);
                     self.changes.push(ModelChange::Add(id, cube(paint)));
                 }
-                Shape::Vox(hash) => self.want(hash),
+                Shape::Vox(hash) => {
+                    // Until the file arrives, its place is a glass box with
+                    // a mark turning over it.
+                    self.ensure(Shape::Cube, LOADING_PAINT);
+                    self.ensure(Shape::Cube, WAITING_PAINT);
+                    self.want(hash);
+                }
                 // A picture is no model: drawn by `pictures`.
                 Shape::Image(_) => {}
             }
@@ -909,6 +967,24 @@ impl Parts {
             None => Some(boxed),
         }
     }
+}
+
+/// The mark over a loading part: a bar over the middle of the top of its
+/// box, turning about the part's own up with the clock. `world` is the
+/// world from the part's own space.
+fn waiting_mark(world: &DAffine3, clock_s: f64) -> DAffine3 {
+    let up = world.z_axis.normalize();
+    let top = world.transform_point3(DVec3::new(0.0, 0.0, 1.0)) + up * WAITING_OVER_M;
+    let turn =
+        glam::DQuat::from_axis_angle(up, clock_s * WAITING_TURNS_HZ * core::f64::consts::TAU);
+    let x = turn * world.x_axis.normalize();
+    let y = up.cross(x);
+    let frame = glam::DMat3::from_cols(x, y, up);
+    // The bar lies along x, centred on the top: the unit box rises from
+    // its anchor, so it is lowered by half its thickness.
+    DAffine3::from_mat3_translation(frame, top - up * (WAITING_THICK_M / 2.0))
+        * DAffine3::from_translation(DVec3::new(0.0, 0.0, 0.0))
+        * DAffine3::from_scale(DVec3::new(WAITING_BAR_M, WAITING_THICK_M, WAITING_THICK_M))
 }
 
 /// How far a body at `body`, from the centre of the body it is on, is from
@@ -1270,10 +1346,9 @@ mod tests {
         parts.place(&generator, seat, part);
         assert_eq!(parts.wanted(), vec![hash]);
         assert!(parts.wanted().is_empty());
-        assert!(
-            parts.drain_changes().is_empty(),
-            "nothing is drawn before the file comes"
-        );
+        // Before the file comes, the place it will fill is drawn: a glass
+        // box and the mark turning over it, one mesh each.
+        assert_eq!(parts.drain_changes().len(), 2);
         // Until it comes, the box holds a body up: on top of it.
         let near = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-4);
         let under_arch = SurfacePoint::new(seat.sector(), 1000.6, 1000.0);
@@ -1282,9 +1357,11 @@ mod tests {
             .unwrap();
         assert!(near(boxed.floor_m, 14.0 * BLOCK_M), "{boxed:?}");
 
+        parts.drain_changes();
         parts.model_arrived(hash, model);
         assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
-        // Its mesh, and the box it is from afar, in the paint most of it is.
+        // Its mesh, and the box it is from afar, in the paint most of it is;
+        // the glass box and the mark of its loading were announced before.
         let changes = parts.drain_changes();
         assert_eq!(changes.len(), 2);
         let mesh = changes

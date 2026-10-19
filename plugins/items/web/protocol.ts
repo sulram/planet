@@ -37,6 +37,8 @@ export interface Hand {
 	edge: Edge;
 	/** The model in hand, by its file's asset name. Null with none taken. */
 	model: string | null;
+	/** Whether the model in hand is still on its way: it places a glass box until its file arrives. */
+	loading: boolean;
 }
 
 /** `items.picked`: the part picked as it stands: where, in blocks of its seat; how it is turned, degrees about its own axes; how long its sides are, in blocks; whether it is solid. */
@@ -63,7 +65,8 @@ export function parseHand(event: Record<string, unknown>): Hand | null {
 	const edge = edges.find((edge) => edge === event.edge);
 	if (!mode || !finish || !edge) return null;
 	const model = typeof event.model === 'string' ? event.model : null;
-	return { editing, item, mode, paint, finish, edge, model };
+	const loading = event.loading === true;
+	return { editing, item, mode, paint, finish, edge, model, loading };
 }
 
 const isVector = (value: unknown): value is [number, number, number] =>

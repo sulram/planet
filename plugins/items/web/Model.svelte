@@ -15,13 +15,14 @@
 	let sending = $state(false);
 	let refused = $state<NotTaken | null>(null);
 	let model = $state<string | null>(null);
+	let loading = $state(false);
 	let picker: HTMLInputElement | undefined = $state();
 
 	$effect(() => {
 		const stop = seam.listen((kind, event) => {
 			if (kind !== 'hand') return;
 			const hand = parseHand(event);
-			if (hand) model = hand.model;
+			if (hand) ({ model, loading } = hand);
 		});
 		seam.command('state');
 		return stop;
@@ -58,7 +59,9 @@
 		<p>{t('model.drop')}</p>
 		<Button variant="ghost" onclick={() => picker?.click()}>{t('model.choose')}</Button>
 		<input bind:this={picker} type="file" accept=".vox" hidden onchange={chosen} />
-		{#if model}
+		{#if model && loading}
+			<p class="inhand"><Spinner label={t('model.loading')} /> {t('model.loading')}</p>
+		{:else if model}
 			<p class="inhand">{t('model.inhand', { name: short(model) })}</p>
 		{/if}
 	{/if}
