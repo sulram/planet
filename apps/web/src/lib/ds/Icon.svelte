@@ -23,7 +23,9 @@
 		| 'rotate-3d'
 		| 'scale-3d'
 		| 'rotate-ccw'
-		| 'package';
+		| 'package'
+		| 'lock'
+		| 'lock-open';
 
 	interface Props {
 		name: IconName;
@@ -55,6 +57,9 @@
 		// Lucide draws a rect with a radius of 2 and a circle; spelled as paths here.
 		image:
 			'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0m14 6-3.086-3.086a2 2 0 0 0-2.828 0L6 21',
+		// Lucide draws the body as a rect with a radius of 2; spelled as a path.
+		lock: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2ZM7 11V7a5 5 0 0 1 10 0v4',
+		'lock-open': 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2ZM7 11V7a5 5 0 0 1 9.9-1',
 		'rotate-ccw': 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5',
 		'move-3d': 'M5 3v16h16M5 19l6-6M2 6l3-3 3 3m10 10 3 3-3 3',
 		// Lucide's two ellipse arcs, as it draws them.

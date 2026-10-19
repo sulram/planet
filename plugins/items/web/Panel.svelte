@@ -118,6 +118,8 @@
 					onchange={(scale) => onset({ scale: vector(scale) })}
 					onreset={() => origin && onset({ scale: origin.scale })}
 					resetLabel={t('reset')}
+					lockLabel={t('lock')}
+					locked
 				/>
 				<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
 				<Button variant="danger" type="button" onclick={onremove}>{t('remove')} <kbd>Del</kbd></Button>

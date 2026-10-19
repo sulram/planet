@@ -3,7 +3,9 @@
 	// a field sideways changes its value, clicking it types one. Shift
 	// multiplies the step by ten. The way an editor's inspector says a
 	// position, a rotation or a size, after tatil-tim-platform. With
-	// `onreset`, a small button beside the label puts the vector back.
+	// `onreset`, a small button beside the label puts the vector back. With
+	// `lockLabel`, a lock beside it keeps the proportion: one axis changed
+	// changes the others by the same factor.
 	import Icon from './Icon.svelte';
 
 	interface Props {
@@ -24,9 +26,17 @@
 		onreset?: () => void;
 		/** The reset button's name. Required with `onreset`. */
 		resetLabel?: string;
+		/** The lock's name: with it, the lock is offered. */
+		lockLabel?: string;
+		/** Whether the lock starts closed. */
+		locked?: boolean;
 	}
 
-	let { label, axes, values, step = 0.1, decimals = 2, min = -Infinity, max = Infinity, onchange, onreset, resetLabel }: Props = $props();
+	let { label, axes, values, step = 0.1, decimals = 2, min = -Infinity, max = Infinity, onchange, onreset, resetLabel, lockLabel, locked: lockedAtFirst = false }: Props =
+		$props();
+
+	// svelte-ignore state_referenced_locally
+	let locked = $state(lockedAtFirst);
 
 	/** Steps a pixel of drag is worth. */
 	const SENSITIVITY = 0.5;
@@ -46,7 +56,15 @@
 
 	function set(axis: number, value: number) {
 		const next = [...values];
+		const was = values[axis];
 		next[axis] = clamp(Number(value.toFixed(decimals)));
+		// Locked, the others follow by the same factor, when there is one.
+		if (locked && lockLabel && was !== 0 && Number.isFinite(next[axis] / was)) {
+			const factor = next[axis] / was;
+			for (let other = 0; other < next.length; other++) {
+				if (other !== axis) next[other] = clamp(Number((values[other] * factor).toFixed(decimals)));
+			}
+		}
 		onchange(next);
 	}
 
@@ -107,11 +125,18 @@
 <div class="vector" role="group" aria-label={label}>
 	<span class="label">
 		{label}
-		{#if onreset}
-			<button type="button" class="reset" aria-label={resetLabel} title={resetLabel} onclick={onreset}>
-				<Icon name="rotate-ccw" />
-			</button>
-		{/if}
+		<span class="tools">
+			{#if lockLabel}
+				<button type="button" class="tool" aria-label={lockLabel} title={lockLabel} aria-pressed={locked} onclick={() => (locked = !locked)}>
+					<Icon name={locked ? 'lock' : 'lock-open'} />
+				</button>
+			{/if}
+			{#if onreset}
+				<button type="button" class="tool" aria-label={resetLabel} title={resetLabel} onclick={onreset}>
+					<Icon name="rotate-ccw" />
+				</button>
+			{/if}
+		</span>
 	</span>
 	{#each axes as axis, index (axis)}
 		<div class="axis" class:dragging={dragging === index}>
@@ -151,7 +176,10 @@
 		justify-content: space-between;
 		align-items: center;
 	}
-	.reset {
+	.tools {
+		display: flex;
+	}
+	.tool {
 		display: inline-grid;
 		place-items: center;
 		width: var(--control-h);
@@ -161,7 +189,8 @@
 		color: var(--text-muted);
 		cursor: pointer;
 	}
-	.reset:hover {
+	.tool:hover,
+	.tool[aria-pressed='true'] {
 		color: var(--text);
 	}
 	.axis {
