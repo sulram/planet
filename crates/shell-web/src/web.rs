@@ -398,6 +398,8 @@ impl State {
         self.renderer
             .apply_skinned(self.client.drain_skinned_changes());
         self.renderer
+            .apply_pictures(self.client.drain_picture_changes());
+        self.renderer
             .apply_models(self.client.drain_model_changes());
         let events: Vec<JsValue> = self
             .client
