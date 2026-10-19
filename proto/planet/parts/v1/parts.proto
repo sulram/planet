@@ -23,6 +23,7 @@ message Shape {
     bytes vox = 2;
     Media image = 3;
     Landmark landmark = 4;
+    Portal portal = 5;
   }
 }
 
@@ -34,6 +35,13 @@ message Cube {}
 // light whatever its paint's finish; a place one travels to.
 message Landmark {
   string name = 1;
+}
+
+// A portal: a standing doorway leading to a landmark by the name the world
+// gave it; 0 leads nowhere. A body that passes through its pane is taken to
+// stand on that star, facing the way it points.
+message Portal {
+  uint64 to = 1;
 }
 
 // A picture: its size in texels and the three files its owner's client made

@@ -250,24 +250,45 @@ impl Host<'_> {
         Pose::of_stance(grid, stance).map(|pose| pose.place(grid))
     }
 
-    /// A point of a seat, in blocks along it and over the datum, as a place:
-    /// the code `GoTo` takes to stand there. On the ground the height is
-    /// left out, as a stance's is; over it by more than a step, a tower's
-    /// top, it is kept, so arriving there arrives flying, onto the floor.
-    pub fn place_at(&self, seat: Seat, at: [f64; 3]) -> String {
+    /// A part's anchor as a place: the code `GoTo` takes to stand there,
+    /// facing the way the part's box points, its `+y` side, when it points
+    /// somewhere on the ground. On the ground the height is left out, as a
+    /// stance's is; over it by more than a step, a tower's top, it is
+    /// kept, so arriving there arrives flying, onto the floor.
+    pub fn place_at(&self, seat: Seat, pose: &PartPose) -> String {
         let grid = self.sphere().blocks();
+        let at = pose.at;
         let point = SurfacePoint::new(seat.sector(), at[0], at[1]);
         let step = collision::STEP_M / topology::BLOCK_M;
         let over = at[2] - self.ground(seat, point) > step;
+        let world = self.lent.parts.place_of(self.lent.generator, seat, pose);
+        let bearing_deg = topology::bearing_deg(
+            world.matrix3.z_axis.to_array(),
+            world.matrix3.y_axis.normalize_or_zero().to_array(),
+        );
         let pose = Pose {
             on_moon: seat.body() == Body::Moon,
             column: grid.column_of(point),
             h: over.then(|| at[2] as i16),
-            bearing_deg: None,
-            pitch_deg: None,
+            bearing_deg,
+            // A bearing with no pitch would be half an aim: level, then.
+            pitch_deg: bearing_deg.map(|_| 0.0),
             chars: topology::CODE_MAX,
         };
-        pose.place(grid)
+        pose.text(grid)
+    }
+
+    /// Takes the body to a place, as a link does: what a portal's crossing
+    /// asks. Wrong, the text says what is wrong and the body stays.
+    pub fn go_to(&mut self, place: &str) -> Result<(), String> {
+        let moon = self.lent.cells.centre(Body::Moon);
+        crate::travel(
+            self.lent.controller,
+            self.lent.generator,
+            moon,
+            self.lent.events,
+            place,
+        )
     }
 
     /// The body of the world: how an address is a place on it.

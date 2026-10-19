@@ -337,51 +337,14 @@ impl Client {
     /// box is where you land: a person who quotes four characters means the
     /// neighbourhood, and the middle of it is the least surprising answer.
     pub fn go_to(&mut self, text: &str) -> Result<(), String> {
-        let grid = self.generator.sphere().blocks();
-        let pose = place::Pose::parse(grid, text)?;
-        let found = topology::Place {
-            column: pose.column,
-            h: pose.h,
-            chars: pose.chars,
-        };
-        let [su, sv] = found.span(grid).map(f64::from);
-        let point = SurfacePoint::new(
-            pose.column.sector,
-            f64::from(pose.column.u) + su / 2.0,
-            f64::from(pose.column.v) + sv / 2.0,
-        );
-        // The point first, because it is what the body stands on and what the
-        // moon's radial is read from; then the body, then the height, then the
-        // way of looking. Each step reads the one before it.
-        let mode = self.controller.mode;
-        self.teleport(point);
-        if pose.on_moon {
-            let moon = self.moon_position();
-            self.controller.set_moon(controller::MoonBody {
-                center: moon,
-                radius_m: MOON_RADIUS_M,
-            });
-            let direction = DVec3::from(grid.direction(point));
-            self.controller.stand_on_moon(direction, &self.generator);
-        }
-        self.controller.stand_at(
-            pose.h.map(|h| f64::from(h) * topology::BLOCK_M),
+        let moon = self.moon_position();
+        travel(
+            &mut self.controller,
             &self.generator,
-        );
-        if let Some(bearing) = pose.bearing_deg {
-            self.controller.face(bearing);
-        }
-        if let Some(pitch) = pose.pitch_deg {
-            self.controller.set_pitch(pitch.to_radians());
-        }
-        // A height off the ground is a flight, and a front end that showed a
-        // walker has to hear it: the panel says what the body does.
-        if self.controller.mode != mode {
-            self.events.push(Event::ModeChanged {
-                mode: self.controller.mode,
-            });
-        }
-        Ok(())
+            moon,
+            &mut self.events,
+            text,
+        )
     }
 
     /// Flies to `gap_m` metres under the moon, on the side that faces the
@@ -1537,6 +1500,57 @@ fn dress(
             false
         }
     }
+}
+
+/// Takes the body to a place, as [`Client::go_to`] and a plugin's
+/// [`Host::go_to`] both do: the point first, because it is what the body
+/// stands on and what the moon's radial is read from; then the body, then
+/// the height, then the way of looking. Each step reads the one before it.
+pub(crate) fn travel(
+    controller: &mut Controller,
+    generator: &Generator,
+    moon: DVec3,
+    events: &mut Vec<Event>,
+    text: &str,
+) -> Result<(), String> {
+    let grid = generator.sphere().blocks();
+    let pose = place::Pose::parse(grid, text)?;
+    let found = topology::Place {
+        column: pose.column,
+        h: pose.h,
+        chars: pose.chars,
+    };
+    let [su, sv] = found.span(grid).map(f64::from);
+    let point = SurfacePoint::new(
+        pose.column.sector,
+        f64::from(pose.column.u) + su / 2.0,
+        f64::from(pose.column.v) + sv / 2.0,
+    );
+    let mode = controller.mode;
+    controller.teleport(point, generator);
+    if pose.on_moon {
+        controller.set_moon(controller::MoonBody {
+            center: moon,
+            radius_m: MOON_RADIUS_M,
+        });
+        let direction = DVec3::from(grid.direction(point));
+        controller.stand_on_moon(direction, generator);
+    }
+    controller.stand_at(pose.h.map(|h| f64::from(h) * topology::BLOCK_M), generator);
+    if let Some(bearing) = pose.bearing_deg {
+        controller.face(bearing);
+    }
+    if let Some(pitch) = pose.pitch_deg {
+        controller.set_pitch(pitch.to_radians());
+    }
+    // A height off the ground is a flight, and a front end that showed a
+    // walker has to hear it: the panel says what the body does.
+    if controller.mode != mode {
+        events.push(Event::ModeChanged {
+            mode: controller.mode,
+        });
+    }
+    Ok(())
 }
 
 /// How far from the body a landmark's name is hung over it, metres: as far

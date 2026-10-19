@@ -786,7 +786,8 @@ impl Parts {
         Some(self.place_of(generator, seat, &part.pose))
     }
 
-    fn place_of(&self, generator: &Generator, seat: Seat, pose: &Pose) -> DAffine3 {
+    /// Where a part in a pose on a seat stands in the world: its box's frame.
+    pub(crate) fn place_of(&self, generator: &Generator, seat: Seat, pose: &Pose) -> DAffine3 {
         DAffine3::from_translation(self.centre(seat.body()))
             * seat::seated(seat.sphere(generator), seat.sector(), pose)
     }
@@ -1027,6 +1028,10 @@ impl Parts {
                     self.meshed.push(id);
                     self.changes.push(ModelChange::Add(id, star(paint)));
                 }
+                Shape::Portal(_) => {
+                    self.meshed.push(id);
+                    self.changes.push(ModelChange::Add(id, doorway(paint)));
+                }
                 Shape::Vox(hash) => {
                     // Until the file arrives, its place is a glass box with
                     // a mark turning over it.
@@ -1124,13 +1129,13 @@ pub(crate) fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body
     anchor.distance(body.1)
 }
 
-/// Whether a part is a lamp, lighting what is near: a cube in the light
-/// finish, and a landmark whatever its finish, since it is lit with its own
-/// light to be seen at night. A model has its own colours and a picture
-/// its own image.
+/// Whether a part is a lamp, lighting what is near: a cube or a portal's
+/// frame in the light finish, and a landmark whatever its finish, since it
+/// is lit with its own light to be seen at night. A model has its own
+/// colours and a picture its own image.
 pub fn is_lamp(part: &Part) -> bool {
     match part.shape {
-        Shape::Cube => Paint::of(part.paint).finish == Finish::Light,
+        Shape::Cube | Shape::Portal(_) => Paint::of(part.paint).finish == Finish::Light,
         Shape::Landmark(_) => true,
         Shape::Vox(_) | Shape::Image(_) => false,
     }
@@ -1145,11 +1150,13 @@ fn model_of(part: &Part) -> Option<ModelId> {
 /// The model of one of the core's shapes in a paint, or of a file by its
 /// hash.
 fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
-    // A landmark's name is not in its model: every landmark in a paint
-    // shares one star.
+    // A landmark's name and a portal's destination are not in their
+    // models: every landmark in a paint shares one star, every portal one
+    // doorway.
     let shape = match shape {
         Shape::Cube => 0,
         Shape::Landmark(_) => 1,
+        Shape::Portal(_) => 2,
         Shape::Vox(hash) => return Some(model_of_file(hash)),
         Shape::Image(_) => return None,
     };
@@ -1261,79 +1268,136 @@ const FRONT: DAffine3 = DAffine3 {
 /// clockwise seen from outside, every corner open to the sky.
 fn cube(paint: u8) -> ModelMesh {
     let (color, edge) = paint_look(paint);
-    // Each side from its first corner: across, then up, then back.
-    let sides: [([f32; 3], [[f32; 3]; 4]); 6] = [
+    let mut mesh = ModelMesh {
+        vertices: Vec::with_capacity(24),
+        indices: Vec::with_capacity(36),
+    };
+    block(&mut mesh, [-0.5, -0.5, 0.0], [0.5, 0.5, 1.0], color, edge);
+    mesh
+}
+
+/// Adds a block between two corners to a mesh: six sides wound counter
+/// clockwise seen from outside, every corner open to the sky.
+fn block(mesh: &mut ModelMesh, min: [f32; 3], max: [f32; 3], color: [u8; 4], edge: u8) {
+    // Each side from its first corner: across, then up, then back, each
+    // corner as which end of the box it is on, along each axis.
+    let sides: [([f32; 3], [[usize; 3]; 4]); 6] = [
         (
             [0.0, 0.0, 1.0],
-            [
-                [-0.5, -0.5, 1.0],
-                [0.5, -0.5, 1.0],
-                [0.5, 0.5, 1.0],
-                [-0.5, 0.5, 1.0],
-            ],
+            [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
         ),
         (
             [0.0, 0.0, -1.0],
-            [
-                [-0.5, -0.5, 0.0],
-                [-0.5, 0.5, 0.0],
-                [0.5, 0.5, 0.0],
-                [0.5, -0.5, 0.0],
-            ],
+            [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]],
         ),
         (
             [1.0, 0.0, 0.0],
-            [
-                [0.5, -0.5, 0.0],
-                [0.5, 0.5, 0.0],
-                [0.5, 0.5, 1.0],
-                [0.5, -0.5, 1.0],
-            ],
+            [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],
         ),
         (
             [-1.0, 0.0, 0.0],
-            [
-                [-0.5, -0.5, 0.0],
-                [-0.5, -0.5, 1.0],
-                [-0.5, 0.5, 1.0],
-                [-0.5, 0.5, 0.0],
-            ],
+            [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
         ),
         (
             [0.0, 1.0, 0.0],
-            [
-                [-0.5, 0.5, 0.0],
-                [-0.5, 0.5, 1.0],
-                [0.5, 0.5, 1.0],
-                [0.5, 0.5, 0.0],
-            ],
+            [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],
         ),
         (
             [0.0, -1.0, 0.0],
-            [
-                [-0.5, -0.5, 0.0],
-                [0.5, -0.5, 0.0],
-                [0.5, -0.5, 1.0],
-                [-0.5, -0.5, 1.0],
-            ],
+            [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
         ),
     ];
+    let ends = [min, max];
     let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
-    let mut vertices = Vec::with_capacity(24);
-    let mut indices = Vec::with_capacity(36);
     for (normal, corners) in sides {
-        let base = vertices.len() as u32;
-        for (position, [u, v]) in corners.into_iter().zip(across) {
-            vertices.push(VolumeVertex {
+        let base = mesh.vertices.len() as u32;
+        for (corner, [u, v]) in corners.into_iter().zip(across) {
+            let position = [0, 1, 2].map(|axis| ends[corner[axis]][axis]);
+            mesh.vertices.push(VolumeVertex {
                 position,
                 normal,
                 color,
                 side: [u8::MAX, u, v, edge],
             });
         }
-        indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
+        mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
     }
-    ModelMesh { vertices, indices }
+}
+
+/// How wide a portal's posts are, of the box's width, and how tall its
+/// lintel, of its height.
+const POST: f32 = 0.08;
+const LINTEL: f32 = 0.04;
+/// What a portal's pane is drawn as while nothing is seen through it: dark,
+/// lit with its own faint light, so a door reads as a door at night too.
+const PANE_COLOR: [u8; 4] = [14, 8, 28, u8::MAX];
+
+/// A portal's doorway in a paint: two posts and a lintel, boxes in the
+/// paint along the box's sides, round a pane in the box's middle plane
+/// (`y = 0`) seen from both sides. The frame fills the box; the pane is
+/// the opening between the posts and under the lintel.
+fn doorway(paint: u8) -> ModelMesh {
+    let (color, edge) = paint_look(paint);
+    let mut mesh = ModelMesh {
+        vertices: Vec::with_capacity(3 * 24 + 8),
+        indices: Vec::with_capacity(3 * 36 + 12),
+    };
+    block(
+        &mut mesh,
+        [-0.5, -0.5, 0.0],
+        [-0.5 + POST, 0.5, 1.0],
+        color,
+        edge,
+    );
+    block(
+        &mut mesh,
+        [0.5 - POST, -0.5, 0.0],
+        [0.5, 0.5, 1.0],
+        color,
+        edge,
+    );
+    block(
+        &mut mesh,
+        [-0.5 + POST, -0.5, 1.0 - LINTEL],
+        [0.5 - POST, 0.5, 1.0],
+        color,
+        edge,
+    );
+    // The pane: a quad facing each way, so it is seen from both sides.
+    let (left, right, top) = (-0.5 + POST, 0.5 - POST, 1.0 - LINTEL);
+    let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
+    for (normal, corners) in [
+        (
+            [0.0, -1.0, 0.0],
+            [
+                [left, 0.0, 0.0],
+                [right, 0.0, 0.0],
+                [right, 0.0, top],
+                [left, 0.0, top],
+            ],
+        ),
+        (
+            [0.0, 1.0, 0.0],
+            [
+                [right, 0.0, 0.0],
+                [left, 0.0, 0.0],
+                [left, 0.0, top],
+                [right, 0.0, top],
+            ],
+        ),
+    ] {
+        let base = mesh.vertices.len() as u32;
+        for (position, [u, v]) in corners.into_iter().zip(across) {
+            mesh.vertices.push(VolumeVertex {
+                position,
+                normal,
+                color: PANE_COLOR,
+                side: [u8::MAX, u, v, 0],
+            });
+        }
+        mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
+    }
+    mesh
 }
 
 /// How many points a landmark's star has, and how far in its inner corners
@@ -1454,6 +1518,46 @@ mod tests {
             "every landmark in a paint shares one star"
         );
         assert_ne!(model_id(Shape::Landmark(name), 5), model_id(Shape::Cube, 5));
+    }
+
+    #[test]
+    fn a_doorway_is_a_frame_round_a_pane_seen_from_both_sides() {
+        let mesh = doorway(5);
+        assert_eq!((mesh.vertices.len(), mesh.indices.len()), (80, 120));
+        for side in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|i| Vec3::from(mesh.vertices[side[i] as usize].position));
+            let normal = Vec3::from(mesh.vertices[side[0] as usize].normal);
+            let wound = (b - a).cross(c - a);
+            assert!(wound.dot(normal) > 0.0, "{side:?} winds against its normal");
+            for p in [a, b, c] {
+                assert!(p.x.abs() <= 0.5 + 1e-6 && p.y.abs() <= 0.5 + 1e-6);
+                assert!((0.0..=1.0).contains(&p.z));
+                assert!(((p - a).dot(normal)).abs() < 1e-6);
+            }
+        }
+        // The pane is dark and lit on its own, on the middle plane, facing
+        // both ways; the frame is the paint's.
+        let pane: Vec<&VolumeVertex> = mesh
+            .vertices
+            .iter()
+            .filter(|v| v.color == PANE_COLOR)
+            .collect();
+        assert_eq!(pane.len(), 8);
+        assert!(pane.iter().all(|v| v.position[1] == 0.0));
+        assert!(pane.iter().any(|v| v.normal[1] < 0.0) && pane.iter().any(|v| v.normal[1] > 0.0));
+        assert_eq!(
+            model_id(Shape::Portal(Some(PartId(1))), 5),
+            model_id(Shape::Portal(None), 5),
+            "every portal in a paint shares one doorway"
+        );
+        assert_ne!(model_id(Shape::Portal(None), 5), model_id(Shape::Cube, 5));
+        // The cube is still the unit box.
+        let cube = cube(5);
+        assert_eq!((cube.vertices.len(), cube.indices.len()), (24, 36));
+        assert!(cube.vertices.iter().all(|v| {
+            let [x, y, z] = v.position;
+            x.abs() == 0.5 && y.abs() == 0.5 && (z == 0.0 || z == 1.0)
+        }));
     }
 
     #[test]

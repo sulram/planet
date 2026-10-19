@@ -363,7 +363,15 @@ fn a_landmark_another_placed_is_a_lit_star_with_its_name_over_it() {
     assert!(charted[0].away_m < 10.0);
     let place = client
         .host("test")
-        .place_at(charted[0].seat, charted[0].part.pose.at);
+        .place_at(charted[0].seat, &charted[0].part.pose);
     assert!(client.go_to(&place).is_ok(), "{place} takes a body there");
+    // The place says which way to face on arrival: the way the star's
+    // point toward `+y` points, level; arrived, the body faces it.
+    let (_, look) = place.split_once(',').expect("a bearing and a pitch");
+    let (bearing, pitch) = look.split_once(',').unwrap();
+    let bearing: f64 = bearing.parse().unwrap();
+    assert_eq!(pitch, "0", "{place}");
+    let faced = client.here().bearing_deg.unwrap();
+    assert!((faced - bearing).abs() < 1.0, "{place}: facing {faced}");
     assert!(client.host("test").take_charted().is_none(), "taken once");
 }

@@ -1,9 +1,10 @@
 # Portals: a door from one place to another
 
-Drawn 2026-10-19, with the landmark placed (116) and nothing of the portal
-built. Nothing here is decided. It is the whole a portal is measured
-against: what it stands on today, what the renderer would gain, and the
-order a campaign would pull it in.
+Drawn 2026-10-19, with the landmark placed (116). The doorway and the
+crossing stand in the items plugin: `Shape::Portal(to)`, a pane that leads
+to a landmark by the name the world gave it. Nothing else here is decided.
+It is the whole a portal is measured against: what it stands on today, what
+the renderer would gain, and the order a campaign would pull it in.
 
 ## The thread: a portal is a part that leads to a landmark
 
@@ -52,17 +53,15 @@ a dark pane with its rim when no view is given.
 
 ## The crossing
 
-In the plugin's turn, after the body moved and before the picture is made:
-the feet's column passes the portal's plane inside its quad from front to
-back, and the body is taken to the landmark's place with its bearing, keeping
-its velocity, so a run through a door is a run out of the other. A cooldown
-of a second keeps a return portal on the star from bouncing the body back.
-What it needs: `Host::go_to(place, bearing)`, lifted from `Client::go_to`
-over what the host already lends (the controller, the generator, the events);
-and `Part::contains(point)` or a `Parts::crossing` over `part::through`, since
-nothing today says whether a point is inside a part. Peers would get a flag in
-the stance for a leap, so another client snaps the figure instead of sliding
-it 67 ms through the ground as it does now.
+Built: in the plugin's turn, after the body moved, the feet's step passes
+the pane inside the doorway from either side, and the body goes through
+`Host::go_to` to the landmark's place with the star's bearing. A leap arms
+the crossing again only once the body stands clear of every pane, so a
+return door on the star sends nobody straight back. What would follow: the
+body keeping its velocity, so a run through a door is a run out of the
+other; a flag in the stance for a leap, so another client snaps the figure
+instead of sliding it 67 ms through the ground as it does now; the veil
+lowered for a leap whose ground is not built.
 
 ## The transition
 

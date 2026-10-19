@@ -15,11 +15,13 @@
 //! `{"type":"items.take","item":"model","asset":"asset://<sha256>.vox"}`,
 //! and the file is asked for at once, so its size is known when it is placed.
 
+mod cross;
 mod gizmo;
 mod place;
 
 use client::{Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Shape, Turn};
-use glam::{DQuat, EulerRot};
+
+use glam::{DQuat, DVec3, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use topology::BLOCK_M;
@@ -49,6 +51,12 @@ pub enum Item {
     /// light, a lamp; nobody collides with it. A place one travels to: the
     /// chart lists every landmark of the world with its place code.
     Landmark,
+    /// A portal: a standing doorway a metre wide and two tall, its frame in
+    /// the paint in hand round a dark pane, facing the body as a picture
+    /// does; nobody collides with it. It leads to the landmark in hand, by
+    /// the name the world gave it: a body that walks through its pane is
+    /// taken to stand on that star, facing the way it points.
+    Portal,
 }
 
 /// Why an item was not handed over, or a part not placed or set. A front
@@ -68,6 +76,9 @@ pub enum Refusal {
     /// The name given is no name: empty, over sixty four bytes, or with a
     /// control character in it; or the part picked bears no name.
     Name,
+    /// The destination given is no landmark this client holds, or the part
+    /// picked is no portal.
+    Nowhere,
 }
 
 impl From<client::PartRefusal> for Refusal {
@@ -129,6 +140,17 @@ pub const NEAR: &str = "near";
 /// by its name in the world, what it is called, its paint, how far it is
 /// and the place code that takes a body to it.
 pub const LANDMARKS: &str = "landmarks";
+/// `items.crossed`: the body walked through a portal: which, the landmark
+/// it leads to, and the place the body now stands, `null` when the portal
+/// leads nowhere and the body stayed.
+pub const CROSSED: &str = "crossed";
+
+#[derive(Serialize)]
+struct Crossed {
+    portal: u64,
+    to: Option<u64>,
+    place: Option<String>,
+}
 
 #[derive(Serialize)]
 struct LandmarkOne {
@@ -183,6 +205,10 @@ struct Take {
     /// The name the next landmark bears.
     #[serde(default)]
     name: Option<String>,
+    /// The landmark the next portal leads to, by its name in the world; 0
+    /// leads nowhere.
+    #[serde(default)]
+    to: Option<u64>,
 }
 
 /// A picture's record as the seam says it.
@@ -228,6 +254,10 @@ struct Set {
     /// What the landmark picked is called.
     #[serde(default)]
     name: Option<String>,
+    /// The landmark the portal picked leads to, by its name in the world; 0
+    /// leads nowhere.
+    #[serde(default)]
+    to: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -259,6 +289,8 @@ struct Hand {
     loading: bool,
     /// The name the next landmark bears, when one was given.
     name: Option<String>,
+    /// The landmark the next portal leads to, when one was chosen.
+    to: Option<u64>,
 }
 
 /// A part as the panel shows it.
@@ -286,6 +318,10 @@ struct Picked {
     /// What a landmark is called.
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    /// Where a portal leads: the landmark's name in the world, `null` when
+    /// it leads nowhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    to: Option<Option<u64>>,
 }
 
 #[derive(Serialize)]
@@ -330,6 +366,18 @@ pub struct Items {
     loading: bool,
     /// The name the next landmark bears. None until one is given.
     name: Option<Name>,
+    /// The landmark the next portal leads to. None until one is chosen.
+    to: Option<PartId>,
+    /// Where the body stood last turn, from the planet's centre: what a
+    /// walk through a pane is read from. None right after a leap.
+    feet: Option<DVec3>,
+    /// Whether a walk through a pane counts: not until the body has stood
+    /// clear of every pane since it last leapt, so a door on the star one
+    /// lands on does not send the body straight back.
+    armed: bool,
+    /// A crossing waiting on the chart: the portal walked through and the
+    /// landmark it leads to, one this client does not hold.
+    pending: Option<(PartId, PartId)>,
     /// The item in hand is to be placed in front of the body as soon as it
     /// is ready, with no click.
     ahead: bool,
@@ -351,6 +399,10 @@ impl Default for Items {
             model: None,
             loading: false,
             name: None,
+            to: None,
+            feet: None,
+            armed: true,
+            pending: None,
             ahead: false,
             using: false,
         }
@@ -395,7 +447,7 @@ impl Items {
                 edge: Edge::None,
             }
             .byte(),
-            Shape::Cube | Shape::Vox(_) | Shape::Image(_) => self.made_of(),
+            Shape::Cube | Shape::Vox(_) | Shape::Image(_) | Shape::Portal(_) => self.made_of(),
         }
     }
 
@@ -508,6 +560,12 @@ impl Items {
             };
             part.shape = Shape::Landmark(name);
         }
+        if let Some(to) = set.to {
+            let Shape::Portal(_) = part.shape else {
+                return refuse(host, Refusal::Nowhere);
+            };
+            part.shape = Shape::Portal(destination(to));
+        }
         let (id, seat) = (gizmo.id, gizmo.seat);
         self.apply(id, seat, part, host);
     }
@@ -556,6 +614,7 @@ impl Items {
                 model: self.model.and_then(|hash| Shape::Vox(hash).asset()),
                 loading: self.loading,
                 name: self.name.map(|name| name.to_string()),
+                to: self.to.map(|to| to.0),
             },
         );
     }
@@ -606,7 +665,7 @@ impl Items {
                     name: name.to_string(),
                     paint: landmark.part.paint,
                     away_m: landmark.away_m,
-                    place: host.place_at(landmark.seat, landmark.part.pose.at),
+                    place: host.place_at(landmark.seat, &landmark.part.pose),
                 })
             })
             .collect();
@@ -647,6 +706,10 @@ impl Items {
                     Shape::Landmark(name) => Some(name.to_string()),
                     _ => None,
                 },
+                to: match gizmo.part.shape {
+                    Shape::Portal(to) => Some(to.map(|to| to.0)),
+                    _ => None,
+                },
             },
             None => Picked {
                 id: None,
@@ -659,6 +722,7 @@ impl Items {
                 reach_m: None,
                 lamp: None,
                 name: None,
+                to: None,
             },
         };
         host.emit(PICKED, &picked);
@@ -732,7 +796,13 @@ fn item_of(shape: Shape) -> Item {
         Shape::Vox(_) => Item::Model,
         Shape::Image(_) => Item::Picture,
         Shape::Landmark(_) => Item::Landmark,
+        Shape::Portal(_) => Item::Portal,
     }
+}
+
+/// The landmark a destination on the seam names: 0 is none.
+fn destination(to: u64) -> Option<PartId> {
+    (to != 0).then_some(PartId(to))
 }
 
 impl Plugin for Items {
@@ -763,6 +833,7 @@ impl Plugin for Items {
                     media,
                     ahead,
                     name,
+                    to,
                 }) = read(body, host)
                 {
                     if let Some(text) = name {
@@ -770,6 +841,9 @@ impl Plugin for Items {
                             return refuse(host, Refusal::Name);
                         };
                         self.name = Some(name);
+                    }
+                    if let Some(to) = to {
+                        self.to = destination(to);
                     }
                     if item == Some(Item::Picture) {
                         match media.as_ref().map(MediaBody::media) {
@@ -879,8 +953,12 @@ impl Plugin for Items {
     /// anywhere, and opens the menu on it; with an item in hand a click
     /// places it; with the menu open the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        // The chart answered: the landmarks are said.
+        // The body moved: through a pane, it is taken where the door leads.
+        self.cross(host);
+        // The chart answered: a crossing that waited on it leaps, and the
+        // landmarks are said.
         if let Some(charted) = host.take_charted() {
+            self.charted(&charted, host);
             self.say_landmarks(&charted, host);
         }
         // The model in hand arrived, or a new one is on its way: the hand
@@ -1394,6 +1472,131 @@ mod tests {
         let said = events(&mut visitor);
         assert!(said.iter().any(|e| e["type"] == "items.landmarks"));
         assert!(said.iter().all(|e| e["type"] != "items.refused"));
+    }
+
+    /// Walks the body forward until the plugin says it crossed, or gives up.
+    fn walk_until_crossed(client: &mut Client, frames: usize) -> Option<Value> {
+        let mut input = Input::default();
+        input.key(Key::Forward, true);
+        for _ in 0..frames {
+            client.update(1.0 / 60.0, &mut input);
+            if let Some(crossed) = events(client)
+                .into_iter()
+                .find(|e| e["type"] == "items.crossed")
+            {
+                return Some(crossed);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn a_portal_leads_to_the_landmark_in_hand_and_a_walk_through_it_lands_on_the_star() {
+        let mut client = client();
+        client
+            .command_json(r#"{"type":"items.take","item":"landmark","name":"Praça","ahead":true}"#);
+        let (star, _, part) = client.parts().all().next().unwrap();
+        // The star is set sixty metres along the seat: a leap, never a walk.
+        let mut far = *part;
+        far.pose.at[1] += 120.0;
+        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, star.0));
+        client.command_json(&format!(
+            r#"{{"type":"items.set","at":[{},{},{}]}}"#,
+            far.pose.at[0], far.pose.at[1], far.pose.at[2]
+        ));
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"portal","to":{},"ahead":true}}"#,
+            star.0
+        ));
+        let (door, _, part) = client
+            .parts()
+            .all()
+            .find(|(id, _, _)| *id != star)
+            .expect("a door placed ahead");
+        assert_eq!(part.shape, Shape::Portal(Some(star)));
+        assert!(!part.solid);
+        assert_eq!(part.pose.scale, [2.0, 0.1, 4.0], "a metre wide, two tall");
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["item"], "portal");
+        assert_eq!(picked["to"], star.0);
+        let hand = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.hand")
+            .unwrap();
+        assert_eq!(hand["to"], star.0, "the destination stays in hand");
+        // The door stands in front of the body, facing it: a walk forward
+        // goes through its pane and out onto the star, facing its way.
+        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the door");
+        assert_eq!(crossed["portal"], door.0);
+        assert_eq!(crossed["to"], star.0);
+        let place = crossed["place"].as_str().expect("the place arrived at");
+        assert!(place.contains(','), "{place} says which way to face");
+        let feet = client.host("items").feet();
+        assert!(
+            (feet.point.u - far.pose.at[0]).abs() < 2.0
+                && (feet.point.v - far.pose.at[1]).abs() < 2.0,
+            "landed at {:?}, the star at {:?}",
+            feet.point,
+            far.pose.at
+        );
+        // Landed, the body walks on without being sent anywhere.
+        assert!(walk_until_crossed(&mut client, 60).is_none());
+    }
+
+    #[test]
+    fn a_portal_leading_nowhere_says_so_and_the_body_stays() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"portal","ahead":true}"#);
+        let (door, _, part) = client.parts().all().next().unwrap();
+        assert_eq!(part.shape, Shape::Portal(None));
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert!(picked["to"].is_null(), "{picked}");
+        let before = client.here().place(client.sphere().blocks());
+        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the door");
+        assert_eq!(crossed["portal"], door.0);
+        assert!(
+            crossed["to"].is_null() && crossed["place"].is_null(),
+            "{crossed}"
+        );
+        let after = client.here().place(client.sphere().blocks());
+        assert_eq!(
+            &before[..6],
+            &after[..6],
+            "a walk, no leap: {before} to {after}"
+        );
+        // Aimed by the panel at a landmark, the door leads there; aiming a
+        // part that is no door is refused.
+        client.command_json(r#"{"type":"items.take","item":"landmark","ahead":true}"#);
+        let (star, _, _) = client
+            .parts()
+            .all()
+            .find(|(_, _, part)| matches!(part.shape, Shape::Landmark(_)))
+            .unwrap();
+        client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
+        assert_eq!(events(&mut client).last().unwrap()["reason"], "nowhere");
+        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, door.0));
+        client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
+        assert_eq!(
+            client.parts().get(door).unwrap().1.shape,
+            Shape::Portal(Some(star))
+        );
+        let picked = events(&mut client)
+            .into_iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["to"], star.0);
     }
 
     #[test]

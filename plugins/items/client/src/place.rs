@@ -2,8 +2,9 @@
 //! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
 //! A model stands as big as its file says, a voxel an eighth of a cell. A
 //! picture stands a metre tall in its own aspect, its face turned to the
-//! eye, as a pane nobody collides with. Placed, the part is picked, so the
-//! hand that put it there moves it next.
+//! eye, as a pane nobody collides with; a portal stands two metres tall
+//! and a metre wide, turned the same way. Placed, the part is picked, so
+//! the hand that put it there moves it next.
 
 use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape, VOXEL};
 use glam::{DQuat, DVec3};
@@ -21,6 +22,8 @@ use crate::{Item, Items, Refusal, refuse};
 const PANE: f64 = 0.1;
 /// A landmark's star, in blocks: a metre across, eight centimetres thick.
 const STAR: [f64; 3] = [2.0, 2.0, 0.16];
+/// A portal's doorway, in blocks: a metre wide, a pane thick, two tall.
+const DOOR: [f64; 3] = [CUBE[0], PANE, 2.0 * CUBE[2]];
 
 impl Items {
     /// Places the item in hand where the eye's pointer meets the world.
@@ -87,6 +90,26 @@ impl Items {
                         at,
                         rotation: DQuat::from_rotation_z(yaw),
                         scale: [CUBE[2] * media.aspect(), PANE, CUBE[2]],
+                    },
+                    paint: self.made_of(),
+                    solid: false,
+                    shine: 0.0,
+                    reach_m: 0.0,
+                }
+            }
+            Item::Portal => {
+                // A doorway a metre wide and two tall, its front, its box's
+                // `-y` side, turned to face where the eye stands, as a
+                // picture is.
+                let eye = host.feet_at(from);
+                let toward = [eye.point.u - at[0], eye.point.v - at[1]];
+                let yaw = libm::atan2(toward[0], -toward[1]);
+                client::Part {
+                    shape: Shape::Portal(self.to),
+                    pose: PartPose {
+                        at,
+                        rotation: DQuat::from_rotation_z(yaw),
+                        scale: DOOR,
                     },
                     paint: self.made_of(),
                     solid: false,

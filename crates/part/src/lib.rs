@@ -1,5 +1,6 @@
 //! A part: a placed thing that is no cell (DECISIONS 111). A cube first; a
-//! model, a picture, a landmark, a light are shapes of the same thing.
+//! model, a picture, a landmark, a portal, a light are shapes of the same
+//! thing.
 //!
 //! A part knows no sphere (CLAUDE.md, How it grows). It stands in a flat
 //! frame, blocks along `x` and `y` and up `z`, the frame of the seat it is
@@ -39,6 +40,12 @@ pub enum Shape {
     /// it is seen at night, and it is a place one travels to: arriving at
     /// it is standing on it.
     Landmark(Name),
+    /// A portal: a standing doorway, a frame round the box's sides along
+    /// `x` and `z` with a dark pane in its middle, leading to a landmark by
+    /// the name the world gave it. A body that passes through the pane is
+    /// taken to stand on that star, facing the way it points. `None` leads
+    /// nowhere: the landmark was never chosen, or is gone.
+    Portal(Option<PartId>),
 }
 
 /// The most bytes a name is, UTF-8.
@@ -108,7 +115,7 @@ impl Shape {
                 let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
                 Some(format!("asset://{hex}.vox"))
             }
-            Shape::Cube | Shape::Image(_) | Shape::Landmark(_) => None,
+            Shape::Cube | Shape::Image(_) | Shape::Landmark(_) | Shape::Portal(_) => None,
         }
     }
 }
@@ -521,6 +528,7 @@ mod tests {
         assert!(Name::new(&"\u{1F30D}".repeat(16)).is_some());
         assert!(Name::new(&"\u{1F30D}".repeat(17)).is_none());
         assert_eq!(Shape::Landmark(name).asset(), None);
+        assert_eq!(Shape::Portal(Some(PartId(7))).asset(), None);
     }
 
     #[test]

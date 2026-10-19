@@ -155,7 +155,7 @@ this file in the same change.
 | Landmark | A part whose shape is a five pointed star bearing a name, up to 64 bytes, inline in the record. Lit with its own light whatever its paint, a lamp, so it is seen at night. A place one travels to: its place code is its anchor's, and arriving is standing on it. |
 | Chart | The landmarks of a world, wherever they stand: the parts' answer to `chart`, the nearest the asker first, at most 256, at any level. The star icon beside the cube opens it. |
 | Label | A landmark's name hung over its star, within a nametag's reach, by the core, as a nametag is hung over a head. |
-| Portal | A link between two (place, scale, world) points: drawn in `sketches/portals.md`, leading to a landmark. |
+| Portal | A shape of part: a standing doorway, a dark pane in a frame, leading to a landmark by the name the world gave it. A body that walks through the pane stands on that star, facing where it points. The view through it is drawn in `sketches/portals.md`. |
 | Atlas | The 2D map: the quad sphere unfolded as a cube net. |
 | Seam (code) | A single trait where an integration enters the core. Distinct from a sector seam; say "integration seam" when ambiguous. |
 | Shell (code) | A platform entry crate: `shell-desktop`, `shell-web`, `shell-xr`. Distinct from a radial shell; say "platform shell" when ambiguous. |

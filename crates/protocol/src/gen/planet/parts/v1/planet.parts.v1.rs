@@ -4,7 +4,7 @@
 /// a variant beside the cube.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Shape {
-    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4")]
+    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4, 5")]
     pub shape: ::core::option::Option<shape::Shape>,
 }
 /// Nested message and enum types in `Shape`.
@@ -21,6 +21,8 @@ pub mod shape {
         Image(super::Media),
         #[prost(message, tag="4")]
         Landmark(super::Landmark),
+        #[prost(message, tag="5")]
+        Portal(super::Portal),
     }
 }
 /// The unit box, in one paint.
@@ -34,6 +36,14 @@ pub struct Cube {
 pub struct Landmark {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
+}
+/// A portal: a standing doorway leading to a landmark by the name the world
+/// gave it; 0 leads nowhere. A body that passes through its pane is taken to
+/// stand on that star, facing the way it points.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Portal {
+    #[prost(uint64, tag="1")]
+    pub to: u64,
 }
 /// A picture: its size in texels and the three files its owner's client made
 /// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
