@@ -91,10 +91,17 @@ const FLY_ALIGN_PER_S: f64 = 1.5;
 const FLY_ALIGN_NEAR: f64 = 0.02;
 const FLY_ALIGN_FAR: f64 = 0.30;
 const EYE_M: f64 = 1.5;
-/// How stiffly what is drawn comes after a body that took a step, per
-/// second. The spring is critically damped: it starts and ends with ease and
-/// never passes the body. A third of a second and it is there.
-const DRAWN_SETTLE_PER_S: f64 = 16.0;
+/// A rise under this in one frame is ground, and what is drawn follows it at
+/// once: a slope climbed at a walk rises a few centimetres a frame, and a body
+/// eased over it sinks into the hill on the way up and floats on the way down.
+/// A step is more, up to [`STEP_M`], and is eased.
+const GROUND_M: f64 = STEP_M / 2.0;
+/// How stiffly the figure and the eye come after a body that took a step, per
+/// second. Each spring is critically damped: it starts and ends with ease and
+/// never passes the body. The figure is there in a tenth of a second, so its
+/// feet leave a stair little; the eye in a third, so the view stays calm.
+const FIGURE_SETTLE_PER_S: f64 = 48.0;
+const EYE_SETTLE_PER_S: f64 = 16.0;
 const LOOK_RAD_PER_PX: f64 = 0.0025;
 const PITCH_LIMIT: f64 = 1.45;
 const TURN_PER_S: f64 = 12.0;
@@ -173,12 +180,36 @@ pub struct Controller {
     /// the flyer's frame wins. Look at the planet from the moon and fly: you go
     /// to the planet, and nothing turns you on the way.
     frame_up: DVec3,
-    /// How far the body as drawn, figure and eye, stands off the body's own
-    /// height, metres along the frame's up, and how fast that closes. A body
-    /// takes a step whole, in the frame it happens, and what is drawn is left
-    /// where it was to come after: see [`Controller::stand_on`].
-    drawn_off_m: f64,
-    drawn_off_mps: f64,
+    /// How far the figure and the eye stand off the body's own height, along
+    /// the frame's up. A body takes a step whole, in the frame it happens, and
+    /// what is drawn is left where it was to come after, each at its own pace:
+    /// see [`Controller::stand_on`].
+    figure: Spring,
+    eye: Spring,
+}
+
+/// What is drawn trailing the body along up: how far, metres, and how fast
+/// that closes. Critically damped and solved in closed form, so a long frame
+/// settles further and never past.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Spring {
+    off_m: f64,
+    off_mps: f64,
+}
+
+impl Spring {
+    /// The body rose by `rise_m` at once; what is drawn stays where it was.
+    fn left_by(&mut self, rise_m: f64) {
+        self.off_m -= rise_m;
+    }
+
+    /// Closes the gap at `per_s`, exactly for any `dt`.
+    fn settle(&mut self, per_s: f64, dt: f64) {
+        let pull = (self.off_mps + per_s * self.off_m) * dt;
+        let decay = (-per_s * dt).exp();
+        self.off_m = (self.off_m + pull) * decay;
+        self.off_mps = (self.off_mps - per_s * pull) * decay;
+    }
 }
 
 impl Controller {
@@ -208,8 +239,8 @@ impl Controller {
             moon: None,
             drawn_footprint_m: 0.0,
             frame_up: DVec3::from(tangents.up),
-            drawn_off_m: 0.0,
-            drawn_off_mps: 0.0,
+            figure: Spring::default(),
+            eye: Spring::default(),
         }
     }
 
@@ -473,12 +504,11 @@ impl Controller {
         center + self.radial() * (radius_m + self.height_m)
     }
 
-    /// Feet as drawn, world space: the body with what a step left it to
-    /// close. The figure stands here and the eye hangs over it, so a stair
-    /// passes under a body that holds still on the screen: see
+    /// Feet as drawn, world space: the body with what a step left the figure
+    /// to close. The figure, its label and what it brushes stand here: see
     /// [`Controller::stand_on`].
     pub fn drawn_position(&self) -> DVec3 {
-        self.position() + self.frame_up * self.drawn_off_m
+        self.position() + self.frame_up * self.figure.off_m
     }
 
     /// Where the camera looks, flattened on the tangent plane.
@@ -842,26 +872,24 @@ impl Controller {
         }
     }
 
-    /// Puts the feet on the floor under them. On foot, a change of a step or
-    /// less leaves what is drawn where it was, to come after with ease: a
-    /// stair jolts the body and never the figure or the view. More than a
-    /// step is the world changing under the body, and the drawing goes with
-    /// it at once.
+    /// Puts the feet on the floor under them. On foot, a change over
+    /// [`GROUND_M`] and up to a step leaves the figure and the eye where they
+    /// were, to come after with ease: a stair jolts the body and never the
+    /// figure or the view. Less is ground, and more is the world changing
+    /// under the body: both are followed at once.
     fn stand_on(&mut self, floor_m: f64) {
         let rise_m = floor_m - self.height_m;
-        if self.mode == Mode::Walk && rise_m.abs() <= STEP_M + 1e-6 {
-            self.drawn_off_m -= rise_m;
+        if self.mode == Mode::Walk && (GROUND_M..=STEP_M + 1e-6).contains(&rise_m.abs()) {
+            self.figure.left_by(rise_m);
+            self.eye.left_by(rise_m);
         }
         self.height_m = floor_m;
     }
 
-    /// Closes what a step left between the body as drawn and the body,
-    /// exactly for any `dt`: a long frame settles further, never past.
+    /// Closes what a step left between what is drawn and the body.
     fn settle_drawn(&mut self, dt: f64) {
-        let pull = (self.drawn_off_mps + DRAWN_SETTLE_PER_S * self.drawn_off_m) * dt;
-        let decay = (-DRAWN_SETTLE_PER_S * dt).exp();
-        self.drawn_off_m = (self.drawn_off_m + pull) * decay;
-        self.drawn_off_mps = (self.drawn_off_mps - DRAWN_SETTLE_PER_S * pull) * decay;
+        self.figure.settle(FIGURE_SETTLE_PER_S, dt);
+        self.eye.settle(EYE_SETTLE_PER_S, dt);
     }
 
     fn step_on_planet(&mut self, delta: DVec3, generator: &Generator, built: Built<'_>) {
@@ -990,7 +1018,7 @@ impl Controller {
     pub fn camera(&self, generator: &Generator) -> Camera {
         let up = self.frame_up;
         let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
-        let target = self.drawn_position() + up * EYE_M;
+        let target = self.position() + up * (EYE_M + self.eye.off_m);
         let mut position = target - forward * self.boom_m;
 
         // Never inside the body the avatar stands on, as drawn. In a cave
@@ -1141,9 +1169,9 @@ mod tests {
     fn what_is_drawn_eases_over_a_step_the_body_takes_at_once() {
         let (feet_m, figure_m, eye_m, off_m) = walk_up_a_stair();
         assert!((feet_m - BLOCK_M).abs() < 1e-6, "{feet_m}");
-        // A spring this stiff moves the figure and the eye three metres a
-        // second at most over a step: a twentieth of a metre a tick.
-        assert!(figure_m < 0.06, "{figure_m}");
+        // Over a step the eye moves three metres a second at most, a twentieth
+        // of a metre a tick; the figure, three times as stiff, nine.
+        assert!(figure_m < 0.16, "{figure_m}");
         assert!(eye_m < 0.06, "{eye_m}");
         assert!(off_m.abs() < 0.01, "{off_m}");
     }
@@ -1155,7 +1183,29 @@ mod tests {
         let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
         let mut controller = Controller::spawn(point, &generator);
         controller.lift_onto(controller.height_m + 4.0);
-        assert_eq!(controller.drawn_off_m, 0.0);
+        assert_eq!(controller.eye, Spring::default());
+        assert_eq!(controller.figure, Spring::default());
+    }
+
+    #[test]
+    fn ground_is_followed_at_once_and_a_step_is_eased() {
+        let generator = Generator::new(Recipe::new(1)).unwrap();
+        let side = f64::from(generator.sphere().blocks().side());
+        let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
+        let mut controller = Controller::spawn(point, &generator);
+        // A slope: a few centimetres a frame, up and down.
+        for rise_m in [0.05, 0.12, -0.08, -0.2] {
+            controller.stand_on(controller.height_m + rise_m);
+        }
+        assert_eq!(controller.figure, Spring::default());
+        // A stair: one block, left behind whole.
+        controller.stand_on(controller.height_m + BLOCK_M);
+        assert!((controller.figure.off_m + BLOCK_M).abs() < 1e-9);
+        assert!((controller.eye.off_m + BLOCK_M).abs() < 1e-9);
+        // The world moving under the body: more than a step, followed at once.
+        controller.figure = Spring::default();
+        controller.stand_on(controller.height_m + 2.0 * BLOCK_M);
+        assert_eq!(controller.figure, Spring::default());
     }
 
     #[test]
