@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
-use client::Moving;
+use client::{Moving, SoundSource};
 use render::PictureFrame;
 use render::wgpu::{CopyExternalImageSourceInfo, ExternalImageSource, Origin2d};
 use scene::PictureId;
@@ -110,7 +110,9 @@ pub fn tick(state: &Rc<RefCell<State>>) {
         match moving {
             Moving::Open { picture, path } => open(state, picture, &path),
             Moving::Close(picture) => {
-                state.borrow_mut().playing.sources.remove(&picture);
+                let mut held = state.borrow_mut();
+                held.audio.detach(SoundSource::Picture(picture));
+                held.playing.sources.remove(&picture);
             }
         }
     }
@@ -211,7 +213,9 @@ fn open(state: &Rc<RefCell<State>>, picture: PictureId, path: &str) {
     if mime.starts_with("video/") {
         match video(&url) {
             Ok(element) => {
-                state.borrow_mut().playing.sources.insert(
+                let mut held = state.borrow_mut();
+                held.audio.attach(SoundSource::Picture(picture), &element);
+                held.playing.sources.insert(
                     picture,
                     Source::Video {
                         element,

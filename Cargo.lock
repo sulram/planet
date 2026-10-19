@@ -2567,6 +2567,7 @@ dependencies = [
  "client",
  "console_error_panic_hook",
  "console_log",
+ "glam",
  "js-sys",
  "log",
  "plugins-client",

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use client::{Chord, Client, Form, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 
-use crate::moving;
+use crate::{audio, moving};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, PointerEvent, WheelEvent};
 
@@ -45,6 +45,8 @@ pub(crate) struct State {
     secondary_down: Option<(f64, f64)>,
     /// The pictures that move, playing into the renderer.
     pub(crate) playing: moving::Playing,
+    /// What is heard, mixed at the eye.
+    pub(crate) audio: audio::Audio,
     /// Drawing through WebGL2, where a frame takes another road to the texture.
     pub(crate) webgl: bool,
 }
@@ -100,6 +102,7 @@ impl Engine {
             files: FILES.to_owned(),
             secondary_down: None,
             playing: moving::Playing::default(),
+            audio: audio::Audio::default(),
             webgl,
         }));
         let alive = Rc::new(RefCell::new(true));
@@ -395,6 +398,7 @@ impl State {
 
         self.client.set_view([width, height]);
         let frame = self.client.update(dt, &mut self.input);
+        self.audio.tick(&frame.camera, self.client.sounds());
         // A tool aims with a free pointer: taking one lets a captured one go.
         if self.client.pointing() && locked(&self.canvas) {
             if let Some(document) = web_sys::window().and_then(|w| w.document()) {
@@ -573,6 +577,9 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             if typing() {
                 return;
             }
+            if down {
+                state.borrow_mut().audio.unlock();
+            }
             let event: KeyboardEvent = event.unchecked_into();
             let code = event.code();
             // Command on a Mac, Control elsewhere.
@@ -628,6 +635,7 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             let event: PointerEvent = event.unchecked_into();
             let _ = canvas.focus();
             let mut state = state.borrow_mut();
+            state.audio.unlock();
             if event.button() == SECONDARY {
                 state.secondary_down = Some((event.client_x().into(), event.client_y().into()));
             }
