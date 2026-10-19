@@ -29,6 +29,7 @@ fn welcomed() -> Client {
             peers: vec![],
             level: protocol::Level::Builder.into(),
             plugins: vec![],
+            clock_ms: 0,
         },
     )));
     client.drain_events();
