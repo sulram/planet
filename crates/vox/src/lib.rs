@@ -74,6 +74,61 @@ impl Grid {
     pub fn count(&self) -> usize {
         self.voxels.iter().filter(|&&v| v != 0).count()
     }
+
+    /// The solid runs a segment from `a` to `b`, in voxel coordinates,
+    /// passes through: where along it, `0` at `a` and `1` at `b`, the
+    /// line enters solid and where it leaves, adjacent solid voxels joined
+    /// into one run, in order from `a`. What a body standing over a model
+    /// has under its feet and over its head is read from this.
+    pub fn solid_runs(&self, a: [f64; 3], b: [f64; 3]) -> Vec<(f64, f64)> {
+        let d = [0, 1, 2].map(|i| b[i] - a[i]);
+        if d.iter().any(|n| !n.is_finite()) || a.iter().chain(&b).any(|n| !n.is_finite()) {
+            return Vec::new();
+        }
+        // The voxel the segment starts in, and how far along it leaves that
+        // voxel on each axis: a walk from voxel to voxel, the nearest
+        // boundary first (Amanatides and Woo).
+        let mut cell = a.map(|n| n.floor() as i32);
+        let step = d.map(|n| if n > 0.0 { 1 } else { -1 });
+        let next = |i: usize, cell: i32| -> f64 {
+            if d[i] == 0.0 {
+                return f64::INFINITY;
+            }
+            let edge = if d[i] > 0.0 { cell + 1 } else { cell };
+            (f64::from(edge) - a[i]) / d[i]
+        };
+        let mut to_edge = [next(0, cell[0]), next(1, cell[1]), next(2, cell[2])];
+        let along = d.map(|n| {
+            if n == 0.0 {
+                f64::INFINITY
+            } else {
+                (1.0 / n).abs()
+            }
+        });
+        let mut runs: Vec<(f64, f64)> = Vec::new();
+        let mut t = 0.0;
+        // No more voxels than the segment can cross, and a little.
+        let most = d.iter().map(|n| n.abs().ceil() as usize + 1).sum::<usize>() + 1;
+        for _ in 0..most {
+            let axis = (0..3)
+                .min_by(|&i, &j| to_edge[i].total_cmp(&to_edge[j]))
+                .unwrap_or(0);
+            let leave = to_edge[axis].min(1.0);
+            if self.at(cell) != 0 {
+                match runs.last_mut() {
+                    Some(run) if run.1 >= t => run.1 = leave,
+                    _ => runs.push((t, leave)),
+                }
+            }
+            if to_edge[axis] >= 1.0 {
+                break;
+            }
+            t = to_edge[axis];
+            cell[axis] += step[axis];
+            to_edge[axis] += along[axis];
+        }
+        runs
+    }
 }
 
 /// A `.vox` read: its grid and the colours it names.

@@ -24,6 +24,8 @@ pub(crate) enum Purpose {
     /// An avatar, by the reference it was asked for.
     Avatar(String),
     Clip(crate::figure::Gait),
+    /// A model's file, by the hash of its content (`part::Shape::Vox`).
+    Model([u8; 32]),
 }
 
 /// `manifest.json` at the asset root: the one place that says which avatars

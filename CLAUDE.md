@@ -81,9 +81,8 @@ only `CLAUDE.md`. `planet` is a codename; the name is pending (docs/OPEN.md).
   - `protocol`: wire messages generated from `proto/`; `lib.rs` alone by hand.
   - `scene`: the plain data a client hands a renderer. No GPU, no generator.
   - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
-  - `voxel`: a volume's cells, gestures, sight, faces and footing. No sphere.
+  - `voxel`: a volume's cells, gestures, sight, faces and footing. `vox`: a MagicaVoxel file as one grid, its palette and its faces. No sphere.
   - `part`: a placed thing that is no cell: its pose in the flat frame of its seat, its shape, what a line and a body meet of it. No sphere.
-  - `vox`: a MagicaVoxel file read into one grid with its palette, and its faces. No sphere, no IO.
   - `seat`: how cells and parts are seated on a world, as client and server both hold it: plots, a volume's bounds by the ground, a gesture on the wire, the frame of a point and a part read back from the world.
   - `render`: all of wgpu lives here. `ui-native`: the desktop panel, all of egui.
   - `client`: controller, streaming, the cells, the host of plugins. No window, no DOM.

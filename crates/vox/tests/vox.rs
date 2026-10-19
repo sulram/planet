@@ -252,6 +252,53 @@ fn hidden_corners_are_shut_in() {
     assert!(tops.iter().all(|v| v.sky == 255));
 }
 
+#[test]
+fn a_column_through_a_model_finds_its_solid_runs() {
+    // A tower of three with air in the middle: voxels at z = 0 and z = 2.
+    let bytes = file(&[size([1, 1, 3]), xyzi(&[[0, 0, 0, 1], [0, 0, 2, 1]])]);
+    let grid = parse(&bytes).unwrap().grid;
+    // Up the middle of the column, from under the model to over it: two
+    // runs, each a voxel long, a third of the way each.
+    let runs = grid.solid_runs([0.5, 0.5, -1.5], [0.5, 0.5, 4.5]);
+    assert_eq!(runs.len(), 2, "{runs:?}");
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    assert!(
+        near(runs[0].0, 1.5 / 6.0) && near(runs[0].1, 2.5 / 6.0),
+        "{runs:?}"
+    );
+    assert!(
+        near(runs[1].0, 3.5 / 6.0) && near(runs[1].1, 4.5 / 6.0),
+        "{runs:?}"
+    );
+    // Down the same column, the runs come in the other order.
+    let down = grid.solid_runs([0.5, 0.5, 4.5], [0.5, 0.5, -1.5]);
+    assert_eq!(down.len(), 2);
+    assert!(near(down[0].0, 1.5 / 6.0), "{down:?}");
+    // Beside the model: nothing.
+    assert!(
+        grid.solid_runs([1.5, 0.5, -1.0], [1.5, 0.5, 4.0])
+            .is_empty()
+    );
+    // Adjacent solid voxels are one run: along a row of two.
+    let row = parse(&file(&[
+        size([2, 1, 1]),
+        xyzi(&[[0, 0, 0, 1], [1, 0, 0, 1]]),
+    ]))
+    .unwrap()
+    .grid;
+    let runs = row.solid_runs([-1.0, 0.5, 0.5], [3.0, 0.5, 0.5]);
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert!(near(runs[0].0, 0.25) && near(runs[0].1, 0.75), "{runs:?}");
+    // A segment that ends inside solid ends its run at 1.
+    let runs = row.solid_runs([-1.0, 0.5, 0.5], [1.0, 0.5, 0.5]);
+    assert_eq!(runs.len(), 1);
+    assert!(near(runs[0].0, 0.5) && near(runs[0].1, 1.0), "{runs:?}");
+    // Slanting through a corner of the row, from below to above.
+    let runs = row.solid_runs([0.2, 0.5, -0.5], [1.8, 0.5, 1.5]);
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert!(near(runs[0].0, 0.25) && near(runs[0].1, 0.75), "{runs:?}");
+}
+
 /// The files MagicaVoxel wrote, from the reference checkouts beside the repo.
 #[test]
 fn files_magicavoxel_wrote() {
