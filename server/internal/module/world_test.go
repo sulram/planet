@@ -42,7 +42,11 @@ func instance(t *testing.T, dir string, level world.Level) *httptest.Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { hosted.Close(context.Background()) })
-	web := httptest.NewServer(api.New(api.Config{DevLevel: level, Version: "test"}, kept, hosted.Plugins()).Handler())
+	instance, err := api.New(api.Config{DevLevel: level, Version: "test"}, kept, hosted.Plugins())
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := httptest.NewServer(instance.Handler())
 	t.Cleanup(web.Close)
 	return web
 }
