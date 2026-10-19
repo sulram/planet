@@ -1,7 +1,7 @@
 ---
 date: 2026-10-20
 lives_in:
-  - PICTURES.md#pictures
+  - SOUND.md#heard
 ---
 
 # A video is heard at the eye, within its reach, seen or not

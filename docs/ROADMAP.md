@@ -139,7 +139,8 @@ end to end.
 - [ ] Models: a `.vox` file as a shape of a part, read and meshed by `crates/vox` with its own palette, solid or passable, placed with the one gizmo (sketches/entities.md)
 - [ ] Entities: GLB as a shape of a part, with budgets
 - [ ] Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL
-- [ ] Native audio: a video is heard on the web alone; the desktop has no audio stack. Voice by proximity enters as another source over the same list (PICTURES.md). Playback in step between clients waits on the server's clock
+- [ ] Native audio: a video and a sound are heard on the web alone; the desktop has no audio stack. Voice by proximity enters as another source over the same list (SOUND.md). Playback in step between clients waits on the server's clock
+- [ ] An ambience for a volume: a sound on the volume's record, heard inside it with no fall off, the build plugin's
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
 - [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
