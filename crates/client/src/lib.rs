@@ -104,8 +104,12 @@ pub struct Client {
     /// The view's height in pixels: what a picture's size on the screen is
     /// measured in.
     view_height_px: f32,
+    /// The world's clock, seconds. Online it is the server's, set by Welcome,
+    /// so every client shares one sky; offline it counts from the world's
+    /// making. The sun, the moon and the weather are functions of it.
     clock_s: f64,
-    /// Sun angle at `clock_s = 0`, chosen so every spawn starts in daylight.
+    /// Sun angle at `clock_s = 0`: mid morning at the spawn, a fact of the
+    /// world, so clients that set their clocks by one server agree on the sun.
     noon_offset: f64,
     stats_timer_s: f64,
     frames_since_stats: u32,
@@ -259,7 +263,8 @@ impl Client {
         self.entropy ^= mix(bits);
     }
 
-    /// Pins the clock, for reproducible headless renders.
+    /// Sets the clock: a server's on Welcome, a fixed one for reproducible
+    /// headless renders.
     pub fn set_clock(&mut self, seconds: f64) {
         self.clock_s = seconds;
     }
@@ -754,6 +759,8 @@ impl Client {
                     return;
                 }
                 self.session.welcomed(welcome.session);
+                // The world's clock is the server's from here on.
+                self.set_clock(welcome.clock_ms as f64 / 1000.0);
                 self.level = Some(Level::from_wire(welcome.level));
                 // The world keeps the cells from here on.
                 self.cells.link(welcome.session);
@@ -977,9 +984,11 @@ impl Client {
         let (plugins, lent) = self.lend();
         plugins.keys(&taken.codes, lent);
 
-        // Long frames (a stalled tab) must not tunnel the avatar anywhere.
+        // The clock takes every second, a stalled tab's too, so it keeps
+        // pace with the server's. Long frames must not tunnel the avatar
+        // anywhere: the body takes a tenth at most.
+        self.clock_s += dt.max(0.0);
         let dt = dt.clamp(0.0, 0.1);
-        self.clock_s += dt;
         let wish = Wish {
             movement: input.movement(),
             up: input.held(Key::Up),
@@ -1311,17 +1320,19 @@ impl Client {
         self.controller.mode = mode;
         self.terrain.clear();
         self.moon_terrain.clear();
+        // A new world starts its own clock.
+        self.clock_s = 0.0;
         self.face_the_sun();
         self.events.push(Event::RecipeChanged {
             recipe: self.generator.recipe().clone(),
         });
     }
 
-    /// Mid morning at the spawn, whatever the clock says.
+    /// Mid morning at the spawn when the clock reads zero. The spawn is the
+    /// recipe's, so the offset is the world's too.
     fn face_the_sun(&mut self) {
         let up = self.controller.up();
-        let now = self.clock_s / DAY_S * core::f64::consts::TAU;
-        self.noon_offset = up.z.atan2(up.x) - 0.7 - now;
+        self.noon_offset = up.z.atan2(up.x) - 0.7;
     }
 
     fn stats(&mut self, dt: f64) {

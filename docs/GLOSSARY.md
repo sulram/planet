@@ -115,6 +115,7 @@ this file in the same change.
 | Stage | One full screen pass of the compositor. Reads the colour and depth before it, writes the next target. |
 | Tone map | The curve in `output` that turns the scene's unbounded light into what a screen shows. A setting. |
 | Scene target | The HDR, linear light texture the world is drawn into, with its depth. |
+| Clock | The world's time, seconds. The server's wall clock online, set in every client by `Welcome`; counted from the world's making offline. The sun, the moon and the weather are functions of it. |
 | Weather | The low frequency field that says where on the planet clouds may stand at all. Turns with the clock. |
 | Cloud layer | The shell of altitude clouds live in. Marched by the compositor, sampled by lit surfaces for shade. |
 | Cascade | One sun shadow map of a nested set around the eye; each covers more ground at a coarser texel. |

@@ -172,6 +172,11 @@ pub struct Welcome {
     /// The plugins that are on. A client mounts what it holds of them.
     #[prost(message, repeated, tag="5")]
     pub plugins: ::prost::alloc::vec::Vec<Plugin>,
+    /// The world's clock as the server reads it, milliseconds since the Unix
+    /// epoch. Every client sets its own by it, so the sun, the moon and the
+    /// weather are the same in every eye.
+    #[prost(uint64, tag="6")]
+    pub clock_ms: u64,
 }
 /// The plugins that are on, said again whenever the admin switches one.
 #[derive(Clone, PartialEq, ::prost::Message)]

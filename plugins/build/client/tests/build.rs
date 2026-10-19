@@ -33,6 +33,7 @@ fn welcome(client: &Client, level: protocol::Level) -> Vec<u8> {
         peers: vec![],
         level: level.into(),
         plugins: build_on(),
+        clock_ms: 0,
     }))
 }
 

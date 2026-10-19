@@ -126,6 +126,7 @@ func (a *actor) join(s *session) {
 		Peers:   peers,
 		Level:   s.identity.Level.wire(),
 		Plugins: wirePlugins(spoken(a.plugins)),
+		ClockMs: uint64(time.Now().UnixMilli()),
 	}}})
 	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Joined{Joined: &pb.Joined{Peer: s.peer()}}}, s)
 }

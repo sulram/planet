@@ -163,6 +163,10 @@ message Welcome {
   Level level = 4;
   // The plugins that are on. A client mounts what it holds of them.
   repeated Plugin plugins = 5;
+  // The world's clock as the server reads it, milliseconds since the Unix
+  // epoch. Every client sets its own by it, so the sun, the moon and the
+  // weather are the same in every eye.
+  uint64 clock_ms = 6;
 }
 
 // The plugins that are on, said again whenever the admin switches one.

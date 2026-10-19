@@ -77,8 +77,8 @@ not yet confirmed.
 - Wire: protobuf, one message per binary WebSocket frame, `proto/` the single
   source (66). `Hello` says the protocol version; any other is refused.
   `Welcome` carries the session, its level, the recipe, so a client checks it
-  stands in the world the server holds, and the plugins that are on. A
-  plugin's message rides an `Envelope`: its name, a kind and its own payload.
+  stands in the world the server holds, the plugins that are on, and the clock
+  every client sets its own by (112). A plugin's message rides an `Envelope`.
 - The hub holds the world's actor: started on the first session, gone after
   the last. The actor keeps every session's last stance and relays what
   changed at 15 Hz, in one frame encoded once, with a heartbeat every two

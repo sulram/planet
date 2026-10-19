@@ -958,7 +958,11 @@ type Welcome struct {
 	// What this session may do, for its life. A client offers its tools by it.
 	Level Level `protobuf:"varint,4,opt,name=level,proto3,enum=planet.v1.Level" json:"level,omitempty"`
 	// The plugins that are on. A client mounts what it holds of them.
-	Plugins       []*Plugin `protobuf:"bytes,5,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	Plugins []*Plugin `protobuf:"bytes,5,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	// The world's clock as the server reads it, milliseconds since the Unix
+	// epoch. Every client sets its own by it, so the sun, the moon and the
+	// weather are the same in every eye.
+	ClockMs       uint64 `protobuf:"varint,6,opt,name=clock_ms,json=clockMs,proto3" json:"clock_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1026,6 +1030,13 @@ func (x *Welcome) GetPlugins() []*Plugin {
 		return x.Plugins
 	}
 	return nil
+}
+
+func (x *Welcome) GetClockMs() uint64 {
+	if x != nil {
+		return x.ClockMs
+	}
+	return 0
 }
 
 // The plugins that are on, said again whenever the admin switches one.
@@ -1673,13 +1684,14 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\x06stance\x18\x05 \x01(\v2\x11.planet.v1.StanceR\x06stance\"6\n" +
 	"\x06Plugin\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\rR\aversion\"\xca\x01\n" +
+	"\aversion\x18\x02 \x01(\rR\aversion\"\xe5\x01\n" +
 	"\aWelcome\x12\x18\n" +
 	"\asession\x18\x01 \x01(\rR\asession\x12)\n" +
 	"\x06recipe\x18\x02 \x01(\v2\x11.planet.v1.RecipeR\x06recipe\x12%\n" +
 	"\x05peers\x18\x03 \x03(\v2\x0f.planet.v1.PeerR\x05peers\x12&\n" +
 	"\x05level\x18\x04 \x01(\x0e2\x10.planet.v1.LevelR\x05level\x12+\n" +
-	"\aplugins\x18\x05 \x03(\v2\x11.planet.v1.PluginR\aplugins\"6\n" +
+	"\aplugins\x18\x05 \x03(\v2\x11.planet.v1.PluginR\aplugins\x12\x19\n" +
+	"\bclock_ms\x18\x06 \x01(\x04R\aclockMs\"6\n" +
 	"\aPlugins\x12+\n" +
 	"\aplugins\x18\x01 \x03(\v2\x11.planet.v1.PluginR\aplugins\"-\n" +
 	"\x06Joined\x12#\n" +

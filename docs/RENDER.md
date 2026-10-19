@@ -117,7 +117,10 @@ compositor. What the world *is* lives in WORLD.md.
   Flight keeps its own floor over the drawn ground, except under the ground,
   where the footing takes over. With no tool in hand a volume's cells are
   floor, roof and walls to a flyer too; building, it flies through (76).
-- Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world.
+- Sky: a shell atmosphere (3.6 km), a sun, stars fixed to the world. The sun,
+  the moon and the weather are functions of the world's clock: the server's
+  online, so every client sees one sky; from zero offline, mid morning at the
+  spawn (112). A day is `DAY_S` in `client`, twenty minutes.
 - Bodies: the planet and the moon share one terrain quadtree (`Body`). Patches
   are built around their body's centre; the renderer adds where the body is
   this frame. The moon orbits on rails, twenty of its radii out, 5.2 km of

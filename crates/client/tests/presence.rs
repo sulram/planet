@@ -53,12 +53,23 @@ fn welcome_as(
     peers: Vec<protocol::Peer>,
     level: protocol::Level,
 ) -> Vec<u8> {
+    welcome_at(client, session, peers, level, 0)
+}
+
+fn welcome_at(
+    client: &Client,
+    session: u32,
+    peers: Vec<protocol::Peer>,
+    level: protocol::Level,
+    clock_ms: u64,
+) -> Vec<u8> {
     server(server_message::Message::Welcome(protocol::Welcome {
         session,
         recipe: Some(recipe_of(client)),
         peers,
         level: level.into(),
         plugins: vec![],
+        clock_ms,
     }))
 }
 
@@ -224,6 +235,7 @@ fn another_recipe_is_another_world() {
             peers: vec![],
             level: protocol::Level::Admin.into(),
             plugins: vec![],
+            clock_ms: 0,
         },
     )));
     assert!(client.drain_outbound().contains(&Outbound::Close));
@@ -314,4 +326,47 @@ fn a_name_rides_in_hello_and_a_peer_renamed_is_listed_anew() {
         client.drain_events().last(),
         Some(Event::Peers { peers }) if peers.len() == 1 && peers[0].name == "Grace"
     ));
+}
+
+/// The sky is the world's, not the client's: two clients welcomed by one
+/// server at one moment see the sun and the moon in the same place, however
+/// long each ran alone, and whenever each came to this recipe.
+#[test]
+fn one_welcome_sets_one_sky() {
+    let mut a = Client::new(Recipe::new(7)).unwrap();
+    let mut b = Client::new(Recipe::new(3)).unwrap();
+    let mut input = Input::default();
+    // A ran a while; B ran a while and only then turned to A's world.
+    for _ in 0..600 {
+        a.update(1.0 / 60.0, &mut input);
+    }
+    for _ in 0..1500 {
+        b.update(1.0 / 60.0, &mut input);
+    }
+    b.command(Command::SetRecipe {
+        recipe: a.recipe().clone(),
+    });
+    let apart = a.settled_frame().sun_direction - b.settled_frame().sun_direction;
+    assert!(apart.length() > 0.01, "alone, their suns disagree: {apart}");
+
+    let now_ms = 1_760_000_000_000;
+    for (client, session) in [(&mut a, 1), (&mut b, 2)] {
+        client.link_opened();
+        let frame = welcome_at(client, session, vec![], protocol::Level::Anonymous, now_ms);
+        client.receive(&frame);
+    }
+    let (fa, fb) = (a.settled_frame(), b.settled_frame());
+    assert!(
+        (fa.sun_direction - fb.sun_direction).length() < 1e-5,
+        "the sun: {} and {}",
+        fa.sun_direction,
+        fb.sun_direction
+    );
+    assert!(
+        (fa.moon.position - fb.moon.position).length() < 1e-3,
+        "the moon: {} and {}",
+        fa.moon.position,
+        fb.moon.position
+    );
+    assert_eq!(fa.clock_s, now_ms as f64 / 1000.0);
 }

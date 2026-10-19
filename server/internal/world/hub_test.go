@@ -164,6 +164,9 @@ func TestTwoPeopleSeeEachOther(t *testing.T) {
 	if welcome.Recipe.Seed != "00000000deadbeef" || welcome.Recipe.ParamsJson != `{"relief_m":2000}` {
 		t.Fatalf("the welcome carries the recipe: %v", welcome.Recipe)
 	}
+	if welcome.ClockMs == 0 {
+		t.Fatalf("the welcome carries the world's clock: %v", welcome)
+	}
 	a.say(&pb.ClientMessage{Message: &pb.ClientMessage_Stance{Stance: stance(10)}})
 	// The stance lands in the actor by its own road, so it is heard back
 	// before the second person arrives to be told it.

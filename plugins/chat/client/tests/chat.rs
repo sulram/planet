@@ -28,6 +28,7 @@ fn welcome(client: &Client) -> Vec<u8> {
             name: chat_client::NAME.into(),
             version: chat_client::VERSION,
         }],
+        clock_ms: 0,
     }))
 }
 

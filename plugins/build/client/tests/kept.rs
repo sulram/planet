@@ -83,6 +83,7 @@ impl World {
                     name: build_client::NAME.into(),
                     version: build_client::VERSION,
                 }],
+                clock_ms: 0,
             },
         )));
         self.here.push(Here {
