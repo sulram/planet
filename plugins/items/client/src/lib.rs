@@ -293,6 +293,9 @@ struct Picked {
     /// Whether it is a lamp: a cube in the light finish, or a landmark.
     #[serde(skip_serializing_if = "Option::is_none")]
     lamp: Option<bool>,
+    /// Whether it is heard: a video. Its reach is how far.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sound: Option<bool>,
     /// What a landmark is called.
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
@@ -660,6 +663,7 @@ impl Items {
                 shine: Some(gizmo.part.shine),
                 reach_m: Some(gizmo.part.reach_m),
                 lamp: Some(client::is_lamp(&gizmo.part)),
+                sound: Some(matches!(gizmo.part.shape, Shape::Image(media) if media.sounds())),
                 name: match gizmo.part.shape {
                     Shape::Landmark(name) => Some(name.to_string()),
                     _ => None,
@@ -675,6 +679,7 @@ impl Items {
                 shine: None,
                 reach_m: None,
                 lamp: None,
+                sound: None,
                 name: None,
             },
         };
