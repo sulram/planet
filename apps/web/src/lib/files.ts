@@ -9,7 +9,7 @@ import { Refused } from './instance';
 export type Asset = `asset://${string}`;
 
 /** The kinds the world takes, each read off the first bytes and never off a name. */
-export type Kind = 'vox' | 'png' | 'jpg' | 'webp';
+export type Kind = 'vox' | 'png' | 'jpg' | 'webp' | 'gif' | 'mp4';
 
 /** The kind of some bytes, as the server reads it. Null for bytes of no kind the world takes. */
 export function kindOf(head: Uint8Array): Kind | null {
@@ -19,6 +19,9 @@ export function kindOf(head: Uint8Array): Kind | null {
 	if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'png';
 	if (starts([0xff, 0xd8, 0xff])) return 'jpg';
 	if (head.length >= 12 && ascii('RIFF') && ascii('WEBP', 8)) return 'webp';
+	if (ascii('GIF87a') || ascii('GIF89a')) return 'gif';
+	// An MP4 opens with a box whose type is `ftyp`, after its four byte size.
+	if (head.length >= 8 && ascii('ftyp', 4)) return 'mp4';
 	return null;
 }
 

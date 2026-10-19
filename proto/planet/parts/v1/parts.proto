@@ -36,9 +36,11 @@ message Landmark {
   string name = 1;
 }
 
-// A picture: its size in texels and the three files its owner's client made
-// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
-// 89): the thumb and the low version are WebP, the original is `kind`.
+// A picture: its size in texels, how long it plays, and the three files its
+// owner's client made when it was placed, each the SHA-256 of its bytes, 32
+// bytes (DECISIONS 89): the thumb and the low version are WebP posters, the
+// original is `kind`. `millis` is how long the original plays, 0 for a
+// still: a GIF, an animated WebP or a video moves.
 message Media {
   uint32 width = 1;
   uint32 height = 2;
@@ -46,6 +48,7 @@ message Media {
   bytes low = 4;
   bytes full = 5;
   ImageKind kind = 6;
+  uint32 millis = 7;
 }
 
 enum ImageKind {
@@ -53,6 +56,8 @@ enum ImageKind {
   IMAGE_KIND_PNG = 1;
   IMAGE_KIND_JPG = 2;
   IMAGE_KIND_WEBP = 3;
+  IMAGE_KIND_GIF = 4;
+  IMAGE_KIND_MP4 = 5;
 }
 
 // Where a part stands in the flat frame of its seat, in blocks: its anchor

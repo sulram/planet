@@ -140,12 +140,15 @@ impl ContentId {
 }
 
 /// The file kinds a picture is kept in, by the extension the world names
-/// them with.
+/// them with. A GIF, a WebP and an MP4 may move; what says whether one does
+/// is [`Media::millis`].
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ImageKind {
     Png,
     Jpg,
     Webp,
+    Gif,
+    Mp4,
 }
 
 impl ImageKind {
@@ -154,6 +157,8 @@ impl ImageKind {
             ImageKind::Png => "png",
             ImageKind::Jpg => "jpg",
             ImageKind::Webp => "webp",
+            ImageKind::Gif => "gif",
+            ImageKind::Mp4 => "mp4",
         }
     }
 
@@ -162,6 +167,8 @@ impl ImageKind {
             "png" => Some(ImageKind::Png),
             "jpg" => Some(ImageKind::Jpg),
             "webp" => Some(ImageKind::Webp),
+            "gif" => Some(ImageKind::Gif),
+            "mp4" => Some(ImageKind::Mp4),
             _ => None,
         }
     }
@@ -179,12 +186,15 @@ pub enum PictureLevel {
 }
 
 /// What a picture is at every distance, and nothing else: its size in
-/// texels and the three files its owner's client made when it was placed
-/// (ARCHITECTURE § Files). The thumb and the low version are WebP.
+/// texels, how long it plays, and the three files its owner's client made
+/// when it was placed (ARCHITECTURE § Files). The thumb and the low version
+/// are WebP; for a picture that moves they are posters, its first frame.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Media {
     pub width: u32,
     pub height: u32,
+    /// How long the original plays, in milliseconds: 0 for a still.
+    pub millis: u32,
     pub thumb: ContentId,
     pub low: ContentId,
     pub full: ContentId,
@@ -196,6 +206,12 @@ impl Media {
     /// Width over height.
     pub fn aspect(&self) -> f64 {
         f64::from(self.width.max(1)) / f64::from(self.height.max(1))
+    }
+
+    /// Whether the original moves: a GIF, an animated WebP or a video, played
+    /// near and in view, a poster elsewhere.
+    pub fn moves(&self) -> bool {
+        self.millis > 0
     }
 
     /// The content id of a level.
@@ -217,9 +233,16 @@ impl Media {
         format!("asset://{}.{ext}", self.id(level).hex())
     }
 
-    /// A media read back from three asset names and a size. `None` when a
-    /// name is no `asset://<hash>.<ext>` of a picture.
-    pub fn parse(width: u32, height: u32, thumb: &str, low: &str, full: &str) -> Option<Media> {
+    /// A media read back from three asset names, a size and how long it
+    /// plays. `None` when a name is no `asset://<hash>.<ext>` of a picture.
+    pub fn parse(
+        width: u32,
+        height: u32,
+        millis: u32,
+        thumb: &str,
+        low: &str,
+        full: &str,
+    ) -> Option<Media> {
         let split = |name: &str| -> Option<(ContentId, ImageKind)> {
             let (hex, ext) = name.strip_prefix("asset://")?.split_once('.')?;
             Some((ContentId::parse(hex)?, ImageKind::from_ext(ext)?))
@@ -228,6 +251,7 @@ impl Media {
         Some(Media {
             width,
             height,
+            millis,
             thumb: split(thumb)?.0,
             low: split(low)?.0,
             full,
@@ -529,15 +553,24 @@ mod tests {
         let thumb = format!("asset://{hex}.webp");
         let low = format!("asset://{}.webp", "ff".repeat(32));
         let full = format!("asset://{}.jpg", "00".repeat(32));
-        let media = Media::parse(300, 200, &thumb, &low, &full).unwrap();
+        let media = Media::parse(300, 200, 0, &thumb, &low, &full).unwrap();
         assert_eq!(media.name(PictureLevel::Thumb), thumb);
         assert_eq!(media.name(PictureLevel::Low), low);
         assert_eq!(media.name(PictureLevel::Full), full);
         assert_eq!(media.kind, ImageKind::Jpg);
+        assert!(!media.moves(), "a still");
         assert!((media.aspect() - 1.5).abs() < 1e-12);
-        assert!(Media::parse(1, 1, &thumb, &low, "asset://abc.jpg").is_none());
-        assert!(Media::parse(1, 1, &thumb, &low, &format!("asset://{hex}.gif")).is_none());
+        assert!(Media::parse(1, 1, 0, &thumb, &low, "asset://abc.jpg").is_none());
+        assert!(Media::parse(1, 1, 0, &thumb, &low, &format!("asset://{hex}.svg")).is_none());
         assert!(ContentId::parse(&"zz".repeat(32)).is_none());
+        // A GIF and an MP4 are pictures too, and move when they play for a while.
+        let gif = Media::parse(1, 1, 1200, &thumb, &low, &format!("asset://{hex}.gif")).unwrap();
+        assert_eq!(gif.kind, ImageKind::Gif);
+        assert!(gif.moves());
+        assert_eq!(gif.name(PictureLevel::Full), format!("asset://{hex}.gif"));
+        let video = Media::parse(1, 1, 90_000, &thumb, &low, &format!("asset://{hex}.mp4")).unwrap();
+        assert_eq!(video.kind, ImageKind::Mp4);
+        assert!(video.moves());
     }
     use core::f64::consts::FRAC_PI_4;
     use proptest::prelude::*;

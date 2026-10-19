@@ -35,9 +35,11 @@ pub struct Landmark {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
-/// A picture: its size in texels and the three files its owner's client made
-/// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
-/// 89): the thumb and the low version are WebP, the original is `kind`.
+/// A picture: its size in texels, how long it plays, and the three files its
+/// owner's client made when it was placed, each the SHA-256 of its bytes, 32
+/// bytes (DECISIONS 89): the thumb and the low version are WebP posters, the
+/// original is `kind`. `millis` is how long the original plays, 0 for a
+/// still: a GIF, an animated WebP or a video moves.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Media {
     #[prost(uint32, tag="1")]
@@ -52,6 +54,8 @@ pub struct Media {
     pub full: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration="ImageKind", tag="6")]
     pub kind: i32,
+    #[prost(uint32, tag="7")]
+    pub millis: u32,
 }
 /// Where a part stands in the flat frame of its seat, in blocks: its anchor
 /// along u and v and over the datum, how it is turned, a unit quaternion in
@@ -217,6 +221,8 @@ pub enum ImageKind {
     Png = 1,
     Jpg = 2,
     Webp = 3,
+    Gif = 4,
+    Mp4 = 5,
 }
 impl ImageKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -229,6 +235,8 @@ impl ImageKind {
             Self::Png => "IMAGE_KIND_PNG",
             Self::Jpg => "IMAGE_KIND_JPG",
             Self::Webp => "IMAGE_KIND_WEBP",
+            Self::Gif => "IMAGE_KIND_GIF",
+            Self::Mp4 => "IMAGE_KIND_MP4",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -238,6 +246,8 @@ impl ImageKind {
             "IMAGE_KIND_PNG" => Some(Self::Png),
             "IMAGE_KIND_JPG" => Some(Self::Jpg),
             "IMAGE_KIND_WEBP" => Some(Self::Webp),
+            "IMAGE_KIND_GIF" => Some(Self::Gif),
+            "IMAGE_KIND_MP4" => Some(Self::Mp4),
             _ => None,
         }
     }

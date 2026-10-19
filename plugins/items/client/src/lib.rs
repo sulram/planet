@@ -190,6 +190,9 @@ struct Take {
 struct MediaBody {
     width: u32,
     height: u32,
+    /// How long it plays, in milliseconds; a still says none.
+    #[serde(default)]
+    millis: u32,
     thumb: String,
     low: String,
     full: String,
@@ -197,7 +200,14 @@ struct MediaBody {
 
 impl MediaBody {
     fn media(&self) -> Option<Media> {
-        Media::parse(self.width, self.height, &self.thumb, &self.low, &self.full)
+        Media::parse(
+            self.width,
+            self.height,
+            self.millis,
+            &self.thumb,
+            &self.low,
+            &self.full,
+        )
     }
 }
 

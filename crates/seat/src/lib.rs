@@ -335,8 +335,11 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
                 part::ImageKind::Png => parts_wire::ImageKind::Png,
                 part::ImageKind::Jpg => parts_wire::ImageKind::Jpg,
                 part::ImageKind::Webp => parts_wire::ImageKind::Webp,
+                part::ImageKind::Gif => parts_wire::ImageKind::Gif,
+                part::ImageKind::Mp4 => parts_wire::ImageKind::Mp4,
             }
             .into(),
+            millis: media.millis,
         }),
         part::Shape::Landmark(name) => parts_wire::shape::Shape::Landmark(parts_wire::Landmark {
             name: name.as_str().to_owned(),
@@ -384,8 +387,11 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
                 parts_wire::ImageKind::Png => part::ImageKind::Png,
                 parts_wire::ImageKind::Jpg => part::ImageKind::Jpg,
                 parts_wire::ImageKind::Webp => part::ImageKind::Webp,
+                parts_wire::ImageKind::Gif => part::ImageKind::Gif,
+                parts_wire::ImageKind::Mp4 => part::ImageKind::Mp4,
                 parts_wire::ImageKind::Unspecified => return None,
             },
+            millis: media.millis,
         }),
         parts_wire::shape::Shape::Landmark(landmark) => {
             part::Shape::Landmark(part::Name::new(&landmark.name)?)
@@ -478,15 +484,22 @@ mod tests {
         let media = part::Media {
             width: 300,
             height: 200,
+            millis: 0,
             thumb: part::ContentId([1; 32]),
             low: part::ContentId([2; 32]),
             full: part::ContentId([3; 32]),
             kind: part::ImageKind::Jpg,
         };
+        let video = part::Media {
+            millis: 90_000,
+            kind: part::ImageKind::Mp4,
+            ..media
+        };
         for shape in [
             part::Shape::Cube,
             part::Shape::Vox([7; 32]),
             part::Shape::Image(media),
+            part::Shape::Image(video),
             part::Shape::Landmark(part::Name::new("Praça da Sé").unwrap()),
         ] {
             let sent = part::Part {

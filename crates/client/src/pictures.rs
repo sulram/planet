@@ -334,6 +334,7 @@ mod tests {
         Media {
             width: 3000,
             height: 2000,
+            millis: 0,
             thumb: id(1),
             low: id(2),
             full: id(3),

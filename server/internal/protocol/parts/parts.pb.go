@@ -37,6 +37,8 @@ const (
 	ImageKind_IMAGE_KIND_PNG         ImageKind = 1
 	ImageKind_IMAGE_KIND_JPG         ImageKind = 2
 	ImageKind_IMAGE_KIND_WEBP        ImageKind = 3
+	ImageKind_IMAGE_KIND_GIF         ImageKind = 4
+	ImageKind_IMAGE_KIND_MP4         ImageKind = 5
 )
 
 // Enum value maps for ImageKind.
@@ -46,12 +48,16 @@ var (
 		1: "IMAGE_KIND_PNG",
 		2: "IMAGE_KIND_JPG",
 		3: "IMAGE_KIND_WEBP",
+		4: "IMAGE_KIND_GIF",
+		5: "IMAGE_KIND_MP4",
 	}
 	ImageKind_value = map[string]int32{
 		"IMAGE_KIND_UNSPECIFIED": 0,
 		"IMAGE_KIND_PNG":         1,
 		"IMAGE_KIND_JPG":         2,
 		"IMAGE_KIND_WEBP":        3,
+		"IMAGE_KIND_GIF":         4,
+		"IMAGE_KIND_MP4":         5,
 	}
 )
 
@@ -284,9 +290,11 @@ func (x *Landmark) GetName() string {
 	return ""
 }
 
-// A picture: its size in texels and the three files its owner's client made
-// when it was placed, each the SHA-256 of its bytes, 32 bytes (DECISIONS
-// 89): the thumb and the low version are WebP, the original is `kind`.
+// A picture: its size in texels, how long it plays, and the three files its
+// owner's client made when it was placed, each the SHA-256 of its bytes, 32
+// bytes (DECISIONS 89): the thumb and the low version are WebP posters, the
+// original is `kind`. `millis` is how long the original plays, 0 for a
+// still: a GIF, an animated WebP or a video moves.
 type Media struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Width         uint32                 `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
@@ -295,6 +303,7 @@ type Media struct {
 	Low           []byte                 `protobuf:"bytes,4,opt,name=low,proto3" json:"low,omitempty"`
 	Full          []byte                 `protobuf:"bytes,5,opt,name=full,proto3" json:"full,omitempty"`
 	Kind          ImageKind              `protobuf:"varint,6,opt,name=kind,proto3,enum=planet.parts.v1.ImageKind" json:"kind,omitempty"`
+	Millis        uint32                 `protobuf:"varint,7,opt,name=millis,proto3" json:"millis,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -369,6 +378,13 @@ func (x *Media) GetKind() ImageKind {
 		return x.Kind
 	}
 	return ImageKind_IMAGE_KIND_UNSPECIFIED
+}
+
+func (x *Media) GetMillis() uint32 {
+	if x != nil {
+		return x.Millis
+	}
+	return 0
 }
 
 // Where a part stands in the flat frame of its seat, in blocks: its anchor
@@ -1285,14 +1301,15 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x05shape\"\x06\n" +
 	"\x04Cube\"\x1e\n" +
 	"\bLandmark\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xa1\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xb9\x01\n" +
 	"\x05Media\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\rR\x05width\x12\x16\n" +
 	"\x06height\x18\x02 \x01(\rR\x06height\x12\x14\n" +
 	"\x05thumb\x18\x03 \x01(\fR\x05thumb\x12\x10\n" +
 	"\x03low\x18\x04 \x01(\fR\x03low\x12\x12\n" +
 	"\x04full\x18\x05 \x01(\fR\x04full\x12.\n" +
-	"\x04kind\x18\x06 \x01(\x0e2\x1a.planet.parts.v1.ImageKindR\x04kind\"\xa0\x01\n" +
+	"\x04kind\x18\x06 \x01(\x0e2\x1a.planet.parts.v1.ImageKindR\x04kind\x12\x16\n" +
+	"\x06millis\x18\a \x01(\rR\x06millis\"\xa0\x01\n" +
 	"\x04Pose\x12\f\n" +
 	"\x01u\x18\x01 \x01(\x01R\x01u\x12\f\n" +
 	"\x01v\x18\x02 \x01(\x01R\x01v\x12\f\n" +
@@ -1346,12 +1363,14 @@ const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\x04gone\x18\x02 \x03(\x04R\x04gone\"\a\n" +
 	"\x05Chart\"<\n" +
 	"\aCharted\x121\n" +
-	"\arecords\x18\x01 \x03(\v2\x17.planet.parts.v1.RecordR\arecords*d\n" +
+	"\arecords\x18\x01 \x03(\v2\x17.planet.parts.v1.RecordR\arecords*\x8c\x01\n" +
 	"\tImageKind\x12\x1a\n" +
 	"\x16IMAGE_KIND_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eIMAGE_KIND_PNG\x10\x01\x12\x12\n" +
 	"\x0eIMAGE_KIND_JPG\x10\x02\x12\x13\n" +
-	"\x0fIMAGE_KIND_WEBP\x10\x03B?Z=github.com/sulram/planet/server/internal/protocol/parts;partsb\x06proto3"
+	"\x0fIMAGE_KIND_WEBP\x10\x03\x12\x12\n" +
+	"\x0eIMAGE_KIND_GIF\x10\x04\x12\x12\n" +
+	"\x0eIMAGE_KIND_MP4\x10\x05B?Z=github.com/sulram/planet/server/internal/protocol/parts;partsb\x06proto3"
 
 var (
 	file_planet_parts_v1_parts_proto_rawDescOnce sync.Once

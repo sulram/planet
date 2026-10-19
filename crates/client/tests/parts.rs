@@ -252,6 +252,7 @@ fn a_picture_another_placed_arrives_and_is_drawn_as_one() {
     let media = Media {
         width: 3000,
         height: 2000,
+        millis: 0,
         thumb: ContentId([1; 32]),
         low: ContentId([2; 32]),
         full: ContentId([3; 32]),

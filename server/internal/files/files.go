@@ -1,5 +1,6 @@
 // Package files is what a world keeps of heavy files (DECISIONS 89): a
-// model, an image, each named by the hash of its content and never changed.
+// model, an image, a video, each named by the hash of its content and never
+// changed.
 // A session that may build sends one; the world reads its kind off its bytes,
 // names it and keeps it. Alone, the files sit in the world folder and the
 // server serves them; mundos's bucket takes them when it hands a world one.
@@ -41,6 +42,11 @@ func Kind(head []byte) (string, bool) {
 		return "jpg", true
 	case len(head) >= 12 && bytes.Equal(head[:4], []byte("RIFF")) && bytes.Equal(head[8:12], []byte("WEBP")):
 		return "webp", true
+	case bytes.HasPrefix(head, []byte("GIF87a")), bytes.HasPrefix(head, []byte("GIF89a")):
+		return "gif", true
+	// An MP4 opens with a box whose type is `ftyp`, after its four byte size.
+	case len(head) >= 8 && bytes.Equal(head[4:8], []byte("ftyp")):
+		return "mp4", true
 	}
 	return "", false
 }

@@ -54,6 +54,8 @@ func TestTheKindIsReadOffTheBytes(t *testing.T) {
 		"\x89PNG\r\n\x1a\n....":        "png",
 		"\xff\xd8\xff\xe0..":           "jpg",
 		"RIFF\x00\x00\x00\x00WEBPVP8 ": "webp",
+		"GIF89a\x10\x00\x10\x00":       "gif",
+		"\x00\x00\x00\x18ftypisom":     "mp4",
 		"glTF\x02\x00\x00\x00":         "",
 		"RIFF\x00\x00\x00\x00WAVEfmt ": "",
 		"<svg xmlns='http://www.w3'/>": "",
