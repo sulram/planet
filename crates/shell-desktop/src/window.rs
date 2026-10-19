@@ -167,7 +167,11 @@ impl Stage {
                         "planet {seed} | {place} | {altitude_m:.0} m | {fps:.0} fps"
                     ));
                 }
-                Event::AvatarChanged { path } => log::info!("avatar: {path}"),
+                Event::AvatarChanged {
+                    path: Some(path),
+                    worn: true,
+                } => log::info!("avatar: {path}"),
+                Event::AvatarChanged { .. } => {}
                 // One thing open at a time: a plugin taking the pointer
                 // closes the settings.
                 Event::PointerChanged { plugin: Some(_) } => self.panel.close(),

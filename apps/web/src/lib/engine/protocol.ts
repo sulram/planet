@@ -117,7 +117,12 @@ export type EngineEvent =
 	| { type: 'mode_changed'; mode: Mode }
 	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. Once, at the start. */
 	| { type: 'palette'; colors: string[] }
-	| { type: 'avatar_changed'; path: string }
+	/**
+	 * The avatar you are in, or on your way into. `path` is the choice: keep it as this browser's.
+	 * While `worn` is false the file is on its way and the body stays as it was: show the wait.
+	 * A null path is the box figure, nothing wanted.
+	 */
+	| { type: 'avatar_changed'; path: string | null; worn: boolean }
 	| { type: 'effects_changed'; effects: Effects }
 	/** Which plugin has the pointer, a tool in hand, or none. */
 	| { type: 'pointer_changed'; plugin: string | null }

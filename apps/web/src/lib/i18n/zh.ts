@@ -45,6 +45,7 @@ export const zh: Messages = {
 	'engine.hint.sprint': '奔跑',
 	'engine.hint.mode': '行走或飞行',
 	'engine.hint.avatar': '下一个形象',
+	'engine.avatar.loading': '正在加载形象',
 	'engine.hint.undo.keys': 'Ctrl Z, Ctrl Shift Z',
 	'engine.hint.undo': '撤销与重做任何更改',
 	'engine.hint.zoom.keys': '滚轮',

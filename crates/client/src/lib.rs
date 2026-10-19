@@ -104,6 +104,9 @@ pub struct Client {
     wants_random_avatar: bool,
     /// The asset reference of the avatar asked for last.
     wanted_avatar: Option<String>,
+    /// What the front end was last told of the player's avatar: the choice,
+    /// and whether the body is in it yet.
+    told_avatar: (Option<String>, bool),
     /// What to be called, as the front end set it. Rides in Hello.
     wanted_name: String,
     events: Vec<Event>,
@@ -171,6 +174,7 @@ impl Client {
             manifest: None,
             wants_random_avatar: false,
             wanted_avatar: None,
+            told_avatar: (None, false),
             wanted_name: String::new(),
             events: vec![
                 Event::Ready {
@@ -644,7 +648,8 @@ impl Client {
 
     /// Puts every body in what it wants, from what has landed, and asks for
     /// what has not. A body whose file is still on its way stays as it is:
-    /// the box figure, or what it wore before.
+    /// the box figure, or what it wore before. The front end hears of the
+    /// player's avatar whenever the choice or its being worn changes.
     fn dress_all(&mut self) {
         let default = self.default_avatar();
         let choose = |wanted: &str| -> Option<String> {
@@ -654,15 +659,14 @@ impl Client {
                 Some(wanted.to_owned())
             }
         };
-        if let Some(wanted) = self.wanted_avatar.clone().and_then(|w| choose(&w))
-            && dress(
+        let wanted = self.wanted_avatar.clone().and_then(|w| choose(&w));
+        if let Some(wanted) = &wanted {
+            dress(
                 &mut self.figure,
-                &wanted,
+                wanted,
                 &mut self.wardrobe,
                 &mut self.requests,
-            )
-        {
-            self.events.push(Event::AvatarChanged { path: wanted });
+            );
         }
         for peer in self.peers.iter_mut() {
             if let Some(wanted) = choose(&peer.avatar) {
@@ -680,23 +684,39 @@ impl Client {
             .into_iter()
             .chain(self.peers.iter().filter_map(|p| p.figure.mesh()));
         self.wardrobe.prune(worn);
+        self.wardrobe.advance(&mut self.requests);
+        let worn = wanted.as_deref().is_some_and(|wanted| {
+            self.wardrobe
+                .get(wanted)
+                .is_some_and(|worn| Some(worn.mesh) == self.figure.mesh())
+        });
+        if self.told_avatar != (wanted.clone(), worn) {
+            self.events.push(Event::AvatarChanged {
+                path: wanted.clone(),
+                worn,
+            });
+            self.told_avatar = (wanted, worn);
+        }
     }
 
-    /// The avatar on offer after the one worn, wrapping around.
+    /// The avatar on offer after the one worn, wrapping around. The first
+    /// press holds the whole offer, fetched one by one in the order of
+    /// pressing once the next has landed: browsing is one wait, and every
+    /// press after lands at once.
     fn next_avatar(&mut self) {
         let Some(manifest) = &self.manifest else {
             return;
         };
-        if manifest.avatars.is_empty() {
+        let offer = manifest.avatars.clone();
+        if offer.is_empty() {
             return;
         }
         let current = self.wanted_avatar.as_ref();
-        let index = manifest
-            .avatars
-            .iter()
-            .position(|path| Some(path) == current);
-        let next = index.map_or(0, |i| (i + 1) % manifest.avatars.len());
-        self.wear(manifest.avatars[next].clone());
+        let index = offer.iter().position(|path| Some(path) == current);
+        let next = index.map_or(0, |i| (i + 1) % offer.len());
+        let after_next = (1..=offer.len()).map(|k| offer[(next + k) % offer.len()].clone());
+        self.wardrobe.hold(after_next);
+        self.wear(offer[next].clone());
     }
 
     /// The manifest arrived: fetch the clips it names, and the avatar if one
@@ -1519,23 +1539,12 @@ fn mix(mut x: u64) -> u64 {
 }
 
 /// Puts one body in the avatar it wants, when the file has landed, and asks
-/// for it otherwise. True when the body changed into it just now.
-fn dress(
-    figure: &mut Figure,
-    wanted: &str,
-    wardrobe: &mut Wardrobe,
-    requests: &mut Requests,
-) -> bool {
+/// for it otherwise.
+fn dress(figure: &mut Figure, wanted: &str, wardrobe: &mut Wardrobe, requests: &mut Requests) {
     match wardrobe.get(wanted) {
-        Some(worn) if figure.mesh() != Some(worn.mesh) => {
-            figure.wear(worn);
-            true
-        }
-        Some(_) => false,
-        None => {
-            wardrobe.want(wanted, requests);
-            false
-        }
+        Some(worn) if figure.mesh() != Some(worn.mesh) => figure.wear(worn),
+        Some(_) => {}
+        None => wardrobe.want(wanted, requests),
     }
 }
 

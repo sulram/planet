@@ -26,8 +26,12 @@ compositor. What the world *is* lives in WORLD.md.
   walk, run, jump, fall, fly. VRM 0.x, one skin, PNG textures for now.
 - Asset seam: the client does no IO. It queues requests by reference, the
   platform shell fetches (disk on desktop, `fetch` in the browser) and answers.
-- `V` wears the next avatar on offer. The engine reports `avatar_changed`, and
-  the front end keeps it as this browser's choice.
+- `V` wears the next avatar on offer. The first press holds the whole offer
+  (DECISIONS hold-the-offer): fetched one by one in the order of pressing,
+  after the next has landed, so every press after lands at once.
+- The engine reports `avatar_changed` with the choice and whether the body is
+  in it yet. The front end keeps the choice as this browser's, and shows the
+  wait at the bottom of the screen while the file is on its way.
 
 ## Volumes
 
