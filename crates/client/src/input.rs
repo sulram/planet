@@ -111,6 +111,9 @@ pub struct Input {
     codes_pressed: Vec<(String, Chord)>,
     /// Whether the shell let everything go since the last update.
     interrupted: bool,
+    /// Whether the pointer's secondary button was tapped since the last
+    /// update: pressed and let go without a drag.
+    inspected: bool,
     /// Pointer motion in pixels, x right, y down.
     pub look: [f32; 2],
     /// Wheel motion in lines, positive zooms in.
@@ -178,6 +181,13 @@ impl Input {
         self.interrupted = true;
     }
 
+    /// The pointer's secondary button was tapped: pressed and let go where
+    /// it was, with no drag between. What picks a thing in the world to
+    /// look at it again, whoever has the pointer.
+    pub fn inspect(&mut self) {
+        self.inspected = true;
+    }
+
     /// Takes the one shot input, leaving held keys in place.
     pub(crate) fn take_frame(&mut self) -> Taken {
         let taken = Taken {
@@ -186,10 +196,12 @@ impl Input {
             look: self.look,
             zoom: self.zoom,
             interrupted: self.interrupted,
+            inspected: self.inspected,
         };
         self.look = [0.0; 2];
         self.zoom = 0.0;
         self.interrupted = false;
+        self.inspected = false;
         taken
     }
 }
@@ -203,6 +215,8 @@ pub(crate) struct Taken {
     pub zoom: f32,
     /// Whether the shell let everything go.
     pub interrupted: bool,
+    /// Whether the pointer's secondary button was tapped.
+    pub inspected: bool,
 }
 
 fn held_slot(key: Key) -> Option<usize> {

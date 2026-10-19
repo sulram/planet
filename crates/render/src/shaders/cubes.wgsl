@@ -14,9 +14,12 @@ struct Varying {
     @location(3) side: vec4<f32>,
 }
 
-// How far an edge reaches into a side, in sides: two sides meet in a line
-// twice as wide.
-const EDGE: f32 = 0.045;
+// How far an edge reaches into a side, metres: two sides meet in a line
+// twice as wide. A cell's side is half a metre, so this is 0.045 of it, and
+// a side stretched by a part keeps the same line.
+const EDGE_M: f32 = 0.0225;
+// What a side measures when the screen cannot say: a cell's.
+const CELL_M: f32 = 0.5;
 // How many times over a light shines with its colour: enough to glow.
 const SHINE: f32 = 3.0;
 
@@ -24,13 +27,31 @@ const SHINE: f32 = 3.0;
 // lies within EDGE of a border of the side, on either side of it. Far off,
 // where an edge is thinner than a pixel, it melts into the side by as much
 // as it covers of it, and never shimmers.
-fn edge_cover(at: vec2<f32>) -> f32 {
+fn edge_cover(relative: vec3<f32>, at: vec2<f32>) -> f32 {
     let pixel = max(fwidth(at), vec2<f32>(1e-5));
     let away = min(at, 1.0 - at);
-    let reach = vec2<f32>(EDGE);
+    let reach = vec2<f32>(EDGE_M) / side_metres(relative, at);
     let within = min(away + pixel * 0.5, reach) - max(away - pixel * 0.5, -reach);
     let cover = clamp(within / pixel, vec2<f32>(0.0), vec2<f32>(1.0));
     return 1.0 - (1.0 - cover.x) * (1.0 - cover.y);
+}
+
+// Metres a side spans along each of its two axes, read from how the world
+// moves across the screen as the side's own coordinates do: the screen
+// derivatives of both, and one solved for the other. Seen edge on, where
+// that says nothing, a cell's.
+fn side_metres(relative: vec3<f32>, at: vec2<f32>) -> vec2<f32> {
+    let px = dpdx(relative);
+    let py = dpdy(relative);
+    let ax = dpdx(at);
+    let ay = dpdy(at);
+    let det = ax.x * ay.y - ax.y * ay.x;
+    if abs(det) < 1e-12 {
+        return vec2<f32>(CELL_M);
+    }
+    let along_u = (px * ay.y - py * ax.y) / det;
+    let along_v = (py * ax.x - px * ay.x) / det;
+    return max(vec2<f32>(length(along_u), length(along_v)), vec2<f32>(1e-4));
 }
 
 // The colour of a side under its edge: black, white, or none.
@@ -42,7 +63,7 @@ fn inked(albedo: vec3<f32>, edge: f32, cover: f32) -> vec3<f32> {
 
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
-    let cover = edge_cover(in.side.yz);
+    let cover = edge_cover(in.relative, in.side.yz);
     let albedo = inked(pow(in.color.rgb, vec3<f32>(2.2)), in.side.w, cover);
     let normal = normalize(in.normal);
     // A shut corner darkens along a curve, the way light falls off into one.
@@ -58,7 +79,7 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
 // edge on, and its edge drawn whole.
 @fragment
 fn fs_glass(in: Varying) -> @location(0) vec4<f32> {
-    let cover = edge_cover(in.side.yz);
+    let cover = edge_cover(in.relative, in.side.yz);
     let albedo = inked(pow(in.color.rgb, vec3<f32>(2.2)), in.side.w, cover);
     let normal = normalize(in.normal);
     let distance = length(in.relative);

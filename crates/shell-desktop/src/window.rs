@@ -70,6 +70,9 @@ struct Stage {
     last_frame: Instant,
     /// The pointer is captured and steers the camera.
     looking: bool,
+    /// Where the pointer was when the right button went down, while it is
+    /// down: let go there, it was a tap.
+    right_down: Option<Option<[f32; 2]>>,
 }
 
 impl Stage {
@@ -102,6 +105,7 @@ impl Stage {
             panel,
             last_frame: Instant::now(),
             looking: false,
+            right_down: None,
         })
     }
 
@@ -277,6 +281,18 @@ impl ApplicationHandler for App {
             // captures the pointer, and the camera has it until Escape.
             WindowEvent::MouseInput { state, button, .. } => {
                 let down = state == ElementState::Pressed;
+                // The right button let go where it went down was a tap: what
+                // is under the pointer is picked to be looked at again.
+                if button == MouseButton::Right {
+                    match down {
+                        true => stage.right_down = Some(self.input.pointer),
+                        false => {
+                            if stage.right_down.take() == Some(self.input.pointer) {
+                                self.input.inspect();
+                            }
+                        }
+                    }
+                }
                 match (self.client.pointing(), button) {
                     (true, MouseButton::Left) => self.input.key(Key::Use, down),
                     (true, MouseButton::Right) => stage.set_looking(down),
