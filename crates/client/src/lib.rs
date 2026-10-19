@@ -1087,12 +1087,12 @@ impl Client {
         let through = self.through(&camera);
         // The cells near the star a portal leads to are looked at too, so
         // what is built there shows through the pane.
-        let eye = through.map(|(_, _, star)| self.body_of(star));
+        let eye = through.as_ref().map(|seen| self.body_of(seen.star));
         self.cells
             .look(&self.generator, self.controller.held_by(), eye, dt);
         self.parts
             .look(&self.generator, self.controller.held_by(), dt);
-        self.ease_seen(dt, through.as_ref().map(|(id, _, _)| *id));
+        self.ease_seen(dt, through.as_ref().map(|seen| seen.portal));
         let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -1202,7 +1202,7 @@ impl Client {
         self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
         let through = self.through(&camera);
-        self.ease_seen(f64::INFINITY, through.as_ref().map(|(id, _, _)| *id));
+        self.ease_seen(f64::INFINITY, through.as_ref().map(|seen| seen.portal));
         let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::settle);
         let pictures = self.pictures_drawn(&camera);
         self.frame(camera, patches, pictures, through.zip(seen))
@@ -1309,7 +1309,7 @@ impl Client {
     /// whose place is known here, and the camera carried from the portal's
     /// frame to the landmark's, as a body that walked through would be. A
     /// landmark this client does not hold is asked of the chart.
-    fn through(&mut self, camera: &scene::Camera) -> Option<(PartId, scene::Camera, DVec3)> {
+    fn through(&mut self, camera: &scene::Camera) -> Option<Seen> {
         let body = self.controller.held_by();
         let (_, id, to) = self
             .parts
@@ -1331,15 +1331,39 @@ impl Client {
         // lies on the ground with its heading `+y` too: frame to frame, the
         // rigid part alone, since a portal is a door, not a lens.
         let carried = rigid(&star) * rigid(&ring).inverse();
-        Some((
-            id,
-            scene::Camera {
+        Some(Seen {
+            portal: id,
+            camera: scene::Camera {
                 position: carried.transform_point3(camera.position),
                 rotation: DQuat::from_mat3(&carried.matrix3) * camera.rotation,
                 ..*camera
             },
-            star.translation,
-        ))
+            star: star.translation,
+            size: self.through_size(camera, id),
+        })
+    }
+
+    /// How big the world past a portal is drawn, of the view's size: as big
+    /// as the pane is seen, in steps, a quarter at least and whole at most,
+    /// so a pane that fills the view is as sharp as the view and a far one
+    /// costs a quarter.
+    fn through_size(&self, camera: &scene::Camera, portal: PartId) -> f32 {
+        let seen = self
+            .parts
+            .transform(&self.generator, portal)
+            .and_then(|ring| {
+                let centre = ring.transform_point3(DVec3::new(0.0, 0.0, 0.5));
+                let radius_m = ring.matrix3.x_axis.length() / 2.0;
+                Projection::of(camera, self.aspect).height_of(centre, radius_m)
+            })
+            .unwrap_or(0.0);
+        // The disc's height on the screen, of the view's: a step up at a
+        // quarter and at a half.
+        match seen * 2.0 {
+            h if h >= 0.5 => 1.0,
+            h if h >= 0.25 => 0.5,
+            _ => 0.25,
+        }
     }
 
     /// The body a point of the world is on, and where from its centre: the
@@ -1368,7 +1392,7 @@ impl Client {
     fn stream(
         &mut self,
         camera: &scene::Camera,
-        through: Option<&(PartId, scene::Camera, DVec3)>,
+        through: Option<&Seen>,
         select: Select,
     ) -> (Vec<scene::PatchDraw>, Option<Vec<scene::PatchDraw>>) {
         let moon = self.moon_position();
@@ -1378,9 +1402,11 @@ impl Client {
             camera: *camera,
             coarseness: 1.0,
         })
-        .chain(through.map(|(_, camera, _)| Viewpoint {
-            camera: *camera,
-            coarseness: 4.0,
+        .chain(through.map(|seen| Viewpoint {
+            camera: seen.camera,
+            // As coarse as the sight is small: a quarter height sight asks
+            // for a quarter of the detail.
+            coarseness: f64::from(1.0 / seen.size),
         }))
         .collect();
         let from_moon: Vec<Viewpoint> = eyes
@@ -1449,7 +1475,7 @@ impl Client {
         camera: scene::Camera,
         patches: Vec<scene::PatchDraw>,
         pictures: Vec<scene::PictureDraw>,
-        through: Option<((PartId, scene::Camera, DVec3), Vec<scene::PatchDraw>)>,
+        through: Option<(Seen, Vec<scene::PatchDraw>)>,
     ) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
@@ -1532,7 +1558,11 @@ impl Client {
                 f64::from(self.effects.parts_reach_m),
                 &self.seen,
             ),
-            through: through.map(|((_, camera, _), patches)| scene::Through { camera, patches }),
+            through: through.map(|(seen, patches)| scene::Through {
+                camera: seen.camera,
+                patches,
+                size: seen.size,
+            }),
             warp: self.warp(&camera),
         }
     }
@@ -1770,6 +1800,15 @@ type Select = fn(&mut Terrain, &Generator, Cover, &[Viewpoint], f32) -> Vec<Vec<
 /// How far from the body a portal is seen through, metres: three plots.
 /// One at a time, the nearest; further, a pane is a lens.
 const THROUGH_M: f64 = 96.0;
+
+/// What is seen through a portal this frame: which, the eye past it, the
+/// star it leads to, and how big the world past it is drawn, of the view.
+struct Seen {
+    portal: PartId,
+    camera: scene::Camera,
+    star: DVec3,
+    size: f32,
+}
 /// How long a pane takes to become a window from a lens, and back, seconds.
 const SEEN_S: f64 = 0.6;
 
@@ -1833,6 +1872,16 @@ impl Projection {
             aspect: f64::from(aspect),
             near: f64::from(camera.near),
         }
+    }
+
+    /// How tall a sphere round a point is on the screen, of the viewport's
+    /// height. `None` behind the camera.
+    fn height_of(&self, point: DVec3, radius_m: f64) -> Option<f32> {
+        let local = self.inverse * (point - self.position);
+        if local.z >= -self.near {
+            return None;
+        }
+        Some((self.focal * radius_m / -local.z / 2.0) as f32)
     }
 
     /// Where a point lands: fractions of the viewport from the top left,

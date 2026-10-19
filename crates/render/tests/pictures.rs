@@ -228,6 +228,7 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
             ..camera
         },
         patches: Vec::new(),
+        size: 0.25,
     });
     let seen = headless.render(&frame);
     let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("pane_seen.png");

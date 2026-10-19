@@ -302,7 +302,9 @@ impl Renderer {
                 let resources = through_slot.get_or_insert_with(|| self.view_resources());
                 let sight = Sight {
                     camera: through.camera,
-                    size: view.size.map(|n| n.div_ceil(4)),
+                    size: view
+                        .size
+                        .map(|n| ((f32::from(n as u16) * through.size).ceil() as u32).max(1)),
                     patches: &through.patches,
                     whole: false,
                 };

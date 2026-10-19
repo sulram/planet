@@ -63,8 +63,13 @@ lives in WORLD.md; how the picture is made in RENDER.md.
 - A portal's pane is a window on the world past it, drawn as Valve's
   Portal draws its portals: the view's camera is carried from the ring's
   frame to the landmark's, as a body that walked through would be, and the
-  world is drawn from there first, into a slot of its own at a quarter of
-  the view's height (`render::panes`, `scene::Through`).
+  world is drawn from there first, into a slot of its own as big as the
+  pane is seen, a quarter of the view at least and the whole of it when
+  the disc fills it, in steps (`render::panes`, `scene::Through`). The
+  streamer's detail for that eye follows the same size.
+- The window bends what it shows toward its rim in a band that pulses, the
+  colours parting there: the picture, drawn smaller than the view, meets
+  the view through a band that is the portal's and not a seam.
 - The eye past the portal keeps the view's own projection, so a point of
   the pane and the point seen through it fall on the same pixel: the pane
   samples that picture where it stands on the screen, and the window has

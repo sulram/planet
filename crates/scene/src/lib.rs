@@ -566,6 +566,9 @@ pub struct Through {
     pub camera: Camera,
     /// The patches in its view. All were announced by a [`TerrainChange::Add`].
     pub patches: Vec<PatchDraw>,
+    /// How big it is drawn, of the view's size: as big as the pane is seen,
+    /// a quarter at least, whole at most.
+    pub size: f32,
 }
 
 /// Stable identity of a picture while a renderer holds it: one image of one
