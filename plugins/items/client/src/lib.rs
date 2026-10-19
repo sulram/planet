@@ -15,11 +15,15 @@
 //! `{"type":"items.take","item":"model","asset":"asset://<sha256>.vox"}`,
 //! and the file is asked for at once, so its size is known when it is placed.
 
+mod cross;
 mod gizmo;
 mod place;
 
-use client::{Clip, Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Shape, Turn};
-use glam::{DQuat, EulerRot};
+use client::{
+    Clip, Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Portal, Shape, Turn,
+};
+
+use glam::{DQuat, DVec3, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use topology::BLOCK_M;
@@ -54,6 +58,12 @@ pub enum Item {
     /// light, a lamp; nobody collides with it. A place one travels to: the
     /// chart lists every landmark of the world with its place code.
     Landmark,
+    /// A portal: a standing ring two metres across, its rim in the colour in
+    /// hand and always lit with its own light, a lamp, round a dark pane,
+    /// facing the body as a picture does; nobody collides with it. It leads to the landmark in hand, by
+    /// the name the world gave it: a body that walks through its pane is
+    /// taken to stand on that star, facing the way it points.
+    Portal,
 }
 
 /// Why an item was not handed over, or a part not placed or set. A front
@@ -73,6 +83,9 @@ pub enum Refusal {
     /// The name given is no name: empty, over sixty four bytes, or with a
     /// control character in it; or the part picked bears no name.
     Name,
+    /// The destination given is no landmark this client holds, or the part
+    /// picked is no portal.
+    Nowhere,
 }
 
 impl From<client::PartRefusal> for Refusal {
@@ -134,6 +147,17 @@ pub const NEAR: &str = "near";
 /// by its name in the world, what it is called, its paint, how far it is
 /// and the place code that takes a body to it.
 pub const LANDMARKS: &str = "landmarks";
+/// `items.crossed`: the body walked through a portal: which, the landmark
+/// it leads to, and the place the body now stands, `null` when the portal
+/// leads nowhere and the body stayed.
+pub const CROSSED: &str = "crossed";
+
+#[derive(Serialize)]
+struct Crossed {
+    portal: u64,
+    to: Option<u64>,
+    place: Option<String>,
+}
 
 #[derive(Serialize)]
 struct LandmarkOne {
@@ -193,6 +217,14 @@ struct Take {
     /// The name the next landmark bears.
     #[serde(default)]
     name: Option<String>,
+    /// The landmark the next portal leads to, by its name in the world; 0
+    /// leads nowhere.
+    #[serde(default)]
+    to: Option<u64>,
+    /// How wide the next portal's rim is, of its width: 0 is no rim, the
+    /// pane alone; a half is the rim to the middle.
+    #[serde(default)]
+    rim: Option<f32>,
 }
 
 /// A sound's record as the seam says it: its file and how long it plays.
@@ -262,6 +294,13 @@ struct Set {
     /// What the landmark picked is called.
     #[serde(default)]
     name: Option<String>,
+    /// The landmark the portal picked leads to, by its name in the world; 0
+    /// leads nowhere.
+    #[serde(default)]
+    to: Option<u64>,
+    /// How wide the portal picked's rim is, of its width.
+    #[serde(default)]
+    rim: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -293,6 +332,10 @@ struct Hand {
     loading: bool,
     /// The name the next landmark bears, when one was given.
     name: Option<String>,
+    /// The landmark the next portal leads to, when one was chosen.
+    to: Option<u64>,
+    /// How wide the next portal's rim is, of its width.
+    rim: f32,
 }
 
 /// A part as the panel shows it.
@@ -323,6 +366,13 @@ struct Picked {
     /// What a landmark is called.
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    /// Where a portal leads: the landmark's name in the world, `null` when
+    /// it leads nowhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    to: Option<Option<u64>>,
+    /// How wide a portal's rim is, of its width.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rim: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -369,6 +419,20 @@ pub struct Items {
     loading: bool,
     /// The name the next landmark bears. None until one is given.
     name: Option<Name>,
+    /// The landmark the next portal leads to. None until one is chosen.
+    to: Option<PartId>,
+    /// How wide the next portal's rim is, in the part's units.
+    rim: u8,
+    /// Where the body stood last turn, from the planet's centre: what a
+    /// walk through a pane is read from. None right after a leap.
+    feet: Option<DVec3>,
+    /// Whether a walk through a pane counts: not until the body has stood
+    /// clear of every pane since it last leapt, so a portal on the star one
+    /// lands on does not send the body straight back.
+    armed: bool,
+    /// A crossing waiting on the chart: the portal walked through and the
+    /// landmark it leads to, one this client does not hold.
+    pending: Option<(PartId, PartId)>,
     /// The item in hand is to be placed in front of the body as soon as it
     /// is ready, with no click.
     ahead: bool,
@@ -391,6 +455,11 @@ impl Default for Items {
             model: None,
             loading: false,
             name: None,
+            to: None,
+            rim: Portal::RIM,
+            feet: None,
+            armed: true,
+            pending: None,
             ahead: false,
             using: false,
         }
@@ -430,13 +499,13 @@ impl Items {
         .byte()
     }
 
-    /// The paint a shape is made of in the colour in hand: a landmark is
-    /// always in the light finish with no edge, lit with its own light, so
-    /// only its colour is the hand's; a picture that moves is a screen, in
-    /// the light finish, until its shine says otherwise.
+    /// The paint a shape is made of in the colour in hand: a landmark and a
+    /// portal are always in the light finish with no edge, lit with their
+    /// own light, so only their colour is the hand's; a picture that moves
+    /// is a screen, in the light finish, until its shine says otherwise.
     pub(crate) fn paint_of(&self, shape: Shape) -> u8 {
         match shape {
-            Shape::Landmark(_) => Paint {
+            Shape::Landmark(_) | Shape::Portal(_) => Paint {
                 color: self.paint,
                 finish: Finish::Light,
                 edge: Edge::None,
@@ -569,6 +638,18 @@ impl Items {
                 part.name = Some(name);
             }
         }
+        if set.to.is_some() || set.rim.is_some() {
+            let Shape::Portal(mut portal) = part.shape else {
+                return refuse(host, Refusal::Nowhere);
+            };
+            if let Some(to) = set.to {
+                portal.to = destination(to);
+            }
+            if let Some(rim) = set.rim {
+                portal.rim = rim_units(rim);
+            }
+            part.shape = Shape::Portal(portal);
+        }
         let (id, seat) = (gizmo.id, gizmo.seat);
         if let (Some(rotation), Some(gizmo)) = (set.rotation, &mut self.picked) {
             // Said angles are shown back as said; a turn made another way
@@ -622,6 +703,8 @@ impl Items {
                 model: self.model.and_then(|hash| Shape::Vox(hash).asset()),
                 loading: self.loading,
                 name: self.name.map(|name| name.to_string()),
+                to: self.to.map(|to| to.0),
+                rim: rim_of_width(self.rim),
             },
         );
     }
@@ -673,7 +756,7 @@ impl Items {
                     name: name.to_string(),
                     paint: landmark.part.paint,
                     away_m: landmark.away_m,
-                    place: host.place_at(landmark.seat, landmark.part.pose.at),
+                    place: host.place_at(landmark.seat, &landmark.part.pose),
                 })
             })
             .collect();
@@ -721,6 +804,14 @@ impl Items {
                     _ => false,
                 }),
                 name: name_of(&gizmo.part),
+                to: match gizmo.part.shape {
+                    Shape::Portal(portal) => Some(portal.to.map(|to| to.0)),
+                    _ => None,
+                },
+                rim: match gizmo.part.shape {
+                    Shape::Portal(portal) => Some(rim_of_width(portal.rim)),
+                    _ => None,
+                },
             },
             None => Picked {
                 id: None,
@@ -734,6 +825,8 @@ impl Items {
                 lamp: None,
                 sound: None,
                 name: None,
+                to: None,
+                rim: None,
             },
         };
         host.emit(PICKED, &picked);
@@ -742,7 +835,7 @@ impl Items {
     /// One turn with the menu open and no item in hand: a handle dragged
     /// moves the part picked; a click picks a handle, a part, or nothing.
     fn edit_turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        let (from, toward) = turn.eye.sight();
+        let (eye, toward) = turn.eye.sight();
         let pressed = turn.using && !self.using;
         let released = !turn.using && self.using;
         if let Some(gizmo) = &mut self.picked {
@@ -754,12 +847,15 @@ impl Items {
         // Shift held while stretching: every side alike.
         let uniform = turn.chord.shift;
         if let Some(gizmo) = &mut self.picked {
+            // The gizmo works on the part's body, which may be moving.
+            let from = gizmo.on_body(host, eye);
             if gizmo.drag.is_some() {
                 if released || turn.interrupted {
                     gizmo.drag = None;
-                } else if let Some(world) =
+                } else if let Some(frame) =
                     gizmo.dragged(mode_of(self.mode, gizmo), uniform, from, toward)
-                    && let Some((seat, pose)) = host.reseat(gizmo.seat.body(), &world)
+                    && let Some((seat, pose)) =
+                        host.reseat(gizmo.seat.body(), &gizmo.in_world(host, &frame))
                 {
                     let (id, mut part) = (gizmo.id, gizmo.part);
                     part.pose = pose;
@@ -787,7 +883,7 @@ impl Items {
             .as_ref()
             .is_some_and(|gizmo| gizmo.hot.is_some());
         if pressed && !dragging && !on_handle {
-            let id = host.pick(from, toward).map(|(id, _)| id);
+            let id = host.pick(eye, toward).map(|(id, _)| id);
             if id != self.picked.as_ref().map(|gizmo| gizmo.id) {
                 self.pick(id, host);
             }
@@ -795,7 +891,7 @@ impl Items {
         let marks = self
             .picked
             .as_ref()
-            .map(|gizmo| gizmo.marks(mode_of(self.mode, gizmo)));
+            .map(|gizmo| gizmo.marks(host, mode_of(self.mode, gizmo)));
         host.mark(marks.as_deref().unwrap_or(&[]));
     }
 }
@@ -830,7 +926,25 @@ fn item_of(shape: Shape) -> Item {
         Shape::Image(_) => Item::Picture,
         Shape::Landmark(_) => Item::Landmark,
         Shape::Sound(_) => Item::Sound,
+        Shape::Portal(_) => Item::Portal,
     }
+}
+
+/// The landmark a destination on the seam names: 0 is none.
+fn destination(to: u64) -> Option<PartId> {
+    (to != 0).then_some(PartId(to))
+}
+
+/// A rim's width as the seam says it, of the portal's width, in the part's
+/// units: none under nothing, the middle at most.
+fn rim_units(rim: f32) -> u8 {
+    let units = (rim.max(0.0) * f32::from(Portal::RIM_UNITS)).round();
+    units.min(f32::from(Portal::RIM_MAX)) as u8
+}
+
+/// A rim's width in the part's units, of the portal's width.
+fn rim_of_width(rim: u8) -> f32 {
+    Portal { to: None, rim }.rim_of_width()
 }
 
 impl Plugin for Items {
@@ -862,6 +976,8 @@ impl Plugin for Items {
                     clip,
                     ahead,
                     name,
+                    to,
+                    rim,
                 }) = read(body, host)
                 {
                     if item == Some(Item::Sound) {
@@ -877,6 +993,12 @@ impl Plugin for Items {
                             return refuse(host, Refusal::Name);
                         };
                         self.name = Some(name);
+                    }
+                    if let Some(to) = to {
+                        self.to = destination(to);
+                    }
+                    if let Some(rim) = rim {
+                        self.rim = rim_units(rim);
                     }
                     if item == Some(Item::Picture) {
                         match media.as_ref().map(MediaBody::media) {
@@ -986,8 +1108,12 @@ impl Plugin for Items {
     /// anywhere, and opens the menu on it; with an item in hand a click
     /// places it; with the menu open the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        // The chart answered: the landmarks are said.
+        // The body moved: through a pane, it is taken where the portal leads.
+        self.cross(host);
+        // The chart answered: a crossing that waited on it leaps, and the
+        // landmarks are said.
         if let Some(charted) = host.take_charted() {
+            self.charted(&charted, host);
             self.say_landmarks(&charted, host);
         }
         // The model in hand arrived, or a new one is on its way: the hand
@@ -1518,6 +1644,48 @@ mod tests {
         assert!((3.0..8.0).contains(&away), "{away} blocks ahead");
     }
 
+    /// Standing on the ground, an add lands on it; high up, the cube floats
+    /// in front of the body at its own height.
+    #[test]
+    fn a_take_ahead_lands_on_ground_within_reach_and_floats_over_a_drop() {
+        let mut client = client();
+        let mut input = Input::default();
+        // On foot, settled on the ground.
+        for _ in 0..30 {
+            client.update(1.0 / 60.0, &mut input);
+        }
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        let (_, seat, part) = client
+            .parts()
+            .all()
+            .map(|(id, seat, part)| (id, seat, *part))
+            .next()
+            .unwrap();
+        let under = client.host("test").ground(
+            seat,
+            topology::SurfacePoint::new(seat.sector(), part.pose.at[0], part.pose.at[1]),
+        );
+        assert!(
+            (part.pose.at[2] - under).abs() < 1.0,
+            "stands on the ground: at {} blocks, the ground under it at {under}",
+            part.pose.at[2]
+        );
+        // Ten metres up: in the air on purpose, the cube floats level with
+        // the feet.
+        client.pose(10.0, 0.0, 4.0);
+        client.update(1.0 / 60.0, &mut input);
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        let feet = client.host("test").feet();
+        let (_, _, part) = client.parts().all().last().unwrap();
+        assert!(
+            (part.pose.at[2] - feet.height_m / BLOCK_M).abs() < 1.0,
+            "floats at the feet's height {} blocks, placed at {}",
+            feet.height_m / BLOCK_M,
+            part.pose.at[2]
+        );
+        assert!(part.pose.at[2] - under > 10.0, "well over the ground");
+    }
+
     #[test]
     fn a_part_placed_over_another_stands_on_its_top() {
         let mut client = client();
@@ -1634,6 +1802,197 @@ mod tests {
         let said = events(&mut visitor);
         assert!(said.iter().any(|e| e["type"] == "items.landmarks"));
         assert!(said.iter().all(|e| e["type"] != "items.refused"));
+    }
+
+    /// Walks the body forward until the plugin says it crossed, or gives up.
+    fn walk_until_crossed(client: &mut Client, frames: usize) -> Option<Value> {
+        let mut input = Input::default();
+        input.key(Key::Forward, true);
+        for _ in 0..frames {
+            client.update(1.0 / 60.0, &mut input);
+            if let Some(crossed) = events(client)
+                .into_iter()
+                .find(|e| e["type"] == "items.crossed")
+            {
+                return Some(crossed);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn a_portal_leads_to_the_landmark_in_hand_and_a_walk_through_it_lands_on_the_star() {
+        let mut client = client();
+        client
+            .command_json(r#"{"type":"items.take","item":"landmark","name":"Praça","ahead":true}"#);
+        let (star, _, part) = client.parts().all().next().unwrap();
+        // The star is set sixty metres along the seat: a leap, never a walk.
+        let mut far = *part;
+        far.pose.at[1] += 120.0;
+        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, star.0));
+        client.command_json(&format!(
+            r#"{{"type":"items.set","at":[{},{},{}]}}"#,
+            far.pose.at[0], far.pose.at[1], far.pose.at[2]
+        ));
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"portal","to":{},"ahead":true}}"#,
+            star.0
+        ));
+        let (portal, _, part) = client
+            .parts()
+            .all()
+            .find(|(id, _, _)| *id != star)
+            .expect("a portal placed ahead");
+        assert_eq!(
+            part.shape,
+            Shape::Portal(Portal {
+                to: Some(star),
+                rim: Portal::RIM
+            })
+        );
+        assert!(!part.solid);
+        assert_eq!(part.pose.scale, [4.0, 0.1, 4.0], "two metres across");
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["item"], "portal");
+        assert_eq!(picked["to"], star.0);
+        let hand = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.hand")
+            .unwrap();
+        assert_eq!(hand["to"], star.0, "the destination stays in hand");
+        // The ring stands in front of the body, facing it: a walk forward
+        // goes through its pane and out onto the star, facing its way.
+        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the ring");
+        assert_eq!(crossed["portal"], portal.0);
+        assert_eq!(crossed["to"], star.0);
+        let place = crossed["place"].as_str().expect("the place arrived at");
+        assert!(place.contains(','), "{place} says which way to face");
+        // The body falls into the portal for a moment, the picture drawn
+        // into it, then is through: the picture bursts out where it stands.
+        let mut input = Input::default();
+        let frame = client.update(1.0 / 60.0, &mut input);
+        let warp = frame.warp.expect("the picture is drawn into the portal");
+        assert!(warp.phase < 0.0, "{warp:?}");
+        let before = client.host("items").feet();
+        assert!(
+            (before.point.v - far.pose.at[1]).abs() > 10.0,
+            "not through yet"
+        );
+        for _ in 0..30 {
+            client.update(1.0 / 60.0, &mut input);
+        }
+        let frame = client.update(1.0 / 60.0, &mut input);
+        let warp = frame.warp.expect("the picture bursts out past the portal");
+        assert!(warp.phase >= 0.0, "{warp:?}");
+        for _ in 0..60 {
+            client.update(1.0 / 60.0, &mut input);
+        }
+        let frame = client.update(1.0 / 60.0, &mut input);
+        assert!(frame.warp.is_none(), "the passage is over in a second");
+        let feet = client.host("items").feet();
+        assert!(
+            (feet.point.u - far.pose.at[0]).abs() < 2.0
+                && (feet.point.v - far.pose.at[1]).abs() < 2.0,
+            "landed at {:?}, the star at {:?}",
+            feet.point,
+            far.pose.at
+        );
+        // Landed, the body walks on without being sent anywhere.
+        assert!(walk_until_crossed(&mut client, 60).is_none());
+    }
+
+    #[test]
+    fn a_portal_leading_nowhere_says_so_and_the_body_stays() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"portal","ahead":true}"#);
+        let (portal, _, part) = client.parts().all().next().unwrap();
+        assert_eq!(
+            part.shape,
+            Shape::Portal(Portal {
+                to: None,
+                rim: Portal::RIM
+            })
+        );
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert!(picked["to"].is_null(), "{picked}");
+        let before = client.here().place(client.sphere().blocks());
+        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the ring");
+        assert_eq!(crossed["portal"], portal.0);
+        assert!(
+            crossed["to"].is_null() && crossed["place"].is_null(),
+            "{crossed}"
+        );
+        let after = client.here().place(client.sphere().blocks());
+        assert_eq!(
+            &before[..6],
+            &after[..6],
+            "a walk, no leap: {before} to {after}"
+        );
+        // Aimed by the panel at a landmark, the portal leads there; aiming a
+        // part that is no portal is refused.
+        client.command_json(r#"{"type":"items.take","item":"landmark","ahead":true}"#);
+        let (star, _, _) = client
+            .parts()
+            .all()
+            .find(|(_, _, part)| matches!(part.shape, Shape::Landmark(_)))
+            .unwrap();
+        client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
+        assert_eq!(events(&mut client).last().unwrap()["reason"], "nowhere");
+        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, portal.0));
+        client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
+        assert_eq!(
+            client.parts().get(portal).unwrap().1.shape,
+            Shape::Portal(Portal {
+                to: Some(star),
+                rim: Portal::RIM
+            })
+        );
+        let picked = events(&mut client)
+            .into_iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert_eq!(picked["to"], star.0);
+        // The rim is the hand's: none at all, or to the middle at most.
+        client.command_json(r#"{"type":"items.set","rim":0}"#);
+        assert!(matches!(
+            client.parts().get(portal).unwrap().1.shape,
+            Shape::Portal(Portal { rim: 0, .. })
+        ));
+        assert_eq!(
+            events(&mut client)
+                .into_iter()
+                .rev()
+                .find(|e| e["type"] == "items.picked")
+                .unwrap()["rim"],
+            0.0
+        );
+        client.command_json(r#"{"type":"items.set","rim":0.9}"#);
+        assert!(matches!(
+            client.parts().get(portal).unwrap().1.shape,
+            Shape::Portal(Portal {
+                rim: Portal::RIM_MAX,
+                ..
+            })
+        ));
+        client.command_json(r#"{"type":"items.take","item":"portal","rim":0.25,"ahead":true}"#);
+        let (_, _, part) = client.parts().all().last().unwrap();
+        assert!(
+            matches!(part.shape, Shape::Portal(Portal { rim: 50, .. })),
+            "{:?}",
+            part.shape
+        );
     }
 
     #[test]

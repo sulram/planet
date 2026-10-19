@@ -1377,7 +1377,13 @@ impl Cells {
     /// body that this client lacks. `body` is the body of the world this
     /// client's own stands on or flies by, and where it is from the centre of
     /// it: what is seated on another body is far.
-    pub(crate) fn look(&mut self, generator: &Generator, body: (Body, DVec3), dt: f64) {
+    pub(crate) fn look(
+        &mut self,
+        generator: &Generator,
+        body: (Body, DVec3),
+        eye: Option<(Body, DVec3)>,
+        dt: f64,
+    ) {
         let Some(link) = &mut self.link else {
             return;
         };
@@ -1386,12 +1392,19 @@ impl Cells {
             return;
         }
         link.since_look_s = 0.0;
-        let (on, from) = (body.0, body.1.to_array());
-        // How far the body is from each volume held, at each step.
+        // Where the body stands, and where its eye past a portal does: a
+        // volume is near if near either.
+        let froms: Vec<(Body, [f64; 3])> = core::iter::once(body)
+            .chain(eye)
+            .map(|(on, from)| (on, from.to_array()))
+            .collect();
+        // How far the nearer of the two is from each volume held, at each
+        // step.
         let away: Vec<(i32, Seat, [i32; 2], f64)> = self
             .sites
             .iter()
             .flat_map(|site| {
+                let froms = &froms;
                 site.volumes.plots().filter_map(move |plot| {
                     let held = site.volumes.bounds(plot)?;
                     let [low, high] = [held.min[2], held.max[2] + 1].map(|n| n * site.scale);
@@ -1400,10 +1413,11 @@ impl Cells {
                         height: (high - low) as u32,
                     };
                     let sector = site.seat.sector();
-                    let away_m = match site.seat.body() == on {
-                        true => seat::away_m(site.sphere, sector, plot, stand, from),
-                        false => f64::INFINITY,
-                    };
+                    let away_m = froms
+                        .iter()
+                        .filter(|(on, _)| *on == site.seat.body())
+                        .map(|&(_, from)| seat::away_m(site.sphere, sector, plot, stand, from))
+                        .fold(f64::INFINITY, f64::min);
                     Some((site.scale, site.seat, plot, away_m))
                 })
             })
@@ -1451,6 +1465,16 @@ impl Cells {
             });
         let look = wire::Look {
             held: held.collect(),
+            eye: eye.map(|(body, from)| {
+                let sphere = seat::sphere_of(generator, body);
+                let point = sphere.blocks().surface_point(from.to_array());
+                wire::Eye {
+                    seat: Some(Seat::on(body, point.sector).wire()),
+                    u: point.u as f32,
+                    v: point.v as f32,
+                    height_m: (from.length() - sphere.radius_m()) as f32,
+                }
+            }),
         };
         link.ask(wire::LOOK, &look, None);
     }

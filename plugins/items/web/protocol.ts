@@ -3,13 +3,13 @@
  * `items.pick`, `items.mode`, `items.set`, `items.remove`, `items.paint`,
  * `items.finish`, `items.edge`, `items.state`, `items.list` and
  * `items.chart`, and the events `items.hand`, `items.picked`,
- * `items.refused`, `items.near` and `items.landmarks`, as the plugin's
- * crate writes them. Pure: no WASM, no DOM.
+ * `items.refused`, `items.near`, `items.landmarks` and `items.crossed`,
+ * as the plugin's crate writes them. Pure: no WASM, no DOM.
  */
 
 /** What the menu offers to place. A kind another plugin's session adds enters `kinds.ts` under its own name. */
-export type Item = 'cube' | 'model' | 'picture' | 'sound' | 'landmark';
-export const items = ['cube', 'model', 'picture', 'sound', 'landmark'] as const satisfies readonly Item[];
+export type Item = 'cube' | 'model' | 'picture' | 'sound' | 'landmark' | 'portal';
+export const items = ['cube', 'model', 'picture', 'sound', 'landmark', 'portal'] as const satisfies readonly Item[];
 
 /** How what is placed takes the light: lit, see-through, or shining and lighting what is near. */
 export type Finish = 'matte' | 'glass' | 'light';
@@ -20,8 +20,8 @@ export type Edge = 'none' | 'black' | 'white';
 export const edges = ['none', 'black', 'white'] as const satisfies readonly Edge[];
 
 /** Why an item was not handed over or a part not placed. */
-export type Refusal = 'level' | 'pose' | 'gone' | 'unread' | 'name';
-const refusals = ['level', 'pose', 'gone', 'unread', 'name'] as const satisfies readonly Refusal[];
+export type Refusal = 'level' | 'pose' | 'gone' | 'unread' | 'name' | 'nowhere';
+const refusals = ['level', 'pose', 'gone', 'unread', 'name', 'nowhere'] as const satisfies readonly Refusal[];
 
 /** What a drag of a handle does to the part picked. */
 export type Mode = 'move' | 'rotate' | 'scale';
@@ -42,6 +42,10 @@ export interface Hand {
 	loading: boolean;
 	/** The name the next landmark bears, once one was given. */
 	name: string | null;
+	/** The landmark the next portal leads to, by its name in the world, once one was chosen. */
+	to: number | null;
+	/** How wide the next portal's rim is, of its width: 0 is none, 0.5 the rim to the middle. */
+	rim: number;
 }
 
 /** `items.picked`: the part picked as it stands: where, in blocks of its seat; how it is turned, degrees about its own axes; how long its sides are, in blocks; whether it is solid. */
@@ -63,6 +67,10 @@ export interface Picked {
 	sound: boolean;
 	/** What a landmark is called. */
 	name?: string;
+	/** Where a portal leads: a landmark's name in the world, null when it leads nowhere. */
+	to?: number | null;
+	/** How wide a portal's rim is, of its width. */
+	rim?: number;
 }
 
 const isItem = (value: unknown): value is Item => items.some((item) => item === value);
@@ -80,7 +88,9 @@ export function parseHand(event: Record<string, unknown>): Hand | null {
 	const model = typeof event.model === 'string' ? event.model : null;
 	const loading = event.loading === true;
 	const name = typeof event.name === 'string' ? event.name : null;
-	return { editing, item, mode, paint, finish, edge, model, loading, name };
+	const to = typeof event.to === 'number' ? event.to : null;
+	const rim = typeof event.rim === 'number' ? event.rim : 0;
+	return { editing, item, mode, paint, finish, edge, model, loading, name, to, rim };
 }
 
 const isVector = (value: unknown): value is [number, number, number] =>
@@ -88,11 +98,13 @@ const isVector = (value: unknown): value is [number, number, number] =>
 
 /** Reads a `picked` event: the part picked, or null when none is, or when the event is no part. */
 export function parsePicked(event: Record<string, unknown>): Picked | null {
-	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound, name } = event;
+	const { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound, name, to, rim } = event;
 	if (typeof id !== 'number' || !isItem(item)) return null;
 	if (!isVector(at) || !isVector(rotation) || !isVector(scale) || typeof solid !== 'boolean' || typeof shine !== 'number' || typeof reach_m !== 'number' || typeof lamp !== 'boolean') return null;
 	const picked: Picked = { id, item, at, rotation, scale, solid, shine, reach_m, lamp, sound: sound === true };
 	if (typeof name === 'string') picked.name = name;
+	if ('to' in event) picked.to = typeof to === 'number' ? to : null;
+	if (typeof rim === 'number') picked.rim = rim;
 	return picked;
 }
 

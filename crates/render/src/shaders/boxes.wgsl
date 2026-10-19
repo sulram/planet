@@ -17,6 +17,7 @@ struct Varying {
     @location(0) relative: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) color: vec3<f32>,
+    @location(3) shine: f32,
 }
 
 @vertex
@@ -31,10 +32,12 @@ fn vs(in: Vertex, box: Instance) -> Varying {
     let scale2 = vec3<f32>(dot(m[0], m[0]), dot(m[1], m[1]), dot(m[2], m[2]));
     out.normal = m * (in.normal / scale2);
     out.color = box.color.rgb;
+    out.shine = box.color.a;
     return out;
 }
 
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
-    return vec4<f32>(lit(in.color, normalize(in.normal), 0.0, in.relative), 1.0);
+    let color = lit(in.color, normalize(in.normal), 0.0, in.relative);
+    return vec4<f32>(charged(color, in.shine), 1.0);
 }

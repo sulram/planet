@@ -27,7 +27,9 @@ mod speakers;
 mod terrain;
 mod wardrobe;
 
-use glam::{DQuat, DVec3};
+use std::collections::BTreeMap;
+
+use glam::{DAffine3, DMat3, DQuat, DVec3};
 use scene::{ModelChange, PictureChange, SkinnedChange, TerrainChange, VolumeChange};
 use topology::{Sector, SurfacePoint};
 pub use worldgen::{Field, Recipe};
@@ -36,13 +38,14 @@ use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 pub use assets::{AssetRequest, Form};
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use cells::{Aim, Cells, Guide, Met, PALETTE, REACH_M, Refusal, Seat, Sight};
+pub use collision::BODY_M;
 pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use history::{History, Owner};
 pub use input::{Chord, Input, Key, KeyAsk};
 pub use part::{
     Clip, ClipKind, ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel,
-    Pose as PartPose, Shape,
+    Portal, Pose as PartPose, Shape,
 };
 pub use parts::is_lamp;
 pub use parts::{CUBE, Landmarked, Mark, PartRefusal, Parts, VOXEL};
@@ -59,7 +62,7 @@ use session::Session;
 pub use sound::{Sound, SoundSource};
 use speakers::Speakers;
 pub use speakers::{CLIPS_AT_ONCE, Sounding};
-use terrain::{Body, Cover, Terrain};
+use terrain::{Body, Cover, Terrain, Viewpoint};
 use wardrobe::Wardrobe;
 
 /// Seconds for the sun to go around once.
@@ -138,6 +141,12 @@ pub struct Client {
     /// them still says so.
     had_anchors: bool,
     had_labels: bool,
+    /// A body's passage through a portal, while it lasts.
+    passage: Option<Passage>,
+    /// How much each portal's pane shows the world seen through it, by
+    /// name: eased toward 1 for the one seen through, toward 0 for the
+    /// rest, so a lens becomes a window and back over [`SEEN_S`].
+    seen: BTreeMap<PartId, f32>,
     /// Whether the last frame's streaming found nothing to build.
     settled: bool,
     entropy: u64,
@@ -207,6 +216,8 @@ impl Client {
             frames_since_stats: 0,
             had_anchors: false,
             had_labels: false,
+            passage: None,
+            seen: BTreeMap::new(),
             settled: false,
             entropy: 0,
         };
@@ -352,51 +363,14 @@ impl Client {
     /// box is where you land: a person who quotes four characters means the
     /// neighbourhood, and the middle of it is the least surprising answer.
     pub fn go_to(&mut self, text: &str) -> Result<(), String> {
-        let grid = self.generator.sphere().blocks();
-        let pose = place::Pose::parse(grid, text)?;
-        let found = topology::Place {
-            column: pose.column,
-            h: pose.h,
-            chars: pose.chars,
-        };
-        let [su, sv] = found.span(grid).map(f64::from);
-        let point = SurfacePoint::new(
-            pose.column.sector,
-            f64::from(pose.column.u) + su / 2.0,
-            f64::from(pose.column.v) + sv / 2.0,
-        );
-        // The point first, because it is what the body stands on and what the
-        // moon's radial is read from; then the body, then the height, then the
-        // way of looking. Each step reads the one before it.
-        let mode = self.controller.mode;
-        self.teleport(point);
-        if pose.on_moon {
-            let moon = self.moon_position();
-            self.controller.set_moon(controller::MoonBody {
-                center: moon,
-                radius_m: MOON_RADIUS_M,
-            });
-            let direction = DVec3::from(grid.direction(point));
-            self.controller.stand_on_moon(direction, &self.generator);
-        }
-        self.controller.stand_at(
-            pose.h.map(|h| f64::from(h) * topology::BLOCK_M),
+        let moon = self.moon_position();
+        travel(
+            &mut self.controller,
             &self.generator,
-        );
-        if let Some(bearing) = pose.bearing_deg {
-            self.controller.face(bearing);
-        }
-        if let Some(pitch) = pose.pitch_deg {
-            self.controller.set_pitch(pitch.to_radians());
-        }
-        // A height off the ground is a flight, and a front end that showed a
-        // walker has to hear it: the panel says what the body does.
-        if self.controller.mode != mode {
-            self.events.push(Event::ModeChanged {
-                mode: self.controller.mode,
-            });
-        }
-        Ok(())
+            moon,
+            &mut self.events,
+            text,
+        )
     }
 
     /// Flies to `gap_m` metres under the moon, on the side that faces the
@@ -479,6 +453,8 @@ impl Client {
             controller: &mut self.controller,
             level: self.level,
             pointer: &mut self.pointer,
+            passage: &mut self.passage,
+            clock_s: self.clock_s,
         };
         (&mut self.plugins, lent)
     }
@@ -1141,7 +1117,8 @@ impl Client {
                 parts: &self.parts,
             },
         );
-        let motion = Motion::of(&self.controller);
+        self.passage_turn();
+        let motion = self.motion();
         self.figure.update(dt, &motion, &self.clips);
         self.peers.update(dt, moon, &self.clips);
         let stance = self.stance();
@@ -1170,11 +1147,16 @@ impl Client {
         let (plugins, lent) = self.lend();
         plugins.turn(&eye, input, (taken.interrupted, taken.inspected), lent);
         self.cells.update(eye.position);
+        let through = self.through(&camera);
+        // The cells near the star a portal leads to are looked at too, so
+        // what is built there shows through the pane.
+        let eye = through.as_ref().map(|seen| self.body_of(seen.star));
         self.cells
-            .look(&self.generator, self.controller.held_by(), dt);
+            .look(&self.generator, self.controller.held_by(), eye, dt);
         self.parts
             .look(&self.generator, self.controller.held_by(), dt);
-        let patches = self.stream(&camera, Terrain::update);
+        self.ease_seen(dt, through.as_ref().map(|seen| seen.portal));
+        let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
         let settled = self.terrain.settled()
@@ -1186,7 +1168,7 @@ impl Client {
         }
         self.settled = settled;
         let pictures = self.pictures_drawn(&camera);
-        self.frame(camera, patches, pictures)
+        self.frame(camera, patches, pictures, through.zip(seen))
     }
 
     /// Where every head in view lands on the screen, own body first, with
@@ -1282,9 +1264,179 @@ impl Client {
         plugins.settle(lent);
         self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
-        let patches = self.stream(&camera, Terrain::settle);
+        let through = self.through(&camera);
+        self.ease_seen(f64::INFINITY, through.as_ref().map(|seen| seen.portal));
+        let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::settle);
         let pictures = self.pictures_drawn(&camera);
-        self.frame(camera, patches, pictures)
+        self.frame(camera, patches, pictures, through.zip(seen))
+    }
+
+    /// Eases how much each portal's pane shows the world seen through it:
+    /// toward 1 for the portal seen through this frame, toward 0 for every
+    /// other, a step of `dt` over [`SEEN_S`]. A portal no longer held is
+    /// forgotten.
+    fn ease_seen(&mut self, dt: f64, through: Option<PartId>) {
+        let step = (dt / SEEN_S).min(1.0) as f32;
+        let portals: Vec<PartId> = self
+            .parts
+            .all()
+            .filter(|(_, _, part)| matches!(part.shape, Shape::Portal(_)))
+            .map(|(id, _, _)| id)
+            .collect();
+        self.seen.retain(|id, _| portals.contains(id));
+        for id in portals {
+            let target = f32::from(u8::from(through == Some(id)));
+            let amount = self.seen.entry(id).or_insert(0.0);
+            *amount += (target - *amount).clamp(-step, step);
+        }
+    }
+
+    /// The body's motion as the figure shows it: falling, while it passes
+    /// through a portal.
+    fn motion(&self) -> Motion {
+        let mut motion = Motion::of(&self.controller);
+        if self.passage.is_some() {
+            motion.gait = Gait::Fall;
+        }
+        motion
+    }
+
+    /// A passage's turn: the body goes through the portal [`WARP_IN_S`]
+    /// after it fell in, and the passage ends [`WARP_OUT_S`] after that.
+    /// A place that cannot be reached leaves the body where it is, said.
+    fn passage_turn(&mut self) {
+        let Some(passage) = &mut self.passage else {
+            return;
+        };
+        let elapsed = self.clock_s - passage.started_s;
+        if !passage.through && elapsed >= WARP_IN_S {
+            passage.through = true;
+            let place = passage.place.clone();
+            if let Err(message) = self.go_to(&place) {
+                self.events.push(Event::Rejected { message });
+                self.passage = None;
+            }
+        } else if elapsed >= WARP_IN_S + WARP_OUT_S {
+            self.passage = None;
+        }
+    }
+
+    /// How charged the body is by its passage through a portal, 0 to 1:
+    /// white as it goes through, its own colour again as it lands.
+    fn charge(&self) -> f32 {
+        let Some(passage) = &self.passage else {
+            return 0.0;
+        };
+        let elapsed = self.clock_s - passage.started_s;
+        let charge = match passage.through {
+            false => elapsed / WARP_IN_S,
+            true => 1.0 - (elapsed - WARP_IN_S) / WARP_OUT_S,
+        };
+        charge.clamp(0.0, 1.0) as f32
+    }
+
+    /// The warp of the picture this frame: into the portal the body is
+    /// falling into, out of the body where it landed.
+    fn warp(&self, camera: &scene::Camera) -> Option<scene::Warp> {
+        let passage = self.passage.as_ref()?;
+        let elapsed = self.clock_s - passage.started_s;
+        let projection = Projection::of(camera, self.aspect);
+        let on_screen = |point: DVec3| {
+            projection
+                .project(point)
+                .map_or([0.5, 0.5], |(x, y, _)| [x, y])
+        };
+        Some(match passage.through {
+            false => {
+                let pane = self
+                    .parts
+                    .transform(&self.generator, passage.portal)
+                    .map(|ring| ring.transform_point3(DVec3::new(0.0, 0.0, 0.5)));
+                scene::Warp {
+                    centre: pane.map_or([0.5, 0.5], on_screen),
+                    phase: ((elapsed / WARP_IN_S).min(1.0) - 1.0) as f32,
+                }
+            }
+            true => {
+                let waist = self.controller.drawn_position() + self.controller.up() * 0.9;
+                scene::Warp {
+                    centre: on_screen(waist),
+                    phase: (((elapsed - WARP_IN_S) / WARP_OUT_S).clamp(0.0, 1.0)) as f32,
+                }
+            }
+        })
+    }
+
+    /// The portal the view is seen through this frame, and the eye past it:
+    /// the nearest portal within [`THROUGH_M`] that leads to a landmark
+    /// whose place is known here, and the camera carried from the portal's
+    /// frame to the landmark's, as a body that walked through would be. A
+    /// landmark this client does not hold is asked of the chart.
+    fn through(&mut self, camera: &scene::Camera) -> Option<Seen> {
+        let body = self.controller.held_by();
+        let (_, id, to) = self
+            .parts
+            .all()
+            .filter_map(|(id, seat, part)| {
+                let Shape::Portal(Portal { to: Some(to), .. }) = part.shape else {
+                    return None;
+                };
+                let away_m = parts::away_m(&self.generator, seat, &part.pose, body);
+                (away_m <= THROUGH_M).then_some((away_m, id, to))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))?;
+        let ring = self.parts.transform(&self.generator, id)?;
+        let Some(star) = self.parts.landmark_transform(&self.generator, to) else {
+            self.parts.chart_for(self.clock_s);
+            return None;
+        };
+        // The pane is the ring's `y = 0` plane and its heading `+y`; the star
+        // lies on the ground with its heading `+y` too: frame to frame, the
+        // rigid part alone, since a portal is a door, not a lens.
+        let carried = rigid(&star) * rigid(&ring).inverse();
+        Some(Seen {
+            portal: id,
+            camera: scene::Camera {
+                position: carried.transform_point3(camera.position),
+                rotation: DQuat::from_mat3(&carried.matrix3) * camera.rotation,
+                ..*camera
+            },
+            star: star.translation,
+            size: self.through_size(camera, id),
+        })
+    }
+
+    /// How big the world past a portal is drawn, of the view's size: as big
+    /// as the pane is seen, in steps, a quarter at least and whole at most,
+    /// so a pane that fills the view is as sharp as the view and a far one
+    /// costs a quarter.
+    fn through_size(&self, camera: &scene::Camera, portal: PartId) -> f32 {
+        let seen = self
+            .parts
+            .transform(&self.generator, portal)
+            .and_then(|ring| {
+                let centre = ring.transform_point3(DVec3::new(0.0, 0.0, 0.5));
+                let radius_m = ring.matrix3.x_axis.length() / 2.0;
+                Projection::of(camera, self.aspect).height_of(centre, radius_m)
+            })
+            .unwrap_or(0.0);
+        // The disc's height on the screen, of the view's: a step up at a
+        // quarter and at a half.
+        match seen * 2.0 {
+            h if h >= 0.5 => 1.0,
+            h if h >= 0.25 => 0.5,
+            _ => 0.25,
+        }
+    }
+
+    /// The body a point of the world is on, and where from its centre: the
+    /// moon within its reach, else the planet.
+    fn body_of(&self, point: DVec3) -> (protocol::Body, DVec3) {
+        let moon = self.cells.centre(protocol::Body::Moon);
+        match (point - moon).length() < plugin::MOON_REACH_M {
+            true => (protocol::Body::Moon, point - moon),
+            false => (protocol::Body::Planet, point),
+        }
     }
 
     /// Where the moon is now: an orbit on rails, a function of the clock. It
@@ -1303,13 +1455,33 @@ impl Client {
     fn stream(
         &mut self,
         camera: &scene::Camera,
-        select: fn(&mut Terrain, &Generator, Cover, &scene::Camera, f32) -> Vec<scene::PatchId>,
-    ) -> Vec<scene::PatchDraw> {
+        through: Option<&Seen>,
+        select: Select,
+    ) -> (Vec<scene::PatchDraw>, Option<Vec<scene::PatchDraw>>) {
         let moon = self.moon_position();
-        let from_moon = scene::Camera {
-            position: camera.position - moon,
-            ..*camera
-        };
+        // The view's eye first, then the eye past a portal, which sees at a
+        // quarter of the view's height and asks for a quarter of its detail.
+        let eyes: Vec<Viewpoint> = core::iter::once(Viewpoint {
+            camera: *camera,
+            coarseness: 1.0,
+        })
+        .chain(through.map(|seen| Viewpoint {
+            camera: seen.camera,
+            // As coarse as the sight is small: a quarter height sight asks
+            // for a quarter of the detail.
+            coarseness: f64::from(1.0 / seen.size),
+        }))
+        .collect();
+        let from_moon: Vec<Viewpoint> = eyes
+            .iter()
+            .map(|eye| Viewpoint {
+                camera: scene::Camera {
+                    position: eye.camera.position - moon,
+                    ..eye.camera
+                },
+                coarseness: eye.coarseness,
+            })
+            .collect();
         // Grass grows again where what is built over it changed.
         for (middle, angle) in self.cells.drain_touched() {
             self.terrain.regrow(middle, angle);
@@ -1319,7 +1491,7 @@ impl Client {
             &mut self.terrain,
             &self.generator,
             &|sector, column, heights| build.covered(sector, column, heights),
-            camera,
+            &eyes,
             self.aspect,
         );
         // No grass grows on the moon for what is built there to cover.
@@ -1331,8 +1503,14 @@ impl Client {
             self.aspect,
         );
         let at = |body_center: DVec3| move |id| scene::PatchDraw { id, body_center };
-        let planet = on_planet.into_iter().map(at(DVec3::ZERO));
-        planet.chain(on_moon.into_iter().map(at(moon))).collect()
+        let mut lists = on_planet.into_iter().zip(on_moon).map(|(planet, on_moon)| {
+            let planet = planet.into_iter().map(at(DVec3::ZERO));
+            planet
+                .chain(on_moon.into_iter().map(at(moon)))
+                .collect::<Vec<_>>()
+        });
+        let view = lists.next().expect("the view's eye");
+        (view, lists.next())
     }
 
     /// Every picture placed, at the level it is seen at from the camera,
@@ -1368,6 +1546,7 @@ impl Client {
         camera: scene::Camera,
         patches: Vec<scene::PatchDraw>,
         pictures: Vec<scene::PictureDraw>,
+        through: Option<(Seen, Vec<scene::PatchDraw>)>,
     ) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
@@ -1376,12 +1555,20 @@ impl Client {
         // landed, the box figure until then.
         let mut boxes = Vec::new();
         let mut skinned = Vec::new();
-        let bodies = core::iter::once((&self.figure, Motion::of(&self.controller)))
-            .chain(self.peers.bodies(self.moon_position()));
-        for (figure, motion) in bodies {
+        let charge = self.charge();
+        let bodies = core::iter::once((&self.figure, self.motion(), charge)).chain(
+            self.peers
+                .bodies(self.moon_position())
+                .map(|(figure, motion)| (figure, motion, 0.0)),
+        );
+        for (figure, motion, shine) in bodies {
             match figure.instance(&motion, &self.clips) {
-                Some(instance) => skinned.push(instance),
-                None => boxes.extend(box_figure::parts(&motion)),
+                Some(instance) => skinned.push(scene::SkinnedInstance { shine, ..instance }),
+                None => boxes.extend(
+                    box_figure::parts(&motion)
+                        .into_iter()
+                        .map(|part| scene::BoxPart { shine, ..part }),
+                ),
             }
         }
         Frame {
@@ -1436,6 +1623,18 @@ impl Client {
             ghost: self.cells.ghost(),
             guides: self.cells.guides_drawn(),
             pictures,
+            panes: self.parts.panes(
+                &self.generator,
+                self.controller.held_by(),
+                f64::from(self.effects.parts_reach_m),
+                &self.seen,
+            ),
+            through: through.map(|(seen, patches)| scene::Through {
+                camera: seen.camera,
+                patches,
+                size: seen.size,
+            }),
+            warp: self.warp(&camera),
         }
     }
 
@@ -1600,9 +1799,119 @@ fn dress(figure: &mut Figure, wanted: &str, wardrobe: &mut Wardrobe, requests: &
     }
 }
 
+/// Takes the body to a place, as [`Client::go_to`] and a plugin's
+/// [`Host::go_to`] both do: the point first, because it is what the body
+/// stands on and what the moon's radial is read from; then the body, then
+/// the height, then the way of looking. Each step reads the one before it.
+pub(crate) fn travel(
+    controller: &mut Controller,
+    generator: &Generator,
+    moon: DVec3,
+    events: &mut Vec<Event>,
+    text: &str,
+) -> Result<(), String> {
+    let grid = generator.sphere().blocks();
+    let pose = place::Pose::parse(grid, text)?;
+    let found = topology::Place {
+        column: pose.column,
+        h: pose.h,
+        chars: pose.chars,
+    };
+    let [su, sv] = found.span(grid).map(f64::from);
+    let point = SurfacePoint::new(
+        pose.column.sector,
+        f64::from(pose.column.u) + su / 2.0,
+        f64::from(pose.column.v) + sv / 2.0,
+    );
+    let mode = controller.mode;
+    controller.teleport(point, generator);
+    if pose.on_moon {
+        controller.set_moon(controller::MoonBody {
+            center: moon,
+            radius_m: MOON_RADIUS_M,
+        });
+        let direction = DVec3::from(grid.direction(point));
+        controller.stand_on_moon(direction, generator);
+    }
+    controller.stand_at(pose.h.map(|h| f64::from(h) * topology::BLOCK_M), generator);
+    if let Some(bearing) = pose.bearing_deg {
+        controller.face(bearing);
+    }
+    if let Some(pitch) = pose.pitch_deg {
+        controller.set_pitch(pitch.to_radians());
+    }
+    // A height off the ground is a flight, and a front end that showed a
+    // walker has to hear it: the panel says what the body does.
+    if controller.mode != mode {
+        events.push(Event::ModeChanged {
+            mode: controller.mode,
+        });
+    }
+    Ok(())
+}
+
 /// How far from the body a landmark's name is hung over it, metres: as far
 /// as a nametag is read.
 const LABEL_M: f64 = 120.0;
+
+/// How a streamer picks the patches each eye draws: [`Terrain::update`]
+/// within a frame's budget, or [`Terrain::settle`] until nothing is missing.
+type Select = fn(&mut Terrain, &Generator, Cover, &[Viewpoint], f32) -> Vec<Vec<scene::PatchId>>;
+
+/// How far from the body a portal is seen through, metres: three plots.
+/// One at a time, the nearest; further, a pane is a lens.
+const THROUGH_M: f64 = 96.0;
+
+/// What is seen through a portal this frame: which, the eye past it, the
+/// star it leads to, and how big the world past it is drawn, of the view.
+struct Seen {
+    portal: PartId,
+    camera: scene::Camera,
+    star: DVec3,
+    size: f32,
+}
+/// How long a pane takes to become a window from a lens, and back, seconds.
+const SEEN_S: f64 = 0.6;
+
+/// How long a body falls into a portal before it is through, and how long
+/// the picture takes to burst out past it, seconds: a passage is under a
+/// second, a blink of the world.
+const WARP_IN_S: f64 = 0.35;
+const WARP_OUT_S: f64 = 0.65;
+
+/// A body's passage through a portal: it falls into the portal, the
+/// picture drawn into it, goes through at [`WARP_IN_S`] and lands at the
+/// place, the picture bursting out of it for [`WARP_OUT_S`].
+pub(crate) struct Passage {
+    place: String,
+    portal: PartId,
+    started_s: f64,
+    /// Whether the body has gone through yet.
+    through: bool,
+}
+
+impl Passage {
+    pub(crate) fn new(place: String, portal: PartId, started_s: f64) -> Passage {
+        Passage {
+            place,
+            portal,
+            started_s,
+            through: false,
+        }
+    }
+}
+
+/// A frame's rigid part: its rotation and translation, its scale taken out,
+/// each axis made unit.
+fn rigid(frame: &DAffine3) -> DAffine3 {
+    let m = frame.matrix3;
+    let axes = DMat3::from_cols(
+        m.x_axis.normalize(),
+        m.y_axis.normalize(),
+        m.z_axis.normalize(),
+    );
+    DAffine3::from_mat3_translation(axes, frame.translation)
+}
 
 /// The renderer's own projection of a point of the world onto the screen:
 /// reversed infinite depth has no far plane, so only what is behind the
@@ -1624,6 +1933,16 @@ impl Projection {
             aspect: f64::from(aspect),
             near: f64::from(camera.near),
         }
+    }
+
+    /// How tall a sphere round a point is on the screen, of the viewport's
+    /// height. `None` behind the camera.
+    fn height_of(&self, point: DVec3, radius_m: f64) -> Option<f32> {
+        let local = self.inverse * (point - self.position);
+        if local.z >= -self.near {
+            return None;
+        }
+        Some((self.focal * radius_m / -local.z / 2.0) as f32)
     }
 
     /// Where a point lands: fractions of the viewport from the top left,

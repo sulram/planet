@@ -252,6 +252,9 @@ pub struct BoxPart {
     pub transform: DAffine3,
     /// Linear RGB.
     pub color: Vec3,
+    /// How much it shines white with its own light in place of its colour,
+    /// 0 to 1: a body charged by its passage through a portal.
+    pub shine: f32,
 }
 
 /// Stable identity of a volume mesh while it is in the scene: one chunk of
@@ -451,6 +454,9 @@ pub struct SkinnedInstance {
     pub transform: DAffine3,
     /// Mesh space from rest space, per joint: at most [`MAX_JOINTS`].
     pub joints: Vec<Mat4>,
+    /// How much it shines white with its own light in place of its colour,
+    /// 0 to 1: a body charged by its passage through a portal.
+    pub shine: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -512,6 +518,57 @@ pub struct Frame {
     /// The pictures in reach, each at the level the client picked. Every
     /// level drawn was announced by a [`PictureChange::Add`].
     pub pictures: Vec<PictureDraw>,
+    /// The panes of the portals in reach: a window each on the world seen
+    /// through it, or dark.
+    pub panes: Vec<PaneDraw>,
+    /// The world seen through one portal this frame, the one its pane says
+    /// is seen through: drawn before the views, from the eye past it.
+    pub through: Option<Through>,
+    /// The picture drawn into a portal and out of another: a body's passage
+    /// through one, while it lasts.
+    pub warp: Option<Warp>,
+}
+
+/// The picture of a view drawn into a point of the screen as a body falls
+/// into a portal, then out of a point as it lands past it: the picture
+/// pulled toward the point and streaked along the pull, a black hole
+/// opening there with a hot rim, then the same let go.
+#[derive(Clone, Copy, Debug)]
+pub struct Warp {
+    /// The point, fractions of the viewport from the top left.
+    pub centre: [f32; 2],
+    /// How far along: from -1, the fall just begun, to 0, the body gone
+    /// through, to 1, landed past it and the picture whole again.
+    pub phase: f32,
+}
+
+/// A portal's pane in the world: the disc inside a unit quad, `-0.5..=0.5`
+/// across `x` and `y`, facing `+z`, placed by its transform, which carries
+/// the pane's size in metres as a scale; seen from both sides.
+#[derive(Clone, Copy, Debug)]
+pub struct PaneDraw {
+    /// World from the quad.
+    pub transform: DAffine3,
+    /// How much the world seen through the portal, [`Frame::through`],
+    /// shows in it, 0 to 1: at 0 a lens, the world behind the pane bent and
+    /// pulsing as through glass; at 1 a window; between, the one becoming
+    /// the other.
+    pub seen: f32,
+}
+
+/// The world past a portal, as seen from the eye carried through it: the
+/// view's camera moved from the pane to where the portal leads, as a body
+/// that walked through would be. It is drawn with the view's own
+/// projection, so a point of the pane and the point seen through it fall
+/// on the same pixel, and the pane is a window, with parallax.
+#[derive(Clone, Debug)]
+pub struct Through {
+    pub camera: Camera,
+    /// The patches in its view. All were announced by a [`TerrainChange::Add`].
+    pub patches: Vec<PatchDraw>,
+    /// How big it is drawn, of the view's size: as big as the pane is seen,
+    /// a quarter at least, whole at most.
+    pub size: f32,
 }
 
 /// Stable identity of a picture while a renderer holds it: one image of one

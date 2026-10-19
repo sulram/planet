@@ -20,6 +20,7 @@ use topology::{QuadSphere, SurfacePoint};
 use voxel::{Gesture, Span};
 use worldgen::Generator;
 
+use crate::Passage;
 use crate::cells::{self, Cells, Guide, Refusal, Seat, Sight};
 use crate::collision;
 use crate::controller::Controller;
@@ -32,7 +33,7 @@ use crate::session::Session;
 
 /// How far from the moon's centre a point of the world is the moon's,
 /// metres: its radius and the band over it where anything stands.
-const MOON_REACH_M: f64 = worldgen::MOON_RADIUS_M + 2000.0;
+pub(crate) const MOON_REACH_M: f64 = worldgen::MOON_RADIUS_M + 2000.0;
 
 /// A plugin's client half.
 pub trait Plugin {
@@ -188,6 +189,9 @@ pub(crate) struct Lent<'a> {
     pub level: Option<Level>,
     /// The plugin that has the pointer, while one does.
     pub pointer: &'a mut Option<&'static str>,
+    /// A body's passage through a portal, while it lasts.
+    pub passage: &'a mut Option<Passage>,
+    pub clock_s: f64,
 }
 
 impl<'a> Lent<'a> {
@@ -202,6 +206,8 @@ impl<'a> Lent<'a> {
             controller: self.controller,
             level: self.level,
             pointer: self.pointer,
+            passage: self.passage,
+            clock_s: self.clock_s,
         }
     }
 
@@ -250,24 +256,67 @@ impl Host<'_> {
         Pose::of_stance(grid, stance).map(|pose| pose.place(grid))
     }
 
-    /// A point of a seat, in blocks along it and over the datum, as a place:
-    /// the code `GoTo` takes to stand there. On the ground the height is
-    /// left out, as a stance's is; over it by more than a step, a tower's
-    /// top, it is kept, so arriving there arrives flying, onto the floor.
-    pub fn place_at(&self, seat: Seat, at: [f64; 3]) -> String {
+    /// A part's anchor as a place: the code `GoTo` takes to stand there,
+    /// facing the way the part's box points, its `+y` side, when it points
+    /// somewhere on the ground. On the ground the height is left out, as a
+    /// stance's is; over it by more than a step, a tower's top, it is
+    /// kept, so arriving there arrives flying, onto the floor.
+    pub fn place_at(&self, seat: Seat, pose: &PartPose) -> String {
         let grid = self.sphere().blocks();
+        let at = pose.at;
         let point = SurfacePoint::new(seat.sector(), at[0], at[1]);
         let step = collision::STEP_M / topology::BLOCK_M;
         let over = at[2] - self.ground(seat, point) > step;
+        // Every body is parametrised on the planet's sector grid: a place on
+        // the moon is the column of it the moon's radial passes through, as
+        // a body standing there reads its own.
+        let direction = seat.sphere(self.lent.generator).blocks().direction(point);
+        let column = grid.column_of(grid.surface_point(direction));
+        let world = self.lent.parts.place_of(self.lent.generator, seat, pose);
+        let bearing_deg = topology::bearing_deg(
+            world.matrix3.z_axis.to_array(),
+            world.matrix3.y_axis.normalize_or_zero().to_array(),
+        );
         let pose = Pose {
             on_moon: seat.body() == Body::Moon,
-            column: grid.column_of(point),
+            column,
             h: over.then(|| at[2] as i16),
-            bearing_deg: None,
-            pitch_deg: None,
+            bearing_deg,
+            // A bearing with no pitch would be half an aim: level, then.
+            pitch_deg: bearing_deg.map(|_| 0.0),
             chars: topology::CODE_MAX,
         };
-        pose.place(grid)
+        pose.text(grid)
+    }
+
+    /// Takes the body through a portal to a place: the body falls into the
+    /// portal, the picture drawn into it, and lands at the place a moment
+    /// later, the picture bursting out (PORTALS.md). Wrong, the text says
+    /// what is wrong and the body stays.
+    pub fn go_through(&mut self, place: &str, portal: PartId) -> Result<(), String> {
+        let grid = self.sphere().blocks();
+        Pose::parse(grid, place)?;
+        *self.lent.passage = Some(Passage::new(place.to_owned(), portal, self.lent.clock_s));
+        Ok(())
+    }
+
+    /// Takes the body to a place, as a link does: what a portal's crossing
+    /// asks. Wrong, the text says what is wrong and the body stays.
+    pub fn go_to(&mut self, place: &str) -> Result<(), String> {
+        let moon = self.lent.cells.centre(Body::Moon);
+        crate::travel(
+            self.lent.controller,
+            self.lent.generator,
+            moon,
+            self.lent.events,
+            place,
+        )
+    }
+
+    /// Where the centre of a body is this frame, from the planet's: the
+    /// moon moves, so what is measured on it is measured from here.
+    pub fn body_centre(&self, body: Body) -> DVec3 {
+        self.lent.cells.centre(body)
     }
 
     /// The body of the world: how an address is a place on it.

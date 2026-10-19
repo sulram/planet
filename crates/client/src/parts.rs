@@ -33,11 +33,12 @@
 use std::collections::{BTreeMap, HashMap};
 
 use glam::{DAffine3, DMat3, DVec3};
-use part::{Gap, Part, PartId, Pose, Shape};
+use part::{Gap, Part, PartId, Portal, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
 use scene::{
-    Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PictureDraw, VolumeVertex,
+    Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PaneDraw, PictureDraw,
+    VolumeVertex,
 };
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
@@ -111,7 +112,9 @@ pub enum PartRefusal {
 
 /// The models of the core's own shapes have ids under this; a model of a
 /// file is named by the hash of its content, over it.
-const SHAPES: u64 = 1 << 16;
+const SHAPES: u64 = 1 << 24;
+/// The shape numbers of the rings: one a width of rim, over the others'.
+const RINGS: u64 = 1 << 8;
 /// The bit that marks the model of a file.
 const FILE: u64 = 1 << 63;
 
@@ -175,6 +178,10 @@ impl Link {
     }
 }
 
+/// How long before the chart is asked again for a landmark not held here,
+/// seconds.
+const CHART_AGAIN_S: f64 = 2.0;
+
 /// A landmark as the chart says it: under the name the world gives it, or
 /// the name here with no world, where it stands and how far from the body.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -192,6 +199,12 @@ pub struct Parts {
     held: BTreeMap<PartId, (Seat, Part)>,
     /// The chart's answer since last taken: the landmarks of the world.
     charted: Option<Vec<(u64, Seat, Part)>>,
+    /// The landmarks of the world as last charted, by name: where a portal
+    /// leads when its star is not held here.
+    known: BTreeMap<u64, (Seat, Part)>,
+    /// When the chart was last asked for a landmark not held here, seconds
+    /// of the clock.
+    asked_s: Option<f64>,
     /// The next name given here: a hand knows a part by it, in a world or
     /// alone.
     next: u64,
@@ -365,12 +378,80 @@ impl Parts {
             link.ask(wire::CHART, &wire::Chart {});
             return;
         }
-        let landmarks = self
+        let landmarks: Vec<(u64, Seat, Part)> = self
             .all()
             .filter(|(_, _, part)| matches!(part.shape, Shape::Landmark(_)))
             .map(|(id, seat, part)| (id.0, seat, *part))
             .collect();
+        self.know(&landmarks);
         self.charted = Some(landmarks);
+    }
+
+    /// Asks for the chart for a landmark not held here, at most once every
+    /// [`CHART_AGAIN_S`]: what a portal near the body leads to.
+    pub(crate) fn chart_for(&mut self, clock_s: f64) {
+        if self
+            .asked_s
+            .is_none_or(|asked_s| clock_s - asked_s >= CHART_AGAIN_S)
+        {
+            self.asked_s = Some(clock_s);
+            self.chart();
+        }
+    }
+
+    fn know(&mut self, landmarks: &[(u64, Seat, Part)]) {
+        self.known = landmarks
+            .iter()
+            .map(|&(id, seat, part)| (id, (seat, part)))
+            .collect();
+    }
+
+    /// A landmark by its name: held here, else as the chart last said it.
+    pub(crate) fn landmark(&self, id: PartId) -> Option<(Seat, Part)> {
+        match self.get(id) {
+            Some((seat, part)) if matches!(part.shape, Shape::Landmark(_)) => Some((seat, *part)),
+            _ => self.known.get(&id.0).copied(),
+        }
+    }
+
+    /// Where a landmark stands in the world: its star's frame.
+    pub(crate) fn landmark_transform(&self, generator: &Generator, id: PartId) -> Option<DAffine3> {
+        let (seat, part) = self.landmark(id)?;
+        Some(self.place_of(generator, seat, &part.pose))
+    }
+
+    /// The panes of the portals in reach: the disc inside each ring, placed
+    /// as a picture's quad is, facing the ring's front. `seen` says how
+    /// much the world is seen through each, by name; none is a lens.
+    pub fn panes(
+        &self,
+        generator: &Generator,
+        body: (Body, DVec3),
+        reach_m: f64,
+        seen: &BTreeMap<PartId, f32>,
+    ) -> Vec<PaneDraw> {
+        // The quad's `x` along the box's, its `y` up the box, its front out
+        // of the box's front (`-y`), the disc as wide as the rim leaves.
+        let quad_in_box = |portal: Portal| {
+            let across = f64::from(1.0 - 2.0 * portal.rim_of_width());
+            DAffine3::from_cols(
+                DVec3::new(across, 0.0, 0.0),
+                DVec3::new(0.0, 0.0, across),
+                DVec3::new(0.0, -1.0, 0.0),
+                DVec3::new(0.0, 0.0, 0.5),
+            )
+        };
+        self.all()
+            .filter_map(|(id, seat, part)| match part.shape {
+                Shape::Portal(portal) => Some((id, seat, part, portal)),
+                _ => None,
+            })
+            .filter(|(_, seat, part, _)| away_m(generator, *seat, &part.pose, body) <= reach_m)
+            .map(|(id, seat, part, portal)| PaneDraw {
+                transform: self.place_of(generator, seat, &part.pose) * quad_in_box(portal),
+                seen: seen.get(&id).copied().unwrap_or(0.0),
+            })
+            .collect()
     }
 
     /// The chart's answer, once: the landmarks, the nearest the body first,
@@ -516,7 +597,7 @@ impl Parts {
                 let Ok(charted) = wire::Charted::decode(payload) else {
                     return;
                 };
-                let landmarks = charted
+                let landmarks: Vec<(u64, Seat, Part)> = charted
                     .records
                     .iter()
                     .filter_map(|record| {
@@ -524,6 +605,7 @@ impl Parts {
                         Some((record.id, seat, part))
                     })
                     .collect();
+                self.know(&landmarks);
                 self.charted = Some(landmarks);
             }
             _ => {}
@@ -787,7 +869,8 @@ impl Parts {
         Some(self.place_of(generator, seat, &part.pose))
     }
 
-    fn place_of(&self, generator: &Generator, seat: Seat, pose: &Pose) -> DAffine3 {
+    /// Where a part in a pose on a seat stands in the world: its box's frame.
+    pub(crate) fn place_of(&self, generator: &Generator, seat: Seat, pose: &Pose) -> DAffine3 {
         DAffine3::from_translation(self.centre(seat.body()))
             * seat::seated(seat.sphere(generator), seat.sector(), pose)
     }
@@ -918,9 +1001,10 @@ impl Parts {
             let Some(mesh) = model_of(part) else {
                 continue;
             };
-            // A landmark is solid to the eye whatever its paint says.
+            // A landmark and a portal are solid to the eye whatever their
+            // paint says.
             let glass = Paint::of(part.paint).finish == Finish::Glass
-                && !matches!(part.shape, Shape::Landmark(_));
+                && !matches!(part.shape, Shape::Landmark(_) | Shape::Portal(_));
             drawn.push(ModelDraw {
                 mesh,
                 transform,
@@ -1050,6 +1134,11 @@ impl Parts {
                     self.meshed.push(id);
                     self.changes.push(ModelChange::Add(id, star(paint)));
                 }
+                Shape::Portal(portal) => {
+                    self.meshed.push(id);
+                    self.changes
+                        .push(ModelChange::Add(id, ring(paint, portal.rim_of_width())));
+                }
                 Shape::Vox(hash) => {
                     // Until the file arrives, its place is a glass box with
                     // a mark turning over it.
@@ -1149,13 +1238,15 @@ pub(crate) fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body
 }
 
 /// Whether a part is a lamp, lighting what is near: a cube in the light
-/// finish, and a landmark whatever its finish, since it is lit with its own
-/// light to be seen at night. A model has its own colours and a picture
-/// its own image.
+/// finish, and a landmark and a portal's rim whatever their finish, since
+/// they are lit with their own light to be seen at night. A model has its
+/// own colours and a picture its own image.
 pub fn is_lamp(part: &Part) -> bool {
     match part.shape {
         Shape::Cube => Paint::of(part.paint).finish == Finish::Light,
         Shape::Landmark(_) => true,
+        // A portal with no rim has nothing to shine.
+        Shape::Portal(portal) => portal.rim > 0,
         Shape::Vox(_) | Shape::Image(_) | Shape::Sound(_) => false,
     }
 }
@@ -1169,11 +1260,15 @@ fn model_of(part: &Part) -> Option<ModelId> {
 /// The model of one of the core's shapes in a paint, or of a file by its
 /// hash.
 fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
-    // A landmark's name is not in its model: every landmark in a paint
-    // shares one star.
+    // A landmark's name and a portal's destination are not in their
+    // models: every landmark in a paint shares one star, every portal with
+    // a rim of one width one ring. A portal with no rim has no model: its
+    // pane is drawn on its own.
     let shape = match shape {
         Shape::Cube => 0,
         Shape::Landmark(_) => 1,
+        Shape::Portal(Portal { rim: 0, .. }) => return None,
+        Shape::Portal(portal) => RINGS | u64::from(portal.rim),
         Shape::Vox(hash) => return Some(model_of_file(hash)),
         Shape::Image(_) | Shape::Sound(_) => return None,
     };
@@ -1285,79 +1380,142 @@ const FRONT: DAffine3 = DAffine3 {
 /// clockwise seen from outside, every corner open to the sky.
 fn cube(paint: u8) -> ModelMesh {
     let (color, edge) = paint_look(paint);
-    // Each side from its first corner: across, then up, then back.
-    let sides: [([f32; 3], [[f32; 3]; 4]); 6] = [
+    let mut mesh = ModelMesh {
+        vertices: Vec::with_capacity(24),
+        indices: Vec::with_capacity(36),
+    };
+    block(&mut mesh, [-0.5, -0.5, 0.0], [0.5, 0.5, 1.0], color, edge);
+    mesh
+}
+
+/// Adds a block between two corners to a mesh: six sides wound counter
+/// clockwise seen from outside, every corner open to the sky.
+fn block(mesh: &mut ModelMesh, min: [f32; 3], max: [f32; 3], color: [u8; 4], edge: u8) {
+    // Each side from its first corner: across, then up, then back, each
+    // corner as which end of the box it is on, along each axis.
+    let sides: [([f32; 3], [[usize; 3]; 4]); 6] = [
         (
             [0.0, 0.0, 1.0],
-            [
-                [-0.5, -0.5, 1.0],
-                [0.5, -0.5, 1.0],
-                [0.5, 0.5, 1.0],
-                [-0.5, 0.5, 1.0],
-            ],
+            [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
         ),
         (
             [0.0, 0.0, -1.0],
-            [
-                [-0.5, -0.5, 0.0],
-                [-0.5, 0.5, 0.0],
-                [0.5, 0.5, 0.0],
-                [0.5, -0.5, 0.0],
-            ],
+            [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]],
         ),
         (
             [1.0, 0.0, 0.0],
-            [
-                [0.5, -0.5, 0.0],
-                [0.5, 0.5, 0.0],
-                [0.5, 0.5, 1.0],
-                [0.5, -0.5, 1.0],
-            ],
+            [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],
         ),
         (
             [-1.0, 0.0, 0.0],
-            [
-                [-0.5, -0.5, 0.0],
-                [-0.5, -0.5, 1.0],
-                [-0.5, 0.5, 1.0],
-                [-0.5, 0.5, 0.0],
-            ],
+            [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
         ),
         (
             [0.0, 1.0, 0.0],
-            [
-                [-0.5, 0.5, 0.0],
-                [-0.5, 0.5, 1.0],
-                [0.5, 0.5, 1.0],
-                [0.5, 0.5, 0.0],
-            ],
+            [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],
         ),
         (
             [0.0, -1.0, 0.0],
-            [
-                [-0.5, -0.5, 0.0],
-                [0.5, -0.5, 0.0],
-                [0.5, -0.5, 1.0],
-                [-0.5, -0.5, 1.0],
-            ],
+            [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
         ),
     ];
+    let ends = [min, max];
     let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
-    let mut vertices = Vec::with_capacity(24);
-    let mut indices = Vec::with_capacity(36);
     for (normal, corners) in sides {
-        let base = vertices.len() as u32;
-        for (position, [u, v]) in corners.into_iter().zip(across) {
-            vertices.push(VolumeVertex {
+        let base = mesh.vertices.len() as u32;
+        for (corner, [u, v]) in corners.into_iter().zip(across) {
+            let position = [0, 1, 2].map(|axis| ends[corner[axis]][axis]);
+            mesh.vertices.push(VolumeVertex {
                 position,
                 normal,
                 color,
                 side: [u8::MAX, u, v, edge],
             });
         }
-        indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
+        mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
     }
-    ModelMesh { vertices, indices }
+}
+
+/// How many segments a portal's ring is drawn in. The pane inside it is
+/// the renderer's ([`Parts::panes`]): a window on the world seen through
+/// the portal.
+const RING_SEGMENTS: usize = 32;
+
+/// A portal's ring in a paint: a rim `rim` of the box's width wide and as
+/// thick as the box along `y`, round the circle that fills the box along
+/// `x` and `z`. Each face of the rim is a quad a segment, flat, wound
+/// counter clockwise seen from where it faces. The rim shines with its own
+/// light whatever the paint's finish, so a portal is seen at night.
+fn ring(paint: u8, rim: f32) -> ModelMesh {
+    let (mut color, edge) = paint_look(paint);
+    color[3] = u8::MAX;
+    let mut mesh = ModelMesh {
+        vertices: Vec::with_capacity(RING_SEGMENTS * 16),
+        indices: Vec::with_capacity(RING_SEGMENTS * 24),
+    };
+    let centre = [0.0, 0.5];
+    let (outer, inner) = (0.5, 0.5 - rim);
+    let round = |k: usize, radius: f32| -> [f32; 2] {
+        let angle = k as f32 * core::f32::consts::TAU / RING_SEGMENTS as f32;
+        [
+            centre[0] + radius * angle.cos(),
+            centre[1] + radius * angle.sin(),
+        ]
+    };
+    let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
+    let mut quad = |corners: [[f32; 3]; 4], normal: [f32; 3], color: [u8; 4], edge: u8| {
+        let base = mesh.vertices.len() as u32;
+        for (position, [u, v]) in corners.into_iter().zip(across) {
+            mesh.vertices.push(VolumeVertex {
+                position,
+                normal,
+                color,
+                side: [u8::MAX, u, v, edge],
+            });
+        }
+        mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
+    };
+    for k in 0..RING_SEGMENTS {
+        let (a, b) = (round(k, outer), round(k + 1, outer));
+        let (c, d) = (round(k, inner), round(k + 1, inner));
+        let at = |[x, z]: [f32; 2], y: f32| [x, y, z];
+        // The front, facing `-y`, and the back: a quad of the annulus each.
+        quad(
+            [at(a, -0.5), at(b, -0.5), at(d, -0.5), at(c, -0.5)],
+            [0.0, -1.0, 0.0],
+            color,
+            edge,
+        );
+        quad(
+            [at(a, 0.5), at(c, 0.5), at(d, 0.5), at(b, 0.5)],
+            [0.0, 1.0, 0.0],
+            color,
+            edge,
+        );
+        // The outside and the inside of the rim, their normals radial, flat
+        // over the segment.
+        let mid = round(k, outer);
+        let next = round(k + 1, outer);
+        let radial = [
+            (mid[0] + next[0]) / 2.0 - centre[0],
+            (mid[1] + next[1]) / 2.0 - centre[1],
+        ];
+        let length = (radial[0] * radial[0] + radial[1] * radial[1]).sqrt();
+        let out = [radial[0] / length, 0.0, radial[1] / length];
+        quad(
+            [at(a, -0.5), at(a, 0.5), at(b, 0.5), at(b, -0.5)],
+            out,
+            color,
+            edge,
+        );
+        quad(
+            [at(c, -0.5), at(d, -0.5), at(d, 0.5), at(c, 0.5)],
+            [-out[0], 0.0, -out[2]],
+            color,
+            edge,
+        );
+    }
+    mesh
 }
 
 /// How many points a landmark's star has, and how far in its inner corners
@@ -1478,6 +1636,67 @@ mod tests {
             "every landmark in a paint shares one star"
         );
         assert_ne!(model_id(Shape::Landmark(name), 5), model_id(Shape::Cube, 5));
+    }
+
+    #[test]
+    fn a_ring_is_a_rim_round_an_open_pane() {
+        let rim = 0.06;
+        let mesh = ring(5, rim);
+        let n = RING_SEGMENTS;
+        assert_eq!((mesh.vertices.len(), mesh.indices.len()), (16 * n, 24 * n));
+        for side in mesh.indices.chunks(3) {
+            let [a, b, c] = [0, 1, 2].map(|i| Vec3::from(mesh.vertices[side[i] as usize].position));
+            let normal = Vec3::from(mesh.vertices[side[0] as usize].normal);
+            let wound = (b - a).cross(c - a);
+            assert!(wound.dot(normal) > 0.0, "{side:?} winds against its normal");
+            for p in [a, b, c] {
+                assert!(p.x.abs() <= 0.5 + 1e-6 && p.y.abs() <= 0.5 + 1e-6);
+                assert!((-1e-6..=1.0 + 1e-6).contains(&p.z));
+                assert!(((p - a).dot(normal)).abs() < 1e-5);
+            }
+        }
+        // The rim fills the box: a corner reaches each of its sides.
+        for (axis, end) in [(0, -0.5), (0, 0.5), (2, 0.0), (2, 1.0)] {
+            assert!(
+                mesh.vertices
+                    .iter()
+                    .any(|v| (v.position[axis] - end).abs() < 1e-6)
+            );
+        }
+        // The rim is the paint's and leaves the pane open inside it.
+        assert!(mesh.vertices.iter().all(|v| {
+            let [x, _, z] = v.position;
+            (x * x + (z - 0.5) * (z - 0.5)).sqrt() >= 0.5 - rim - 1e-6
+        }));
+        assert!(
+            mesh.vertices.iter().all(|v| v.color[3] == u8::MAX),
+            "the rim shines whatever its paint"
+        );
+        let portal = |to: Option<PartId>, rim: u8| Shape::Portal(Portal { to, rim });
+        assert_eq!(
+            model_id(portal(Some(PartId(1)), 12), 5),
+            model_id(portal(None, 12), 5),
+            "every portal in a paint with a rim of one width shares one ring"
+        );
+        assert_ne!(model_id(portal(None, 12), 5), model_id(portal(None, 13), 5));
+        assert_ne!(model_id(portal(None, 12), 5), model_id(Shape::Cube, 5));
+        assert_eq!(model_id(portal(None, 0), 5), None, "no rim, no ring");
+        assert!(!is_lamp(&Part {
+            shape: portal(None, 0),
+            pose: Pose::upright([0.0; 3], [4.0, 0.1, 4.0]),
+            paint: 5,
+            solid: false,
+            shine: 0.0,
+            reach_m: 0.0,
+            name: None,
+        }));
+        // The cube is still the unit box.
+        let cube = cube(5);
+        assert_eq!((cube.vertices.len(), cube.indices.len()), (24, 36));
+        assert!(cube.vertices.iter().all(|v| {
+            let [x, y, z] = v.position;
+            x.abs() == 0.5 && y.abs() == 0.5 && (z == 0.0 || z == 1.0)
+        }));
     }
 
     #[test]

@@ -159,8 +159,20 @@ fn seen(
     session: u32,
     held: Vec<wire::Held>,
 ) -> Vec<wire::Seen> {
+    seen_from(cells, stage, session, held, None)
+}
+
+/// The same, with an eye elsewhere whose surroundings the session asks for
+/// too.
+fn seen_from(
+    cells: &mut Cells,
+    stage: &mut Stage,
+    session: u32,
+    held: Vec<wire::Held>,
+    eye: Option<wire::Eye>,
+) -> Vec<wire::Seen> {
     stage.told.clear();
-    ask(cells, stage, session, wire::LOOK, &wire::Look { held });
+    ask(cells, stage, session, wire::LOOK, &wire::Look { held, eye });
     let seen = stage.told.iter().filter(|(kind, ..)| kind == wire::SEEN);
     seen.map(|(_, payload, to)| {
         assert_eq!(to, &[session]);
@@ -229,6 +241,47 @@ fn a_volume_is_seated_by_the_ground_and_told_to_whoever_is_near() {
     let beside = SurfacePoint::new(point.sector, point.u + 64.0, point.v);
     open(&mut cells, &mut stage, 1, beside);
     assert_eq!(stage.refused.as_deref(), Some("ground"));
+}
+
+/// A look with an eye elsewhere, the eye past a portal, is shown what is
+/// near the eye as if the body stood there: a volume two kilometres from
+/// the visitor, seen from afar at most, is shown whole when its eye stands
+/// by it.
+#[test]
+fn a_look_with_an_eye_elsewhere_is_shown_what_is_near_the_eye() {
+    let (mut stage, point) = stage();
+    let mut cells = Cells::default();
+    let span = boxed(&stage, point, [3, 3, 0], [20, 3, 2]);
+    open(&mut cells, &mut stage, 1, point);
+    change(
+        &mut cells,
+        &mut stage,
+        1,
+        point,
+        &[Gesture::Create { span, paint: 5 }],
+    );
+    let mut again = Cells::default();
+    let whole = |seen: Vec<wire::Seen>| {
+        seen.iter()
+            .flat_map(|seen| seen.volumes.iter())
+            .any(|volume| volume.afar == 0)
+    };
+    assert!(
+        !whole(seen(&mut again, &mut stage, 2, Vec::new())),
+        "two kilometres off, the volume is not shown whole"
+    );
+    let ground = stage.ground.as_ref().unwrap();
+    let eye = wire::Eye {
+        seat: seat_of(point),
+        u: point.u as f32,
+        v: point.v as f32,
+        height_m: (seat::ground(ground, point.sector.into(), point) * BLOCK_M) as f32,
+    };
+    let mut again = Cells::default();
+    assert!(
+        whole(seen_from(&mut again, &mut stage, 2, Vec::new(), Some(eye))),
+        "with an eye by the volume, it is shown whole"
+    );
 }
 
 #[test]

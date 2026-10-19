@@ -96,12 +96,28 @@ pub struct TakeBack {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PutBack {
 }
-/// `look`: what this client holds of the volumes near it. The world answers
-/// with `seen`.
+/// `look`: what this client holds of the volumes near it, and an eye
+/// elsewhere whose surroundings it asks for too: the eye past a portal it
+/// sees through. The world answers with `seen`.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Look {
     #[prost(message, repeated, tag="1")]
     pub held: ::prost::alloc::vec::Vec<Held>,
+    #[prost(message, optional, tag="2")]
+    pub eye: ::core::option::Option<Eye>,
+}
+/// Where an eye stands: a seat, blocks along it, metres over its body's
+/// datum.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Eye {
+    #[prost(message, optional, tag="1")]
+    pub seat: ::core::option::Option<Seat>,
+    #[prost(float, tag="2")]
+    pub u: f32,
+    #[prost(float, tag="3")]
+    pub v: f32,
+    #[prost(float, tag="4")]
+    pub height_m: f32,
 }
 /// A volume a client holds, at the version it holds it: whole, or as it is
 /// seen from afar.

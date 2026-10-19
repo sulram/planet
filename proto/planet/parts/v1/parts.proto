@@ -23,7 +23,8 @@ message Shape {
     bytes vox = 2;
     Media image = 3;
     Landmark landmark = 4;
-    Clip clip = 5;
+    Portal portal = 5;
+    Clip clip = 6;
   }
 }
 
@@ -51,6 +52,15 @@ message Cube {}
 // light whatever its paint's finish; a place one travels to.
 message Landmark {
   string name = 1;
+}
+
+// A portal: a standing ring leading to a landmark by the name the world
+// gave it; 0 leads nowhere. A body that passes through its pane is taken to
+// stand on that star, facing the way it points. `rim` is the rim's width in
+// two hundredths of the ring's width: none at 0, at most 100, the middle.
+message Portal {
+  uint64 to = 1;
+  uint32 rim = 2;
 }
 
 // A picture: its size in texels, how long it plays, and the three files its

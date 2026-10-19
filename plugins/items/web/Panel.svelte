@@ -119,9 +119,9 @@
 	const placeOnly = $derived(picked?.item === 'sound');
 	const pickedKind = $derived(picked ? kinds.find((kind) => kind.name === picked.item) : undefined);
 	const vector = (values: number[]) => [values[0], values[1], values[2]] as [number, number, number];
-	/** What the material section paints: the kind in hand, else the kind picked. A cube takes a finish and an edge; a landmark its colour alone. */
+	/** What the material section paints: the kind in hand, else the kind picked. A cube takes a finish and an edge; a landmark and a portal their colour alone. */
 	const material = $derived(item ?? picked?.item ?? null);
-	const showMaterial = $derived(material === 'cube' || material === 'landmark');
+	const showMaterial = $derived(material === 'cube' || material === 'landmark' || material === 'portal');
 	/** How far a landmark is, said short. */
 	function away(m: number | null): string {
 		if (m === null) return t('landmarks.elsewhere');

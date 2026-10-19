@@ -40,6 +40,9 @@ struct View {
     // x: how thick the air is, as a factor. y: which tone map, by index.
     // z: how clear the sea is to a swimmer, as a factor.
     grade: vec4<f32>,
+    // A passage through a portal: xy its point on the screen, z its phase,
+    // -1 to 1, w 1 while there is one.
+    warp: vec4<f32>,
     // x: how many of `lamps` are lit.
     lamps_on: vec4<f32>,
     lamps: array<Lamp, LAMPS>,
@@ -48,6 +51,13 @@ struct View {
 @group(0) @binding(0) var<uniform> view: View;
 @group(0) @binding(1) var shadow_map: texture_depth_2d_array;
 @group(0) @binding(2) var shadow_sampler: sampler_comparison;
+
+// A body charged by its passage through a portal: its colour gives way to
+// a white well over a sunlit white, which the bloom takes, by `shine`.
+const CHARGE: vec3<f32> = vec3<f32>(7.0, 6.5, 6.0);
+fn charged(color: vec3<f32>, shine: f32) -> vec3<f32> {
+    return mix(color, CHARGE, clamp(shine, 0.0, 1.0));
+}
 
 fn shadow_sample(relative: vec3<f32>, normal: vec3<f32>, cascade: u32) -> vec2<f32> {
     let texel_m = view.shadow_texel_m[cascade];

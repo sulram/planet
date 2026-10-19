@@ -8,7 +8,8 @@ order: 22
 # RENDER
 
 How the picture is made: bodies in it, the sea, the sky, the light and the
-compositor. What the world *is* lives in WORLD.md.
+compositor. What the world *is* lives in WORLD.md; a portal, and the window
+its pane is, in PORTALS.md.
 
 ## Avatars
 

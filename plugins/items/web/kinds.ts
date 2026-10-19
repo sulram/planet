@@ -12,6 +12,7 @@ import Picture from './Picture.svelte';
 import Model from './Model.svelte';
 import Landmark from './Landmark.svelte';
 import Sound from './Sound.svelte';
+import Portal from './Portal.svelte';
 import type { Item, Picked } from './protocol';
 import { t } from './words';
 
@@ -37,5 +38,6 @@ export const kinds: readonly Kind[] = [
 	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture },
 	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model },
 	{ name: 'sound', icon: 'volume-2', label: () => t('kind.sound'), Extra: Sound },
-	{ name: 'landmark', icon: 'star', label: () => t('kind.landmark'), Extra: Landmark, adds: true }
+	{ name: 'landmark', icon: 'star', label: () => t('kind.landmark'), Extra: Landmark, adds: true },
+	{ name: 'portal', icon: 'circle', label: () => t('kind.portal'), Extra: Portal, adds: true }
 ];

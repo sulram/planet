@@ -147,6 +147,9 @@ fn pictures_are_drawn() {
                 both_sides: false,
             },
         ],
+        panes: Vec::new(),
+        through: None,
+        warp: None,
     };
     let pixels = headless.render(&frame);
     // Beside the other test output, to be looked at: `target/tmp/pictures.png`.
@@ -176,5 +179,104 @@ fn pictures_are_drawn() {
     assert!(
         screen[1] > screen[0] + 80 && screen[1] > screen[2] + 80,
         "the frame written last of the right size shows: {screen:?}"
+    );
+}
+
+/// A portal's pane: dark while nothing is seen through it, and a window on
+/// the world past the portal when the frame carries one: here the sun, from
+/// an eye turned to face it, which the view itself has at its back.
+#[test]
+fn a_pane_is_a_window_on_the_world_past_the_portal() {
+    let (width, height) = (640, 360);
+    let Ok(mut headless) = Headless::new(width, height) else {
+        eprintln!("no GPU: the pane test is skipped");
+        return;
+    };
+    let radius_m = 1000.0;
+    let eye = DVec3::new(0.0, radius_m + 1.6, 0.0);
+    let camera = Camera {
+        position: eye,
+        rotation: DQuat::IDENTITY,
+        fov_y: 60f32.to_radians(),
+        near: 0.1,
+    };
+    // A pane two metres across, three metres ahead, facing the eye: the quad
+    // faces `+z`, toward the eye looking down `-z`.
+    let pane = DAffine3::from_translation(eye + DVec3::new(0.0, 0.0, -3.0))
+        * DAffine3::from_scale(DVec3::new(2.0, 2.0, 1.0));
+    let mut frame = Frame {
+        camera,
+        sun_direction: Vec3::new(0.0, 0.3, 1.0).normalize(),
+        moon: Moon {
+            position: DVec3::new(0.0, 0.0, -50_000.0),
+            radius_m: 100.0,
+        },
+        planet_radius_m: radius_m,
+        clock_s: 0.0,
+        patches: Vec::new(),
+        shadow_patches: Vec::new(),
+        interaction: InteractionCapsule {
+            start: eye,
+            end: eye,
+            radius_m: 0.0,
+        },
+        effects: Effects {
+            clouds: false,
+            bloom: 0.0,
+            ..Effects::default()
+        },
+        boxes: Vec::new(),
+        skinned: Vec::new(),
+        volumes: Vec::new(),
+        glass: Vec::new(),
+        lamps: Vec::new(),
+        models: Vec::new(),
+        ghost: None,
+        guides: Vec::new(),
+        pictures: Vec::new(),
+        panes: vec![scene::PaneDraw {
+            transform: pane,
+            seen: 0.0,
+        }],
+        through: None,
+        warp: None,
+    };
+    let luma = |pixels: &[u8], x: u32, y: u32| {
+        let i = ((y * width + x) * 4) as usize;
+        u32::from(pixels[i]) + u32::from(pixels[i + 1]) + u32::from(pixels[i + 2])
+    };
+    let dark = headless.render(&frame);
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("pane_dark.png");
+    write_png(&out, width, height, &dark).unwrap();
+    assert!(
+        luma(&dark, 320, 180) < 60,
+        "a pane with nothing through it is dark"
+    );
+
+    // Seen through: the eye past the portal faces the sun.
+    frame.panes[0].seen = 1.0;
+    frame.through = Some(scene::Through {
+        camera: Camera {
+            rotation: DQuat::from_rotation_y(core::f64::consts::PI),
+            ..camera
+        },
+        patches: Vec::new(),
+        size: 0.25,
+    });
+    let seen = headless.render(&frame);
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("pane_seen.png");
+    write_png(&out, width, height, &seen).unwrap();
+    // The sun stands 17 degrees over the eye's horizon: a third of the way
+    // up the view, inside the disc, where the window shows it.
+    assert!(
+        luma(&seen, 320, 90) > luma(&dark, 320, 90) + 100,
+        "the sun past the portal shows in the pane: {} over {}",
+        luma(&seen, 320, 90),
+        luma(&dark, 320, 90)
+    );
+    assert_eq!(
+        luma(&seen, 320 - 95, 180 - 95),
+        luma(&dark, 320 - 95, 180 - 95),
+        "beside the disc nothing changed"
     );
 }

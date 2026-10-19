@@ -603,11 +603,13 @@ func (*PutBack) Descriptor() ([]byte, []int) {
 	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{7}
 }
 
-// `look`: what this client holds of the volumes near it. The world answers
-// with `seen`.
+// `look`: what this client holds of the volumes near it, and an eye
+// elsewhere whose surroundings it asks for too: the eye past a portal it
+// sees through. The world answers with `seen`.
 type Look struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Held          []*Held                `protobuf:"bytes,1,rep,name=held,proto3" json:"held,omitempty"`
+	Eye           *Eye                   `protobuf:"bytes,2,opt,name=eye,proto3" json:"eye,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -649,6 +651,83 @@ func (x *Look) GetHeld() []*Held {
 	return nil
 }
 
+func (x *Look) GetEye() *Eye {
+	if x != nil {
+		return x.Eye
+	}
+	return nil
+}
+
+// Where an eye stands: a seat, blocks along it, metres over its body's
+// datum.
+type Eye struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Seat          *Seat                  `protobuf:"bytes,1,opt,name=seat,proto3" json:"seat,omitempty"`
+	U             float32                `protobuf:"fixed32,2,opt,name=u,proto3" json:"u,omitempty"`
+	V             float32                `protobuf:"fixed32,3,opt,name=v,proto3" json:"v,omitempty"`
+	HeightM       float32                `protobuf:"fixed32,4,opt,name=height_m,json=heightM,proto3" json:"height_m,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Eye) Reset() {
+	*x = Eye{}
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Eye) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Eye) ProtoMessage() {}
+
+func (x *Eye) ProtoReflect() protoreflect.Message {
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Eye.ProtoReflect.Descriptor instead.
+func (*Eye) Descriptor() ([]byte, []int) {
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Eye) GetSeat() *Seat {
+	if x != nil {
+		return x.Seat
+	}
+	return nil
+}
+
+func (x *Eye) GetU() float32 {
+	if x != nil {
+		return x.U
+	}
+	return 0
+}
+
+func (x *Eye) GetV() float32 {
+	if x != nil {
+		return x.V
+	}
+	return 0
+}
+
+func (x *Eye) GetHeightM() float32 {
+	if x != nil {
+		return x.HeightM
+	}
+	return 0
+}
+
 // A volume a client holds, at the version it holds it: whole, or as it is
 // seen from afar.
 type Held struct {
@@ -666,7 +745,7 @@ type Held struct {
 
 func (x *Held) Reset() {
 	*x = Held{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[9]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -678,7 +757,7 @@ func (x *Held) String() string {
 func (*Held) ProtoMessage() {}
 
 func (x *Held) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[9]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -691,7 +770,7 @@ func (x *Held) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Held.ProtoReflect.Descriptor instead.
 func (*Held) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{9}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Held) GetSeat() *Seat {
@@ -740,7 +819,7 @@ type Opened struct {
 
 func (x *Opened) Reset() {
 	*x = Opened{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[10]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -752,7 +831,7 @@ func (x *Opened) String() string {
 func (*Opened) ProtoMessage() {}
 
 func (x *Opened) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[10]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -765,7 +844,7 @@ func (x *Opened) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Opened.ProtoReflect.Descriptor instead.
 func (*Opened) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{10}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Opened) GetSeat() *Seat {
@@ -797,7 +876,7 @@ type Changed struct {
 
 func (x *Changed) Reset() {
 	*x = Changed{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[11]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +888,7 @@ func (x *Changed) String() string {
 func (*Changed) ProtoMessage() {}
 
 func (x *Changed) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[11]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +901,7 @@ func (x *Changed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Changed.ProtoReflect.Descriptor instead.
 func (*Changed) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{11}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Changed) GetSession() uint32 {
@@ -874,7 +953,7 @@ type Restored struct {
 
 func (x *Restored) Reset() {
 	*x = Restored{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[12]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +965,7 @@ func (x *Restored) String() string {
 func (*Restored) ProtoMessage() {}
 
 func (x *Restored) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[12]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +978,7 @@ func (x *Restored) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Restored.ProtoReflect.Descriptor instead.
 func (*Restored) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{12}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Restored) GetSession() uint32 {
@@ -985,7 +1064,7 @@ type Chunk struct {
 
 func (x *Chunk) Reset() {
 	*x = Chunk{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[13]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -997,7 +1076,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[13]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1010,7 +1089,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{13}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Chunk) GetX() int32 {
@@ -1057,7 +1136,7 @@ type Volume struct {
 
 func (x *Volume) Reset() {
 	*x = Volume{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[14]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +1148,7 @@ func (x *Volume) String() string {
 func (*Volume) ProtoMessage() {}
 
 func (x *Volume) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[14]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +1161,7 @@ func (x *Volume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Volume.ProtoReflect.Descriptor instead.
 func (*Volume) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{14}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Volume) GetSeat() *Seat {
@@ -1127,7 +1206,7 @@ type Seen struct {
 
 func (x *Seen) Reset() {
 	*x = Seen{}
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[15]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1139,7 +1218,7 @@ func (x *Seen) String() string {
 func (*Seen) ProtoMessage() {}
 
 func (x *Seen) ProtoReflect() protoreflect.Message {
-	mi := &file_planet_cells_v1_cells_proto_msgTypes[15]
+	mi := &file_planet_cells_v1_cells_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1152,7 +1231,7 @@ func (x *Seen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Seen.ProtoReflect.Descriptor instead.
 func (*Seen) Descriptor() ([]byte, []int) {
-	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{15}
+	return file_planet_cells_v1_cells_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Seen) GetVolumes() []*Volume {
@@ -1206,9 +1285,15 @@ const file_planet_cells_v1_cells_proto_rawDesc = "" +
 	"\x06plot_y\x18\x03 \x01(\x11R\x05plotY\"\n" +
 	"\n" +
 	"\bTakeBack\"\t\n" +
-	"\aPutBack\"1\n" +
+	"\aPutBack\"Y\n" +
 	"\x04Look\x12)\n" +
-	"\x04held\x18\x01 \x03(\v2\x15.planet.cells.v1.HeldR\x04held\"\x8d\x01\n" +
+	"\x04held\x18\x01 \x03(\v2\x15.planet.cells.v1.HeldR\x04held\x12&\n" +
+	"\x03eye\x18\x02 \x01(\v2\x14.planet.cells.v1.EyeR\x03eye\"g\n" +
+	"\x03Eye\x12)\n" +
+	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12\f\n" +
+	"\x01u\x18\x02 \x01(\x02R\x01u\x12\f\n" +
+	"\x01v\x18\x03 \x01(\x02R\x01v\x12\x19\n" +
+	"\bheight_m\x18\x04 \x01(\x02R\aheightM\"\x8d\x01\n" +
 	"\x04Held\x12)\n" +
 	"\x04seat\x18\x01 \x01(\v2\x15.planet.cells.v1.SeatR\x04seat\x12\x15\n" +
 	"\x06plot_x\x18\x02 \x01(\x11R\x05plotX\x12\x15\n" +
@@ -1268,7 +1353,7 @@ func file_planet_cells_v1_cells_proto_rawDescGZIP() []byte {
 }
 
 var file_planet_cells_v1_cells_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_planet_cells_v1_cells_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_planet_cells_v1_cells_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_planet_cells_v1_cells_proto_goTypes = []any{
 	(Kind)(0),        // 0: planet.cells.v1.Kind
 	(*Seat)(nil),     // 1: planet.cells.v1.Seat
@@ -1280,13 +1365,14 @@ var file_planet_cells_v1_cells_proto_goTypes = []any{
 	(*TakeBack)(nil), // 7: planet.cells.v1.TakeBack
 	(*PutBack)(nil),  // 8: planet.cells.v1.PutBack
 	(*Look)(nil),     // 9: planet.cells.v1.Look
-	(*Held)(nil),     // 10: planet.cells.v1.Held
-	(*Opened)(nil),   // 11: planet.cells.v1.Opened
-	(*Changed)(nil),  // 12: planet.cells.v1.Changed
-	(*Restored)(nil), // 13: planet.cells.v1.Restored
-	(*Chunk)(nil),    // 14: planet.cells.v1.Chunk
-	(*Volume)(nil),   // 15: planet.cells.v1.Volume
-	(*Seen)(nil),     // 16: planet.cells.v1.Seen
+	(*Eye)(nil),      // 10: planet.cells.v1.Eye
+	(*Held)(nil),     // 11: planet.cells.v1.Held
+	(*Opened)(nil),   // 12: planet.cells.v1.Opened
+	(*Changed)(nil),  // 13: planet.cells.v1.Changed
+	(*Restored)(nil), // 14: planet.cells.v1.Restored
+	(*Chunk)(nil),    // 15: planet.cells.v1.Chunk
+	(*Volume)(nil),   // 16: planet.cells.v1.Volume
+	(*Seen)(nil),     // 17: planet.cells.v1.Seen
 }
 var file_planet_cells_v1_cells_proto_depIdxs = []int32{
 	0,  // 0: planet.cells.v1.Gesture.kind:type_name -> planet.cells.v1.Kind
@@ -1294,25 +1380,27 @@ var file_planet_cells_v1_cells_proto_depIdxs = []int32{
 	1,  // 2: planet.cells.v1.Change.seat:type_name -> planet.cells.v1.Seat
 	2,  // 3: planet.cells.v1.Change.gestures:type_name -> planet.cells.v1.Gesture
 	1,  // 4: planet.cells.v1.Close.seat:type_name -> planet.cells.v1.Seat
-	10, // 5: planet.cells.v1.Look.held:type_name -> planet.cells.v1.Held
-	1,  // 6: planet.cells.v1.Held.seat:type_name -> planet.cells.v1.Seat
-	1,  // 7: planet.cells.v1.Opened.seat:type_name -> planet.cells.v1.Seat
-	3,  // 8: planet.cells.v1.Opened.stood:type_name -> planet.cells.v1.Stood
-	1,  // 9: planet.cells.v1.Changed.seat:type_name -> planet.cells.v1.Seat
-	2,  // 10: planet.cells.v1.Changed.gestures:type_name -> planet.cells.v1.Gesture
-	3,  // 11: planet.cells.v1.Changed.stood:type_name -> planet.cells.v1.Stood
-	1,  // 12: planet.cells.v1.Restored.seat:type_name -> planet.cells.v1.Seat
-	3,  // 13: planet.cells.v1.Restored.stood:type_name -> planet.cells.v1.Stood
-	1,  // 14: planet.cells.v1.Volume.seat:type_name -> planet.cells.v1.Seat
-	3,  // 15: planet.cells.v1.Volume.stood:type_name -> planet.cells.v1.Stood
-	14, // 16: planet.cells.v1.Volume.chunks:type_name -> planet.cells.v1.Chunk
-	15, // 17: planet.cells.v1.Seen.volumes:type_name -> planet.cells.v1.Volume
-	10, // 18: planet.cells.v1.Seen.gone:type_name -> planet.cells.v1.Held
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	11, // 5: planet.cells.v1.Look.held:type_name -> planet.cells.v1.Held
+	10, // 6: planet.cells.v1.Look.eye:type_name -> planet.cells.v1.Eye
+	1,  // 7: planet.cells.v1.Eye.seat:type_name -> planet.cells.v1.Seat
+	1,  // 8: planet.cells.v1.Held.seat:type_name -> planet.cells.v1.Seat
+	1,  // 9: planet.cells.v1.Opened.seat:type_name -> planet.cells.v1.Seat
+	3,  // 10: planet.cells.v1.Opened.stood:type_name -> planet.cells.v1.Stood
+	1,  // 11: planet.cells.v1.Changed.seat:type_name -> planet.cells.v1.Seat
+	2,  // 12: planet.cells.v1.Changed.gestures:type_name -> planet.cells.v1.Gesture
+	3,  // 13: planet.cells.v1.Changed.stood:type_name -> planet.cells.v1.Stood
+	1,  // 14: planet.cells.v1.Restored.seat:type_name -> planet.cells.v1.Seat
+	3,  // 15: planet.cells.v1.Restored.stood:type_name -> planet.cells.v1.Stood
+	1,  // 16: planet.cells.v1.Volume.seat:type_name -> planet.cells.v1.Seat
+	3,  // 17: planet.cells.v1.Volume.stood:type_name -> planet.cells.v1.Stood
+	15, // 18: planet.cells.v1.Volume.chunks:type_name -> planet.cells.v1.Chunk
+	16, // 19: planet.cells.v1.Seen.volumes:type_name -> planet.cells.v1.Volume
+	11, // 20: planet.cells.v1.Seen.gone:type_name -> planet.cells.v1.Held
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_planet_cells_v1_cells_proto_init() }
@@ -1330,7 +1418,7 @@ func file_planet_cells_v1_cells_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_planet_cells_v1_cells_proto_rawDesc), len(file_planet_cells_v1_cells_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

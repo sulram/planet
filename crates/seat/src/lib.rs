@@ -354,6 +354,10 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
             .into(),
             millis: clip.millis,
         }),
+        part::Shape::Portal(portal) => parts_wire::shape::Shape::Portal(parts_wire::Portal {
+            to: portal.to.map_or(0, |to| to.0),
+            rim: u32::from(portal.rim),
+        }),
     };
     parts_wire::Part {
         seat: Some(seat.wire()),
@@ -419,6 +423,16 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
             },
             millis: clip.millis,
         }),
+        parts_wire::shape::Shape::Portal(portal) => {
+            let rim = u8::try_from(portal.rim).ok()?;
+            if rim > part::Portal::RIM_MAX {
+                return None;
+            }
+            part::Shape::Portal(part::Portal {
+                to: (portal.to != 0).then_some(part::PartId(portal.to)),
+                rim,
+            })
+        }
     };
     let pose = part::Pose {
         at: [pose.u, pose.v, pose.h],
@@ -533,6 +547,11 @@ mod tests {
                 kind: part::ClipKind::Ogg,
                 millis: 4000,
             }),
+            part::Shape::Portal(part::Portal {
+                to: Some(part::PartId(9)),
+                rim: part::Portal::RIM,
+            }),
+            part::Shape::Portal(part::Portal { to: None, rim: 0 }),
         ] {
             let sent = part::Part {
                 shape,

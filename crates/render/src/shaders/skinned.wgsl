@@ -2,6 +2,8 @@ const MAX_JOINTS: u32 = 128u;
 
 struct Instance {
     relative_from_mesh: mat4x4<f32>,
+    // x: how much the body shines white with its own light.
+    params: vec4<f32>,
     // Mesh space from rest space, per joint.
     joints: array<mat4x4<f32>, MAX_JOINTS>,
 }
@@ -23,6 +25,7 @@ struct Varying {
     @location(0) relative: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
+    @location(3) shine: f32,
 }
 
 @vertex
@@ -39,6 +42,7 @@ fn vs(in: Vertex) -> Varying {
     // normals; normalising undoes any uniform scale.
     out.normal = (placed * vec4<f32>(in.normal, 0.0)).xyz;
     out.uv = in.uv;
+    out.shine = instance.params.x;
     return out;
 }
 
@@ -48,7 +52,8 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     if texel.a < 0.5 {
         discard;
     }
-    return vec4<f32>(lit(texel.rgb, normalize(in.normal), 0.0, in.relative), 1.0);
+    let color = lit(texel.rgb, normalize(in.normal), 0.0, in.relative);
+    return vec4<f32>(charged(color, in.shine), 1.0);
 }
 
 // Same alpha cutout as the visible mesh: hair gaps do not cast solid cards.
