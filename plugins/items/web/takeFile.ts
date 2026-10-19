@@ -21,13 +21,13 @@ const refusals: readonly NotTaken[] = ['kind', 'size', 'level', 'key', 'unreacha
 /** What a file would be, by its name and type, before it is read. Null for one items takes no interest in. */
 export function givenOf(name: string, type: string): Given | null {
 	if (/\.vox$/i.test(name)) return 'model';
-	if (isPicture({ type } as Blob) || /\.(png|jpe?g|webp)$/i.test(name)) return 'picture';
+	if (isPicture({ type } as Blob) || /\.(png|jpe?g|webp|gif|mp4)$/i.test(name)) return 'picture';
 	return null;
 }
 
-/** What a file being dragged over the page would be, from the types a drag says before the drop: a picture is known by its type, a `.vox` says nothing until dropped. */
+/** What a file being dragged over the page would be, from the types a drag says before the drop: a picture, still or moving, is known by its type, a `.vox` says nothing until dropped. */
 export function draggedOf(types: readonly string[]): Given | 'any' {
-	return types.some((type) => type.startsWith('image/')) ? 'picture' : 'any';
+	return types.some((type) => type.startsWith('image/') || type.startsWith('video/')) ? 'picture' : 'any';
 }
 
 /** Reads the refusal code of what was thrown, in the words this panel has. */

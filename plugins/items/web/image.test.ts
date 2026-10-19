@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { LOW_SIDE, THUMB_SIDE, isPicture, within } from './image';
+import { LOW_SIDE, THUMB_SIDE, isPicture, playsFor, within } from './image';
 
 describe('a picture as it is placed', () => {
 	test('a version is no longer than its side, the aspect kept', () => {
@@ -16,10 +16,18 @@ describe('a picture as it is placed', () => {
 		expect(within(10000, 1, THUMB_SIDE)).toEqual({ width: 128, height: 1 });
 	});
 
-	test('only png, jpeg and webp are pictures', () => {
+	test('png, jpeg, webp and gif are pictures, and an mp4 is one that moves', () => {
 		expect(isPicture(new Blob([], { type: 'image/png' }))).toBe(true);
 		expect(isPicture(new Blob([], { type: 'image/webp' }))).toBe(true);
-		expect(isPicture(new Blob([], { type: 'image/gif' }))).toBe(false);
-		expect(isPicture(new Blob([], { type: 'video/mp4' }))).toBe(false);
+		expect(isPicture(new Blob([], { type: 'image/gif' }))).toBe(true);
+		expect(isPicture(new Blob([], { type: 'video/mp4' }))).toBe(true);
+		expect(isPicture(new Blob([], { type: 'image/svg+xml' }))).toBe(false);
+	});
+
+	test('a picture plays for the sum of its frames, and a still for nothing', () => {
+		expect(playsFor(1, [])).toBe(0);
+		expect(playsFor(3, [40_000, 40_000, 20_000])).toBe(100);
+		// A frame with no delay, or under 20 ms, plays for 100 ms, as in every browser.
+		expect(playsFor(2, [null, 10_000])).toBe(200);
 	});
 });

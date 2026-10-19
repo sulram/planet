@@ -396,13 +396,20 @@ impl Items {
 
     /// The paint a shape is made of in the colour in hand: a landmark is
     /// always in the light finish with no edge, lit with its own light, so
-    /// only its colour is the hand's.
+    /// only its colour is the hand's; a picture that moves is a screen, in
+    /// the light finish, until its shine says otherwise.
     pub(crate) fn paint_of(&self, shape: Shape) -> u8 {
         match shape {
             Shape::Landmark(_) => Paint {
                 color: self.paint,
                 finish: Finish::Light,
                 edge: Edge::None,
+            }
+            .byte(),
+            Shape::Image(media) if media.moves() => Paint {
+                color: self.paint,
+                finish: Finish::Light,
+                edge: self.edge,
             }
             .byte(),
             Shape::Cube | Shape::Vox(_) | Shape::Image(_) => self.made_of(),
@@ -1229,6 +1236,23 @@ mod tests {
         client.command_json(r#"{"type":"items.take","item":"cube"}"#);
         click(&mut client, [0.3, 0.7]);
         assert_eq!(client.parts().all().count(), 2, "a cube beside the picture");
+        // A picture that moves is placed as a screen, whatever the hand's finish.
+        let gif = format!(
+            r#"{{"width":320,"height":240,"millis":1500,"thumb":"asset://{}.webp","low":"asset://{}.webp","full":"asset://{}.gif"}}"#,
+            hex("07"),
+            hex("08"),
+            hex("09")
+        );
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"picture","media":{gif}}}"#
+        ));
+        click(&mut client, [0.7, 0.7]);
+        let (_, _, screen) = client
+            .parts()
+            .all()
+            .find(|(_, _, part)| matches!(part.shape, Shape::Image(media) if media.moves()))
+            .expect("the moving picture is placed");
+        assert_eq!(voxel::Paint::of(screen.paint).finish, voxel::Finish::Light);
     }
 
     #[test]

@@ -81,14 +81,15 @@ impl Items {
                 let eye = host.feet_at(from);
                 let toward = [eye.point.u - at[0], eye.point.v - at[1]];
                 let yaw = libm::atan2(toward[0], -toward[1]);
+                let shape = Shape::Image(media);
                 client::Part {
-                    shape: Shape::Image(media),
+                    shape,
                     pose: PartPose {
                         at,
                         rotation: DQuat::from_rotation_z(yaw),
                         scale: [CUBE[2] * media.aspect(), PANE, CUBE[2]],
                     },
-                    paint: self.made_of(),
+                    paint: self.paint_of(shape),
                     solid: false,
                     shine: 0.0,
                     reach_m: 0.0,
