@@ -6,7 +6,8 @@
 import type { WebPlugin } from './plugin';
 import chat from '@planet/plugin-chat';
 import build from '@planet/plugin-build';
+import items from '@planet/plugin-items';
 
 export type { LayerProps, Seam, WebPlugin } from './plugin';
 
-export const plugins: readonly WebPlugin[] = [chat, build];
+export const plugins: readonly WebPlugin[] = [chat, build, items];

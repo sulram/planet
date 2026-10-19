@@ -87,8 +87,8 @@
 		left: var(--sp-4);
 		z-index: var(--z-panel);
 	}
-	.toggle :global(.icon-button) {
-		background: var(--bg-overlay);
+	.toggle {
+		--control-bg: var(--bg-overlay);
 	}
 	.kinds {
 		display: grid;

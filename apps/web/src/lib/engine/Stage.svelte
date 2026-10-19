@@ -380,9 +380,8 @@
 		align-items: center;
 		gap: var(--sp-2);
 	}
-	.bar :global(.icon-button),
-	.bar :global(.toggle) {
-		background: var(--bg-overlay);
+	.bar {
+		--control-bg: var(--bg-overlay);
 	}
 	.corner {
 		display: flex;
