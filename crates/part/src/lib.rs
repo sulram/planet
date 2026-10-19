@@ -568,7 +568,8 @@ mod tests {
         assert_eq!(gif.kind, ImageKind::Gif);
         assert!(gif.moves());
         assert_eq!(gif.name(PictureLevel::Full), format!("asset://{hex}.gif"));
-        let video = Media::parse(1, 1, 90_000, &thumb, &low, &format!("asset://{hex}.mp4")).unwrap();
+        let video =
+            Media::parse(1, 1, 90_000, &thumb, &low, &format!("asset://{hex}.mp4")).unwrap();
         assert_eq!(video.kind, ImageKind::Mp4);
         assert!(video.moves());
     }
