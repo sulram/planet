@@ -18,7 +18,7 @@
 mod gizmo;
 mod place;
 
-use client::{Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Shape, Turn};
+use client::{Clip, Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Shape, Turn};
 use glam::{DQuat, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -44,6 +44,11 @@ pub enum Item {
     /// file: its size in texels and three asset names, the original, a low
     /// version and a thumb.
     Picture,
+    /// A sound: a file played where it is placed, looping, heard within its
+    /// reach; nothing is drawn of it but its gizmo when picked, so the list
+    /// of what is near finds it. Taken with its `clip`: the asset name of
+    /// the file and how long it plays.
+    Sound,
     /// A landmark: a star a metre across lying where it is placed, bearing
     /// the name in hand, in the colour in hand and always lit with its own
     /// light, a lamp; nobody collides with it. A place one travels to: the
@@ -176,6 +181,8 @@ struct Take {
     asset: Option<String>,
     #[serde(default)]
     media: Option<MediaBody>,
+    #[serde(default)]
+    clip: Option<ClipBody>,
     /// Place it in front of the body at once, with no click: a file given
     /// is placed where it was given, as soon as it is ready.
     #[serde(default)]
@@ -183,6 +190,20 @@ struct Take {
     /// The name the next landmark bears.
     #[serde(default)]
     name: Option<String>,
+}
+
+/// A sound's record as the seam says it: its file and how long it plays.
+#[derive(Deserialize)]
+struct ClipBody {
+    file: String,
+    #[serde(default)]
+    millis: u32,
+}
+
+impl ClipBody {
+    fn clip(&self) -> Option<Clip> {
+        Clip::parse(&self.file, self.millis)
+    }
 }
 
 /// A picture's record as the seam says it.
@@ -336,6 +357,8 @@ pub struct Items {
     picked: Option<Gizmo>,
     /// The picture placed next, once its file is picked.
     picture: Option<Media>,
+    /// The sound placed next, once its file is given.
+    clip: Option<Clip>,
     /// The model in hand, by the hash of its file: what the model item
     /// places. None until a file is taken.
     model: Option<[u8; 32]>,
@@ -361,6 +384,7 @@ impl Default for Items {
             edge: Edge::None,
             picked: None,
             picture: None,
+            clip: None,
             model: None,
             loading: false,
             name: None,
@@ -415,7 +439,7 @@ impl Items {
                 edge: self.edge,
             }
             .byte(),
-            Shape::Cube | Shape::Vox(_) | Shape::Image(_) => self.made_of(),
+            Shape::Cube | Shape::Vox(_) | Shape::Image(_) | Shape::Sound(_) => self.made_of(),
         }
     }
 
@@ -663,7 +687,11 @@ impl Items {
                 shine: Some(gizmo.part.shine),
                 reach_m: Some(gizmo.part.reach_m),
                 lamp: Some(client::is_lamp(&gizmo.part)),
-                sound: Some(matches!(gizmo.part.shape, Shape::Image(media) if media.sounds())),
+                sound: Some(match gizmo.part.shape {
+                    Shape::Image(media) => media.sounds(),
+                    Shape::Sound(_) => true,
+                    _ => false,
+                }),
                 name: match gizmo.part.shape {
                     Shape::Landmark(name) => Some(name.to_string()),
                     _ => None,
@@ -754,6 +782,7 @@ fn item_of(shape: Shape) -> Item {
         Shape::Vox(_) => Item::Model,
         Shape::Image(_) => Item::Picture,
         Shape::Landmark(_) => Item::Landmark,
+        Shape::Sound(_) => Item::Sound,
     }
 }
 
@@ -783,10 +812,19 @@ impl Plugin for Items {
                     item,
                     asset,
                     media,
+                    clip,
                     ahead,
                     name,
                 }) = read(body, host)
                 {
+                    if item == Some(Item::Sound) {
+                        match clip.as_ref().map(ClipBody::clip) {
+                            Some(None) => {
+                                return host.reject("a sound names an asset:// file".into());
+                            }
+                            given => self.clip = given.flatten(),
+                        }
+                    }
                     if let Some(text) = name {
                         let Some(name) = Name::new(&text) else {
                             return refuse(host, Refusal::Name);
@@ -1286,6 +1324,48 @@ mod tests {
             .unwrap();
         assert_eq!(hand["editing"], true);
         assert!(client.pointing());
+    }
+
+    #[test]
+    fn a_sound_given_is_placed_ahead_invisible_and_heard() {
+        let mut client = client();
+        let hex = "0a".repeat(32);
+        // Taken with no file yet, nothing is placed.
+        client.command_json(r#"{"type":"items.take","item":"sound","ahead":true}"#);
+        client.settled_frame();
+        assert_eq!(client.parts().all().count(), 0);
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"sound","clip":{{"file":"asset://{hex}.mp3","millis":4000}},"ahead":true}}"#
+        ));
+        let frame = client.settled_frame();
+        let (_, _, part) = client.parts().all().next().expect("placed ahead");
+        assert!(matches!(part.shape, Shape::Sound(clip) if clip.millis == 4000));
+        assert!(!part.solid, "nobody collides with a sound");
+        assert!(
+            frame.models.is_empty() && frame.pictures.is_empty(),
+            "nothing to the eye"
+        );
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .expect("picked once placed");
+        assert_eq!(picked["item"], "sound");
+        assert_eq!(picked["sound"], true);
+        // Standing beside it, the shell is asked to play it, and it is heard where it stands.
+        assert!(
+            matches!(client.drain_sounding().as_slice(), [client::Sounding::Open { path, .. }] if path.ends_with(".mp3"))
+        );
+        assert_eq!(client.sounds().len(), 1);
+        // A name that is no file: refused, nothing in hand.
+        client.command_json(r#"{"type":"items.take","item":"sound","clip":{"file":"song.mp3"}}"#);
+        assert!(
+            client
+                .drain_events()
+                .iter()
+                .any(|event| matches!(event, Event::Rejected { .. }))
+        );
     }
 
     #[test]

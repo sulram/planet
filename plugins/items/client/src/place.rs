@@ -21,6 +21,9 @@ use crate::{Item, Items, Refusal, refuse};
 const PANE: f64 = 0.1;
 /// A landmark's star, in blocks: a metre across, eight centimetres thick.
 const STAR: [f64; 3] = [2.0, 2.0, 0.16];
+/// The box of a sound, blocks: half a cell, room for its gizmo and nothing
+/// to the eye.
+const SPEAKER: [f64; 3] = [0.5, 0.5, 0.5];
 
 impl Items {
     /// Places the item in hand where the eye's pointer meets the world.
@@ -89,6 +92,21 @@ impl Items {
                         rotation: DQuat::from_rotation_z(yaw),
                         scale: [CUBE[2] * media.aspect(), PANE, CUBE[2]],
                     },
+                    paint: self.paint_of(shape),
+                    solid: false,
+                    shine: 0.0,
+                    reach_m: 0.0,
+                }
+            }
+            Item::Sound => {
+                // Nothing given yet: the panel asks for a file.
+                let Some(clip) = self.clip else {
+                    return;
+                };
+                let shape = Shape::Sound(clip);
+                client::Part {
+                    shape,
+                    pose: PartPose::upright(at, SPEAKER),
                     paint: self.paint_of(shape),
                     solid: false,
                     shine: 0.0,
