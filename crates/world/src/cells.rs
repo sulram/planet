@@ -536,17 +536,25 @@ impl Cells {
             })
             .cloned()
             .collect();
-        let from = who
+        // Where the body stands, and where its eye past a portal does, when
+        // it sees through one: a volume is near if near either.
+        let froms: Vec<(Body, [f64; 3])> = who
             .stance
             .as_ref()
-            .and_then(|stance| place(&measure, stance));
+            .and_then(|stance| place(&measure, stance))
+            .into_iter()
+            .chain(look.eye.as_ref().and_then(|eye| eye_place(&measure, eye)))
+            .collect();
         // Near, a volume is shown whole; further off, at the step afar its
         // distance asks; and not at all to a client that holds it as it
         // stands at that step or a nearer one.
         let mut lacking: Vec<(f64, Seat, [i32; 2], Stood, i32)> = index
             .iter()
             .filter_map(|(&(seat, plot), &stood)| {
-                let away_m = away_m(&measure, seat, plot, stood, from?)?;
+                let away_m = froms
+                    .iter()
+                    .filter_map(|&from| away_m(&measure, seat, plot, stood, from))
+                    .min_by(f64::total_cmp)?;
                 let scale = seat::shown_at(away_m)?;
                 let holds = held.get(&(seat, plot)).is_some_and(|at| {
                     at.iter()
@@ -666,6 +674,17 @@ fn tell_opened(room: &mut dyn Room, seat: Seat, plot: [i32; 2], stood: Stood, to
 /// Where a stance is: the body it is on, and metres from that body's centre.
 fn place(measure: &Measure, stance: &Stance) -> Option<(Body, [f64; 3])> {
     Some((stance.body(), measure.position(stance)?))
+}
+
+/// Where an eye stands, as a look says it: on the body of its seat, metres
+/// from that body's centre. `None` for an eye on no seat.
+fn eye_place(measure: &Measure, eye: &wire::Eye) -> Option<(Body, [f64; 3])> {
+    let seat = Seat::from_wire(eye.seat.as_ref())?;
+    let sphere = measure.body(seat.body());
+    let point = SurfacePoint::new(seat.sector(), f64::from(eye.u), f64::from(eye.v));
+    let from_centre = sphere.radius_m() + f64::from(eye.height_m);
+    let direction = sphere.blocks().direction(point);
+    Some((seat.body(), direction.map(|axis| axis * from_centre)))
 }
 
 /// How far a place is from a volume, metres. `None` from another body:

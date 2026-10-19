@@ -408,3 +408,77 @@ fn a_landmark_on_the_moon_is_travelled_to_on_the_moon() {
         feet.point
     );
 }
+
+/// A portal seen through puts the star it leads to in the cells' look as a
+/// second eye, so what is built there comes and shows through the pane.
+#[test]
+fn a_portal_seen_through_looks_at_the_cells_by_its_star() {
+    let mut client = welcomed();
+    client.set_view([1600, 900]);
+    let feet = client.host("test").feet();
+    let seat = Seat::Sector(feet.point.sector);
+    let star_at = [
+        feet.point.u,
+        feet.point.v + 8000.0,
+        feet.height_m / topology::BLOCK_M,
+    ];
+    let star = Part {
+        shape: Shape::Landmark(Name::new("Far").unwrap()),
+        pose: PartPose::upright(star_at, [2.0, 2.0, 0.16]),
+        paint: 0,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+    };
+    let star = client.host("test").place_part(seat, star).unwrap();
+    let ring = Part {
+        shape: Shape::Portal(client::Portal {
+            to: Some(star),
+            rim: client::Portal::RIM,
+        }),
+        pose: PartPose::upright(
+            [
+                feet.point.u,
+                feet.point.v + 6.0,
+                feet.height_m / topology::BLOCK_M,
+            ],
+            [4.0, 0.1, 4.0],
+        ),
+        paint: 0,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+    };
+    client.host("test").place_part(seat, ring).unwrap();
+    client.drain_outbound();
+    let mut input = client::Input::default();
+    for _ in 0..70 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    let looks: Vec<protocol::cells::Look> = client
+        .drain_outbound()
+        .into_iter()
+        .filter_map(|out| match out {
+            Outbound::Frame(frame) => {
+                match protocol::ClientMessage::decode(&frame[..]).unwrap().message {
+                    Some(client_message::Message::Envelope(envelope))
+                        if envelope.plugin == protocol::cells::OWNER
+                            && envelope.kind == protocol::cells::LOOK =>
+                    {
+                        protocol::cells::Look::decode(envelope.payload.as_slice()).ok()
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
+        .collect();
+    let eye = looks
+        .iter()
+        .find_map(|look| look.eye.as_ref())
+        .expect("the look carries the eye past the portal");
+    assert!(
+        (f64::from(eye.v) - star_at[1]).abs() < 2.0 && (f64::from(eye.u) - star_at[0]).abs() < 2.0,
+        "the eye stands by the star: {eye:?}"
+    );
+}

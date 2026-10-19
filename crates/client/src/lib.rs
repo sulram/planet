@@ -1084,12 +1084,15 @@ impl Client {
         let (plugins, lent) = self.lend();
         plugins.turn(&eye, input, (taken.interrupted, taken.inspected), lent);
         self.cells.update(eye.position);
+        let through = self.through(&camera);
+        // The cells near the star a portal leads to are looked at too, so
+        // what is built there shows through the pane.
+        let eye = through.map(|(_, _, star)| self.body_of(star));
         self.cells
-            .look(&self.generator, self.controller.held_by(), dt);
+            .look(&self.generator, self.controller.held_by(), eye, dt);
         self.parts
             .look(&self.generator, self.controller.held_by(), dt);
-        let through = self.through(&camera);
-        self.ease_seen(dt, through.as_ref().map(|(id, _)| *id));
+        self.ease_seen(dt, through.as_ref().map(|(id, _, _)| *id));
         let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::update);
         // Said on the way in, never while it holds: a front end lifts its
         // veil on it, and hears it again after a leap or a new recipe.
@@ -1199,7 +1202,7 @@ impl Client {
         self.cells.settle(eye);
         let camera = self.controller.camera(&self.generator);
         let through = self.through(&camera);
-        self.ease_seen(f64::INFINITY, through.as_ref().map(|(id, _)| *id));
+        self.ease_seen(f64::INFINITY, through.as_ref().map(|(id, _, _)| *id));
         let (patches, seen) = self.stream(&camera, through.as_ref(), Terrain::settle);
         let pictures = self.pictures_drawn(&camera);
         self.frame(camera, patches, pictures, through.zip(seen))
@@ -1306,7 +1309,7 @@ impl Client {
     /// whose place is known here, and the camera carried from the portal's
     /// frame to the landmark's, as a body that walked through would be. A
     /// landmark this client does not hold is asked of the chart.
-    fn through(&mut self, camera: &scene::Camera) -> Option<(PartId, scene::Camera)> {
+    fn through(&mut self, camera: &scene::Camera) -> Option<(PartId, scene::Camera, DVec3)> {
         let body = self.controller.held_by();
         let (_, id, to) = self
             .parts
@@ -1335,7 +1338,18 @@ impl Client {
                 rotation: DQuat::from_mat3(&carried.matrix3) * camera.rotation,
                 ..*camera
             },
+            star.translation,
         ))
+    }
+
+    /// The body a point of the world is on, and where from its centre: the
+    /// moon within its reach, else the planet.
+    fn body_of(&self, point: DVec3) -> (protocol::Body, DVec3) {
+        let moon = self.cells.centre(protocol::Body::Moon);
+        match (point - moon).length() < plugin::MOON_REACH_M {
+            true => (protocol::Body::Moon, point - moon),
+            false => (protocol::Body::Planet, point),
+        }
     }
 
     /// Where the moon is now: an orbit on rails, a function of the clock. It
@@ -1354,7 +1368,7 @@ impl Client {
     fn stream(
         &mut self,
         camera: &scene::Camera,
-        through: Option<&(PartId, scene::Camera)>,
+        through: Option<&(PartId, scene::Camera, DVec3)>,
         select: Select,
     ) -> (Vec<scene::PatchDraw>, Option<Vec<scene::PatchDraw>>) {
         let moon = self.moon_position();
@@ -1364,7 +1378,7 @@ impl Client {
             camera: *camera,
             coarseness: 1.0,
         })
-        .chain(through.map(|(_, camera)| Viewpoint {
+        .chain(through.map(|(_, camera, _)| Viewpoint {
             camera: *camera,
             coarseness: 4.0,
         }))
@@ -1435,7 +1449,7 @@ impl Client {
         camera: scene::Camera,
         patches: Vec<scene::PatchDraw>,
         pictures: Vec<scene::PictureDraw>,
-        through: Option<((PartId, scene::Camera), Vec<scene::PatchDraw>)>,
+        through: Option<((PartId, scene::Camera, DVec3), Vec<scene::PatchDraw>)>,
     ) -> Frame {
         let angle = self.noon_offset + self.clock_s / DAY_S * core::f64::consts::TAU;
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
@@ -1518,7 +1532,7 @@ impl Client {
                 f64::from(self.effects.parts_reach_m),
                 &self.seen,
             ),
-            through: through.map(|((_, camera), patches)| scene::Through { camera, patches }),
+            through: through.map(|((_, camera, _), patches)| scene::Through { camera, patches }),
             warp: self.warp(&camera),
         }
     }

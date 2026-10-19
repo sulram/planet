@@ -34,9 +34,8 @@ nearest of two eyes, the one past the portal four times as far.
 
 What would follow, in this order:
 
-- The builds through it: the cells and the parts near the destination,
-  which the server tells nobody 8 km away. A `look` from the destination
-  too, a room of its own, answered as the body's is.
+- The parts through it: the cells come already, by the second eye in the
+  cells' `look`; the parts' `look` would take the same eye.
 - An oblique near plane for the eye past the portal, Lengyel's, so the
   ground between that eye and the star's plane is clipped instead of
   closing the window when the star stands on a slope.

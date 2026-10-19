@@ -85,10 +85,21 @@ message TakeBack {}
 // `put_back`: puts back the last change this session took back.
 message PutBack {}
 
-// `look`: what this client holds of the volumes near it. The world answers
-// with `seen`.
+// `look`: what this client holds of the volumes near it, and an eye
+// elsewhere whose surroundings it asks for too: the eye past a portal it
+// sees through. The world answers with `seen`.
 message Look {
   repeated Held held = 1;
+  Eye eye = 2;
+}
+
+// Where an eye stands: a seat, blocks along it, metres over its body's
+// datum.
+message Eye {
+  Seat seat = 1;
+  float u = 2;
+  float v = 3;
+  float height_m = 4;
 }
 
 // A volume a client holds, at the version it holds it: whole, or as it is

@@ -33,7 +33,7 @@ use crate::session::Session;
 
 /// How far from the moon's centre a point of the world is the moon's,
 /// metres: its radius and the band over it where anything stands.
-const MOON_REACH_M: f64 = worldgen::MOON_RADIUS_M + 2000.0;
+pub(crate) const MOON_REACH_M: f64 = worldgen::MOON_RADIUS_M + 2000.0;
 
 /// A plugin's client half.
 pub trait Plugin {

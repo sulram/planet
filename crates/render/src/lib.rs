@@ -39,8 +39,9 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Top of the atmosphere above sea level, metres.
 const ATMOSPHERE_M: f64 = 3600.0;
 /// What one draw of the world sees: a camera, the patches in its view, and
-/// whether the whole world is drawn, or the ground, the sea and the sky
-/// alone, as the world past a portal is.
+/// whether the whole world is drawn, or the ground, the sea, the sky and
+/// the cells alone, as the world past a portal is: what is built there
+/// shows through the pane, the parts and the bodies do not.
 struct Sight<'a> {
     camera: Camera,
     size: [u32; 2],
@@ -382,14 +383,16 @@ impl Renderer {
         );
         // What stands on the ground is the whole world's: the world past a
         // portal is its ground, sea and sky alone.
+        // The cells are every sight's; the rest of what is built the whole
+        // world's.
+        let volumes = self.volumes.place(
+            &self.device,
+            &self.queue,
+            &mut resources.volumes,
+            frame,
+            camera.position,
+        );
         let placed = sight.whole.then(|| {
-            let volumes = self.volumes.place(
-                &self.device,
-                &self.queue,
-                &mut resources.volumes,
-                frame,
-                camera.position,
-            );
             let box_count =
                 resources
                     .boxes
@@ -414,7 +417,7 @@ impl Renderer {
                 &frame.models,
                 camera.position,
             );
-            (volumes, box_count, skinned, models)
+            (box_count, skinned, models)
         });
 
         if shadows {
@@ -432,7 +435,7 @@ impl Renderer {
                 &wanted,
                 camera.position,
             );
-            let (volumes, box_count, skinned, models) = placed.as_ref().expect("whole");
+            let (box_count, skinned, models) = placed.as_ref().expect("whole");
             for (cascade, matrix) in matrices.iter().enumerate() {
                 let mut light = uniform;
                 light.clip_from_relative = matrix.to_cols_array_2d();
@@ -460,7 +463,7 @@ impl Renderer {
                 self.terrain
                     .draw_shadow(&mut pass, &resources.casters, &casters, *matrix);
                 self.volumes
-                    .draw_shadow(&mut pass, &resources.volumes, volumes, *matrix);
+                    .draw_shadow(&mut pass, &resources.volumes, &volumes, *matrix);
                 self.boxes
                     .draw_shadow(&mut pass, &resources.boxes, *box_count);
                 self.skinned
@@ -507,12 +510,12 @@ impl Renderer {
         });
         pass.set_bind_group(0, &resources.bind_group, &[]);
         self.terrain.draw(&mut pass, &resources.patches, &drawn);
-        if let Some((volumes, box_count, skinned, models)) = &placed {
+        self.volumes.draw(&mut pass, &resources.volumes, &volumes);
+        if let Some((box_count, skinned, models)) = &placed {
             if frame.effects.grass {
                 self.terrain
                     .draw_grass(&mut pass, &resources.patches, &drawn);
             }
-            self.volumes.draw(&mut pass, &resources.volumes, volumes);
             self.models.draw(&mut pass, &resources.models, models);
             self.boxes.draw(&mut pass, &resources.boxes, *box_count);
             self.skinned.draw(&mut pass, &resources.skinned, skinned);
@@ -595,7 +598,7 @@ impl Renderer {
         // Glass, and what only a builder sees, go over the sea and the
         // clouds, tested against the depth of what is solid: drawn before
         // them, the sea behind a pane would be laid over it.
-        if let Some((volumes, _, _, models)) = &placed
+        if let Some((_, _, models)) = &placed
             && (volumes.over() || models.over())
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -623,7 +626,7 @@ impl Renderer {
             });
             pass.set_bind_group(0, &resources.bind_group, &[]);
             self.volumes
-                .draw_over(&mut pass, &resources.volumes, volumes);
+                .draw_over(&mut pass, &resources.volumes, &volumes);
             self.models.draw_over(&mut pass, &resources.models, models);
         }
         at

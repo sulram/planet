@@ -70,10 +70,15 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   samples that picture where it stands on the screen, and the window has
   parallax. The picture is HDR, before bloom and the tone map, which run
   once over the view with the pane in it.
-- The world past a portal is its ground, sea, sky and clouds alone: no
-  builds, no bodies, no shadows, no grass. The streamer splits for the
-  nearest of two eyes, the one past the portal four times as far as the
-  view's, so a quarter height sight costs a quarter (`client::terrain`).
+- The world past a portal is its ground, sea, sky, clouds and cells: what
+  is built there shows through the pane; no parts, no bodies, no shadows,
+  no grass. The cells' `look` carries a second eye, the star the portal
+  leads to, and the world answers for the nearer of the two, so the
+  volumes near the star are held, meshed and drawn as the near ones are,
+  and dropped when the portal is no longer seen through. The streamer
+  splits for the nearest of two eyes, the one past the portal four times
+  as far as the view's, so a quarter height sight costs a quarter
+  (`client::terrain`).
 - One portal is seen through at a time: the nearest within 96 m whose
   landmark is known here, held or charted. Every other pane is a lens:
   what is behind it, bent toward its middle and pulsing, as through thick
@@ -81,5 +86,5 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   becomes a window from a lens, and back, over 0.6 s. The panes are drawn
   after the sea and the clouds over a copy of the picture, which the lens
   reads. A pane casts no shadow: light passes a portal.
-- What is drawn ahead and not built: the builds seen through it, the
+- What is drawn ahead and not built: the parts seen through it, the
   oblique near plane (sketches/portals.md).
