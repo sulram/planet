@@ -14,7 +14,7 @@ Needs Rust (stable), Go, Bun.
 
 ```sh
 bun run setup      # dependencies, git hooks, wasm target, wasm-bindgen-cli
-bun run dev        # the world server :8090 + the page :5173 (builds the engine first)
+bun run dev        # the world server :8090 + the page :5173, or the next free ports (builds the engine first)
 bun run desktop    # the offline explorer in a native window
 bun run shot --out out/orbit.png --altitude 30000 --pitch -60 --boom 50
 bun run check      # everything CI runs

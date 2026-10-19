@@ -2,8 +2,11 @@ import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
-/** Where the world server listens in development (`scripts/server.ts`). */
-const WORLD = 'http://127.0.0.1:8090';
+/**
+ * The world server this page is served over: the one `bun run dev` started,
+ * or else one on the usual port (`scripts/server.ts`).
+ */
+const WORLD = process.env.WORLD_ORIGIN ?? 'http://127.0.0.1:8090';
 
 export default defineConfig({
 	plugins: [
