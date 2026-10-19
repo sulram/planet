@@ -375,3 +375,36 @@ fn a_landmark_another_placed_is_a_lit_star_with_its_name_over_it() {
     assert!((faced - bearing).abs() < 1.0, "{place}: facing {faced}");
     assert!(client.host("test").take_charted().is_none(), "taken once");
 }
+
+/// A part on the moon has its place on the moon: the place the host says
+/// for a landmark there takes the body to it, beside its star, wherever the
+/// moon has moved to.
+#[test]
+fn a_landmark_on_the_moon_is_travelled_to_on_the_moon() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.rehearse(client::Level::Admin);
+    let sector = topology::Sector::new(2).unwrap();
+    let seat = Seat::on(protocol::Body::Moon, sector);
+    let point = topology::SurfacePoint::new(sector, 3000.0, 5000.0);
+    let ground = client.host("test").ground(seat, point);
+    let pose = PartPose::upright([3000.0, 5000.0, ground], [2.0, 2.0, 0.16]);
+    let part = Part {
+        shape: Shape::Landmark(Name::new("Mare").unwrap()),
+        pose,
+        paint: 0,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+    };
+    client.host("test").place_part(seat, part).unwrap();
+    let place = client.host("test").place_at(seat, &pose);
+    assert!(place.starts_with('m'), "{place} is on the moon");
+    client.go_to(&place).unwrap();
+    let feet = client.host("test").feet();
+    assert_eq!(feet.seat.body(), protocol::Body::Moon);
+    assert!(
+        (feet.point.u - 3000.0).abs() < 2.0 && (feet.point.v - 5000.0).abs() < 2.0,
+        "landed at {:?}, the star at (3000, 5000)",
+        feet.point
+    );
+}

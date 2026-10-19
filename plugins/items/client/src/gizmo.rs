@@ -1,8 +1,11 @@
 //! The gizmo: the handles over the part picked, one along each of its own
 //! axes, and a drag of one that moves, turns or stretches the part. A drag
-//! changes the part's world transform and asks the host what pose that is
+//! changes the part's transform and asks the host what pose that is
 //! (`Host::reseat`), so a part dragged over a seam is the same part on the
-//! next sector.
+//! next sector. Everything here is measured from the centre of the body the
+//! part stands on, never from the planet's: the moon moves hundreds of
+//! metres a second along its orbit, and a drag measured in the world would
+//! throw a part on it that far.
 
 use client::{Host, Mark, Part, PartId, Seat};
 use glam::{DAffine3, DMat3, DQuat, DVec3};
@@ -39,16 +42,16 @@ pub(crate) struct Gizmo {
     pub id: PartId,
     pub seat: Seat,
     pub part: Part,
-    /// The world from the part's own space, from the planet's centre, as
-    /// it stands now.
-    pub world: DAffine3,
+    /// The part's own space on its body, from the centre of the body it
+    /// stands on, as it stands now.
+    pub frame: DAffine3,
     /// The axis whose handle is under the pointer.
     pub hot: Option<usize>,
     pub drag: Option<Drag>,
 }
 
 /// A handle being dragged: which axis, where the drag started along it and
-/// the part as it stood then.
+/// the part as it stood then, on its body.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Drag {
     pub axis: usize,
@@ -56,7 +59,7 @@ pub(crate) struct Drag {
     pub from: DAffine3,
 }
 
-/// A handle as a box in the world: the world from a unit box.
+/// A handle as a box on the body: the body from a unit box.
 fn handle(world: &DAffine3, axis: usize, mode: Mode, tip: bool) -> DAffine3 {
     let axes = [world.x_axis, world.y_axis, world.z_axis].map(|a| a.normalize());
     let centre = world.transform_point3(DVec3::new(0.0, 0.0, 0.5));
@@ -78,12 +81,12 @@ fn handle(world: &DAffine3, axis: usize, mode: Mode, tip: bool) -> DAffine3 {
 impl Gizmo {
     pub fn new(host: &Host<'_>, id: PartId) -> Option<Gizmo> {
         let (seat, part) = host.parts().get(id)?;
-        let world = host.part_transform(id)?;
+        let frame = Self::frame_of(host, id, seat)?;
         Some(Gizmo {
             id,
             seat,
             part: *part,
-            world,
+            frame,
             hot: None,
             drag: None,
         })
@@ -92,20 +95,41 @@ impl Gizmo {
     /// Reads the part again: it may have been changed by the panel, or by
     /// the world.
     pub fn refresh(&mut self, host: &Host<'_>) -> bool {
-        match (host.parts().get(self.id), host.part_transform(self.id)) {
-            (Some((seat, part)), Some(world)) => {
+        match host.parts().get(self.id) {
+            Some((seat, part)) => {
+                let Some(frame) = Self::frame_of(host, self.id, seat) else {
+                    return false;
+                };
                 self.seat = seat;
                 self.part = *part;
-                self.world = world;
+                self.frame = frame;
                 true
             }
-            _ => false,
+            None => false,
         }
+    }
+
+    /// The part's frame on its body: its world transform with the body's
+    /// centre of this frame taken out.
+    fn frame_of(host: &Host<'_>, id: PartId, seat: Seat) -> Option<DAffine3> {
+        let world = host.part_transform(id)?;
+        Some(DAffine3::from_translation(-host.body_centre(seat.body())) * world)
+    }
+
+    /// A transform on the body, in the world this frame.
+    pub fn in_world(&self, host: &Host<'_>, frame: &DAffine3) -> DAffine3 {
+        DAffine3::from_translation(host.body_centre(self.seat.body())) * *frame
+    }
+
+    /// A point of the world, on the body this frame.
+    pub fn on_body(&self, host: &Host<'_>, point: DVec3) -> DVec3 {
+        point - host.body_centre(self.seat.body())
     }
 
     /// The handles as marks over the world: a bar and a tip an axis, the
     /// hot one in the hot colour.
-    pub fn marks(&self, mode: Mode) -> Vec<Mark> {
+    pub fn marks(&self, host: &Host<'_>, mode: Mode) -> Vec<Mark> {
+        let world = self.in_world(host, &self.frame);
         let paint = |axis: usize| {
             let color = match self.hot == Some(axis) {
                 true => HOT_PAINT,
@@ -122,18 +146,19 @@ impl Gizmo {
             .flat_map(|axis| {
                 [false, true].map(|tip| Mark {
                     paint: paint(axis),
-                    transform: handle(&self.world, axis, mode, tip),
+                    transform: handle(&world, axis, mode, tip),
                 })
             })
             .collect()
     }
 
-    /// The axis whose handle a line of sight meets first, and how far along.
+    /// The axis whose handle a line of sight, on the body, meets first, and
+    /// how far along.
     pub fn handle_hit(&self, mode: Mode, from: DVec3, toward: DVec3) -> Option<(usize, f64)> {
         (0..3)
             .flat_map(|axis| {
                 [false, true].into_iter().filter_map(move |tip| {
-                    let inward = handle(&self.world, axis, mode, tip).inverse();
+                    let inward = handle(&self.frame, axis, mode, tip).inverse();
                     let (near, far) = part::through(
                         inward.transform_point3(from),
                         inward.transform_vector3(toward),
@@ -177,23 +202,23 @@ impl Gizmo {
         Some(p.dot(v).atan2(p.dot(u)))
     }
 
-    /// Starts a drag of a handle where the pointer is.
+    /// Starts a drag of a handle where the pointer, on the body, is.
     pub fn press(&mut self, mode: Mode, axis: usize, from: DVec3, toward: DVec3) {
         let start = match mode {
-            Mode::Move | Mode::Scale => Self::along(&self.world, axis, from, toward),
-            Mode::Rotate => Self::around(&self.world, axis, from, toward),
+            Mode::Move | Mode::Scale => Self::along(&self.frame, axis, from, toward),
+            Mode::Rotate => Self::around(&self.frame, axis, from, toward),
         };
         if let Some(start) = start {
             self.drag = Some(Drag {
                 axis,
                 start,
-                from: self.world,
+                from: self.frame,
             });
         }
     }
 
-    /// Follows a drag with the pointer: the part's world transform as the
-    /// drag has it now, or `None` when the pointer says nothing.
+    /// Follows a drag with the pointer, on the body: the part's frame on it
+    /// as the drag has it now, or `None` when the pointer says nothing.
     pub fn dragged(
         &self,
         mode: Mode,
@@ -261,7 +286,7 @@ mod tests {
                 shine: 0.0,
                 reach_m: 0.0,
             },
-            world,
+            frame: world,
             hot: None,
             drag: None,
         }
@@ -282,7 +307,7 @@ mod tests {
         let moved = gizmo.dragged(Mode::Move, false, at, toward).unwrap();
         assert!((moved.translation.x - 12.0).abs() < 1e-9, "{moved:?}");
         // The part moved there, the pointer stayed: it stays there.
-        gizmo.world = moved;
+        gizmo.frame = moved;
         let again = gizmo.dragged(Mode::Move, false, at, toward).unwrap();
         assert!((again.translation.x - 12.0).abs() < 1e-9, "{again:?}");
         // Turned a quarter about z from the frame it started in.
@@ -294,7 +319,7 @@ mod tests {
         let turned = gizmo.dragged(Mode::Rotate, false, at, toward).unwrap();
         let x = turned.transform_vector3(DVec3::X);
         assert!((x - DVec3::Y).length() < 1e-9, "{x:?}");
-        gizmo.world = turned;
+        gizmo.frame = turned;
         let again = gizmo.dragged(Mode::Rotate, false, at, toward).unwrap();
         assert!((again.transform_vector3(DVec3::X) - DVec3::Y).length() < 1e-9);
     }

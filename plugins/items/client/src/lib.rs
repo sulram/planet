@@ -731,7 +731,7 @@ impl Items {
     /// One turn with the menu open and no item in hand: a handle dragged
     /// moves the part picked; a click picks a handle, a part, or nothing.
     fn edit_turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        let (from, toward) = turn.eye.sight();
+        let (eye, toward) = turn.eye.sight();
         let pressed = turn.using && !self.using;
         let released = !turn.using && self.using;
         if let Some(gizmo) = &mut self.picked {
@@ -743,11 +743,14 @@ impl Items {
         // Shift held while stretching: every side alike.
         let uniform = turn.chord.shift;
         if let Some(gizmo) = &mut self.picked {
+            // The gizmo works on the part's body, which may be moving.
+            let from = gizmo.on_body(host, eye);
             if gizmo.drag.is_some() {
                 if released || turn.interrupted {
                     gizmo.drag = None;
-                } else if let Some(world) = gizmo.dragged(self.mode, uniform, from, toward)
-                    && let Some((seat, pose)) = host.reseat(gizmo.seat.body(), &world)
+                } else if let Some(frame) = gizmo.dragged(self.mode, uniform, from, toward)
+                    && let Some((seat, pose)) =
+                        host.reseat(gizmo.seat.body(), &gizmo.in_world(host, &frame))
                 {
                     let (id, mut part) = (gizmo.id, gizmo.part);
                     part.pose = pose;
@@ -775,12 +778,15 @@ impl Items {
             .as_ref()
             .is_some_and(|gizmo| gizmo.hot.is_some());
         if pressed && !dragging && !on_handle {
-            let id = host.pick(from, toward).map(|(id, _)| id);
+            let id = host.pick(eye, toward).map(|(id, _)| id);
             if id != self.picked.as_ref().map(|gizmo| gizmo.id) {
                 self.pick(id, host);
             }
         }
-        let marks = self.picked.as_ref().map(|gizmo| gizmo.marks(self.mode));
+        let marks = self
+            .picked
+            .as_ref()
+            .map(|gizmo| gizmo.marks(host, self.mode));
         host.mark(marks.as_deref().unwrap_or(&[]));
     }
 }

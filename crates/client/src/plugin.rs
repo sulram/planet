@@ -261,6 +261,11 @@ impl Host<'_> {
         let point = SurfacePoint::new(seat.sector(), at[0], at[1]);
         let step = collision::STEP_M / topology::BLOCK_M;
         let over = at[2] - self.ground(seat, point) > step;
+        // Every body is parametrised on the planet's sector grid: a place on
+        // the moon is the column of it the moon's radial passes through, as
+        // a body standing there reads its own.
+        let direction = seat.sphere(self.lent.generator).blocks().direction(point);
+        let column = grid.column_of(grid.surface_point(direction));
         let world = self.lent.parts.place_of(self.lent.generator, seat, pose);
         let bearing_deg = topology::bearing_deg(
             world.matrix3.z_axis.to_array(),
@@ -268,7 +273,7 @@ impl Host<'_> {
         );
         let pose = Pose {
             on_moon: seat.body() == Body::Moon,
-            column: grid.column_of(point),
+            column,
             h: over.then(|| at[2] as i16),
             bearing_deg,
             // A bearing with no pitch would be half an aim: level, then.
@@ -289,6 +294,12 @@ impl Host<'_> {
             self.lent.events,
             place,
         )
+    }
+
+    /// Where the centre of a body is this frame, from the planet's: the
+    /// moon moves, so what is measured on it is measured from here.
+    pub fn body_centre(&self, body: Body) -> DVec3 {
+        self.lent.cells.centre(body)
     }
 
     /// The body of the world: how an address is a place on it.
