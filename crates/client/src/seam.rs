@@ -84,6 +84,10 @@ pub enum Command {
     SetName {
         name: String,
     },
+    /// The plugin with the pointer puts it down, with what it had in hand:
+    /// what a front end asks when a panel of its own opens, so one thing
+    /// is open at a time.
+    PutDown,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]
@@ -162,6 +166,11 @@ pub enum Event {
     /// after [`Event::Ready`].
     Palette {
         colors: Vec<String>,
+    },
+    /// Which plugin has the pointer now, a tool in hand, or none. One has it
+    /// at a time: taking it rests the one that had it.
+    PointerChanged {
+        plugin: Option<String>,
     },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {

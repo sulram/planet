@@ -30,6 +30,31 @@ impl Plugin for Echo {
     }
 }
 
+/// A plugin that takes the pointer when told to, and says when it is rested.
+struct Hand(&'static str);
+
+impl Plugin for Hand {
+    fn name(&self) -> &'static str {
+        self.0
+    }
+
+    fn version(&self) -> u32 {
+        1
+    }
+
+    fn command(&mut self, kind: &str, _body: Value, host: &mut Host<'_>) {
+        match kind {
+            "take" => host.point(true),
+            "drop" => host.point(false),
+            _ => host.reject(format!("`{kind}` is no command of {}", self.0)),
+        }
+    }
+
+    fn rest(&mut self, host: &mut Host<'_>) {
+        host.emit("rested", &json!({}));
+    }
+}
+
 fn server(message: server_message::Message) -> Vec<u8> {
     protocol::encode(&protocol::ServerMessage {
         message: Some(message),
@@ -214,4 +239,50 @@ fn the_cores_own_commands_take_the_same_door() {
     client.command_json(r#"{"type":"from_the_future"}"#);
     client.command_json("not json");
     assert_eq!(rejected(&client.drain_events()), 2);
+}
+
+/// One plugin has the pointer at a time: taking it rests the one that had
+/// it, the seam hears whose it is, and a front end puts it down whole.
+#[test]
+fn the_pointer_is_one_plugins_and_taking_it_rests_the_other() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.plug(Box::new(Hand("left")));
+    client.plug(Box::new(Hand("right")));
+    let plugins = ["left", "right"]
+        .map(|name| protocol::Plugin {
+            name: name.into(),
+            version: 1,
+        })
+        .to_vec();
+    client.receive(&welcome(&client, plugins));
+    client.drain_events();
+
+    client.command_json(r#"{"type":"left.take"}"#);
+    let events = client.drain_events();
+    assert!(events.contains(&Event::PointerChanged {
+        plugin: Some("left".into())
+    }));
+    assert!(client.pointing());
+
+    client.command_json(r#"{"type":"right.take"}"#);
+    let events = client.drain_events();
+    let rested = events
+        .iter()
+        .any(|event| matches!(event, Event::Plugin(value) if value["type"] == "left.rested"));
+    assert!(
+        rested,
+        "the left hand rests when the right takes the pointer: {events:?}"
+    );
+    assert!(events.contains(&Event::PointerChanged {
+        plugin: Some("right".into())
+    }));
+
+    client.command(Command::PutDown);
+    let events = client.drain_events();
+    let rested = events
+        .iter()
+        .any(|event| matches!(event, Event::Plugin(value) if value["type"] == "right.rested"));
+    assert!(rested, "{events:?}");
+    assert!(events.contains(&Event::PointerChanged { plugin: None }));
+    assert!(!client.pointing());
 }

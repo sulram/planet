@@ -36,12 +36,6 @@
 		return stop;
 	});
 
-	// The panel is open while a tool is in hand, and is one of the one UI
-	// open at a time: the stage hears when it opens and closes it when
-	// another opens.
-	$effect(() => seam.menu(tool !== null));
-	$effect(() => seam.closing(() => seam.command('take', { tool: null })));
-
 	function take(next: Tool | null) {
 		refused = null;
 		seam.command('take', { tool: next });

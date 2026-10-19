@@ -50,7 +50,9 @@ export type Command =
 	 */
 	| { type: 'go_to'; place: string }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
-	| { type: 'set_name'; name: string };
+	| { type: 'set_name'; name: string }
+	/** The plugin with the pointer puts it down, with what it had in hand: a panel of the page opened. */
+	| { type: 'put_down' };
 
 /**
  * A plugin's command: its `type` is the plugin's name and the command's,
@@ -106,6 +108,8 @@ export type EngineEvent =
 	| { type: 'palette'; colors: string[] }
 	| { type: 'avatar_changed'; path: string }
 	| { type: 'effects_changed'; effects: Effects }
+	/** Which plugin has the pointer, a tool in hand, or none. */
+	| { type: 'pointer_changed'; plugin: string | null }
 	| {
 			type: 'stats';
 			fps: number;
@@ -131,6 +135,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'mode_changed',
 	'avatar_changed',
 	'effects_changed',
+	'pointer_changed',
 	'stats',
 	'session',
 	'peers',

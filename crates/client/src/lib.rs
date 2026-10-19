@@ -419,6 +419,10 @@ impl Client {
                 self.session.rename(&name);
                 self.wanted_name = name;
             }
+            Command::PutDown => {
+                let (plugins, lent) = self.lend();
+                plugins.put_down(lent);
+            }
         }
     }
 

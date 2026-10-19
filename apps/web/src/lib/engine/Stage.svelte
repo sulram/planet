@@ -32,11 +32,12 @@
 	// The full viewport engine and what floats over it: what a world and the
 	// founding screen share. In the top right corner a bar of icons, one a
 	// panel: where you are, who is here, the language, the plugins and the
-	// settings, which hold the mode and the picture. One UI is open at a
-	// time: a panel under the bar or one plugin's menu; whichever opens
-	// closes the rest. The keys live behind the help button. The page may
-	// bring a panel of its own, in the top left corner, where a plugin's menu
-	// otherwise sits.
+	// settings, which hold the mode and the picture. One thing is open at a
+	// time: a panel under the bar, or the hand of one plugin, which the engine
+	// keeps; a panel opening puts the hand down, and a plugin taking the
+	// pointer closes the panel. The keys live behind the help button. The
+	// page may bring a panel of its own, in the top left corner, where a
+	// plugin's menu otherwise sits.
 	// The compass point a bearing lands on, and the angle beside it. A rose has
 	// sixteen points, so each is 22.5 degrees wide. `null` is a pole, where a
 	// bearing is not a thing that exists.
@@ -131,8 +132,6 @@
 
 	type Hear = (kind: string, event: Record<string, unknown>) => void;
 	const hearing = new Map<string, Set<Hear>>();
-	/** Who hears when the stage closes a plugin's menu. */
-	const closers = new Map<string, Set<() => void>>();
 	const seams = new Map<string, Seam>();
 
 	function seamOf(plugin: string): Seam {
@@ -144,16 +143,6 @@
 				listen(hear) {
 					const heard = hearing.get(plugin) ?? new Set<Hear>();
 					hearing.set(plugin, heard.add(hear));
-					return () => heard.delete(hear);
-				},
-				menu(open) {
-					const menu: Opened = `plugin:${plugin}`;
-					if (open) show(menu);
-					else if (opened === menu) opened = null;
-				},
-				closing(hear) {
-					const heard = closers.get(plugin) ?? new Set<() => void>();
-					closers.set(plugin, heard.add(hear));
 					return () => heard.delete(hear);
 				},
 				release: () => view?.release(),
@@ -234,16 +223,15 @@
 		}
 	}
 
-	/** The one UI open: a panel under the bar, or a plugin's menu as `plugin:<name>`. */
-	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings' | `plugin:${string}`;
+	/** The panel open under the bar, if any. */
+	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings';
 	let opened = $state<Opened | null>(null);
 
-	/** Opens one UI, or none, and closes a plugin's menu that was open instead. */
+	/** Opens one panel, or none. A panel opening has the engine's hand put down what it holds. */
 	function show(next: Opened | null) {
 		if (opened === next) return;
-		const was = opened;
 		opened = next;
-		if (was?.startsWith('plugin:')) for (const close of closers.get(was.slice('plugin:'.length)) ?? []) close();
+		if (next) view?.command({ type: 'put_down' });
 	}
 
 	function toggle(panel: Opened) {
@@ -251,6 +239,7 @@
 	}
 
 	function receive(event: EngineEvent | PluginEvent) {
+		if (event.type === 'pointer_changed' && event.plugin) opened = null;
 		if (isPluginEvent(event)) return heard(event);
 		if (event.type === 'ready') onready?.(event.generator_version);
 		else if (event.type === 'mode_changed') mode = event.mode;

@@ -664,22 +664,32 @@ impl Plugins {
 
     /// Hands a command to the plugin it names. False when no plugin of that
     /// name is on.
-    pub(crate) fn command(&mut self, name: &str, kind: &str, body: Value, lent: Lent<'_>) -> bool {
+    pub(crate) fn command(
+        &mut self,
+        name: &str,
+        kind: &str,
+        body: Value,
+        mut lent: Lent<'_>,
+    ) -> bool {
         let Some(held) = self.find(name) else {
             return false;
         };
-        let mut host = lent.host(held.plugin.name());
+        let before = *lent.pointer;
+        let mut host = lent.again().host(held.plugin.name());
         held.plugin.command(kind, body, &mut host);
+        self.handed(before, lent);
         true
     }
 
     /// Hands a message from the server to the plugin its envelope names. One
     /// for a plugin that is off, or that nobody plugged in, is let pass.
-    pub(crate) fn receive(&mut self, envelope: &protocol::Envelope, lent: Lent<'_>) {
+    pub(crate) fn receive(&mut self, envelope: &protocol::Envelope, mut lent: Lent<'_>) {
         if let Some(held) = self.find(&envelope.plugin) {
-            let mut host = lent.host(held.plugin.name());
+            let before = *lent.pointer;
+            let mut host = lent.again().host(held.plugin.name());
             held.plugin
                 .receive(&envelope.kind, &envelope.payload, &mut host);
+            self.handed(before, lent);
         }
     }
 
@@ -694,6 +704,7 @@ impl Plugins {
 
     /// Hands each key that went down to the plugins that asked to hear it.
     pub(crate) fn keys(&mut self, pressed: &[(String, Chord)], mut lent: Lent<'_>) {
+        let before = *lent.pointer;
         for (code, chord) in pressed {
             for held in self.held.iter_mut().filter(|held| held.on) {
                 let asked = held
@@ -706,6 +717,7 @@ impl Plugins {
                 }
             }
         }
+        self.handed(before, lent);
     }
 
     /// Gives every plugin that is on its turn in the frame.
@@ -716,6 +728,7 @@ impl Plugins {
         (interrupted, inspected): (bool, bool),
         mut lent: Lent<'_>,
     ) {
+        let before = *lent.pointer;
         for held in self.held.iter_mut().filter(|held| held.on) {
             let name = held.plugin.name();
             let keys: Vec<&'static str> = held
@@ -734,6 +747,7 @@ impl Plugins {
             };
             held.plugin.turn(&turn, &mut lent.again().host(name));
         }
+        self.handed(before, lent);
     }
 
     /// Whether a plugin that is on owes the world work.
@@ -743,10 +757,42 @@ impl Plugins {
 
     /// Has every plugin that is on do at once the work it owes.
     pub(crate) fn settle(&mut self, mut lent: Lent<'_>) {
+        let before = *lent.pointer;
         for held in self.held.iter_mut().filter(|held| held.on) {
             let mut host = lent.again().host(held.plugin.name());
             held.plugin.settle(&mut host);
         }
+        self.handed(before, lent);
+    }
+
+    /// Has the plugin with the pointer put it down, with what it had in
+    /// hand: what a front end asks when a panel of its own opens.
+    pub(crate) fn put_down(&mut self, mut lent: Lent<'_>) {
+        if let Some(name) = *lent.pointer
+            && let Some(held) = self.find(name)
+        {
+            rest(held, lent.again());
+        }
+    }
+
+    /// After the plugins acted: one plugin has the pointer at a time, so the
+    /// one it was taken from rests, and the seam hears whose it is now.
+    fn handed(&mut self, before: Option<&'static str>, mut lent: Lent<'_>) {
+        let now = *lent.pointer;
+        if before == now {
+            return;
+        }
+        if let (Some(former), Some(_)) = (before, now)
+            && let Some(held) = self.find(former)
+        {
+            let mut host = lent.again().host(held.plugin.name());
+            held.plugin.rest(&mut host);
+            host.preview(None);
+            host.guide(&[]);
+        }
+        lent.events.push(Event::PointerChanged {
+            plugin: now.map(str::to_string),
+        });
     }
 
     fn find(&mut self, name: &str) -> Option<&mut Plugged> {
@@ -760,10 +806,16 @@ impl Plugins {
 /// host lends one plugin at a time: the pointer, the ghost and the guides.
 fn rest(held: &mut Plugged, lent: Lent<'_>) {
     let mut host = lent.host(held.plugin.name());
+    let had_pointer = host.pointing();
     held.plugin.rest(&mut host);
     if host.pointing() {
         host.point(false);
         host.preview(None);
         host.guide(&[]);
+    }
+    if had_pointer {
+        host.lent
+            .events
+            .push(Event::PointerChanged { plugin: None });
     }
 }

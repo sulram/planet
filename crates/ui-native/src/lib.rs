@@ -100,6 +100,7 @@ impl Panel {
         let output = self.context.run_ui(raw, |root| {
             layout(root, &mut open, &mut effects, fps);
         });
+        let opened = open && !self.open;
         self.open = open;
         if let Some(input) = &mut self.input {
             input.handle_platform_output(window, output.platform_output);
@@ -115,12 +116,22 @@ impl Panel {
         );
 
         let mut commands = Vec::new();
+        if opened {
+            // One thing open at a time: the hand puts down what it holds.
+            commands.push(Command::PutDown);
+        }
         if effects != self.effects {
             // Shown at once; the client's answer, clamped, replaces it next frame.
             self.effects = effects;
             commands.push(Command::SetEffects { effects });
         }
         commands
+    }
+
+    /// Closes the settings: a plugin took the pointer, and one thing is open
+    /// at a time.
+    pub fn close(&mut self) {
+        self.open = false;
     }
 
     /// The panel, open, over a picture of `size`: how a headless shot looks at

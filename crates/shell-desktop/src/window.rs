@@ -168,6 +168,10 @@ impl Stage {
                     ));
                 }
                 Event::AvatarChanged { path } => log::info!("avatar: {path}"),
+                // One thing open at a time: a plugin taking the pointer
+                // closes the settings.
+                Event::PointerChanged { plugin: Some(_) } => self.panel.close(),
+                Event::PointerChanged { plugin: None } => {}
                 // The desktop has no socket yet (ROADMAP, Other screens): the link stays
                 // offline and nobody else is ever here.
                 Event::RecipeChanged { .. }

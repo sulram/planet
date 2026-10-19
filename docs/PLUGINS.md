@@ -168,14 +168,14 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **On the client**, a host: `send` an op up, `emit` an event over the seam,
   read a stance as a place.
 - **A turn**: each frame, after the body moved and before the picture, with
-  the eye, the pointer and those of the plugin's keys that are held. A plugin
-  says when it owes work (`busy`), does it at once for a picture (`settle`),
-  and puts down what it has in hand when its world switches it off (`rest`).
+  the eye, the pointer and the plugin's held keys. A plugin says when it owes
+  work (`busy`), does it for a picture at once (`settle`) and rests (`rest`).
 - **Keys by name**: a plugin lists its keys as data, each a name, a key of a
   keyboard as the web names it, a chord, and held or heard once. A shell
   hands over the keys the client says are asked for.
-- **The pointer**: one plugin has it at a time. With it the pointer is free
-  to aim and its button is the plugin's.
+- **The pointer**: one plugin's at a time, free to aim, its button the
+  plugin's. Taking it rests the one that had it; the seam says whose it is
+  (`pointer_changed`), and a front end's panel opening asks `put_down`.
 - **The cells' words**: read freely, `holds`, `cell`, `corner`, `sight` from
   a point along a direction, `history`; asked as ops, `open`, `apply`
   (gestures as one change), `preview`, `take_back`, `put_back`. Where cells
@@ -183,9 +183,9 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **The body's words**: where its feet are, a floor to be lifted onto and,
   for the plugin with the pointer, flight through cells.
 - **On the web**, a layer over the world, mounted while the plugin is on, and
-  a `Seam` under its own name: commands out, events in, the pointer let go and
-  taken back, a file sent under the page's key (114), its menu said open and
-  heard closed, one UI at a time. Readings come as props; keys are in the help.
+  a `Seam` under its own name: commands out, its events in, the pointer let
+  go and taken back, a file sent to the world under the page's key (114). The core's
+  readings come as props, the level and the palette; its keys are in the help.
 - A hook is written when a plugin asks: who may do what and where, which
   avatars are offered.
 
