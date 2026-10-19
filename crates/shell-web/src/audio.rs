@@ -14,7 +14,7 @@ use glam::DVec3;
 use scene::Camera;
 use wasm_bindgen::JsValue;
 use web_sys::{
-    AudioContext, AudioContextState, DistanceModelType, HtmlMediaElement,
+    AudioContext, AudioContextState, DistanceModelType, HtmlAudioElement, HtmlMediaElement,
     MediaElementAudioSourceNode, PannerNode, PanningModelType,
 };
 
@@ -95,13 +95,46 @@ impl Audio {
         }
     }
 
-    /// A source leaves the graph.
+    /// A source leaves the graph, and its element goes quiet.
     pub fn detach(&mut self, source: SoundSource) {
         if let Some(panned) = self.sources.remove(&source) {
             panned.element.set_muted(true);
+            let _ = panned.element.pause();
             panned.node.disconnect().ok();
             panned.panner.disconnect().ok();
         }
+    }
+
+    /// A clip placed in the world starts playing, looping, off an audio
+    /// element of its own in the graph: muted until sound may go out.
+    pub fn open_clip(&mut self, source: SoundSource, url: &str) {
+        let element = match HtmlAudioElement::new() {
+            Ok(element) => element,
+            Err(error) => {
+                log::warn!("{source:?}: no audio element: {error:?}");
+                return;
+            }
+        };
+        element.set_loop(true);
+        element.set_muted(true);
+        element.set_autoplay(true);
+        element.set_preload("auto");
+        element.set_src(url);
+        if let Ok(playing) = element.play() {
+            let quiet = wasm_bindgen::closure::Closure::<dyn FnMut(JsValue)>::new(|_| ());
+            let _ = playing.catch(&quiet);
+            quiet.forget();
+        }
+        self.attach(source, &element);
+    }
+
+    /// A clip stops: its element leaves the graph and lets its file go.
+    pub fn close_clip(&mut self, source: SoundSource) {
+        if let Some(panned) = self.sources.get(&source) {
+            panned.element.remove_attribute("src").ok();
+            panned.element.load();
+        }
+        self.detach(source);
     }
 
     /// Every source put where it stands this frame, relative to the eye,

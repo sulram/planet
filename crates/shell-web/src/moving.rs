@@ -105,6 +105,17 @@ pub struct Playing {
 /// Opens and closes what the engine asked for this frame, and advances every
 /// source: a frame due is decoded, a video that moved is copied.
 pub fn tick(state: &Rc<RefCell<State>>) {
+    let heard = state.borrow_mut().client.drain_sounding();
+    for sounding in heard {
+        let mut held = state.borrow_mut();
+        match sounding {
+            client::Sounding::Open { part, path } => {
+                let url = resolve(&path, &held.files);
+                held.audio.open_clip(SoundSource::Clip(part), &url);
+            }
+            client::Sounding::Close(part) => held.audio.close_clip(SoundSource::Clip(part)),
+        }
+    }
     let asked = state.borrow_mut().client.drain_moving();
     for moving in asked {
         match moving {

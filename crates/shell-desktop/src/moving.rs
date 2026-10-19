@@ -40,6 +40,9 @@ impl Playing {
     /// Opens and closes what the engine asked for this frame, and writes
     /// the latest frame of every source that has one.
     pub fn tick(&mut self, client: &mut Client, renderer: &Renderer) {
+        // No audio stack on the desktop yet (ROADMAP, Native audio): what
+        // is asked to play is let go.
+        client.drain_sounding();
         for moving in client.drain_moving() {
             match moving {
                 Moving::Open { picture, path } => {

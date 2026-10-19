@@ -54,6 +54,7 @@ web-sys = { version = "0.3", features = [
     "HtmlVideoElement",
     "MediaError",
     "VideoFrame",
+    "HtmlAudioElement",
     "AudioContext",
     "AudioContextState",
     "AudioDestinationNode",
