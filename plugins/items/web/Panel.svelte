@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, Segmented, Slider, VectorInput, type IconName } from '$lib/ds';
+	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, RenameField, Segmented, Slider, Spinner, VectorInput, type IconName } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import type { Seam } from '$lib/plugins/plugin';
 	import { kinds } from './kinds';
@@ -100,6 +100,23 @@
 	/** How far the list reaches, metres: a plot's width, as the plugin lists it. */
 	const LIST_M = 32;
 	const iconOf = (of: Item): IconName => kinds.find((kind) => kind.name === of)?.icon ?? 'box';
+
+	/** The picked item's name is edited in place: a click on it or on the pencil opens the field, and a spinner stands beside it until the plugin says the name back. */
+	let renaming = $state(false);
+	let savingName = $state<string | null>(null);
+	$effect(() => {
+		if (savingName !== null && (picked?.name ?? '') === savingName) savingName = null;
+		if (!picked) {
+			renaming = false;
+			savingName = null;
+		}
+	});
+	function rename(name: string) {
+		savingName = name.trim();
+		onset({ name: name.trim() });
+	}
+	/** A sound has a place and nothing else: no handles to choose, no turn, no size, nothing to stand on. */
+	const placeOnly = $derived(picked?.item === 'sound');
 	const pickedKind = $derived(picked ? kinds.find((kind) => kind.name === picked.item) : undefined);
 	const vector = (values: number[]) => [values[0], values[1], values[2]] as [number, number, number];
 	/** What the material section paints: the kind in hand, else the kind picked. A cube takes a finish and an edge; a landmark its colour alone. */
@@ -157,7 +174,7 @@
 									<button type="button" class="one" aria-pressed={picked?.id === one.id} onclick={() => onpick(one.id)}>
 										<Icon name={iconOf(one.item)} />
 										<span class="swatch" style:--paint={palette[one.paint % 16] ?? 'transparent'}></span>
-										<span class="what">{kinds.find((kind) => kind.name === one.item)?.label() ?? one.item}</span>
+										<span class="what">{one.name ?? kinds.find((kind) => kind.name === one.item)?.label() ?? one.item}</span>
 										<span class="away">{t('near.away', { m: one.away_m.toFixed(1) })}</span>
 									</button>
 								</li>
@@ -192,14 +209,27 @@
 					<header class="head">
 						<h3>
 							{#if pickedKind}<Icon name={pickedKind.icon} />{/if}
-							{pickedKind ? t('picked', { kind: pickedKind.label() }) : t('part')}
+							{#if renaming}
+								<RenameField value={picked.name ?? ''} label={t('item.name')} placeholder={pickedKind?.label() ?? t('part')} maxlength={64} onCommit={rename} onDone={() => (renaming = false)} />
+							{:else}
+								<button type="button" class="name" title={t('item.rename')} onclick={() => (renaming = true)}>
+									{picked.name || (pickedKind ? t('picked', { kind: pickedKind.label() }) : t('part'))}
+								</button>
+								{#if savingName !== null}
+									<Spinner label={t('item.renaming')} />
+								{:else}
+									<IconButton icon="pencil" label={t('item.rename')} onclick={() => (renaming = true)} />
+								{/if}
+							{/if}
 						</h3>
-						<Icon name={modeIcons[mode]} />
+						{#if !placeOnly}<Icon name={modeIcons[mode]} />{/if}
 					</header>
 					{#if pickedKind?.Extra}
 						<pickedKind.Extra {seam} {picked} />
 					{/if}
-					<Segmented options={modeOptions} value={mode} label={t('mode')} onselect={onmode} />
+					{#if !placeOnly}
+						<Segmented options={modeOptions} value={mode} label={t('mode')} onselect={onmode} />
+					{/if}
 					<VectorInput
 						label={t('position')}
 						axes={['u', 'v', 'h']}
@@ -210,32 +240,34 @@
 						onreset={() => origin && onset({ at: origin.at })}
 						resetLabel={t('reset')}
 					/>
-					<VectorInput
-						label={t('rotation')}
-						axes={['x', 'y', 'z']}
-						values={picked.rotation}
-						step={15}
-						fine={1}
-						decimals={0}
-						min={-180}
-						max={180}
-						onchange={(rotation) => onset({ rotation: vector(rotation) })}
-						onreset={() => onset({ rotation: [0, 0, 0] })}
-						resetLabel={t('reset')}
-					/>
-					<VectorInput
-						label={t('scale')}
-						axes={['x', 'y', 'z']}
-						values={picked.scale}
-						step={0.5}
-						min={0.01}
-						onchange={(scale) => onset({ scale: vector(scale) })}
-						onreset={() => origin && onset({ scale: origin.scale })}
-						resetLabel={t('reset')}
-						lockLabel={t('lock')}
-						locked
-					/>
-					<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
+					{#if !placeOnly}
+						<VectorInput
+							label={t('rotation')}
+							axes={['x', 'y', 'z']}
+							values={picked.rotation}
+							step={15}
+							fine={1}
+							decimals={0}
+							min={-180}
+							max={180}
+							onchange={(rotation) => onset({ rotation: vector(rotation) })}
+							onreset={() => onset({ rotation: [0, 0, 0] })}
+							resetLabel={t('reset')}
+						/>
+						<VectorInput
+							label={t('scale')}
+							axes={['x', 'y', 'z']}
+							values={picked.scale}
+							step={0.5}
+							min={0.01}
+							onchange={(scale) => onset({ scale: vector(scale) })}
+							onreset={() => origin && onset({ scale: origin.scale })}
+							resetLabel={t('reset')}
+							lockLabel={t('lock')}
+							locked
+						/>
+						<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
+					{/if}
 					{#if picked.item === 'picture' || picked.lamp}
 						<Slider label={t('shine')} value={picked.shine} min={0} max={8} step={0.1} format={(n) => n.toFixed(1)} oninput={(shine) => onset({ shine })} />
 					{/if}
@@ -283,6 +315,15 @@
 {/if}
 
 <style>
+	.name {
+		font: inherit;
+		color: inherit;
+		background: none;
+		border: 0;
+		padding: 0;
+		cursor: text;
+		text-align: left;
+	}
 	.toggle {
 		--control-bg: var(--bg-overlay);
 		position: absolute;

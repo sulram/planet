@@ -126,6 +126,8 @@ export interface NearOne {
 	away_m: number;
 	paint: number;
 	solid: boolean;
+	/** What its builder calls it, when named. */
+	name?: string;
 }
 
 /** Reads a `near` event: the parts near the body, nearest first. Null for one that is no list. */
@@ -135,9 +137,11 @@ export function parseNear(event: Record<string, unknown>): NearOne[] | null {
 	const rows: NearOne[] = [];
 	for (const row of near) {
 		if (typeof row !== 'object' || row === null) return null;
-		const { id, item, away_m, paint, solid } = row as Record<string, unknown>;
+		const { id, item, away_m, paint, solid, name } = row as Record<string, unknown>;
 		if (typeof id !== 'number' || !isItem(item) || typeof away_m !== 'number' || typeof paint !== 'number' || typeof solid !== 'boolean') return null;
-		rows.push({ id, item, away_m, paint, solid });
+		const one: NearOne = { id, item, away_m, paint, solid };
+		if (typeof name === 'string') one.name = name;
+		rows.push(one);
 	}
 	return rows;
 }

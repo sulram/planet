@@ -4,11 +4,11 @@
 	import { parseHand } from './protocol';
 	import { t } from './words';
 
-	// The landmark kind's own control: its name. In hand, the name the next
-	// star bears, given to the plugin with the item; with a landmark picked
-	// in the world, the name of that one, set as it is typed. The bound and
-	// what a name may hold are the part's (`part::Name`), and the plugin
-	// says `name` when it refuses one.
+	// The landmark kind's own control: the name the next star bears, given
+	// to the plugin with the item. A landmark picked in the world is renamed
+	// where any item is, in the panel's title. The bound and what a name may
+	// hold are the part's (`part::Name`), and the plugin says `name` when it
+	// refuses one.
 	let { seam, picked }: KindProps = $props();
 
 	let name = $state('');
@@ -37,6 +37,8 @@
 	}
 </script>
 
-<Field label={t('landmark.name')} for="landmark-name" hint={t('landmark.name.hint')}>
-	<Input id="landmark-name" bind:value={name} maxlength={64} placeholder={t('landmark.name.placeholder')} oninput={picked ? changed : undefined} onchange={changed} onkeydown={keydown} />
-</Field>
+{#if !picked}
+	<Field label={t('landmark.name')} for="landmark-name" hint={t('landmark.name.hint')}>
+		<Input id="landmark-name" bind:value={name} maxlength={64} placeholder={t('landmark.name.placeholder')} onchange={changed} onkeydown={keydown} />
+	</Field>
+{/if}
