@@ -1,6 +1,6 @@
 // Imports the default asset set into `assets/` from the reference checkouts in
 // `refs/`: the avatars and the locomotion clips. The result is committed; this
-// script records where it came from. See docs/OPEN.md, Default asset set.
+// script records where it came from. See docs/questions/default-asset-set-where-it-is-hosted.md.
 import { $ } from 'bun';
 import { readdir } from 'node:fs/promises';
 import { ROOT } from './lib';

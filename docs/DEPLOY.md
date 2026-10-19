@@ -1,3 +1,10 @@
+---
+title: Deploy
+group: Shape
+summary: "How a world is hosted: by mundos, from one image, with one folder"
+order: 24
+---
+
 # DEPLOY
 
 How a world is hosted: by mundos (87), from one image, with one folder. What
@@ -35,9 +42,13 @@ confirmed. What of it is built: BRIEF.md.
 - The release workflow publishes it: when `dev` or `main` releases a version,
   the same run builds the image for amd64 and arm64 and pushes it under the
   version's number.
+- The web stage installs `@tekne/kb` from the studio's registry, so the build
+  takes the token as a BuildKit secret, `npmrc`: the workflow passes it from
+  the repository secret `NPM_TOKEN`; a machine passes its own with
+  `--secret id=npmrc,src=$HOME/.npmrc`. CI installs with the same secret.
 - The founding screen offers the grounds a version carries. An image built in
   CI carries the generated one; built on a machine that baked a field, it
-  carries that field too, until fields have a home of their own (OPEN.md).
+  carries that field too, until fields have a home of their own (an open question).
 
 ## What mundos sets
 

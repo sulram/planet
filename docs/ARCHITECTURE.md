@@ -1,6 +1,13 @@
+---
+title: Architecture
+group: Shape
+summary: "The shape as decided: the crates, the server, the wire, the clients, and the future shapes accounted for"
+order: 20
+---
+
 # ARCHITECTURE
 
-The shape as decided. The why lives in DECISIONS.md, open points in OPEN.md,
+The shape as decided. The why lives in `decisions/`, open points in `questions/`,
 and how much of it is built in BRIEF.md. A line marked (p) is proposed and
 not yet confirmed.
 
@@ -192,7 +199,7 @@ not yet confirmed.
 ## Future shapes already accounted for
 
 - Another screen is a shell around the core, a door in mundos for a device
-  (a code on a screen), and each plugin's panel in that front end (OPEN.md).
+  (a code on a screen), and each plugin's panel in that front end (an open question).
 - Scale bands (giant, human, bug): the octree descends into sub-grids; the
   server streams only the levels your scale may see. Secrets are enforced by
   the server, not by the client.

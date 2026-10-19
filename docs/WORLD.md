@@ -1,3 +1,10 @@
+---
+title: World
+group: Shape
+summary: "What a world is made of: its grid, its layers, its recipe, how it is addressed and generated"
+order: 21
+---
+
 # WORLD
 
 What a world is made of: its grid, its layers, its recipe, how it

@@ -1,3 +1,10 @@
+---
+title: Vision
+group: Why
+summary: "The horizon: what the world is for, in prose, and the why under everything else"
+order: 10
+---
+
 # VISION
 
 The horizon. Prose on purpose: this file carries the why. Nothing here is a

@@ -17,6 +17,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
+      - run: echo "//npm.tekne.studio/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
       - run: bun install --frozen-lockfile
       - name: lint pull request commits
         if: github.event_name == 'pull_request'
@@ -87,6 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+      - run: echo "//npm.tekne.studio/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
       - run: bun install --frozen-lockfile
       - run: bun run --cwd apps/web check
       - run: bun test ./apps/web/src ./plugins

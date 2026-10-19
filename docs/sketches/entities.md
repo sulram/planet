@@ -91,7 +91,7 @@ part is scenery. Whatever a part answers is taken together with the ground
 and the cells by `Footing::with`, which already joins two floors.
 
 This is where a `.vox` pays for itself before a GLB does: a model's collision
-is exact and costs nothing to author, where OPEN still asks what a body
+is exact and costs nothing to author, where an open question still asks what a body
 collides with inside a GLB shell. The cheaper answer there, a voxelizer at
 import, would make a GLB a model with a skin, and the same footing serves.
 
@@ -109,7 +109,7 @@ file, and the answer is the asset's name alone: what a picture measures, the
 owner's client knows before it sends.
 A part's record names its file `asset://<hash>.vox`, and on start a world
 deletes from its bucket folder what no part names (89). A file sent twice is
-one file. The terms of use of what is uploaded are OPEN's.
+one file. The terms of use of what is uploaded are an open question's.
 
 The drop is the way in: a `.vox` dropped on the page is sent, and once named
 it is placed where the pointer was, as Cryptovoxels does. The library panel
@@ -182,7 +182,7 @@ not, remove it, so an agent places a model by its hash with no gizmo.
    transforms, placed by the same gizmo.
 5. The footing of a model through its pose.
 6. Budgets and what is drawn from afar, measured in WASM.
-7. A GLB as the third shape, with OPEN's question about its collision answered
+7. A GLB as the third shape, with the open question about its collision answered
    by a voxelizer or not.
 
 ## What would prove it wrong

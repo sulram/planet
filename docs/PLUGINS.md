@@ -1,3 +1,10 @@
+---
+title: Plugins
+group: Shape
+summary: How the core and a plugin are cut, what each owns and how they speak
+order: 23
+---
+
 # PLUGINS
 
 How the core and a plugin are cut, what each owns and how they speak: the
@@ -27,7 +34,7 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   starts on; the admin switches any of them at the founding and after, in the
   world folder. A plugin switched off keeps its store untouched.
 - A plugin imports the core, never another plugin, and draws through `scene`.
-  `ALLOWED` in `scripts/docs.ts` holds it: a plugin's row names core crates.
+  `ALLOWED` in `scripts/kb-plugins.ts` holds it: a plugin's row names core crates.
 
 ## Owners
 

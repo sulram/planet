@@ -1,3 +1,10 @@
+---
+title: Brief
+group: Work
+summary: The one current campaign; it dissolves when it ships
+order: 30
+---
+
 # BRIEF: a world mundos hosts, a core and its plugins
 
 The one current campaign, decided in DECISIONS 87 to 91 and 93 to 110. The build layer's
@@ -25,7 +32,7 @@ ARCHITECTURE and DEPLOY, the why into DECISIONS, the rest into ROADMAP.
 ## Order of work
 
 0. [x] **The docs, first**, because they enter every session: VISION,
-   ARCHITECTURE, DEPLOY, ROADMAP, OPEN and GLOSSARY at 87 to 91, and this
+   ARCHITECTURE, DEPLOY, ROADMAP, the open questions and GLOSSARY at 87 to 91, and this
    brief.
 1. [x] **Marlus confirmed 89, 90 and 91**, which step 2 stands on.
 2. [x] **A world alone.** The world folder holds the recipe, and an admin
@@ -79,6 +86,6 @@ plugin work, on Marlus's word.
 
 ## Open questions
 
-These are settled in OPEN.md, their one home: how a plugin's panel exists
+These are settled in `docs/questions/`, their one home: how a plugin's panel exists
 outside Svelte, what a client does in a world with a plugin it lacks, and
 where fields are hosted.

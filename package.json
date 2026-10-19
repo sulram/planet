@@ -21,13 +21,15 @@
 		"proto": "bun scripts/proto.ts",
 		"plugins": "bun scripts/plugins.ts",
 		"module": "bun scripts/module.ts",
-		"docs": "bun scripts/docs.ts",
+		"kb": "kb",
+		"docs": "kb check",
 		"check": "bun scripts/check.ts",
 		"build": "bun run wasm && bun run --cwd apps/web build"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^20.0.0",
 		"@commitlint/config-conventional": "^20.0.0",
+		"@tekne/kb": "^0.1.0",
 		"@types/bun": "^1.3.14",
 		"conventional-changelog-conventionalcommits": "^9.0.0",
 		"semantic-release": "^25.0.0"

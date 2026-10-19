@@ -29,11 +29,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # The page: SvelteKit built into plain files, the asset set beside them.
 FROM --platform=$BUILDPLATFORM oven/bun:1 AS web
 WORKDIR /src
-COPY package.json bun.lock ./
+COPY package.json bun.lock .npmrc ./
 COPY apps/web/package.json apps/web/
 # A plugin's panel is a package of the workspace, in the plugin's folder.
 COPY plugins plugins
-RUN bun install --frozen-lockfile
+# `@tekne/kb` comes from the studio's registry: the token is a BuildKit secret
+# (`--secret id=npmrc,src=$HOME/.npmrc`), never a layer of the image.
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc bun install --frozen-lockfile
 COPY apps/web apps/web
 # `apps/web/static/assets` is a link to this folder: the build copies the set.
 COPY assets assets

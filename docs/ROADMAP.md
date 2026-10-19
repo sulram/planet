@@ -1,3 +1,10 @@
+---
+title: Roadmap
+group: Work
+summary: "Intent, not contract: what comes next, in what order"
+order: 31
+---
+
 # ROADMAP
 
 Intent, not contract. What is built lives in the theme docs and in git; this
@@ -153,7 +160,7 @@ end to end.
 - [ ] The desktop opens the socket: `bun run desktop <url>` and `bun run shot --world <url>`, a world by the address a browser shows. It builds again then: with no world, no plugin is on (104)
 - [ ] A door for a device, in mundos: a code or a QR on a screen pairs a headset or a desktop with an account
 - [ ] A client reads what a world speaks before it enters (91)
-- [ ] A plugin's panel outside Svelte (OPEN.md)
+- [ ] A plugin's panel outside Svelte (an open question)
 - [ ] Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - [ ] The desktop remembers its settings
 - [ ] Raspberry Pi 5 build (KMS/DRM)

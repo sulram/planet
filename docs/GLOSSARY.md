@@ -1,3 +1,10 @@
+---
+title: Glossary
+group: Reference
+summary: "The vocabulary: use these terms, never invent synonyms"
+order: 40
+---
+
 # GLOSSARY
 
 Use these terms. Never invent synonyms. A new, renamed or shifted term updates

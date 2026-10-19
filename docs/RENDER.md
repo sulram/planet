@@ -1,3 +1,10 @@
+---
+title: Render
+group: Shape
+summary: "How the picture is made: bodies, the sea, the sky, the light, and the budgets it keeps"
+order: 22
+---
+
 # RENDER
 
 How the picture is made: bodies in it, the sea, the sky, the light and the

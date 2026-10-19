@@ -19,5 +19,5 @@ await $`bun test ./apps/web/src ./plugins`;
 await $`bun scripts/proto.ts`;
 await $`bun scripts/plugins.ts`;
 await $`git diff --exit-code -- crates/protocol/src/gen server/internal/protocol plugins/*/world/src/gen crates/plugins-client crates/plugins-world apps/web/src/lib/plugins/index.ts buf.yaml`;
-await $`bun scripts/docs.ts`;
+await $`bun run docs`;
 console.log('all checks pass');

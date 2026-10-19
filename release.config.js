@@ -1,4 +1,4 @@
-// Semantic Release. The why lives in docs/DECISIONS.md 21.
+// Semantic Release. The why is DECISIONS 21 (docs/decisions/).
 //
 // - `dev` publishes prereleases: 0.0.1-dev.1, 0.0.1-dev.2, ...
 // - merging `dev` into `main` publishes the plain version: 0.0.1

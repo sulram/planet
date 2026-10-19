@@ -29,7 +29,7 @@ One description would then have five readers:
    slider on any screen. A plugin with no panel written would still have
    one, in egui on a desktop and in a headset. A Svelte panel becomes the
    bespoke one a plugin writes when the drawn one is not enough. This would
-   answer OPEN's question on a panel outside Svelte.
+   answer the open question on a panel outside Svelte.
 3. **An agent's tools.** A command with a name, a sentence and a JSON Schema
    of its parameters is a tool of the Model Context Protocol, as it stands.
    The seam is JSON already.
@@ -114,7 +114,7 @@ something that moves. If that something were keyed by its own id from that
 step, a vehicle would be a second kind of it and a wire kept as it is. Keyed
 by session, the first vehicle would reopen the wire, presence, and every
 plugin that reads who is where. The library, `hecs` or another, could still
-wait for the second kind (OPEN). The id is what is dear to undo.
+wait for the second kind (an open question). The id is what is dear to undo.
 
 Physics the server decides would be a simulation in the module: state held
 between calls, and a turn. The cells, once kept, would be the first system

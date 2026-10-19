@@ -1,3 +1,10 @@
+---
+title: Refs
+group: Reference
+summary: Reference checkouts under refs/, read-only, and what may be taken from each
+order: 41
+---
+
 # REFS
 
 Reference projects under `refs/`: read-only, gitignored, shallow.
