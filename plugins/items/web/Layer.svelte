@@ -3,7 +3,7 @@
 	import type { LayerProps } from '$lib/plugins/plugin';
 	import Drop from './Drop.svelte';
 	import Panel from './Panel.svelte';
-	import { parseHand, parsePicked, parseRefused, type Edge, type Finish, type Item, type Mode, type Picked, type Refusal } from './protocol';
+	import { parseHand, parseNear, parsePicked, parseRefused, type Edge, type Finish, type Item, type Mode, type NearOne, type Picked, type Refusal } from './protocol';
 
 	// Items over the world: what the plugin says is in hand, which part is
 	// picked and how it stands, and why it last refused. A front end only:
@@ -22,6 +22,18 @@
 	let finish = $state<Finish>('matte');
 	let edge = $state<Edge>('none');
 	let refused = $state<Refusal | null>(null);
+	/** Whether the list of what is near is open, and what it says. */
+	let listing = $state(false);
+	let near = $state<NearOne[]>([]);
+
+	// Open, the list is asked for at once and then every second: the body
+	// moves and others place.
+	$effect(() => {
+		if (!listing) return;
+		seam.command('list');
+		const every = setInterval(() => seam.command('list'), 1000);
+		return () => clearInterval(every);
+	});
 
 	$effect(() => {
 		const stop = seam.listen((kind, event) => {
@@ -33,6 +45,7 @@
 				if (picked?.id !== origin?.id) origin = picked;
 			}
 			else if (kind === 'refused') refused = parseRefused(event);
+			else if (kind === 'near') near = parseNear(event) ?? near;
 		});
 		// What is in hand was said before this layer listened: ask for it.
 		seam.command('state');
@@ -59,7 +72,17 @@
 		{palette}
 		{refused}
 		{seam}
-		onedit={(on) => ask('edit', { on })}
+		{listing}
+		{near}
+		onlist={(on) => {
+			listing = on;
+			if (on && !editing) ask('edit', { on: true });
+		}}
+		onpick={(id) => ask('pick', { id })}
+		onedit={(on) => {
+			if (!on) listing = false;
+			ask('edit', { on });
+		}}
 		ontake={(next) => ask('take', { item: next })}
 		onmode={(next) => ask('mode', { mode: next })}
 		onset={(set) => ask('set', set)}

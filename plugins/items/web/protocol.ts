@@ -80,6 +80,29 @@ export function parsePicked(event: Record<string, unknown>): Picked | null {
 	return { id, item, at, rotation, scale, solid };
 }
 
+/** `items.near`: one part near the body: its name, what kind of item it is, how far in metres, its paint and whether it is solid. */
+export interface NearOne {
+	id: number;
+	item: Item;
+	away_m: number;
+	paint: number;
+	solid: boolean;
+}
+
+/** Reads a `near` event: the parts near the body, nearest first. Null for one that is no list. */
+export function parseNear(event: Record<string, unknown>): NearOne[] | null {
+	const { near } = event;
+	if (!Array.isArray(near)) return null;
+	const rows: NearOne[] = [];
+	for (const row of near) {
+		if (typeof row !== 'object' || row === null) return null;
+		const { id, item, away_m, paint, solid } = row as Record<string, unknown>;
+		if (typeof id !== 'number' || !isItem(item) || typeof away_m !== 'number' || typeof paint !== 'number' || typeof solid !== 'boolean') return null;
+		rows.push({ id, item, away_m, paint, solid });
+	}
+	return rows;
+}
+
 /** Reads a `refused` event. Null for a reason this front end has no words for. */
 export function parseRefused(event: Record<string, unknown>): Refusal | null {
 	return refusals.find((reason) => reason === event.reason) ?? null;

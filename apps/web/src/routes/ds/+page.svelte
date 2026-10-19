@@ -264,6 +264,7 @@
 				<Icon name="package" label="Model" />
 				<Icon name="lock" label="Locked" />
 				<Icon name="lock-open" label="Open" />
+				<Icon name="list" label="List" />
 				<Button variant="ghost"><Icon name="send" /> With a label</Button>
 			</div>
 			<p class="muted">IconButton: an action said by its icon alone, square, for a corner where words do not fit. The label is required; it is the accessible name and the tooltip.</p>

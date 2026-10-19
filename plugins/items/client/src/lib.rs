@@ -22,6 +22,7 @@ use client::{Host, KeyAsk, Media, Part, PartId, Plugin, Shape, Turn};
 use glam::{DQuat, EulerRot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use topology::BLOCK_M;
 use voxel::{Edge, Finish, Paint};
 
 use gizmo::Gizmo;
@@ -99,6 +100,8 @@ pub const FINISH: &str = "finish";
 pub const EDGE: &str = "edge";
 /// `items.state`: say what is in hand, for a layer that just mounted.
 pub const STATE: &str = "state";
+/// `items.list`: say the parts near the body, nearest first, with `near`.
+pub const LIST: &str = "list";
 /// `items.hand`: whether the menu is open, the item in hand, `null` when
 /// none, the mode, the paint in hand, and the model's asset when one is in
 /// hand, `null` otherwise.
@@ -107,6 +110,29 @@ pub const HAND: &str = "hand";
 pub const PICKED: &str = "picked";
 /// `items.refused`: why what was asked was not done.
 pub const REFUSED: &str = "refused";
+/// `items.near`: the parts within a plot's width of the body, the nearest
+/// first: each by its name, what kind of item it is, how far, its paint and
+/// whether it is solid.
+pub const NEAR: &str = "near";
+
+/// How far from the body a part is listed, metres: a plot's width.
+const LIST_M: f64 = 32.0;
+/// The most parts listed.
+const LISTED: usize = 64;
+
+#[derive(Serialize)]
+struct NearOne {
+    id: u64,
+    item: Item,
+    away_m: f64,
+    paint: u8,
+    solid: bool,
+}
+
+#[derive(Serialize)]
+struct Near {
+    near: Vec<NearOne>,
+}
 
 #[derive(Deserialize)]
 struct Edit {
@@ -431,6 +457,42 @@ impl Items {
         );
     }
 
+    /// Says the parts near the body, the nearest first: those on the seat
+    /// the body is over, within a plot's width of its feet in the flat
+    /// frame.
+    fn say_near(&self, host: &mut Host<'_>) {
+        let feet = host.feet();
+        let here = [feet.point.u, feet.point.v, feet.height_m / BLOCK_M];
+        let mut near: Vec<NearOne> = host
+            .parts()
+            .all()
+            .filter(|(_, seat, _)| *seat == feet.seat)
+            .map(|(id, _, part)| {
+                let at = part.pose.at;
+                let away_m = (0..3)
+                    .map(|i| (at[i] - here[i]).powi(2))
+                    .sum::<f64>()
+                    .sqrt()
+                    * BLOCK_M;
+                NearOne {
+                    id: id.0,
+                    item: match part.shape {
+                        Shape::Cube => Item::Cube,
+                        Shape::Vox(_) => Item::Model,
+                        Shape::Image(_) => Item::Picture,
+                    },
+                    away_m,
+                    paint: part.paint,
+                    solid: part.solid,
+                }
+            })
+            .filter(|one| one.away_m <= LIST_M)
+            .collect();
+        near.sort_by(|a, b| a.away_m.total_cmp(&b.away_m));
+        near.truncate(LISTED);
+        host.emit(NEAR, &Near { near });
+    }
+
     /// Whether the model in hand is still on its way.
     fn is_loading(&self, host: &Host<'_>) -> bool {
         self.model
@@ -600,6 +662,7 @@ impl Plugin for Items {
                 self.say_hand(host);
                 self.say_picked(host);
             }
+            LIST => self.say_near(host),
             _ => host.reject(format!("`{kind}` is no command of items")),
         }
     }

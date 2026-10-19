@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, Segmented, VectorInput } from '$lib/ds';
+	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, Segmented, VectorInput, type IconName } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import type { Seam } from '$lib/plugins/plugin';
 	import { kinds } from './kinds';
-	import { edges, finishes, modes, type Edge, type Finish, type Item, type Mode, type Picked, type Refusal } from './protocol';
+	import { edges, finishes, modes, type Edge, type Finish, type Item, type Mode, type NearOne, type Picked, type Refusal } from './protocol';
 	import { t } from './words';
 
 	// The menu of items: a button in the top left corner, and the panel it
@@ -31,6 +31,11 @@
 		/** Why the last thing asked for was not done, until the next one. */
 		refused: Refusal | null;
 		seam: Seam;
+		/** Whether the list of what is near is open, and what it says. */
+		listing: boolean;
+		near: NearOne[];
+		onlist: (on: boolean) => void;
+		onpick: (id: number) => void;
 		onedit: (on: boolean) => void;
 		ontake: (item: Item | null) => void;
 		onmode: (mode: Mode) => void;
@@ -41,14 +46,40 @@
 		onedge: (edge: Edge) => void;
 	}
 
-	let { editing, item, mode, picked, origin, paint, finish, edge, palette, refused, seam, onedit, ontake, onmode, onset, onremove, onpaint, onfinish, onedge }: Props =
-		$props();
+	let {
+		editing,
+		item,
+		mode,
+		picked,
+		origin,
+		paint,
+		finish,
+		edge,
+		palette,
+		refused,
+		seam,
+		listing,
+		near,
+		onlist,
+		onpick,
+		onedit,
+		ontake,
+		onmode,
+		onset,
+		onremove,
+		onpaint,
+		onfinish,
+		onedge
+	}: Props = $props();
 
 	const modeIcons = { move: 'move-3d', rotate: 'rotate-3d', scale: 'scale-3d' } as const;
 	const modeOptions = $derived(modes.map((value) => ({ value, label: t(`mode.${value}`) })));
 	const finishOptions = $derived(finishes.map((value) => ({ value, label: t(`finish.${value}`) })));
 	const edgeOptions = $derived(edges.map((value) => ({ value, label: t(`edge.${value}`) })));
 	const inHand = $derived(kinds.find((kind) => kind.name === item));
+	/** How far the list reaches, metres: a plot's width, as the plugin lists it. */
+	const LIST_M = 32;
+	const iconOf = (of: Item): IconName => kinds.find((kind) => kind.name === of)?.icon ?? 'box';
 	const pickedKind = $derived(picked ? kinds.find((kind) => kind.name === picked.item) : undefined);
 	const vector = (values: number[]) => [values[0], values[1], values[2]] as [number, number, number];
 </script>
@@ -56,8 +87,32 @@
 {#if editing}
 	<Panel title={t('title')} corner="top-left">
 		{#snippet aside()}
-			<IconButton icon="x" label="{core('common.close')} · Esc" onclick={() => onedit(false)} />
+			<span class="head">
+				<IconButton icon="list" label={t('near')} aria-expanded={listing} onclick={() => onlist(!listing)} />
+				<IconButton icon="x" label="{core('common.close')} · Esc" onclick={() => onedit(false)} />
+			</span>
 		{/snippet}
+		{#if listing}
+			<section>
+				<h3>{t('near')}</h3>
+				{#if near.length === 0}
+					<p class="muted">{t('near.empty', { m: String(LIST_M) })}</p>
+				{:else}
+					<ul class="near">
+						{#each near as one (one.id)}
+							<li>
+								<button type="button" class="one" aria-pressed={picked?.id === one.id} onclick={() => onpick(one.id)}>
+									<Icon name={iconOf(one.item)} />
+									<span class="swatch" style:--paint={palette[one.paint % 16] ?? 'transparent'}></span>
+									<span class="what">{kinds.find((kind) => kind.name === one.item)?.label() ?? one.item}</span>
+									<span class="away">{t('near.away', { m: one.away_m.toFixed(1) })}</span>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
 		<div class="kinds" role="group" aria-label={t('kind')}>
 			{#each kinds as kind (kind.name)}
 				<button type="button" class="kind" aria-pressed={kind.name === item} onclick={() => ontake(kind.name === item ? null : kind.name)}>
@@ -142,6 +197,7 @@
 {:else}
 	<div class="toggle">
 		<IconButton icon="box" label="{t('title')} · I" onclick={() => onedit(true)} />
+		<IconButton icon="list" label={t('near')} onclick={() => onlist(true)} />
 	</div>
 {/if}
 
@@ -152,6 +208,57 @@
 		top: var(--sp-4);
 		left: var(--sp-4);
 		z-index: var(--z-panel);
+		display: flex;
+		gap: var(--sp-2);
+	}
+	.head {
+		display: flex;
+		gap: var(--sp-1);
+	}
+	.muted {
+		color: var(--text-muted);
+	}
+	.near {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-1);
+	}
+	/* A line of the list is the item's icon, its paint, its kind and how far
+	   it is. */
+	.one {
+		display: grid;
+		grid-template-columns: auto var(--sp-4) 1fr auto;
+		align-items: center;
+		gap: var(--sp-2);
+		box-sizing: border-box;
+		width: 100%;
+		min-height: var(--control-h);
+		padding: 0 var(--sp-2);
+		border: var(--bw) solid transparent;
+		background: transparent;
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+	}
+	.one:hover {
+		border-color: var(--border-strong);
+	}
+	.one[aria-pressed='true'] {
+		background: var(--action);
+		color: var(--action-text);
+	}
+	.swatch {
+		display: block;
+		width: var(--sp-4);
+		height: var(--sp-4);
+		background: var(--paint);
+	}
+	.away {
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.one[aria-pressed='true'] .away {
+		color: var(--action-text);
 	}
 	.kinds {
 		display: grid;
