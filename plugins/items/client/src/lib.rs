@@ -146,6 +146,10 @@ struct Take {
     asset: Option<String>,
     #[serde(default)]
     media: Option<MediaBody>,
+    /// Place it in front of the body at once, with no click: a file given
+    /// is placed where it was given, as soon as it is ready.
+    #[serde(default)]
+    ahead: bool,
 }
 
 /// A picture's record as the seam says it.
@@ -272,6 +276,9 @@ pub struct Items {
     model: Option<[u8; 32]>,
     /// Whether the model in hand was still on its way, as last said.
     loading: bool,
+    /// The item in hand is to be placed in front of the body as soon as it
+    /// is ready, with no click.
+    ahead: bool,
     /// Whether the pointer's button was down last turn.
     using: bool,
 }
@@ -289,6 +296,7 @@ impl Default for Items {
             picture: None,
             model: None,
             loading: false,
+            ahead: false,
             using: false,
         }
     }
@@ -337,6 +345,9 @@ impl Items {
 
     /// Takes an item in hand or puts it down. The menu opens with it.
     pub(crate) fn take(&mut self, item: Option<Item>, host: &mut Host<'_>) {
+        if item.is_none() {
+            self.ahead = false;
+        }
         if item.is_some() && !host.may_change() {
             return refuse(host, Refusal::Level);
         }
@@ -493,6 +504,18 @@ impl Items {
         host.emit(NEAR, &Near { near });
     }
 
+    /// Places the item in hand in front of the body, when it is to be and
+    /// is ready: a model waits for its file.
+    fn place_when_ready(&mut self, host: &mut Host<'_>) {
+        if !self.ahead || self.is_loading(host) {
+            return;
+        }
+        self.ahead = false;
+        if let Some(item) = self.item {
+            self.place_ahead(item, host);
+        }
+    }
+
     /// Whether the model in hand is still on its way.
     fn is_loading(&self, host: &Host<'_>) -> bool {
         self.model
@@ -608,7 +631,13 @@ impl Plugin for Items {
                 }
             }
             TAKE => {
-                if let Some(Take { item, asset, media }) = read(body, host) {
+                if let Some(Take {
+                    item,
+                    asset,
+                    media,
+                    ahead,
+                }) = read(body, host)
+                {
                     if item == Some(Item::Picture) {
                         match media.as_ref().map(MediaBody::media) {
                             Some(None) => {
@@ -618,6 +647,8 @@ impl Plugin for Items {
                         }
                     }
                     self.take_with(item, asset, host);
+                    self.ahead = ahead && self.item.is_some();
+                    self.place_when_ready(host);
                 }
             }
             PICK => {
@@ -720,6 +751,7 @@ impl Plugin for Items {
         if loading != self.loading {
             self.loading = loading;
             self.say_hand(host);
+            self.place_when_ready(host);
         }
         if turn.inspected && host.may_change() {
             let (from, toward) = turn.eye.sight();
@@ -1077,6 +1109,35 @@ mod tests {
             .unwrap();
         assert_eq!(hand["editing"], true);
         assert!(client.pointing());
+    }
+
+    #[test]
+    fn a_take_ahead_places_in_front_of_the_body_with_no_click() {
+        let mut client = client();
+        client.command_json(r#"{"type":"items.take","item":"cube","ahead":true}"#);
+        assert_eq!(client.parts().all().count(), 1, "placed at once");
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .unwrap();
+        assert!(picked["id"].is_number(), "and picked");
+        let hand = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.hand")
+            .unwrap();
+        assert!(hand["item"].is_null(), "the hand is empty again");
+        // In front of the feet, a step or so, on the ground.
+        let feet = client.host("test").feet();
+        let (_, _, part) = client.parts().all().next().unwrap();
+        let [du, dv] = [
+            part.pose.at[0] - feet.point.u,
+            part.pose.at[1] - feet.point.v,
+        ];
+        let away = (du * du + dv * dv).sqrt();
+        assert!((3.0..8.0).contains(&away), "{away} blocks ahead");
     }
 
     #[test]

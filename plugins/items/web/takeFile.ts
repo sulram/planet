@@ -43,9 +43,9 @@ export interface Taken {
 }
 
 /**
- * Takes a file: sends it to the world and puts the item it is in hand, or
- * into the picture picked. Throws an `Error` whose message is a `NotTaken`
- * code.
+ * Takes a file: sends it to the world and places the item it is in front
+ * of the body, as soon as it is ready, or puts it into the picture picked.
+ * Throws an `Error` whose message is a `NotTaken` code.
  */
 export async function takeFile(seam: Seam, file: File, picked?: Picked | null): Promise<Taken> {
 	const given = givenOf(file.name, file.type);
@@ -54,14 +54,14 @@ export async function takeFile(seam: Seam, file: File, picked?: Picked | null): 
 		const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
 		if (kindOf(head) !== 'vox') throw new Refused('kind');
 		const asset = await seam.upload(file);
-		seam.command('take', { item: 'model', asset });
+		seam.command('take', { item: 'model', asset, ahead: true });
 		return { given };
 	}
 	const media = await prepareImage(file, (blob) => seam.upload(blob));
 	if (picked?.item === 'picture') {
 		seam.command('set', { media });
 	} else {
-		seam.command('take', { item: 'picture', media });
+		seam.command('take', { item: 'picture', media, ahead: true });
 	}
 	return { given, media };
 }

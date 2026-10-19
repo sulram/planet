@@ -9,6 +9,12 @@ use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape, VOXEL};
 use glam::{DQuat, DVec3};
 use topology::BLOCK_M;
 
+/// How far in front of the body a file given is placed, metres, and how
+/// high over the feet the line down to the ground starts, so a thing
+/// stands on what is there, a floor over the ground too.
+const AHEAD_M: f64 = 2.5;
+const OVER_M: f64 = 6.0;
+
 use crate::{Item, Items, Refusal, refuse};
 
 /// How thick a picture's pane is, in blocks: enough to pick, nothing to see.
@@ -18,6 +24,21 @@ impl Items {
     /// Places the item in hand where the eye's pointer meets the world.
     pub(crate) fn place(&mut self, item: Item, eye: &Eye, host: &mut Host<'_>) {
         let (from, toward) = eye.sight();
+        self.place_along(item, from, toward, host);
+    }
+
+    /// Places the item in hand in front of the body, with no click: a line
+    /// from over the body's front straight down meets the ground, a cell
+    /// or a part, and the item stands there. A file given lands so.
+    pub(crate) fn place_ahead(&mut self, item: Item, host: &mut Host<'_>) {
+        let body = host.body();
+        let flat = (body.facing - body.up * body.facing.dot(body.up)).normalize_or(body.facing);
+        let from = body.position + flat * AHEAD_M + body.up * OVER_M;
+        self.place_along(item, from, -body.up, host);
+    }
+
+    /// Places the item in hand where a line meets the world.
+    fn place_along(&mut self, item: Item, from: DVec3, toward: DVec3, host: &mut Host<'_>) {
         let Some(feet) = met(host, from, toward) else {
             return;
         };

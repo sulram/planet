@@ -44,7 +44,7 @@ use peers::Peers;
 use pictures::Pictures;
 pub use pictures::{FULL_SIDE, LOW_SIDE, Screen, THUMB_SIDE};
 pub use place::Pose;
-pub use plugin::{Eye, Feet, Host, Plugin, Turn};
+pub use plugin::{Eye, Feet, Host, Plugin, Standing, Turn};
 use plugin::{Lent, Plugins};
 pub use scene::{Effects, Frame, ToneMap};
 pub use seam::{Anchor, Command, Event, Level, Mode, PeerInfo, PluginOn, SessionStatus};

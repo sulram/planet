@@ -142,6 +142,16 @@ impl Turn<'_> {
     }
 }
 
+/// This client's own body in the world, as a hand that places something in
+/// front of it reads it.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Standing {
+    /// From the planet's centre, metres.
+    pub position: DVec3,
+    pub up: DVec3,
+    pub facing: DVec3,
+}
+
 /// Where the feet of this client's own body are.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Feet {
@@ -236,6 +246,17 @@ impl Host<'_> {
     /// the ground in full detail, as a body stands on it.
     pub fn ground(&self, seat: Seat, point: SurfacePoint) -> f64 {
         cells::ground(self.lent.generator, seat, point)
+    }
+
+    /// This client's own body in the world: where it is, from the planet's
+    /// centre, which way is up for it, and which way it faces, both unit.
+    pub fn body(&self) -> Standing {
+        let controller = &self.lent.controller;
+        Standing {
+            position: controller.position(),
+            up: controller.up(),
+            facing: controller.facing(),
+        }
     }
 
     /// Where the feet of this client's own body are.
