@@ -102,10 +102,9 @@
 	const iconOf = (of: Item): IconName => kinds.find((kind) => kind.name === of)?.icon ?? 'box';
 	const pickedKind = $derived(picked ? kinds.find((kind) => kind.name === picked.item) : undefined);
 	const vector = (values: number[]) => [values[0], values[1], values[2]] as [number, number, number];
-	/** What the material section paints: the kind in hand, else the kind picked. A cube and a portal's frame take a finish and an edge; a landmark its colour alone. */
+	/** What the material section paints: the kind in hand, else the kind picked. A cube takes a finish and an edge; a landmark and a portal their colour alone. */
 	const material = $derived(item ?? picked?.item ?? null);
 	const showMaterial = $derived(material === 'cube' || material === 'landmark' || material === 'portal');
-	const finished = $derived(material === 'cube' || material === 'portal');
 	/** How far a landmark is, said short. */
 	function away(m: number | null): string {
 		if (m === null) return t('landmarks.elsewhere');
@@ -257,7 +256,7 @@
 				<section>
 					<h3>{t('material')}</h3>
 					<Palette colors={palette} {paint} {finish} {edge} label={t('paint')} pick={(n) => t('paint.pick', { n: String(n) })} onpick={onpaint} />
-					{#if finished}
+					{#if material === 'cube'}
 						<div class="row">
 							<span>{t('finish')}</span>
 							<Segmented options={finishOptions} value={finish} label={t('finish')} onselect={onfinish} />

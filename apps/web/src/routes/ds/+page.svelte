@@ -263,7 +263,7 @@
 				<Icon name="rotate-ccw" label="Reset" />
 				<Icon name="package" label="Model" />
 				<Icon name="star" label="Landmark" />
-				<Icon name="door-open" label="Portal" />
+				<Icon name="circle" label="Portal" />
 				<Icon name="lock" label="Locked" />
 				<Icon name="lock-open" label="Open" />
 				<Icon name="list" label="List" />

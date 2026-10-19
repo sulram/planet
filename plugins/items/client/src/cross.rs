@@ -2,19 +2,19 @@
 //! stand on the landmark it leads to, facing the way the star points,
 //! through the one `go_to` a link and the chart travel by. Read in the
 //! plugin's turn, after the body moved: the line from where the feet stood
-//! last turn to where they stand now passes the pane's plane inside its
-//! doorway. A leap, a link's or a portal's, is no walk: it starts the line
-//! over, and the crossing is armed again only once the body has stood clear
-//! of every pane, so a door on the star one lands on does not send the
-//! body straight back.
+//! last turn to where they stand now passes the pane's plane where the
+//! body, feet to head, meets the ring's circle. A leap, a link's or a
+//! portal's, is no walk: it starts the line over, and the crossing is armed
+//! again only once the body has stood clear of every pane, so a portal on
+//! the star one lands on does not send the body straight back.
 
-use client::{Host, PartId, Shape};
+use client::{BODY_M, Host, PartId, Shape};
 use glam::{DAffine3, DVec3};
 
 use crate::{CROSSED, Crossed, Items, Landmarked};
 
 /// How far a body walks in one turn at most, metres: further is a leap,
-/// never a walk through a door.
+/// never a walk through a ring.
 const STRIDE_M: f64 = 8.0;
 /// How far from the body a portal is read, metres: a plot's width.
 const NEAR_M: f64 = 32.0;
@@ -27,7 +27,7 @@ impl Items {
     pub(crate) fn cross(&mut self, host: &mut Host<'_>) {
         let now = host.body().position;
         let before = self.feet.replace(now);
-        let doors: Vec<(PartId, Option<PartId>, DAffine3)> = host
+        let rings: Vec<(PartId, Option<PartId>, DAffine3)> = host
             .parts()
             .all()
             .filter_map(|(id, _, part)| {
@@ -39,7 +39,7 @@ impl Items {
             })
             .collect();
         if !self.armed {
-            self.armed = doors.iter().all(|(_, _, world)| !within(world, now));
+            self.armed = rings.iter().all(|(_, _, world)| !within(world, now));
             return;
         }
         let Some(before) = before else {
@@ -48,7 +48,7 @@ impl Items {
         if (now - before).length() > STRIDE_M {
             return;
         }
-        let crossed = doors
+        let crossed = rings
             .iter()
             .find(|(_, _, world)| through(world, before, now))
             .map(|&(id, to, _)| (id, to));
@@ -126,8 +126,8 @@ impl Items {
 }
 
 /// Whether a step from `before` to `now` passes a portal's pane, its box's
-/// `y = 0` plane, inside the doorway: between the box's sides along `x` and
-/// `z` where the step meets the plane.
+/// `y = 0` plane, through the ring: where the step meets the plane, the
+/// body standing there, feet to head, meets the circle.
 fn through(world: &DAffine3, before: DVec3, now: DVec3) -> bool {
     let normal = world.matrix3.y_axis.normalize_or_zero();
     let d0 = (before - world.translation).dot(normal);
@@ -136,49 +136,47 @@ fn through(world: &DAffine3, before: DVec3, now: DVec3) -> bool {
         return false;
     }
     let met = before + (now - before) * (d0 / (d0 - d1));
-    in_doorway(world, met)
+    in_ring(world, met)
 }
 
-/// Whether a point stands within a metre of a portal's pane, inside its
-/// doorway.
+/// Whether a body standing at a point is within a metre of a portal's pane
+/// and meets its circle.
 fn within(world: &DAffine3, point: DVec3) -> bool {
     let normal = world.matrix3.y_axis.normalize_or_zero();
     let away_m = (point - world.translation).dot(normal);
-    away_m.abs() <= CLEAR_M && in_doorway(world, point)
+    away_m.abs() <= CLEAR_M && in_ring(world, point)
 }
 
-/// How far under a door's sill the feet still pass through it, metres: a
-/// step, since the feet stand on the ground and the sill is placed on it,
-/// and on a slope the one is under the other by a little.
-const SILL_M: f64 = 0.5;
-
-/// Whether a point, dropped onto the pane's plane, is inside the doorway:
-/// between the box's sides along `x`, between a step under its sill and
-/// its top along `z`.
-fn in_doorway(world: &DAffine3, point: DVec3) -> bool {
-    let local = world.inverse().transform_point3(point);
-    let sill = SILL_M / world.matrix3.z_axis.length();
-    local.x.abs() <= 0.5 && (-sill..=1.0).contains(&local.z)
+/// Whether a body whose feet stand at a point, dropped onto the pane's
+/// plane, meets the ring's circle: the circle fills the box along `x` and
+/// `z`, and the body is a column from the feet up to [`BODY_M`], so a
+/// body passes a ring its feet are under the rim of, as a body does.
+fn in_ring(world: &DAffine3, feet: DVec3) -> bool {
+    let local = world.inverse().transform_point3(feet);
+    let x = local.x;
+    if x.abs() > 0.5 {
+        return false;
+    }
+    let half = (0.25 - x * x).sqrt();
+    let head = local.z + BODY_M / world.matrix3.z_axis.length();
+    local.z <= 0.5 + half && head >= 0.5 - half
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn door() -> DAffine3 {
-        // A doorway a metre wide and two tall, standing at the origin, its
-        // pane on the `xz` plane.
-        DAffine3::from_scale(DVec3::new(1.0, 0.05, 2.0))
+    fn ring() -> DAffine3 {
+        // A ring two metres across, standing at the origin, its pane on
+        // the `xz` plane.
+        DAffine3::from_scale(DVec3::new(2.0, 0.05, 2.0))
     }
 
     #[test]
-    fn a_step_through_the_doorway_crosses_and_one_beside_it_does_not() {
-        let world = door();
-        assert!(through(
-            &world,
-            DVec3::new(0.2, -1.0, 0.1),
-            DVec3::new(0.2, 1.0, 0.1)
-        ));
+    fn a_step_through_the_ring_crosses_and_one_beside_it_does_not() {
+        let world = ring();
+        let step = |x: f64, z: f64| through(&world, DVec3::new(x, -1.0, z), DVec3::new(x, 1.0, z));
+        assert!(step(0.2, 0.1));
         assert!(
             through(
                 &world,
@@ -188,37 +186,16 @@ mod tests {
             "from either side"
         );
         assert!(
-            !through(
-                &world,
-                DVec3::new(0.8, -1.0, 0.1),
-                DVec3::new(0.8, 1.0, 0.1)
-            ),
-            "past the post"
+            step(0.8, 0.0),
+            "off the middle, the body still meets the circle"
         );
+        assert!(!step(1.1, 0.0), "past the rim");
+        assert!(!step(0.2, 2.5), "over the ring");
         assert!(
-            !through(
-                &world,
-                DVec3::new(0.2, -1.0, 2.5),
-                DVec3::new(0.2, 1.0, 2.5)
-            ),
-            "over the lintel"
+            step(0.2, -0.4),
+            "feet a little under the ring: the body meets it"
         );
-        assert!(
-            through(
-                &world,
-                DVec3::new(0.2, -1.0, -0.4),
-                DVec3::new(0.2, 1.0, -0.4)
-            ),
-            "feet a little under the sill"
-        );
-        assert!(
-            !through(
-                &world,
-                DVec3::new(0.2, -1.0, -0.6),
-                DVec3::new(0.2, 1.0, -0.6)
-            ),
-            "under the floor"
-        );
+        assert!(!step(0.2, -2.0), "under the ground");
         assert!(
             !through(
                 &world,
@@ -235,7 +212,7 @@ mod tests {
             ),
             "standing still"
         );
-        // A step that meets the plane inside the doorway crosses, wherever it
+        // A step that meets the plane inside the ring crosses, wherever it
         // starts and ends.
         assert!(through(
             &world,
@@ -246,13 +223,13 @@ mod tests {
 
     #[test]
     fn a_body_stands_clear_a_metre_from_the_pane() {
-        let world = door();
+        let world = ring();
         assert!(within(&world, DVec3::new(0.0, 0.0, 0.0)));
         assert!(within(&world, DVec3::new(0.3, 0.9, 1.5)));
         assert!(!within(&world, DVec3::new(0.3, 1.1, 1.5)));
         assert!(
-            !within(&world, DVec3::new(0.7, 0.0, 1.5)),
-            "beside the door"
+            !within(&world, DVec3::new(1.2, 0.0, 0.5)),
+            "beside the ring"
         );
     }
 }

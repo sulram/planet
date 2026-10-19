@@ -5,7 +5,7 @@
 	import { t } from './words';
 
 	// The portal kind's own control: where it leads, one of the landmarks of
-	// the world, from the chart. In hand, the landmark the next door leads
+	// the world, from the chart. In hand, the landmark the next ring leads
 	// to, given to the plugin with the item; with a portal picked in the
 	// world, where that one leads, set as it is chosen. The chart is asked
 	// for while the control shows, every two seconds, as the chart panel asks.

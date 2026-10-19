@@ -918,9 +918,10 @@ impl Parts {
             let Some(mesh) = model_of(part) else {
                 continue;
             };
-            // A landmark is solid to the eye whatever its paint says.
+            // A landmark and a portal are solid to the eye whatever their
+            // paint says.
             let glass = Paint::of(part.paint).finish == Finish::Glass
-                && !matches!(part.shape, Shape::Landmark(_));
+                && !matches!(part.shape, Shape::Landmark(_) | Shape::Portal(_));
             drawn.push(ModelDraw {
                 mesh,
                 transform,
@@ -1030,7 +1031,7 @@ impl Parts {
                 }
                 Shape::Portal(_) => {
                     self.meshed.push(id);
-                    self.changes.push(ModelChange::Add(id, doorway(paint)));
+                    self.changes.push(ModelChange::Add(id, ring(paint)));
                 }
                 Shape::Vox(hash) => {
                     // Until the file arrives, its place is a glass box with
@@ -1129,14 +1130,14 @@ pub(crate) fn away_m(generator: &Generator, seat: Seat, pose: &Pose, body: (Body
     anchor.distance(body.1)
 }
 
-/// Whether a part is a lamp, lighting what is near: a cube or a portal's
-/// frame in the light finish, and a landmark whatever its finish, since it
-/// is lit with its own light to be seen at night. A model has its own
+/// Whether a part is a lamp, lighting what is near: a cube in the light
+/// finish, and a landmark and a portal whatever their finish, since they
+/// are lit with their own light to be seen at night. A model has its own
 /// colours and a picture its own image.
 pub fn is_lamp(part: &Part) -> bool {
     match part.shape {
-        Shape::Cube | Shape::Portal(_) => Paint::of(part.paint).finish == Finish::Light,
-        Shape::Landmark(_) => true,
+        Shape::Cube => Paint::of(part.paint).finish == Finish::Light,
+        Shape::Landmark(_) | Shape::Portal(_) => true,
         Shape::Vox(_) | Shape::Image(_) => false,
     }
 }
@@ -1152,7 +1153,7 @@ fn model_of(part: &Part) -> Option<ModelId> {
 fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
     // A landmark's name and a portal's destination are not in their
     // models: every landmark in a paint shares one star, every portal one
-    // doorway.
+    // ring.
     let shape = match shape {
         Shape::Cube => 0,
         Shape::Landmark(_) => 1,
@@ -1324,78 +1325,112 @@ fn block(mesh: &mut ModelMesh, min: [f32; 3], max: [f32; 3], color: [u8; 4], edg
     }
 }
 
-/// How wide a portal's posts are, of the box's width, and how tall its
-/// lintel, of its height.
-const POST: f32 = 0.08;
-const LINTEL: f32 = 0.04;
-/// What a portal's pane is drawn as while nothing is seen through it: dark,
-/// lit with its own faint light, so a door reads as a door at night too.
+/// How many segments a portal's ring is drawn in, how wide its rim is, of
+/// the box's width, and what its pane is drawn as while nothing is seen
+/// through it: dark, lit with its own faint light, so a portal reads as a
+/// portal at night too.
+const RING_SEGMENTS: usize = 32;
+const RIM: f32 = 0.06;
 const PANE_COLOR: [u8; 4] = [14, 8, 28, u8::MAX];
 
-/// A portal's doorway in a paint: two posts and a lintel, boxes in the
-/// paint along the box's sides, round a pane in the box's middle plane
-/// (`y = 0`) seen from both sides. The frame fills the box; the pane is
-/// the opening between the posts and under the lintel.
-fn doorway(paint: u8) -> ModelMesh {
-    let (color, edge) = paint_look(paint);
+/// A portal's ring in a paint: a rim as thick as the box along `y`, round
+/// the circle that fills the box along `x` and `z`, with a pane, a disc on
+/// the box's middle plane (`y = 0`), seen from both sides. Each face of the
+/// rim is a quad a segment, flat, wound counter clockwise seen from where
+/// it faces. The rim shines with its own light whatever the paint's finish,
+/// so a portal is seen at night.
+fn ring(paint: u8) -> ModelMesh {
+    let (mut color, edge) = paint_look(paint);
+    color[3] = u8::MAX;
     let mut mesh = ModelMesh {
-        vertices: Vec::with_capacity(3 * 24 + 8),
-        indices: Vec::with_capacity(3 * 36 + 12),
+        vertices: Vec::with_capacity(RING_SEGMENTS * 16 + 2 * (RING_SEGMENTS + 1)),
+        indices: Vec::with_capacity(RING_SEGMENTS * 24 + 6 * RING_SEGMENTS),
     };
-    block(
-        &mut mesh,
-        [-0.5, -0.5, 0.0],
-        [-0.5 + POST, 0.5, 1.0],
-        color,
-        edge,
-    );
-    block(
-        &mut mesh,
-        [0.5 - POST, -0.5, 0.0],
-        [0.5, 0.5, 1.0],
-        color,
-        edge,
-    );
-    block(
-        &mut mesh,
-        [-0.5 + POST, -0.5, 1.0 - LINTEL],
-        [0.5 - POST, 0.5, 1.0],
-        color,
-        edge,
-    );
-    // The pane: a quad facing each way, so it is seen from both sides.
-    let (left, right, top) = (-0.5 + POST, 0.5 - POST, 1.0 - LINTEL);
+    let centre = [0.0, 0.5];
+    let (outer, inner) = (0.5, 0.5 - RIM);
+    let round = |k: usize, radius: f32| -> [f32; 2] {
+        let angle = k as f32 * core::f32::consts::TAU / RING_SEGMENTS as f32;
+        [
+            centre[0] + radius * angle.cos(),
+            centre[1] + radius * angle.sin(),
+        ]
+    };
     let across = [[0, 0], [u8::MAX, 0], [u8::MAX, u8::MAX], [0, u8::MAX]];
-    for (normal, corners) in [
-        (
-            [0.0, -1.0, 0.0],
-            [
-                [left, 0.0, 0.0],
-                [right, 0.0, 0.0],
-                [right, 0.0, top],
-                [left, 0.0, top],
-            ],
-        ),
-        (
-            [0.0, 1.0, 0.0],
-            [
-                [right, 0.0, 0.0],
-                [left, 0.0, 0.0],
-                [left, 0.0, top],
-                [right, 0.0, top],
-            ],
-        ),
-    ] {
+    let mut quad = |corners: [[f32; 3]; 4], normal: [f32; 3], color: [u8; 4], edge: u8| {
         let base = mesh.vertices.len() as u32;
         for (position, [u, v]) in corners.into_iter().zip(across) {
             mesh.vertices.push(VolumeVertex {
                 position,
                 normal,
-                color: PANE_COLOR,
-                side: [u8::MAX, u, v, 0],
+                color,
+                side: [u8::MAX, u, v, edge],
             });
         }
         mesh.indices.extend([0, 1, 2, 0, 2, 3].map(|k| base + k));
+    };
+    for k in 0..RING_SEGMENTS {
+        let (a, b) = (round(k, outer), round(k + 1, outer));
+        let (c, d) = (round(k, inner), round(k + 1, inner));
+        let at = |[x, z]: [f32; 2], y: f32| [x, y, z];
+        // The front, facing `-y`, and the back: a quad of the annulus each.
+        quad(
+            [at(a, -0.5), at(b, -0.5), at(d, -0.5), at(c, -0.5)],
+            [0.0, -1.0, 0.0],
+            color,
+            edge,
+        );
+        quad(
+            [at(a, 0.5), at(c, 0.5), at(d, 0.5), at(b, 0.5)],
+            [0.0, 1.0, 0.0],
+            color,
+            edge,
+        );
+        // The outside and the inside of the rim, their normals radial, flat
+        // over the segment.
+        let mid = round(k, outer);
+        let next = round(k + 1, outer);
+        let radial = [
+            (mid[0] + next[0]) / 2.0 - centre[0],
+            (mid[1] + next[1]) / 2.0 - centre[1],
+        ];
+        let length = (radial[0] * radial[0] + radial[1] * radial[1]).sqrt();
+        let out = [radial[0] / length, 0.0, radial[1] / length];
+        quad(
+            [at(a, -0.5), at(a, 0.5), at(b, 0.5), at(b, -0.5)],
+            out,
+            color,
+            edge,
+        );
+        quad(
+            [at(c, -0.5), at(d, -0.5), at(d, 0.5), at(c, 0.5)],
+            [-out[0], 0.0, -out[2]],
+            color,
+            edge,
+        );
+    }
+    // The pane: a fan facing each way, so it is seen from both sides.
+    for (normal, forward) in [([0.0, -1.0, 0.0], true), ([0.0, 1.0, 0.0], false)] {
+        let base = mesh.vertices.len() as u32;
+        let vertex = |position: [f32; 3], across: [u8; 2]| VolumeVertex {
+            position,
+            normal,
+            color: PANE_COLOR,
+            side: [u8::MAX, across[0], across[1], 0],
+        };
+        mesh.vertices
+            .push(vertex([centre[0], 0.0, centre[1]], [0, 0]));
+        for k in 0..RING_SEGMENTS {
+            let [x, z] = round(k, inner);
+            mesh.vertices.push(vertex([x, 0.0, z], [u8::MAX, u8::MAX]));
+        }
+        let n = RING_SEGMENTS as u32;
+        for k in 0..n {
+            let (a, b) = (base + 1 + k, base + 1 + (k + 1) % n);
+            match forward {
+                true => mesh.indices.extend([base, a, b]),
+                false => mesh.indices.extend([base, b, a]),
+            }
+        }
     }
     mesh
 }
@@ -1521,9 +1556,13 @@ mod tests {
     }
 
     #[test]
-    fn a_doorway_is_a_frame_round_a_pane_seen_from_both_sides() {
-        let mesh = doorway(5);
-        assert_eq!((mesh.vertices.len(), mesh.indices.len()), (80, 120));
+    fn a_ring_is_a_rim_round_a_pane_seen_from_both_sides() {
+        let mesh = ring(5);
+        let n = RING_SEGMENTS;
+        assert_eq!(
+            (mesh.vertices.len(), mesh.indices.len()),
+            (16 * n + 2 * (n + 1), 24 * n + 6 * n)
+        );
         for side in mesh.indices.chunks(3) {
             let [a, b, c] = [0, 1, 2].map(|i| Vec3::from(mesh.vertices[side[i] as usize].position));
             let normal = Vec3::from(mesh.vertices[side[0] as usize].normal);
@@ -1531,24 +1570,40 @@ mod tests {
             assert!(wound.dot(normal) > 0.0, "{side:?} winds against its normal");
             for p in [a, b, c] {
                 assert!(p.x.abs() <= 0.5 + 1e-6 && p.y.abs() <= 0.5 + 1e-6);
-                assert!((0.0..=1.0).contains(&p.z));
-                assert!(((p - a).dot(normal)).abs() < 1e-6);
+                assert!((-1e-6..=1.0 + 1e-6).contains(&p.z));
+                assert!(((p - a).dot(normal)).abs() < 1e-5);
             }
         }
-        // The pane is dark and lit on its own, on the middle plane, facing
-        // both ways; the frame is the paint's.
+        // The rim fills the box: a corner reaches each of its sides.
+        for (axis, end) in [(0, -0.5), (0, 0.5), (2, 0.0), (2, 1.0)] {
+            assert!(
+                mesh.vertices
+                    .iter()
+                    .any(|v| (v.position[axis] - end).abs() < 1e-6)
+            );
+        }
+        // The pane is dark and lit on its own, on the middle plane, inside
+        // the rim, facing both ways; the rim is the paint's.
         let pane: Vec<&VolumeVertex> = mesh
             .vertices
             .iter()
             .filter(|v| v.color == PANE_COLOR)
             .collect();
-        assert_eq!(pane.len(), 8);
+        assert_eq!(pane.len(), 2 * (n + 1));
         assert!(pane.iter().all(|v| v.position[1] == 0.0));
+        assert!(pane.iter().all(|v| {
+            let [x, _, z] = v.position;
+            (x * x + (z - 0.5) * (z - 0.5)).sqrt() <= 0.5 - RIM + 1e-6
+        }));
         assert!(pane.iter().any(|v| v.normal[1] < 0.0) && pane.iter().any(|v| v.normal[1] > 0.0));
+        assert!(
+            mesh.vertices.iter().all(|v| v.color[3] == u8::MAX),
+            "the rim shines whatever its paint"
+        );
         assert_eq!(
             model_id(Shape::Portal(Some(PartId(1))), 5),
             model_id(Shape::Portal(None), 5),
-            "every portal in a paint shares one doorway"
+            "every portal in a paint shares one ring"
         );
         assert_ne!(model_id(Shape::Portal(None), 5), model_id(Shape::Cube, 5));
         // The cube is still the unit box.

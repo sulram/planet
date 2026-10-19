@@ -51,9 +51,9 @@ pub enum Item {
     /// light, a lamp; nobody collides with it. A place one travels to: the
     /// chart lists every landmark of the world with its place code.
     Landmark,
-    /// A portal: a standing doorway a metre wide and two tall, its frame in
-    /// the paint in hand round a dark pane, facing the body as a picture
-    /// does; nobody collides with it. It leads to the landmark in hand, by
+    /// A portal: a standing ring two metres across, its rim in the colour in
+    /// hand and always lit with its own light, a lamp, round a dark pane,
+    /// facing the body as a picture does; nobody collides with it. It leads to the landmark in hand, by
     /// the name the world gave it: a body that walks through its pane is
     /// taken to stand on that star, facing the way it points.
     Portal,
@@ -372,7 +372,7 @@ pub struct Items {
     /// walk through a pane is read from. None right after a leap.
     feet: Option<DVec3>,
     /// Whether a walk through a pane counts: not until the body has stood
-    /// clear of every pane since it last leapt, so a door on the star one
+    /// clear of every pane since it last leapt, so a portal on the star one
     /// lands on does not send the body straight back.
     armed: bool,
     /// A crossing waiting on the chart: the portal walked through and the
@@ -436,18 +436,18 @@ impl Items {
         .byte()
     }
 
-    /// The paint a shape is made of in the colour in hand: a landmark is
-    /// always in the light finish with no edge, lit with its own light, so
-    /// only its colour is the hand's.
+    /// The paint a shape is made of in the colour in hand: a landmark and a
+    /// portal are always in the light finish with no edge, lit with their
+    /// own light, so only their colour is the hand's.
     pub(crate) fn paint_of(&self, shape: Shape) -> u8 {
         match shape {
-            Shape::Landmark(_) => Paint {
+            Shape::Landmark(_) | Shape::Portal(_) => Paint {
                 color: self.paint,
                 finish: Finish::Light,
                 edge: Edge::None,
             }
             .byte(),
-            Shape::Cube | Shape::Vox(_) | Shape::Image(_) | Shape::Portal(_) => self.made_of(),
+            Shape::Cube | Shape::Vox(_) | Shape::Image(_) => self.made_of(),
         }
     }
 
@@ -953,7 +953,7 @@ impl Plugin for Items {
     /// anywhere, and opens the menu on it; with an item in hand a click
     /// places it; with the menu open the gizmo works.
     fn turn(&mut self, turn: &Turn<'_>, host: &mut Host<'_>) {
-        // The body moved: through a pane, it is taken where the door leads.
+        // The body moved: through a pane, it is taken where the portal leads.
         self.cross(host);
         // The chart answered: a crossing that waited on it leaps, and the
         // landmarks are said.
@@ -1508,14 +1508,14 @@ mod tests {
             r#"{{"type":"items.take","item":"portal","to":{},"ahead":true}}"#,
             star.0
         ));
-        let (door, _, part) = client
+        let (portal, _, part) = client
             .parts()
             .all()
             .find(|(id, _, _)| *id != star)
-            .expect("a door placed ahead");
+            .expect("a portal placed ahead");
         assert_eq!(part.shape, Shape::Portal(Some(star)));
         assert!(!part.solid);
-        assert_eq!(part.pose.scale, [2.0, 0.1, 4.0], "a metre wide, two tall");
+        assert_eq!(part.pose.scale, [4.0, 0.1, 4.0], "two metres across");
         let said = events(&mut client);
         let picked = said
             .iter()
@@ -1530,10 +1530,10 @@ mod tests {
             .find(|e| e["type"] == "items.hand")
             .unwrap();
         assert_eq!(hand["to"], star.0, "the destination stays in hand");
-        // The door stands in front of the body, facing it: a walk forward
+        // The ring stands in front of the body, facing it: a walk forward
         // goes through its pane and out onto the star, facing its way.
-        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the door");
-        assert_eq!(crossed["portal"], door.0);
+        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the ring");
+        assert_eq!(crossed["portal"], portal.0);
         assert_eq!(crossed["to"], star.0);
         let place = crossed["place"].as_str().expect("the place arrived at");
         assert!(place.contains(','), "{place} says which way to face");
@@ -1553,7 +1553,7 @@ mod tests {
     fn a_portal_leading_nowhere_says_so_and_the_body_stays() {
         let mut client = client();
         client.command_json(r#"{"type":"items.take","item":"portal","ahead":true}"#);
-        let (door, _, part) = client.parts().all().next().unwrap();
+        let (portal, _, part) = client.parts().all().next().unwrap();
         assert_eq!(part.shape, Shape::Portal(None));
         let said = events(&mut client);
         let picked = said
@@ -1563,8 +1563,8 @@ mod tests {
             .unwrap();
         assert!(picked["to"].is_null(), "{picked}");
         let before = client.here().place(client.sphere().blocks());
-        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the door");
-        assert_eq!(crossed["portal"], door.0);
+        let crossed = walk_until_crossed(&mut client, 600).expect("walked through the ring");
+        assert_eq!(crossed["portal"], portal.0);
         assert!(
             crossed["to"].is_null() && crossed["place"].is_null(),
             "{crossed}"
@@ -1575,8 +1575,8 @@ mod tests {
             &after[..6],
             "a walk, no leap: {before} to {after}"
         );
-        // Aimed by the panel at a landmark, the door leads there; aiming a
-        // part that is no door is refused.
+        // Aimed by the panel at a landmark, the portal leads there; aiming a
+        // part that is no portal is refused.
         client.command_json(r#"{"type":"items.take","item":"landmark","ahead":true}"#);
         let (star, _, _) = client
             .parts()
@@ -1585,10 +1585,10 @@ mod tests {
             .unwrap();
         client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
         assert_eq!(events(&mut client).last().unwrap()["reason"], "nowhere");
-        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, door.0));
+        client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, portal.0));
         client.command_json(&format!(r#"{{"type":"items.set","to":{}}}"#, star.0));
         assert_eq!(
-            client.parts().get(door).unwrap().1.shape,
+            client.parts().get(portal).unwrap().1.shape,
             Shape::Portal(Some(star))
         );
         let picked = events(&mut client)

@@ -34,6 +34,7 @@ use worldgen::{GENERATOR_VERSION, Generator, Material, Params, Sample};
 pub use assets::{AssetRequest, Form};
 use assets::{MANIFEST_PATH, Manifest, Purpose, Requests};
 pub use cells::{Aim, Cells, Guide, Met, PALETTE, REACH_M, Refusal, Seat, Sight};
+pub use collision::BODY_M;
 pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use history::{History, Owner};

@@ -1,6 +1,6 @@
 # Portals: a door from one place to another
 
-Drawn 2026-10-19, with the landmark placed (116). The doorway and the
+Drawn 2026-10-19, with the landmark placed (116). The ring and the
 crossing stand in the items plugin: `Shape::Portal(to)`, a pane that leads
 to a landmark by the name the world gave it. Nothing else here is decided.
 It is the whole a portal is measured against: what it stands on today, what
@@ -11,8 +11,8 @@ the renderer would gain, and the order a campaign would pull it in.
 A portal would be a shape of part, `Portal { to }`, naming a landmark by the
 name the world gave it. The landmark is the address and the portal the door:
 there is no destination to type, no pair to keep in step, and a landmark
-removed leaves a portal that leads nowhere and says so. A standing frame a
-metre wide and two tall by default, not solid, placed as a picture is, in
+removed leaves a portal that leads nowhere and says so. A standing ring two
+metres across by default, not solid, placed as a picture is, in
 front of the body; its panel row lists the chart to pick the destination from.
 The way back is a second portal placed at the destination; a button "place the
 way back" would place it in one pair of ops, standing on the star and facing
@@ -54,10 +54,11 @@ a dark pane with its rim when no view is given.
 ## The crossing
 
 Built: in the plugin's turn, after the body moved, the feet's step passes
-the pane inside the doorway from either side, and the body goes through
+the pane where the body, feet to head, meets the ring's circle, from
+either side, and the body goes through
 `Host::go_to` to the landmark's place with the star's bearing. A leap arms
 the crossing again only once the body stands clear of every pane, so a
-return door on the star sends nobody straight back. What would follow: the
+return ring on the star sends nobody straight back. What would follow: the
 body keeping its velocity, so a run through a door is a run out of the
 other; a flag in the stance for a leap, so another client snaps the figure
 instead of sliding it 67 ms through the ground as it does now; the veil

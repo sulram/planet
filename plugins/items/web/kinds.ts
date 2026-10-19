@@ -37,5 +37,5 @@ export const kinds: readonly Kind[] = [
 	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture },
 	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model },
 	{ name: 'landmark', icon: 'star', label: () => t('kind.landmark'), Extra: Landmark, adds: true },
-	{ name: 'portal', icon: 'door-open', label: () => t('kind.portal'), Extra: Portal, adds: true }
+	{ name: 'portal', icon: 'circle', label: () => t('kind.portal'), Extra: Portal, adds: true }
 ];

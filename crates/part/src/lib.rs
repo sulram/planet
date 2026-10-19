@@ -40,11 +40,12 @@ pub enum Shape {
     /// it is seen at night, and it is a place one travels to: arriving at
     /// it is standing on it.
     Landmark(Name),
-    /// A portal: a standing doorway, a frame round the box's sides along
-    /// `x` and `z` with a dark pane in its middle, leading to a landmark by
-    /// the name the world gave it. A body that passes through the pane is
-    /// taken to stand on that star, facing the way it points. `None` leads
-    /// nowhere: the landmark was never chosen, or is gone.
+    /// A portal: a standing ring, a rim round the circle that fills the box
+    /// along `x` and `z`, lit with its own light whatever its paint's finish,
+    /// with a dark pane in its middle, leading to a landmark by the name
+    /// the world gave it. A body that passes through
+    /// the pane is taken to stand on that star, facing the way it points.
+    /// `None` leads nowhere: the landmark was never chosen, or is gone.
     Portal(Option<PartId>),
 }
 
