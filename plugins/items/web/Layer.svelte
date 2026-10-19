@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { builds } from '$lib/instance';
 	import type { LayerProps } from '$lib/plugins/plugin';
+	import Drop from './Drop.svelte';
 	import Panel from './Panel.svelte';
 	import { parseHand, parsePicked, parseRefused, type Edge, type Finish, type Item, type Mode, type Picked, type Refusal } from './protocol';
 
@@ -45,6 +46,7 @@
 </script>
 
 {#if builds(level)}
+	<Drop {seam} {picked} />
 	<Panel
 		{editing}
 		{item}
