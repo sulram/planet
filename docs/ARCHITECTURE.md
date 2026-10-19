@@ -106,19 +106,19 @@ not yet confirmed.
 
 - A heavy file, an image, a video, a GLB, is named by the hash of its content
   and never changes (89). A record names it `asset://<hash>.<ext>`.
-- A session that may build sends it to the world server, which names it and
-  writes it to the bucket folder mundos named for this generation. Browsers
-  read it from the address in front of the bucket. Alone, the world folder
-  holds the files and the server serves them. On start a world deletes
-  from its bucket folder what no record names.
+- A builder sends it to `POST /api/files`, the bytes as the body: the kind
+  is read off them, `.vox`, `.png`, `.jpg`, `.webp`, 20 MB at most, and the
+  answer is the asset's name. `GET /api/files` lists what a world holds.
+- It goes to the bucket folder mundos named for this generation, and is read
+  from the address `GET /api/world` says as `files`. Alone, the world folder
+  holds it under `files/` and `GET /files/<hash>.<ext>` serves it, kept by a
+  browser for good. On start a world deletes what no record names.
 - The default asset set (avatars, clips, fields) is part of a version, served
   from the image; `assets/manifest.json` says what is in it.
-- Entities and media are plugins to come: a GLB, a part, a light, a media
-  frame, anchored to an address with a local offset, under a budget of
-  triangles, texture size and bytes. The owner's client makes the thumbnail
-  and the low version at placement; the server fetches no third-party URL and
-  runs no ffmpeg. Far draws the thumbnail, mid the low version, near and in
-  view the original, under a hard cap on videos decoding at once.
+- What is placed in a world, a cube, a model, a GLB, a picture, is drawn in
+  `sketches/entities.md`: one part with a pose, a scale and a shape. The
+  owner's client makes a picture's thumbnail and low version at placement;
+  the server fetches no third-party URL and runs no ffmpeg.
 - Video rule: MP4, H.264, faststart, a host with range requests. `VideoSource`
   is one seam with a backend for each platform.
 
