@@ -119,7 +119,7 @@ impl Motion {
     pub fn of(controller: &Controller) -> Motion {
         let gait = Gait::of(controller);
         Motion {
-            position: controller.position(),
+            position: controller.drawn_position(),
             basis: controller.body_basis(),
             gait,
             speed_mps: speed_for(gait, controller.ground_mps(), controller.speed_mps()),

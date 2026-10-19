@@ -1133,7 +1133,7 @@ impl Client {
             let up = self.controller.body_basis().y_axis;
             (
                 session,
-                self.controller.position() + up * self.figure.label_m(),
+                self.controller.drawn_position() + up * self.figure.label_m(),
             )
         });
         let inverse = camera.rotation.inverse();
@@ -1316,8 +1316,8 @@ impl Client {
                 .collect(),
             effects: self.effects,
             interaction: scene::InteractionCapsule {
-                start: self.controller.position() + self.controller.up() * 0.2,
-                end: self.controller.position() + self.controller.up() * 1.5,
+                start: self.controller.drawn_position() + self.controller.up() * 0.2,
+                end: self.controller.drawn_position() + self.controller.up() * 1.5,
                 radius_m: 0.65,
             },
             boxes,
