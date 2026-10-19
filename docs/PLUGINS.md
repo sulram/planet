@@ -85,11 +85,11 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   them and the op that changes them, a gesture over a box. Building is a
   plugin of how a hand arrives at gestures: tools, kinds of construction,
   modifiers, keys, a panel. With building off, what stands, stands.
-- The parts are the core's (111): a placed thing that is no cell, kept by its
-  seat with a pose, a shape, a paint and a solid flag; placed, set and removed
-  as ops, moved in the world and read back. Items is the plugin of the hand:
-  the menu of items, one gizmo and one panel for every kind, a file kind one
-  of them. Building is the cells alone.
+- The parts are the core's (111): a placed thing that is no cell, kept by the
+  world under the name it gives, one row a part, with a seat, a pose, a shape,
+  a paint and a solid flag; placed, set and removed as ops under the owner
+  `parts`, told to whoever is near, shown to a client that looks. Items is
+  the plugin of the hand: the menu, one gizmo and one panel for every kind.
 
 ## Where a plugin lives
 

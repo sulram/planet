@@ -78,7 +78,8 @@ end to end.
 - [ ] The gizmo's handles sized by the view, so a part far off is still taken by its handle; a drag snapped to blocks and to right angles with a key held
 - [ ] A part picked by one hand shown picked to the others near
 - [ ] One history: a change of the cells and a change of the parts taken back in the order they landed
-- [ ] The op on the wire and the owner in the module: a part placed in one browser stands in another, kept by the seat, told to whoever is near (110); permission asked for every plot its box covers
+- [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
+- [ ] A client lets go of parts far behind it, as it does volumes
 - [ ] A light part lights what is near, as a lamp among the cells does
 - [ ] Items beside the cube: a `.vox` model (its session: `crates/vox`, the upload route) and a picture (its session), each a shape of part, a draw of its own and a row in the items menu
 - [ ] Measure: parts in a frame against the budget, `bun run bench`

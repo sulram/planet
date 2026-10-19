@@ -16,6 +16,7 @@ pub use frame::{frame, reseat, seated};
 
 use protocol::Body;
 use protocol::cells as wire;
+use protocol::parts as parts_wire;
 use topology::{BLOCK_M, QuadSphere, Sector, SurfacePoint};
 use voxel::{Gesture, Span};
 use worldgen::Generator;
@@ -307,6 +308,61 @@ pub fn away_m(
     let along = (dot(to, up) / dot(up, up).max(f64::MIN_POSITIVE)).clamp(0.0, 1.0);
     let apart = [0, 1, 2].map(|i| to[i] - up[i] * along);
     dot(apart, apart).sqrt()
+}
+
+/// A part as the wire says it.
+pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
+    let pose = &part.pose;
+    let [x, y, z, w] = pose.rotation.to_array();
+    let shape = match part.shape {
+        part::Shape::Cube => parts_wire::shape::Shape::Cube(parts_wire::Cube {}),
+    };
+    parts_wire::Part {
+        seat: Some(seat.wire()),
+        pose: Some(parts_wire::Pose {
+            u: pose.at[0],
+            v: pose.at[1],
+            h: pose.at[2],
+            qx: x,
+            qy: y,
+            qz: z,
+            qw: w,
+            sx: pose.scale[0],
+            sy: pose.scale[1],
+            sz: pose.scale[2],
+        }),
+        shape: Some(parts_wire::Shape { shape: Some(shape) }),
+        paint: u32::from(part.paint),
+        solid: part.solid,
+    }
+}
+
+/// The seat and part a message says, when it says a sound one this version
+/// knows: a seat, a pose that is a pose, a shape, a paint of a byte.
+pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
+    let seat = Seat::from_wire(part.seat.as_ref())?;
+    let pose = part.pose.as_ref()?;
+    let shape = match part.shape.as_ref()?.shape.as_ref()? {
+        parts_wire::shape::Shape::Cube(_) => part::Shape::Cube,
+    };
+    let pose = part::Pose {
+        at: [pose.u, pose.v, pose.h],
+        rotation: glam::DQuat::from_xyzw(pose.qx, pose.qy, pose.qz, pose.qw),
+        scale: [pose.sx, pose.sy, pose.sz],
+    };
+    if !pose.is_sound() {
+        return None;
+    }
+    let paint = u8::try_from(part.paint).ok()?;
+    Some((
+        seat,
+        part::Part {
+            shape,
+            pose,
+            paint,
+            solid: part.solid,
+        },
+    ))
 }
 
 /// A gesture as the wire says it.
