@@ -51,8 +51,10 @@ fn fs(in: Varying) -> @location(0) vec4<f32> {
     }
     let normal = normalize(in.normal);
     let lit = lit(texel.rgb, normal, 0.0, in.relative);
-    // A screen shows, a lamp glows: its white is a sunlit white, no brighter.
-    return vec4<f32>(mix(lit, own_light(texel.rgb, in.relative), in.shine), 1.0);
+    // Up to 1 it is a screen, its white a sunlit white; past 1 it is a lamp,
+    // that many times over, and the bloom takes what is over white.
+    let glow = own_light(texel.rgb * max(in.shine, 1.0), in.relative);
+    return vec4<f32>(mix(lit, glow, clamp(in.shine, 0.0, 1.0)), 1.0);
 }
 
 // The same cutout as the visible quad: what is see-through casts nothing.

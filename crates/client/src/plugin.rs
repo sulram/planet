@@ -488,8 +488,9 @@ impl Host<'_> {
 
     /// Whether a pose is one a part on a seat can have: sound, and inside
     /// the seat's sector.
-    fn sound(&self, seat: Seat, pose: &PartPose) -> Result<(), PartRefusal> {
-        match pose.is_sound() && seat::inside(seat.sphere(self.lent.generator), pose) {
+    fn sound(&self, seat: Seat, part: &Part) -> Result<(), PartRefusal> {
+        let pose = &part.pose;
+        match part.is_sound() && seat::inside(seat.sphere(self.lent.generator), pose) {
             true => Ok(()),
             false => Err(PartRefusal::Pose),
         }
@@ -499,7 +500,7 @@ impl Host<'_> {
     /// other. The name it is given.
     pub fn place_part(&mut self, seat: Seat, part: Part) -> Result<PartId, PartRefusal> {
         self.may_place()?;
-        self.sound(seat, &part.pose)?;
+        self.sound(seat, &part)?;
         let id = self.lent.parts.place(self.lent.generator, seat, part);
         let ask = self.lent.parts.last_ask();
         self.lent.history.did(Owner::Parts, ask);
@@ -510,7 +511,7 @@ impl Host<'_> {
     /// solid or not, or seated elsewhere.
     pub fn set_part(&mut self, id: PartId, seat: Seat, part: Part) -> Result<(), PartRefusal> {
         self.may_place()?;
-        self.sound(seat, &part.pose)?;
+        self.sound(seat, &part)?;
         match self.lent.parts.set(self.lent.generator, id, seat, part) {
             true => {
                 // A set goes to the world at a cadence, under no number yet.

@@ -84,6 +84,10 @@ pub struct Part {
     /// Whether a body stands on it and is stopped by it.
     #[prost(bool, tag="5")]
     pub solid: bool,
+    /// How much it shines with its own colour: 0 lit by what falls on it, 1
+    /// its own colour as a screen shows it, more a lamp.
+    #[prost(float, tag="6")]
+    pub shine: f32,
 }
 /// A part as the world keeps it: under the name it gave, one more for each
 /// change that landed in it.

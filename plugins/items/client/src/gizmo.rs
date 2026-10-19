@@ -258,6 +258,7 @@ mod tests {
                 pose: client::PartPose::upright([0.0, 0.0, 0.0], [2.0, 2.0, 2.0]),
                 paint: 0,
                 solid: true,
+                shine: 0.0,
             },
             world,
             hot: None,

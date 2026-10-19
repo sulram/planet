@@ -114,6 +114,7 @@ fn cube(point: SurfacePoint, h: f64) -> wire::Part {
         },
         paint: 11,
         solid: true,
+        shine: 0.0,
     };
     seat::part_wire(Seat::Sector(point.sector), &part)
 }

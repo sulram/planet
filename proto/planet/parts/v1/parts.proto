@@ -71,6 +71,9 @@ message Part {
   uint32 paint = 4;
   // Whether a body stands on it and is stopped by it.
   bool solid = 5;
+  // How much it shines with its own colour: 0 lit by what falls on it, 1
+  // its own colour as a screen shows it, more a lamp.
+  float shine = 6;
 }
 
 // A part as the world keeps it: under the name it gave, one more for each

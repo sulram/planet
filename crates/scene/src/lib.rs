@@ -531,8 +531,9 @@ pub struct PictureDraw {
     pub picture: Option<PictureId>,
     /// World from the quad.
     pub transform: DAffine3,
-    /// How much it shines with its own colour, 0 lit by what falls on it up
-    /// to 1 for a screen, as a cell's side does.
+    /// How much it shines with its own colour: 0 lit by what falls on it, 1
+    /// its own colour as a screen shows it, more a lamp, brighter than any
+    /// sunlit white.
     pub shine: f32,
     /// Whether its back is drawn too: a free standing picture is seen from
     /// both sides, a poster on a wall from one.

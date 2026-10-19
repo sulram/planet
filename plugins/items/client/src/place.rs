@@ -49,6 +49,7 @@ impl Items {
                 pose: PartPose::upright(at, CUBE),
                 paint: self.made_of(),
                 solid: true,
+                shine: 0.0,
             },
             Item::Model => {
                 // With no file taken there is nothing to place yet.
@@ -63,6 +64,7 @@ impl Items {
                     pose: PartPose::upright(at, size.map(|n| f64::from(n) * VOXEL)),
                     paint: self.made_of(),
                     solid: true,
+                    shine: 0.0,
                 }
             }
             Item::Picture => {
@@ -84,6 +86,7 @@ impl Items {
                     },
                     paint: self.made_of(),
                     solid: false,
+                    shine: 0.0,
                 }
             }
         };

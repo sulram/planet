@@ -356,6 +356,7 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
         shape: Some(parts_wire::Shape { shape: Some(shape) }),
         paint: u32::from(part.paint),
         solid: part.solid,
+        shine: part.shine,
     }
 }
 
@@ -387,19 +388,15 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
         rotation: glam::DQuat::from_xyzw(pose.qx, pose.qy, pose.qz, pose.qw),
         scale: [pose.sx, pose.sy, pose.sz],
     };
-    if !pose.is_sound() {
-        return None;
-    }
     let paint = u8::try_from(part.paint).ok()?;
-    Some((
-        seat,
-        part::Part {
-            shape,
-            pose,
-            paint,
-            solid: part.solid,
-        },
-    ))
+    let read = part::Part {
+        shape,
+        pose,
+        paint,
+        solid: part.solid,
+        shine: part.shine,
+    };
+    read.is_sound().then_some((seat, read))
 }
 
 /// A gesture as the wire says it.
@@ -487,6 +484,7 @@ mod tests {
                 pose: part::Pose::upright([100.0, 200.0, 3.0], [2.0, 0.1, 2.0]),
                 paint: 5,
                 solid: false,
+                shine: 0.0,
             };
             assert_eq!(part_from_wire(&part_wire(seat, &sent)), Some((seat, sent)));
         }
@@ -497,6 +495,7 @@ mod tests {
                 pose: part::Pose::upright([1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
                 paint: 0,
                 solid: true,
+                shine: 0.0,
             },
         );
         if let Some(parts_wire::shape::Shape::Image(image)) =

@@ -252,6 +252,20 @@ pub struct Part {
     pub paint: u8,
     /// Whether a body stands on it and is stopped by it.
     pub solid: bool,
+    /// How much it shines with its own colour: 0 lit by what falls on it, 1
+    /// its own colour as a screen shows it, more a lamp, up to [`MAX_SHINE`].
+    pub shine: f32,
+}
+
+/// The most a part shines with its own colour.
+pub const MAX_SHINE: f32 = 8.0;
+
+impl Part {
+    /// Whether what is said of the part beside its pose is sound: a shine
+    /// that is a number within its reach.
+    pub fn is_sound(&self) -> bool {
+        self.pose.is_sound() && self.shine.is_finite() && (0.0..=MAX_SHINE).contains(&self.shine)
+    }
 }
 
 /// What holds up a body standing beside a part: the top of it under the
@@ -426,6 +440,7 @@ mod tests {
             pose,
             paint: 0,
             solid: true,
+            shine: 0.0,
         }
     }
 

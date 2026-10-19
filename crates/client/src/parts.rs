@@ -114,7 +114,8 @@ const FILE: u64 = 1 << 63;
 
 /// A set or a remove asked before the world named the part.
 enum Deferred {
-    Set(Seat, Part),
+    /// Boxed: a part is a good deal larger than nothing.
+    Set(Box<(Seat, Part)>),
     Remove,
 }
 
@@ -362,7 +363,7 @@ impl Parts {
         if link.since_set_s >= SET_S {
             link.since_set_s = 0.0;
             for (local, (seat, part)) in core::mem::take(&mut link.dirty) {
-                self.send(local, Deferred::Set(seat, part));
+                self.send(local, Deferred::Set(Box::new((seat, part))));
             }
         }
         let Some(link) = &mut self.link else {
@@ -492,11 +493,11 @@ impl Parts {
             return;
         };
         let asked = match deferred {
-            Deferred::Set(seat, part) => link.ask(
+            Deferred::Set(set) => link.ask(
                 wire::SET,
                 &wire::Set {
                     id,
-                    part: Some(seat::part_wire(seat, &part)),
+                    part: Some(seat::part_wire(set.0, &set.1)),
                 },
             ),
             Deferred::Remove => link.ask(wire::REMOVE, &wire::Remove { id }),
@@ -868,7 +869,14 @@ impl Parts {
                     return None;
                 };
                 let world_from_quad = self.place_of(generator, seat, &part.pose) * FRONT;
-                let shine = f32::from(u8::from(Paint::of(part.paint).finish == Finish::Light));
+                // As the part says; a picture in the light finish with no
+                // shine said is a screen.
+                let screen_like = Paint::of(part.paint).finish == Finish::Light;
+                let shine = match (part.shine > 0.0, screen_like) {
+                    (true, _) => part.shine,
+                    (false, true) => 1.0,
+                    (false, false) => 0.0,
+                };
                 Some(pictures.draw(&media, world_from_quad, shine, true, screen, requests))
             })
             .collect()
@@ -1249,6 +1257,7 @@ mod tests {
             pose: Pose::upright([side - 0.5, side / 2.0, 20.0], [4.0, 4.0, 2.0]),
             paint: 0,
             solid: true,
+            shine: 0.0,
         };
         parts.place(&generator, seat, part);
         // A body a block past the seam, on the next sector, at the top.
@@ -1277,6 +1286,7 @@ mod tests {
             pose: Pose::upright(at, CUBE),
             paint: 0,
             solid: true,
+            shine: 0.0,
         };
         let id = parts.place(&generator, seat, part);
         let point = SurfacePoint::new(seat.sector(), 1000.3, 999.8);
@@ -1341,6 +1351,7 @@ mod tests {
             pose: Pose::upright([1000.0, 1000.0, 10.0], [4.0, 1.0, 4.0]),
             paint: 0,
             solid: true,
+            shine: 0.0,
         };
         parts.place(&generator, seat, part);
         parts.place(&generator, seat, part);

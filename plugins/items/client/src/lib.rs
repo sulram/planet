@@ -184,6 +184,8 @@ struct Set {
     rotation: Option<[f64; 3]>,
     scale: Option<[f64; 3]>,
     solid: Option<bool>,
+    /// How much the part shines with its own colour.
+    shine: Option<f32>,
     /// Another picture in the place of the one picked: its width follows
     /// the new aspect, its height stays.
     #[serde(default)]
@@ -234,6 +236,8 @@ struct Picked {
     scale: Option<[f64; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     solid: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shine: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -410,6 +414,9 @@ impl Items {
         if let Some(solid) = set.solid {
             part.solid = solid;
         }
+        if let Some(shine) = set.shine {
+            part.shine = shine;
+        }
         if let Some(body) = &set.media {
             let Some(media) = body.media() else {
                 return host.reject("a picture names three asset:// files".into());
@@ -535,6 +542,7 @@ impl Items {
                 rotation: Some(degrees(gizmo.part.pose.rotation)),
                 scale: Some(gizmo.part.pose.scale),
                 solid: Some(gizmo.part.solid),
+                shine: Some(gizmo.part.shine),
             },
             None => Picked {
                 id: None,
@@ -543,6 +551,7 @@ impl Items {
                 rotation: None,
                 scale: None,
                 solid: None,
+                shine: None,
             },
         };
         host.emit(PICKED, &picked);

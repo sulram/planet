@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, Segmented, VectorInput, type IconName } from '$lib/ds';
+	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, Segmented, Slider, VectorInput, type IconName } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import type { Seam } from '$lib/plugins/plugin';
 	import { kinds } from './kinds';
@@ -177,12 +177,16 @@
 					locked
 				/>
 				<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
+				{#if picked.item === 'picture'}
+					<Slider label={t('shine')} value={picked.shine} min={0} max={8} step={0.1} format={(n) => n.toFixed(1)} oninput={(shine) => onset({ shine })} />
+				{/if}
 				<Button variant="danger" type="button" onclick={onremove}>{t('remove')} <kbd>Del</kbd></Button>
 			</section>
 		{/if}
-		<section>
-			<h3>{t('material')}</h3>
-			<Palette colors={palette} {paint} {finish} {edge} label={t('paint')} pick={(n) => t('paint.pick', { n: String(n) })} onpick={onpaint} />
+		{#if item === 'cube' || (!item && picked?.item === 'cube')}
+			<section>
+				<h3>{t('material')}</h3>
+				<Palette colors={palette} {paint} {finish} {edge} label={t('paint')} pick={(n) => t('paint.pick', { n: String(n) })} onpick={onpaint} />
 			<div class="row">
 				<span>{t('finish')}</span>
 				<Segmented options={finishOptions} value={finish} label={t('finish')} onselect={onfinish} />
@@ -191,7 +195,8 @@
 				<span>{t('edge')}</span>
 				<Segmented options={edgeOptions} value={edge} label={t('edge')} onselect={onedge} />
 			</div>
-		</section>
+			</section>
+		{/if}
 		<p class="foot">{t(item ? 'help.place' : picked ? 'help.edit' : 'help.pick')}</p>
 	</Panel>
 {:else}

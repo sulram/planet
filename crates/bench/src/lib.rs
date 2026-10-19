@@ -285,6 +285,7 @@ pub fn parts_start(count: i32) {
             pose: PartPose::upright(at, CUBE),
             paint: (i % 16) as u8,
             solid: true,
+            shine: 0.0,
         };
         client
             .host("bench")
