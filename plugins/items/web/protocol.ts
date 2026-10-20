@@ -8,8 +8,8 @@
  */
 
 /** What the menu offers to place. A kind another plugin's session adds enters `kinds.ts` under its own name. */
-export type Item = 'cube' | 'model' | 'picture' | 'sound' | 'landmark' | 'portal';
-export const items = ['cube', 'model', 'picture', 'sound', 'landmark', 'portal'] as const satisfies readonly Item[];
+export type Item = 'cube' | 'model' | 'picture' | 'video' | 'sound' | 'landmark' | 'portal';
+export const items = ['cube', 'model', 'picture', 'video', 'sound', 'landmark', 'portal'] as const satisfies readonly Item[];
 
 /** How what is placed takes the light: lit, see-through, or shining and lighting what is near. */
 export type Finish = 'matte' | 'glass' | 'light';

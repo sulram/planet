@@ -258,6 +258,7 @@
 				<Icon name="languages" label="Language" />
 				<Icon name="box" label="Cube" />
 				<Icon name="image" label="Picture" />
+				<Icon name="video" label="Video" />
 				<Icon name="move-3d" label="Move" />
 				<Icon name="rotate-3d" label="Rotate" />
 				<Icon name="scale-3d" label="Scale" />

@@ -8,7 +8,7 @@
 import { kindOf } from '$lib/files';
 import { Refused } from '$lib/instance';
 import type { Seam } from '$lib/plugins/plugin';
-import { isPicture, prepareImage, type Media } from './image';
+import { isPicture, isVideo, prepareImage, type Media } from './image';
 import type { Picked } from './protocol';
 
 /** What a file is to items, by its name and type: a picture, a model, a sound, or none of them. */
@@ -90,10 +90,12 @@ export async function takeFile(seam: Seam, file: File, picked?: Picked | null): 
 		return { given };
 	}
 	const media = await prepareImage(file, (blob) => seam.upload(blob));
-	if (picked?.item === 'picture') {
+	// A picture picked takes either kind of file in its place: a still and a
+	// video are the same part, told apart by their file.
+	if (picked?.item === 'picture' || picked?.item === 'video') {
 		seam.command('set', { media });
 	} else {
-		seam.command('take', { item: 'picture', media, ahead: true });
+		seam.command('take', { item: isVideo(file) ? 'video' : 'picture', media, ahead: true });
 	}
 	return { given, media };
 }

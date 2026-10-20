@@ -13,8 +13,10 @@
 export const THUMB_SIDE = 128;
 export const LOW_SIDE = 1024;
 
-/** The file kinds a picture is taken from: what the server sniffs. */
+/** The file kinds a picture is taken from: what the server sniffs. The video kinds are the video item's. */
 export const KINDS = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'video/mp4'] as const;
+export const STILL_KINDS = KINDS.filter((kind) => kind.startsWith('image/'));
+export const VIDEO_KINDS = KINDS.filter((kind) => kind.startsWith('video/'));
 
 /** How the smaller versions are kept: small, and read by every browser. */
 const VERSION_KIND = 'image/webp';

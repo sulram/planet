@@ -268,7 +268,7 @@
 						/>
 						<Checkbox checked={picked.solid} onchange={(solid) => onset({ solid })}>{t('solid')}</Checkbox>
 					{/if}
-					{#if picked.item === 'picture' || picked.lamp}
+					{#if picked.item === 'picture' || picked.item === 'video' || picked.lamp}
 						<Slider label={t('shine')} value={picked.shine} min={0} max={8} step={0.1} format={(n) => n.toFixed(1)} oninput={(shine) => onset({ shine })} />
 					{/if}
 					{#if picked.sound}

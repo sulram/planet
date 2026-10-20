@@ -105,7 +105,7 @@ impl Items {
                     volume: 0.0,
                 }
             }
-            Item::Picture => {
+            Item::Picture | Item::Video => {
                 // Nothing chosen yet: the panel asks for a file.
                 let Some(media) = self.picture else {
                     return;

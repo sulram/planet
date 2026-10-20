@@ -9,6 +9,7 @@ import type { Component } from 'svelte';
 import type { IconName } from '$lib/ds';
 import type { Seam } from '$lib/plugins/plugin';
 import Picture from './Picture.svelte';
+import Video from './Video.svelte';
 import Model from './Model.svelte';
 import Landmark from './Landmark.svelte';
 import Sound from './Sound.svelte';
@@ -36,6 +37,7 @@ export interface Kind {
 export const kinds: readonly Kind[] = [
 	{ name: 'cube', icon: 'box', label: () => t('kind.cube'), adds: true },
 	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture },
+	{ name: 'video', icon: 'video', label: () => t('kind.video'), Extra: Video },
 	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model },
 	{ name: 'sound', icon: 'volume-2', label: () => t('kind.sound'), Extra: Sound },
 	{ name: 'landmark', icon: 'star', label: () => t('kind.landmark'), Extra: Landmark, adds: true },

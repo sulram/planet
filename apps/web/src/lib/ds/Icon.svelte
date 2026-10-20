@@ -19,6 +19,7 @@
 		| 'languages'
 		| 'box'
 		| 'image'
+		| 'video'
 		| 'move-3d'
 		| 'rotate-3d'
 		| 'scale-3d'
@@ -59,6 +60,7 @@
 		languages: 'm5 8 6 6m-7 0 6-6 2-3M2 5h12M7 2h1m14 20-5-10-5 10m2-4h6',
 		box: 'M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Zm-17.7-1 8.7 5 8.7-5M12 22V12',
 		// Lucide draws a rect with a radius of 2 and a circle; spelled as paths here.
+		video: 'M4 6h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2ZM16 13l5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5',
 		image:
 			'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0m14 6-3.086-3.086a2 2 0 0 0-2.828 0L6 21',
 		// Lucide draws the body as a rect with a radius of 2; spelled as a path.

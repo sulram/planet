@@ -20,7 +20,8 @@ mod gizmo;
 mod place;
 
 use client::{
-    Clip, Host, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Portal, Shape, Turn,
+    Clip, Host, ImageKind, KeyAsk, Landmarked, Media, Name, Part, PartId, Plugin, Portal, Shape,
+    Turn,
 };
 
 use glam::{DQuat, DVec3, EulerRot};
@@ -48,6 +49,9 @@ pub enum Item {
     /// file: its size in texels and three asset names, the original, a low
     /// version and a thumb.
     Picture,
+    /// A video: a picture whose file is an MP4, placed as a picture is and
+    /// heard within its reach. Taken with its `media`, as a picture is.
+    Video,
     /// A sound: a file played where it is placed, looping, heard within its
     /// reach; nothing is drawn of it but its gizmo when picked, so the list
     /// of what is near finds it. Taken with its `clip`: the asset name of
@@ -947,6 +951,7 @@ fn item_of(shape: Shape) -> Item {
     match shape {
         Shape::Cube => Item::Cube,
         Shape::Vox(_) => Item::Model,
+        Shape::Image(media) if media.kind == ImageKind::Mp4 => Item::Video,
         Shape::Image(_) => Item::Picture,
         Shape::Landmark(_) => Item::Landmark,
         Shape::Sound(_) => Item::Sound,
@@ -1024,7 +1029,7 @@ impl Plugin for Items {
                     if let Some(rim) = rim {
                         self.rim = rim_units(rim);
                     }
-                    if item == Some(Item::Picture) {
+                    if matches!(item, Some(Item::Picture | Item::Video)) {
                         match media.as_ref().map(MediaBody::media) {
                             Some(None) => {
                                 return host.reject("a picture names three asset:// files".into());
@@ -1493,6 +1498,33 @@ mod tests {
             .find(|(_, _, part)| matches!(part.shape, Shape::Image(media) if media.moves()))
             .expect("the moving picture is placed");
         assert_eq!(voxel::Paint::of(screen.paint).finish, voxel::Finish::Light);
+        // A video is taken by its own name, placed as a picture is, and the
+        // pick says it is a video.
+        let video = format!(
+            r#"{{"width":640,"height":360,"millis":4000,"thumb":"asset://{}.webp","low":"asset://{}.webp","full":"asset://{}.mp4"}}"#,
+            hex("0a"),
+            hex("0b"),
+            hex("0c")
+        );
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"video","media":{video}}}"#
+        ));
+        events(&mut client);
+        click(&mut client, [0.5, 0.85]);
+        let said = events(&mut client);
+        let picked = said
+            .iter()
+            .rev()
+            .find(|e| e["type"] == "items.picked")
+            .expect("the video placed is picked");
+        assert_eq!(picked["item"], "video");
+        assert!(
+            client
+                .parts()
+                .all()
+                .any(|(_, _, part)| matches!(part.shape, Shape::Image(media) if media.sounds())),
+            "the video is placed as a picture that sounds"
+        );
     }
 
     #[test]
