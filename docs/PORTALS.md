@@ -60,20 +60,22 @@ lives in WORLD.md; how the picture is made in RENDER.md.
 
 ## The view through it
 
-- A portal's pane is a window on the world past it, drawn as Valve's
-  Portal draws its portals: the view's camera is carried from the ring's
-  frame to the landmark's, as a body that walked through would be, and the
-  world is drawn from there first, into a slot of its own as big as the
-  pane is seen, a quarter of the view at least and the whole of it when
-  the disc fills it, in steps (`render::panes`, `scene::Through`). The
-  streamer's detail for that eye follows the same size.
+- A portal's pane is a window on the world past it as a wide lens in the
+  portal sees it: a camera carried from the pane's middle to the landmark,
+  12 m over the star, looking the way the eye looks through the pane's
+  middle, 140 degrees high (`LENS_*` in `client`). The world is drawn from
+  there first, into a slot of its own as big as the pane is seen, a
+  quarter of the view at least and the whole of it when the disc fills
+  it, in steps (`render::panes`, `scene::Through`). The streamer's detail
+  for that eye follows the same size.
 - The window bends what it shows toward its rim in a band that pulses, the
   colours parting there: the picture, drawn smaller than the view, meets
   the view through a band that is the portal's and not a seam.
-- The eye past the portal keeps the view's own projection, so a point of
-  the pane and the point seen through it fall on the same pixel: the pane
-  samples that picture where it stands on the screen, and the window has
-  parallax. The picture is HDR, before bloom and the tone map, which run
+- The pane shows that picture as a fisheye: its middle along the line,
+  each point of the disc that line turned toward the point, the rim 65
+  degrees off it, so a disc far off shows the far side whole. Walking
+  round the portal turns the line, and the window keeps its parallax. The
+  picture is HDR, before bloom and the tone map, which run
   once over the view with the pane in it.
 - The world past a portal is its ground, sea, sky, clouds and cells: what
   is built there shows through the pane; no parts, no bodies, no shadows,

@@ -564,14 +564,18 @@ pub struct PaneDraw {
     pub seen: f32,
 }
 
-/// The world past a portal, as seen from the eye carried through it: the
-/// view's camera moved from the pane to where the portal leads, as a body
-/// that walked through would be. It is drawn with the view's own
-/// projection, so a point of the pane and the point seen through it fall
-/// on the same pixel, and the pane is a window, with parallax.
+/// The world past a portal, as a wide lens in the portal sees it: a camera
+/// carried from the pane's middle to where the portal leads, high over it,
+/// looking the way the view looks through the pane. The pane shows it as a
+/// fisheye: its middle along the camera's line, its rim [`Through::lens`]
+/// off that line.
 #[derive(Clone, Debug)]
 pub struct Through {
     pub camera: Camera,
+    /// What carries a direction on this side of the portal to the far side.
+    pub turn: DQuat,
+    /// How far off its line the lens sees at the pane's rim, radians.
+    pub lens: f32,
     /// The patches in its view. All were announced by a [`TerrainChange::Add`].
     pub patches: Vec<PatchDraw>,
     /// How big it is drawn, of the view's size: as big as the pane is seen,

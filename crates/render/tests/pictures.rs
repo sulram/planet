@@ -253,13 +253,17 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
         "a pane with nothing through it is dark"
     );
 
-    // Seen through: the eye past the portal faces the sun.
+    // Seen through: the lens past the portal faces the sun, and sees at the
+    // pane's rim as far off its line as the rim stands from the eye's, so
+    // the pane shows the sun where a window would.
     frame.panes[0].seen = 1.0;
     frame.through = Some(scene::Through {
         camera: Camera {
             rotation: DQuat::from_rotation_y(core::f64::consts::PI),
             ..camera
         },
+        turn: DQuat::from_rotation_y(core::f64::consts::PI),
+        lens: (1.0f32 / 3.0).atan(),
         patches: Vec::new(),
         size: 0.25,
     });
@@ -278,5 +282,26 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
         luma(&seen, 320 - 95, 180 - 95),
         luma(&dark, 320 - 95, 180 - 95),
         "beside the disc nothing changed"
+    );
+
+    // A wide lens sees 65 degrees off its line at the rim, the pane 18 off
+    // the eye's: the sun, 17 over the horizon, comes to a quarter of the
+    // way from the middle to the rim, some 27 pixels over the middle.
+    frame.through = frame.through.map(|through| scene::Through {
+        camera: Camera {
+            fov_y: 140f32.to_radians(),
+            ..through.camera
+        },
+        lens: 65f32.to_radians(),
+        ..through
+    });
+    let wide = headless.render(&frame);
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("pane_wide.png");
+    write_png(&out, width, height, &wide).unwrap();
+    assert!(
+        luma(&wide, 320, 153) > luma(&wide, 320, 90) + 100,
+        "the sun comes nearer the middle: {} over {}",
+        luma(&wide, 320, 153),
+        luma(&wide, 320, 90)
     );
 }

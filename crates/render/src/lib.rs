@@ -80,6 +80,11 @@ struct ViewUniform {
     warp: [f32; 4],
     lamps_on: [f32; 4],
     lamps: [[[f32; 4]; 2]; volumes::LAMPS],
+    /// The lens in the portal seen through: a direction on this side, in
+    /// this view's camera-relative frame, to its picture's clip space.
+    through_clip_from_relative: [[f32; 4]; 4],
+    /// `x`: how far off its line the lens sees at the pane's rim, radians.
+    lens: [f32; 4],
 }
 
 /// GPU state owned by one view slot.
@@ -281,7 +286,7 @@ impl Renderer {
     }
 
     /// Draws the frame once per view and submits. The world past a portal
-    /// is drawn first, from the eye carried through it, at a quarter of the
+    /// is drawn first, by the wide lens carried through it, at a fraction of the
     /// first view's height: every view's panes sample it.
     pub fn render(&mut self, frame: &Frame, views: &[View<'_>]) {
         while self.views.len() < views.len() {
@@ -697,6 +702,21 @@ impl Renderer {
             }),
             lamps_on: [lamps_on, 0.0, 0.0, 0.0],
             lamps,
+            through_clip_from_relative: frame.through.as_ref().map_or([[0.0; 4]; 4], |through| {
+                // The lens's picture has this view's aspect: its target is a
+                // fraction of this view's.
+                let lens = &through.camera;
+                let projection =
+                    Mat4::perspective_infinite_reverse_rh(lens.fov_y, aspect, lens.near);
+                let from_here = (lens.rotation.inverse() * through.turn).as_quat();
+                (projection * Mat4::from_quat(from_here)).to_cols_array_2d()
+            }),
+            lens: [
+                frame.through.as_ref().map_or(0.0, |through| through.lens),
+                0.0,
+                0.0,
+                0.0,
+            ],
             bloom: {
                 // The threshold is of exposed light, as in a lens.
                 let threshold = frame.effects.bloom_threshold / exposure;

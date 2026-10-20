@@ -46,6 +46,11 @@ struct View {
     // x: how many of `lamps` are lit.
     lamps_on: vec4<f32>,
     lamps: array<Lamp, LAMPS>,
+    // The lens in the portal seen through: a direction on this side, in
+    // this view's camera-relative frame, to its picture's clip space.
+    through_clip_from_relative: mat4x4<f32>,
+    // x: how far off its line the lens sees at the pane's rim, radians.
+    lens: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;

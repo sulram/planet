@@ -1,13 +1,12 @@
 //! Portal panes: the disc of a ring, a window on the world seen through it.
-//! The world past a portal is drawn first, from the eye carried through it,
-//! into a target of its own at a quarter of the view's height; a pane the
-//! view is seen through then samples that picture where the pane stands on
-//! the screen. The eye past the portal shares the view's projection, so a
-//! point of the pane and the point seen through it fall on the same pixel,
-//! and the pane is a window, with parallax (Valve's Portal draws its
-//! portals so). A pane with nothing seen through it is a lens: what is
-//! behind it, bent toward its middle and pulsing, as through thick glass,
-//! so a portal is a portal from afar too. Drawn after the sea and the
+//! The world past a portal is drawn first, by a wide lens carried from the
+//! pane's middle to where the portal leads, into a target of its own a
+//! fraction of the view's size; a pane the view is seen through then shows
+//! that picture as a fisheye, its middle along the line the eye looks
+//! through the pane's middle, its rim far off that line, so a small disc
+//! shows the far side whole. A pane with nothing seen through it is a
+//! lens: what is behind it, bent toward its middle and pulsing, as through
+//! thick glass, so a portal is a portal from afar too. Drawn after the sea and the
 //! clouds over a copy of the picture so far, which the lens reads. A pane
 //! casts no shadow: light passes a portal.
 

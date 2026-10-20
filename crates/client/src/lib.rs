@@ -1369,11 +1369,12 @@ impl Client {
         })
     }
 
-    /// The portal the view is seen through this frame, and the eye past it:
+    /// The portal the view is seen through this frame, and the lens past it:
     /// the nearest portal within [`THROUGH_M`] that leads to a landmark
-    /// whose place is known here, and the camera carried from the portal's
-    /// frame to the landmark's, as a body that walked through would be. A
-    /// landmark this client does not hold is asked of the chart.
+    /// whose place is known here, and a wide lens carried from the pane's
+    /// middle to the landmark, lifted over it, looking the way the eye looks
+    /// through the pane. A landmark this client does not hold is asked of
+    /// the chart.
     fn through(&mut self, camera: &scene::Camera) -> Option<Seen> {
         let body = self.controller.held_by();
         let (_, id, to) = self
@@ -1394,15 +1395,26 @@ impl Client {
         };
         // The pane is the ring's `y = 0` plane and its heading `+y`; the star
         // lies on the ground with its heading `+y` too: frame to frame, the
-        // rigid part alone, since a portal is a door, not a lens.
-        let carried = rigid(&star) * rigid(&ring).inverse();
+        // rigid part alone.
+        let star = rigid(&star);
+        let carried = star * rigid(&ring).inverse();
+        let turn = DQuat::from_mat3(&carried.matrix3);
+        // A wide lens in the portal, carried to the star and lifted high
+        // over it, so the far side is seen whole and from above: it looks
+        // the way the eye looks through the pane's middle.
+        let middle = ring.transform_point3(DVec3::new(0.0, 0.0, 0.5));
+        let line = (middle - camera.position).normalize_or(camera.rotation * DVec3::NEG_Z);
+        let rotation = looking(turn * line, turn * (camera.rotation * DVec3::Y))
+            .unwrap_or(turn * camera.rotation);
         Some(Seen {
             portal: id,
             camera: scene::Camera {
-                position: carried.transform_point3(camera.position),
-                rotation: DQuat::from_mat3(&carried.matrix3) * camera.rotation,
+                position: carried.transform_point3(middle) + star.matrix3.z_axis * LENS_LIFT_M,
+                rotation,
+                fov_y: LENS_FOV_Y,
                 ..*camera
             },
+            turn,
             star: star.translation,
             size: self.through_size(camera, id),
         })
@@ -1634,6 +1646,8 @@ impl Client {
             ),
             through: through.map(|(seen, patches)| scene::Through {
                 camera: seen.camera,
+                turn: seen.turn,
+                lens: LENS_RIM,
                 patches,
                 size: seen.size,
             }),
@@ -1870,9 +1884,19 @@ const THROUGH_M: f64 = 96.0;
 struct Seen {
     portal: PartId,
     camera: scene::Camera,
+    /// What carries a direction on this side of the portal to the far side.
+    turn: DQuat,
     star: DVec3,
     size: f32,
 }
+
+/// The lens in a portal: how high over the star it is carried, metres; the
+/// height of its picture, radians; and how far off its line the pane's rim
+/// sees, radians, inside that height so the rim never reads past the
+/// picture's edge.
+const LENS_LIFT_M: f64 = 12.0;
+const LENS_FOV_Y: f32 = 140.0 * core::f32::consts::PI / 180.0;
+const LENS_RIM: f32 = 65.0 * core::f32::consts::PI / 180.0;
 /// How long a pane takes to become a window from a lens, and back, seconds.
 const SEEN_S: f64 = 0.6;
 
@@ -1902,6 +1926,17 @@ impl Passage {
             through: false,
         }
     }
+}
+
+/// The rotation of a camera that looks along `forward` with `up` above it;
+/// none when the two are one line.
+fn looking(forward: DVec3, up: DVec3) -> Option<DQuat> {
+    let right = forward.cross(up).try_normalize()?;
+    let forward = forward.normalize();
+    let up = right.cross(forward);
+    Some(DQuat::from_mat3(&glam::DMat3::from_cols(
+        right, up, -forward,
+    )))
 }
 
 /// A frame's rigid part: its rotation and translation, its scale taken out,
