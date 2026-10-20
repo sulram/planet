@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { wornAvatar } from '$lib/avatar';
-	import { Button, Page, PageHeader, Spinner, Topbar } from '$lib/ds';
+	import { Button, Veil } from '$lib/ds';
 	import { arrival, pass } from '$lib/door';
 	import Found from '$lib/engine/Found.svelte';
 	import Stage from '$lib/engine/Stage.svelte';
@@ -131,16 +131,29 @@
 {:else if face === 'founding'}
 	<Found {avatar} error={refused} {founding} onfound={foundWith} />
 {:else}
-	<Topbar />
-	<Page size="narrow">
+	{#snippet door()}
+		<Button onclick={signIn}>{t('door.signIn')}</Button>
+	{/snippet}
+	<!-- The world's ground, before the engine draws on it: the first screen
+	     and the engine's own waits are one veil, so nothing jumps when the
+	     stage mounts. -->
+	<div class="ground">
 		{#if face === 'entering'}
-			<Spinner label={t('common.loading')} />
+			<Veil busy word={t('common.loading')} />
 		{:else if face === 'unfounded'}
-			<PageHeader title={t('world.unfounded.title')} lede={t('world.unfounded.lede')} />
-			{#if signIn}<Button onclick={signIn}>{t('door.signIn')}</Button>{/if}
+			<Veil word={t('world.unfounded.title')} lede={t('world.unfounded.lede')} children={signIn ? door : undefined} />
 		{:else}
-			<PageHeader title={t('error.unavailable.title')} lede={t('error.unreachable')} />
-			<Button onclick={() => location.reload()}>{t('error.retry')}</Button>
+			<Veil word={t('error.unavailable.title')} lede={t('error.unreachable')}>
+				<Button onclick={() => location.reload()}>{t('error.retry')}</Button>
+			</Veil>
 		{/if}
-	</Page>
+	</div>
 {/if}
+
+<style>
+	.ground {
+		position: fixed;
+		inset: 0;
+		background: var(--bg-inset);
+	}
+</style>

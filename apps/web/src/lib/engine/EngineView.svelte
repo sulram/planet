@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { Alert, Spinner } from '$lib/ds';
+	import { Alert, Veil } from '$lib/ds';
 	import { t } from '$lib/i18n';
 	import { fieldId, type Recipe } from '$lib/world';
 	import type { Link } from '$lib/instance';
@@ -110,6 +110,10 @@
 						: recipe && !(standing && settled)
 							? 'entering'
 							: 'running'
+	);
+	/** The word of the wait, while something is on its way. */
+	const wait = $derived(
+		status === 'loading' ? t('engine.loading') : status === 'shaping' ? t('engine.shaping') : status === 'entering' ? t('engine.entering') : undefined
 	);
 
 	// What the engine last reported or was last told: commands go out only on
@@ -314,34 +318,23 @@
 	});
 </script>
 
-{#snippet wait(word: string)}
-	<div class="wait">
-		<Spinner label={word} />
-		<span aria-hidden="true">{word}</span>
-	</div>
+{#snippet alerts()}
+	{#if status === 'unshaped'}
+		<Alert variant="danger" title={t('engine.unshaped.title')}>{t('engine.unshaped.body')}</Alert>
+	{:else if status === 'refused'}
+		<Alert variant="danger" title={t('engine.refused.title')}>{t('engine.refused.body')}</Alert>
+	{:else if status === 'missing'}
+		<Alert title={t('engine.missing.title')}>{t('engine.missing.body')} <code>bun run wasm</code></Alert>
+	{:else if status === 'unsupported'}
+		<Alert variant="danger" title={t('engine.unsupported.title')}>{t('engine.unsupported.body')}</Alert>
+	{:else if status === 'failed'}
+		<Alert variant="danger" title={t('engine.failed.title')}>{t('engine.failed.body')}</Alert>
+	{/if}
 {/snippet}
 
 <div class="view">
 	<canvas bind:this={canvas} tabindex="0" aria-label={t('engine.canvas')} onclick={() => canvas?.focus()}></canvas>
-	<div class="veil" class:lifted={status === 'running'}>
-		{#if status === 'loading'}
-			{@render wait(t('engine.loading'))}
-		{:else if status === 'shaping'}
-			{@render wait(t('engine.shaping'))}
-		{:else if status === 'entering'}
-			{@render wait(t('engine.entering'))}
-		{:else if status === 'unshaped'}
-			<Alert variant="danger" title={t('engine.unshaped.title')}>{t('engine.unshaped.body')}</Alert>
-		{:else if status === 'refused'}
-			<Alert variant="danger" title={t('engine.refused.title')}>{t('engine.refused.body')}</Alert>
-		{:else if status === 'missing'}
-			<Alert title={t('engine.missing.title')}>{t('engine.missing.body')} <code>bun run wasm</code></Alert>
-		{:else if status === 'unsupported'}
-			<Alert variant="danger" title={t('engine.unsupported.title')}>{t('engine.unsupported.body')}</Alert>
-		{:else if status === 'failed'}
-			<Alert variant="danger" title={t('engine.failed.title')}>{t('engine.failed.body')}</Alert>
-		{/if}
-	</div>
+	<Veil lifted={status === 'running'} busy word={wait} children={wait ? undefined : alerts} />
 </div>
 
 <style>
@@ -355,35 +348,5 @@
 		width: 100%;
 		height: 100%;
 		outline: none;
-	}
-	/* Over the picture until it is the world asked for: softened, not hidden,
-	   so the wait reads as a world coming and not as a blank. */
-	.veil {
-		position: absolute;
-		inset: 0;
-		display: grid;
-		place-items: center;
-		padding: var(--sp-5);
-		pointer-events: none;
-		background: color-mix(in srgb, var(--bg) 45%, transparent);
-		backdrop-filter: blur(18px);
-		-webkit-backdrop-filter: blur(18px);
-		transition: opacity 300ms ease;
-	}
-	.veil.lifted {
-		opacity: 0;
-		visibility: hidden;
-		transition:
-			opacity 300ms ease,
-			visibility 0s linear 300ms;
-	}
-	.wait {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--sp-3);
-		color: var(--text-muted);
-		letter-spacing: var(--ls-caps);
-		text-transform: uppercase;
 	}
 </style>

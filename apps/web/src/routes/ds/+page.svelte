@@ -25,7 +25,8 @@
 		Stat,
 		Table,
 		ThemeToggle,
-		Topbar
+		Topbar,
+		Veil
 	} from '$lib/ds';
 
 	// The living catalogue. A developer reference, written in the project
@@ -384,6 +385,19 @@
 		</section>
 
 		<section>
+			<h2>Veil</h2>
+			<p class="muted">Over the picture until it is the world asked for: a wait, or what stands in the world's place.</p>
+			<div class="row">
+				<div class="veiled"><Veil busy word="Starting the engine" /></div>
+				<div class="veiled">
+					<Veil word="This world is on its way" lede="Its admin is choosing its planet. Come back soon.">
+						<Button>Sign in</Button>
+					</Veil>
+				</div>
+			</div>
+		</section>
+
+		<section>
 			<h2>Topbar</h2>
 			<p class="muted">The bar of what is off the planet is at the top of this page.</p>
 		</section>
@@ -391,6 +405,13 @@
 </Page>
 
 <style>
+	.veiled {
+		position: relative;
+		flex: 1 1 280px;
+		min-height: 200px;
+		border: var(--bw) solid var(--border-strong);
+		background: var(--bg-inset);
+	}
 	.sections {
 		display: flex;
 		flex-direction: column;
