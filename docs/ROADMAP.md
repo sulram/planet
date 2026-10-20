@@ -17,6 +17,7 @@ end to end.
 - The campaign and its order of work: [BRIEF.md](BRIEF.md). A world is
   deployed by mundos (87); its upgrade is walked with the first version that
   carries plugin work.
+- [ ] A mundos button in the bar, as the Hyperfy fork's pane has: a visitor's sign in, the name of whoever is signed in, and for an admin the way to the world in mundos (`PUBLIC_MUNDOS_URL` + `/worlds/` + `PUBLIC_MUNDOS_WORLD`). The sign in stands only inside the panel of who is here. No new variable: the server holds both and says only the door (`/api/world`)
 
 ## The core
 
@@ -146,6 +147,7 @@ end to end.
 - [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
 - [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
 - [ ] Portals between places, scales and worlds, each leading to a landmark (sketches/portals.md); the ring, the crossing and the view through it stand (portal-is-a-ring): the builds seen through it, the wobble; magic as a capability
+  - [ ] The passage starts at the crossing: the fall begins the turn the feet pass the pane, the picture holds in the portal while the chart answers and the landmark's ground arrives, and the leap comes after. A landmark this client does not hold waits on the chart before the fall begins (`cross.rs`), so online the body walks out the far side first
 - [ ] Gravity fields as placeable entities (19)
 - [ ] Scripts, server side
 - [ ] Agents (94): headless clients with a door of their own in mundos, permitted by volume as a person is
