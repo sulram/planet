@@ -408,7 +408,7 @@ impl Parts {
     }
 
     /// A landmark by its name: held here, else as the chart last said it.
-    pub(crate) fn landmark(&self, id: PartId) -> Option<(Seat, Part)> {
+    pub fn landmark(&self, id: PartId) -> Option<(Seat, Part)> {
         match self.get(id) {
             Some((seat, part)) if matches!(part.shape, Shape::Landmark(_)) => Some((seat, *part)),
             _ => self.known.get(&id.0).copied(),

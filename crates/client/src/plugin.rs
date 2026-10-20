@@ -291,13 +291,39 @@ impl Host<'_> {
 
     /// Takes the body through a portal to a place: the body falls into the
     /// portal, the picture drawn into it, and lands at the place a moment
-    /// later, the picture bursting out (PORTALS.md). Wrong, the text says
-    /// what is wrong and the body stays.
+    /// later, the picture bursting out once the ground there has come
+    /// (PORTALS.md). A body held in that portal by [`Host::fall_into`] goes
+    /// on from there. Wrong, the text says what is wrong and the body stays.
     pub fn go_through(&mut self, place: &str, portal: PartId) -> Result<(), String> {
         let grid = self.sphere().blocks();
         Pose::parse(grid, place)?;
-        *self.lent.passage = Some(Passage::new(place.to_owned(), portal, self.lent.clock_s));
+        match self.lent.passage {
+            Some(passage) if passage.waits_in(portal) => passage.lead(place.to_owned()),
+            _ => {
+                *self.lent.passage = Some(Passage::new(
+                    Some(place.to_owned()),
+                    portal,
+                    self.lent.clock_s,
+                ))
+            }
+        }
         Ok(())
+    }
+
+    /// Takes the body into a portal before the place it leads to is known:
+    /// it falls in at once and is held there, the picture drawn into it,
+    /// until [`Host::go_through`] says the place or [`Host::let_out`] that
+    /// there is none.
+    pub fn fall_into(&mut self, portal: PartId) {
+        *self.lent.passage = Some(Passage::new(None, portal, self.lent.clock_s));
+    }
+
+    /// Lets out where it fell in a body held in a portal that leads
+    /// nowhere after all.
+    pub fn let_out(&mut self) {
+        if let Some(passage) = self.lent.passage {
+            passage.let_out(self.lent.clock_s);
+        }
     }
 
     /// Takes the body to a place, as a link does: what a portal's crossing

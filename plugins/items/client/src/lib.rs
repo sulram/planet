@@ -1929,28 +1929,35 @@ mod tests {
         assert_eq!(crossed["to"], star.0);
         let place = crossed["place"].as_str().expect("the place arrived at");
         assert!(place.contains(','), "{place} says which way to face");
-        // The body falls into the portal for a moment, the picture drawn
-        // into it, then is through: the picture bursts out where it stands.
+        // The body falls into the portal the moment it crosses, the picture
+        // drawn into it, and stands where it crossed though the walk goes
+        // on: it never walks out the far side of the ring.
         let mut input = Input::default();
+        input.key(Key::Forward, true);
+        let crossed_at = client.host("items").feet();
         let frame = client.update(1.0 / 60.0, &mut input);
         let warp = frame.warp.expect("the picture is drawn into the portal");
         assert!(warp.phase < 0.0, "{warp:?}");
-        let before = client.host("items").feet();
-        assert!(
-            (before.point.v - far.pose.at[1]).abs() > 10.0,
-            "not through yet"
-        );
-        for _ in 0..30 {
+        for _ in 0..10 {
             client.update(1.0 / 60.0, &mut input);
         }
-        let frame = client.update(1.0 / 60.0, &mut input);
-        let warp = frame.warp.expect("the picture bursts out past the portal");
-        assert!(warp.phase >= 0.0, "{warp:?}");
-        for _ in 0..60 {
-            client.update(1.0 / 60.0, &mut input);
+        let falling = client.host("items").feet();
+        assert_eq!(falling.point, crossed_at.point, "held where it crossed");
+        // Through, it is held drawn in until the ground at the star has
+        // come, then the picture bursts out where it stands.
+        let mut input = Input::default();
+        let mut burst = false;
+        let mut frames = 0;
+        loop {
+            let frame = client.update(1.0 / 60.0, &mut input);
+            frames += 1;
+            match frame.warp {
+                Some(warp) => burst |= warp.phase > 0.0,
+                None => break,
+            }
+            assert!(frames < 60 * 10, "the passage ends");
         }
-        let frame = client.update(1.0 / 60.0, &mut input);
-        assert!(frame.warp.is_none(), "the passage is over in a second");
+        assert!(burst, "the picture burst out past the portal");
         let feet = client.host("items").feet();
         assert!(
             (feet.point.u - far.pose.at[0]).abs() < 2.0

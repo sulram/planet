@@ -422,6 +422,81 @@ fn a_landmark_on_the_moon_is_travelled_to_on_the_moon() {
     );
 }
 
+/// A body that falls into a portal before the place it leads to is known
+/// is held there, the picture drawn in, the body where it crossed; the
+/// place said late, it goes on and lands there. Let out instead, it comes
+/// out where it fell in.
+#[test]
+fn a_body_is_held_in_a_portal_until_its_place_is_said() {
+    let mut client = welcomed();
+    client.set_view([1600, 900]);
+    let feet = client.host("test").feet();
+    let seat = Seat::Sector(feet.point.sector);
+    let ground = feet.height_m / topology::BLOCK_M;
+    let star = Part {
+        shape: Shape::Landmark(Name::new("Far").unwrap()),
+        pose: PartPose::upright(
+            [feet.point.u, feet.point.v + 300.0, ground],
+            [2.0, 2.0, 0.16],
+        ),
+        paint: 0,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+        name: None,
+        muted: false,
+        volume: 0.0,
+    };
+    let ring = Part {
+        shape: Shape::Portal(client::Portal {
+            to: None,
+            rim: client::Portal::RIM,
+        }),
+        pose: PartPose::upright([feet.point.u, feet.point.v + 2.0, ground], [4.0, 0.1, 4.0]),
+        ..star
+    };
+    let ring = client.host("test").place_part(seat, ring).unwrap();
+    let mut input = client::Input::default();
+    client.host("test").fall_into(ring);
+    for _ in 0..90 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    let frame = client.update(1.0 / 60.0, &mut input);
+    let warp = frame.warp.expect("held in the portal");
+    assert_eq!(warp.phase, 0.0, "drawn in, not let go");
+    assert_eq!(
+        client.host("test").feet().point,
+        feet.point,
+        "where it crossed"
+    );
+    // The place, said late: through, and landed by the star.
+    let place = client.host("test").place_at(seat, &star.pose);
+    client.host("test").go_through(&place, ring).unwrap();
+    let mut frames = 0;
+    while client.update(1.0 / 60.0, &mut input).warp.is_some() {
+        frames += 1;
+        assert!(frames < 60 * 10, "the passage ends");
+    }
+    let landed = client.host("test").feet().point;
+    assert!(
+        (landed.v - star.pose.at[1]).abs() < 2.0,
+        "landed at {landed:?}, the star at {:?}",
+        star.pose.at
+    );
+    // Held again and let out: it comes out where it fell in, in a moment.
+    client.host("test").fall_into(ring);
+    for _ in 0..30 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    client.host("test").let_out();
+    let mut frames = 0;
+    while client.update(1.0 / 60.0, &mut input).warp.is_some() {
+        frames += 1;
+        assert!(frames < 60, "let out within a second");
+    }
+    assert_eq!(client.host("test").feet().point, landed, "where it fell in");
+}
+
 /// A portal bears the name of the star it leads to over its ring, as the
 /// star bears its own, so where it leads is read before it is walked.
 #[test]

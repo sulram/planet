@@ -58,32 +58,36 @@ impl Items {
         }
     }
 
-    /// Takes the body where a portal leads: to the landmark held here, at
-    /// once; to one this client does not hold, once the chart says where it
-    /// stands; nowhere, and the body stays and the seam hears it.
+    /// Takes the body where a portal leads: to the landmark known here,
+    /// held or charted, at once; to one not known, it falls into the portal
+    /// at once all the same and is held there until the chart says where
+    /// the star stands; nowhere, and the body stays and the seam hears it.
     fn leap(&mut self, portal: PartId, to: Option<PartId>, host: &mut Host<'_>) {
         let Some(to) = to else {
             return self.say_crossed(portal, None, None, host);
         };
-        let held = host
+        let known = host
             .parts()
-            .get(to)
-            .filter(|(_, part)| matches!(part.shape, Shape::Landmark(_)))
-            .map(|(seat, part)| (seat, *part));
-        match held {
+            .landmark(to)
+            .filter(|(_, part)| matches!(part.shape, Shape::Landmark(_)));
+        match known {
             Some((seat, part)) => {
                 let place = host.place_at(seat, &part.pose);
                 self.arrive(portal, to, place, host);
             }
             None => {
+                host.fall_into(portal);
+                self.feet = None;
+                self.armed = false;
                 self.pending = Some((portal, to));
                 host.chart();
             }
         }
     }
 
-    /// The chart answered: a crossing that waited on it leaps to the
-    /// landmark charted, or nowhere when the world no longer has it.
+    /// The chart answered: a body held in a portal for it goes on to the
+    /// landmark charted, or is let out where it fell in when the world no
+    /// longer has it.
     pub(crate) fn charted(&mut self, charted: &[Landmarked], host: &mut Host<'_>) {
         let Some((portal, to)) = self.pending.take() else {
             return;
@@ -93,7 +97,10 @@ impl Items {
                 let place = host.place_at(landmark.seat, &landmark.part.pose);
                 self.arrive(portal, to, place, host);
             }
-            None => self.say_crossed(portal, Some(to), None, host),
+            None => {
+                host.let_out();
+                self.say_crossed(portal, Some(to), None, host);
+            }
         }
     }
 
@@ -104,7 +111,10 @@ impl Items {
                 self.armed = false;
                 self.say_crossed(portal, Some(to), Some(place), host);
             }
-            Err(message) => host.reject(message),
+            Err(message) => {
+                host.let_out();
+                host.reject(message);
+            }
         }
     }
 

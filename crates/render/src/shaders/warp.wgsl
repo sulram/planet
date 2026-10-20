@@ -3,7 +3,11 @@
 // widening from the point and the rest going dark, the body itself left
 // in sight, charged white; then, past the portal, the same let go: the
 // picture bursting out of the point, the ring closing, the light coming
-// back. Phase -1 to 0 is the fall, 0 to 1 the landing.
+// back. Phase -1 to 0 is the fall, 0 to 1 the landing. Deep in, and for
+// as long as the body is held there, the fall goes on: rings are born
+// round the point and close in on it one after another, fading as they
+// reach it, so it reads as a fall that never ends, as a tone that always
+// rises.
 
 // How many samples a streak is made of.
 const STREAK: u32 = 16u;
@@ -12,6 +16,12 @@ const PULL: f32 = 2.5;
 // The ring at its widest, in heights of the viewport, and its width.
 const RING: f32 = 0.32;
 const RIM: f32 = 0.02;
+// The tunnel: how many rings close in at once, how many each one's life is
+// a second, and how wide the newest is, in heights of the viewport.
+const TUNNEL_RINGS: u32 = 5u;
+const TUNNEL_PACE: f32 = 0.7;
+const TUNNEL_WIDE: f32 = 0.9;
+const PI: f32 = 3.14159265;
 
 @fragment
 fn fs(in: Screen) -> @location(0) vec4<f32> {
@@ -49,6 +59,18 @@ fn fs(in: Screen) -> @location(0) vec4<f32> {
     let ring = RING * eased;
     let rim = exp(-pow((dist - ring) / RIM, 2.0)) * eased;
     let dark = 1.0 - eased * eased * 0.8;
-    color = color * dark + vec3<f32>(4.0, 3.5, 3.0) * rim;
+    // Each ring's life, 0 born to 1 gone: it closes faster as it nears the
+    // point, as the walls of a well do, and grows and fades out of sight.
+    var tunnel = 0.0;
+    let time = view.flags.y * TUNNEL_PACE;
+    for (var i = 0u; i < TUNNEL_RINGS; i++) {
+        let life = fract(time + f32(i) / f32(TUNNEL_RINGS));
+        let left = 1.0 - life;
+        let radius = TUNNEL_WIDE * left * left;
+        let width = RIM * (0.4 + 2.5 * left);
+        tunnel += exp(-pow((dist - radius) / width, 2.0)) * sin(life * PI);
+    }
+    let deep = pow(eased, 6.0);
+    color = color * dark + vec3<f32>(4.0, 3.5, 3.0) * (rim + 0.3 * tunnel * deep);
     return vec4<f32>(color, 1.0);
 }

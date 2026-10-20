@@ -37,24 +37,32 @@ lives in WORLD.md; how the picture is made in RENDER.md.
 - The body goes through the one `go_to` a link and the chart travel by
   (`Host::go_to`), to the landmark's place with the star's bearing: arriving
   is standing on the star, facing the way its point toward `+y` points.
-- A landmark this client does not hold is found through the chart first;
-  one the world no longer has leaves the body where it is, and the seam
-  hears `items.crossed` with no place.
+- The star is the one known here, held or charted: a portal in sight asks
+  the chart ahead. One not known yet takes the body into the portal at
+  once all the same (`Host::fall_into`), held there while the chart
+  answers; one the world no longer has lets it out where it fell in
+  (`Host::let_out`), and the seam hears `items.crossed` with no place.
 - A leap arms the crossing again only once the body stands clear of every
   pane, so a portal on the star one lands on sends nobody straight back.
 
 ## The passage
 
-- A body that crosses falls into the portal for 0.35 s, in the falling
-  gait, before it is through; it lands on the star and the picture takes
-  0.65 s to come back: a second in all (`Passage` in `client`, `WARP_IN_S`
-  and `WARP_OUT_S`).
+- A body that crosses stands where it crossed, in the falling gait,
+  charged white, and never walks out the far side of the ring. It falls
+  into the portal for 0.35 s and is held there until the place is known;
+  it goes through to the star and is held again until the ground there
+  has come, 8 s at most each; then the picture takes 0.65 s to come back.
+  Known and streamed, a second in all (`Passage` in `client`, `WARP_IN_S`,
+  `HELD_S`, `WARP_OUT_S`).
 - The picture is drawn into the portal and out of the body: a compositor
   stage (`warp.wgsl`) pulls the picture toward a point of the screen and
   streaks it along the pull, the colours parting a little, while a black
   hole opens there with a hot rim and the rest goes dark; then the same
   let go. The point is the pane's middle on the way in and the body's
   waist on the way out. Before the bloom, which takes the rim's light.
+- Deep in, the fall goes on: rings are born round the point and close in
+  on it one after another, fading there, a tunnel that loops for as long
+  as the body is held, as a tone that always rises.
 - The plugin asks `Host::go_through(place, portal)`; the core keeps the
   time and travels, as a link does, when the fall is done.
 

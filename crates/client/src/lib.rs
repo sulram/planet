@@ -1110,15 +1110,19 @@ impl Client {
         self.controller.set_drawn_footprint(footprint_m);
         self.cells.orbit(moon);
         self.parts.orbit(moon);
-        self.controller.update(
-            dt,
-            wish,
-            &self.generator,
-            Built {
-                cells: &self.cells,
-                parts: &self.parts,
-            },
-        );
+        // A body passing through a portal is the portal's: it stands where
+        // it crossed, and never walks out the far side of the ring.
+        if self.passage.is_none() {
+            self.controller.update(
+                dt,
+                wish,
+                &self.generator,
+                Built {
+                    cells: &self.cells,
+                    parts: &self.parts,
+                },
+            );
+        }
         self.passage_turn();
         let motion = self.motion();
         self.figure.update(dt, &motion, &self.clips);
@@ -1329,23 +1333,46 @@ impl Client {
         motion
     }
 
-    /// A passage's turn: the body goes through the portal [`WARP_IN_S`]
-    /// after it fell in, and the passage ends [`WARP_OUT_S`] after that.
-    /// A place that cannot be reached leaves the body where it is, said.
+    /// A passage's turn. The body falls into the portal for [`WARP_IN_S`]
+    /// and is held there until the place is known; it goes through, and is
+    /// held again until the ground there has come, [`HELD_S`] at most each;
+    /// then the picture bursts out for [`WARP_OUT_S`]. A place that cannot
+    /// be reached, or never said, lets the body out where it fell in.
     fn passage_turn(&mut self) {
         let Some(passage) = &mut self.passage else {
             return;
         };
-        let elapsed = self.clock_s - passage.started_s;
-        if !passage.through && elapsed >= WARP_IN_S {
-            passage.through = true;
-            let place = passage.place.clone();
-            if let Err(message) = self.go_to(&place) {
-                self.events.push(Event::Rejected { message });
-                self.passage = None;
+        let now = self.clock_s;
+        match passage.stage {
+            Stage::In => {
+                let fallen_s = now - passage.started_s - WARP_IN_S;
+                if fallen_s < 0.0 {
+                    return;
+                }
+                match passage.place.clone() {
+                    Some(place) => match self.go_to(&place) {
+                        Ok(()) => passage_stage(&mut self.passage, Stage::Through(now)),
+                        Err(message) => {
+                            self.events.push(Event::Rejected { message });
+                            passage_stage(&mut self.passage, Stage::Out(now));
+                        }
+                    },
+                    None if fallen_s >= HELD_S => passage.stage = Stage::Out(now),
+                    None => {}
+                }
             }
-        } else if elapsed >= WARP_IN_S + WARP_OUT_S {
-            self.passage = None;
+            // The ground at the place, streamed after the leap: the frame of
+            // the leap is never settled there, so one frame at least.
+            Stage::Through(at) => {
+                if (now > at && self.settled) || now - at >= HELD_S {
+                    passage.stage = Stage::Out(now);
+                }
+            }
+            Stage::Out(at) => {
+                if now - at >= WARP_OUT_S {
+                    self.passage = None;
+                }
+            }
         }
     }
 
@@ -1355,10 +1382,10 @@ impl Client {
         let Some(passage) = &self.passage else {
             return 0.0;
         };
-        let elapsed = self.clock_s - passage.started_s;
-        let charge = match passage.through {
-            false => elapsed / WARP_IN_S,
-            true => 1.0 - (elapsed - WARP_IN_S) / WARP_OUT_S,
+        let charge = match passage.stage {
+            Stage::In => (self.clock_s - passage.started_s) / WARP_IN_S,
+            Stage::Through(_) => 1.0,
+            Stage::Out(at) => 1.0 - (self.clock_s - at) / WARP_OUT_S,
         };
         charge.clamp(0.0, 1.0) as f32
     }
@@ -1367,31 +1394,34 @@ impl Client {
     /// falling into, out of the body where it landed.
     fn warp(&self, camera: &scene::Camera) -> Option<scene::Warp> {
         let passage = self.passage.as_ref()?;
-        let elapsed = self.clock_s - passage.started_s;
         let projection = Projection::of(camera, self.aspect);
         let on_screen = |point: DVec3| {
             projection
                 .project(point)
                 .map_or([0.5, 0.5], |(x, y, _)| [x, y])
         };
-        Some(match passage.through {
-            false => {
+        let waist = || on_screen(self.controller.drawn_position() + self.controller.up() * 0.9);
+        Some(match passage.stage {
+            Stage::In => {
                 let pane = self
                     .parts
                     .transform(&self.generator, passage.portal)
                     .map(|ring| ring.transform_point3(DVec3::new(0.0, 0.0, 0.5)));
+                let elapsed = self.clock_s - passage.started_s;
                 scene::Warp {
                     centre: pane.map_or([0.5, 0.5], on_screen),
                     phase: ((elapsed / WARP_IN_S).min(1.0) - 1.0) as f32,
                 }
             }
-            true => {
-                let waist = self.controller.drawn_position() + self.controller.up() * 0.9;
-                scene::Warp {
-                    centre: on_screen(waist),
-                    phase: (((elapsed - WARP_IN_S) / WARP_OUT_S).clamp(0.0, 1.0)) as f32,
-                }
-            }
+            // Held in, past the portal: the picture stays drawn into the body.
+            Stage::Through(_) => scene::Warp {
+                centre: waist(),
+                phase: 0.0,
+            },
+            Stage::Out(at) => scene::Warp {
+                centre: waist(),
+                phase: (((self.clock_s - at) / WARP_OUT_S).clamp(0.0, 1.0)) as f32,
+            },
         })
     }
 
@@ -1927,30 +1957,70 @@ const LENS_RIM: f32 = 65.0 * core::f32::consts::PI / 180.0;
 const SEEN_S: f64 = 0.6;
 
 /// How long a body falls into a portal before it is through, and how long
-/// the picture takes to burst out past it, seconds: a passage is under a
-/// second, a blink of the world.
+/// the picture takes to burst out past it, seconds: a passage whose place
+/// is known and whose ground has come is under a second, a blink of the
+/// world.
 const WARP_IN_S: f64 = 0.35;
 const WARP_OUT_S: f64 = 0.65;
+/// How long a body is held in a portal at most, seconds: for the place it
+/// leads to, then for the ground there.
+const HELD_S: f64 = 8.0;
 
-/// A body's passage through a portal: it falls into the portal, the
-/// picture drawn into it, goes through at [`WARP_IN_S`] and lands at the
-/// place, the picture bursting out of it for [`WARP_OUT_S`].
+/// A body's passage through a portal: it falls into the portal the moment
+/// it crosses the pane, the picture drawn into it, and is held there until
+/// the place is said; it goes through and lands at the place, held until
+/// the ground there has come; then the picture bursts out of it for
+/// [`WARP_OUT_S`].
 pub(crate) struct Passage {
-    place: String,
+    /// Where it leads, once said.
+    place: Option<String>,
     portal: PartId,
     started_s: f64,
-    /// Whether the body has gone through yet.
-    through: bool,
+    stage: Stage,
+}
+
+/// Where a passage is.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Stage {
+    /// Falling into the portal, then held there.
+    In,
+    /// Through since this second of the clock, held until the ground comes.
+    Through(f64),
+    /// Bursting out since this second of the clock.
+    Out(f64),
 }
 
 impl Passage {
-    pub(crate) fn new(place: String, portal: PartId, started_s: f64) -> Passage {
+    pub(crate) fn new(place: Option<String>, portal: PartId, started_s: f64) -> Passage {
         Passage {
             place,
             portal,
             started_s,
-            through: false,
+            stage: Stage::In,
         }
+    }
+
+    /// Whether the body is held in `portal` for a place yet to be said.
+    pub(crate) fn waits_in(&self, portal: PartId) -> bool {
+        self.portal == portal && self.stage == Stage::In && self.place.is_none()
+    }
+
+    /// The place, said late.
+    pub(crate) fn lead(&mut self, place: String) {
+        self.place = Some(place);
+    }
+
+    /// Lets the body out where it fell in: a portal that leads nowhere.
+    pub(crate) fn let_out(&mut self, now_s: f64) {
+        if self.stage == Stage::In {
+            self.stage = Stage::Out(now_s);
+        }
+    }
+}
+
+fn passage_stage(passage: &mut Option<Passage>, stage: Stage) {
+    if let Some(passage) = passage {
+        passage.stage = stage;
     }
 }
 
