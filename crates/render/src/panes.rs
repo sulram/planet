@@ -29,6 +29,8 @@ struct Instance {
 
 pub struct Panes {
     pipeline: wgpu::RenderPipeline,
+    /// The discs again, into the depth alone, once they are drawn.
+    seal: wgpu::RenderPipeline,
     through_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     vertices: wgpu::Buffer,
@@ -81,6 +83,17 @@ impl Panes {
                 ],
             }),
         ];
+        let seal = pipeline(
+            device,
+            format,
+            PipelineSpec {
+                label: "panes into depth",
+                source: include_str!("shaders/pane.wgsl"),
+                layouts: &[view_layout],
+                buffers,
+                surface: Surface::Seal,
+            },
+        );
         let pipeline = pipeline(
             device,
             format,
@@ -134,6 +147,7 @@ impl Panes {
         let none = through_group(device, &through_layout, &sampler, &none);
         Panes {
             pipeline,
+            seal,
             through_layout,
             sampler,
             vertices,
@@ -166,6 +180,21 @@ impl Panes {
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(1, through.unwrap_or(&self.none), &[]);
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        pass.set_vertex_buffer(1, instances.buffer.slice(..));
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
+        pass.draw_indexed(0..BOTH, 0, 0..drawn.len() as u32);
+    }
+}
+
+impl Panes {
+    /// Lays every disc [`Panes::draw`] drew into the depth, in a pass with
+    /// the depth alone.
+    pub fn seal(&self, pass: &mut wgpu::RenderPass<'_>, instances: &Instances, drawn: &[PaneDraw]) {
+        if drawn.is_empty() {
+            return;
+        }
+        pass.set_pipeline(&self.seal);
         pass.set_vertex_buffer(0, self.vertices.slice(..));
         pass.set_vertex_buffer(1, instances.buffer.slice(..));
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);

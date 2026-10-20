@@ -304,4 +304,47 @@ fn a_pane_is_a_window_on_the_world_past_the_portal() {
         luma(&wide, 320, 153),
         luma(&wide, 320, 90)
     );
+
+    // A sheet of red glass six metres across behind the pane: the disc
+    // hides it, beside the disc it shows.
+    let corner = |x: f32, y: f32| scene::VolumeVertex {
+        position: [x, y, 0.0],
+        normal: [0.0, 0.0, 1.0],
+        color: [255, 0, 0, 0],
+        side: [255, 0, 0, 0],
+    };
+    headless.renderer.apply_models(vec![scene::ModelChange::Add(
+        scene::ModelId(1),
+        scene::ModelMesh {
+            vertices: vec![
+                corner(-3.0, -3.0),
+                corner(3.0, -3.0),
+                corner(3.0, 3.0),
+                corner(-3.0, 3.0),
+            ],
+            indices: vec![0, 1, 2, 0, 2, 3],
+        },
+    )]);
+    frame.models = vec![scene::ModelDraw {
+        mesh: scene::ModelId(1),
+        transform: DAffine3::from_translation(eye + DVec3::new(0.0, 0.0, -6.0)),
+        pass: scene::ModelPass::Glass,
+    }];
+    let behind = headless.render(&frame);
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("pane_glass_behind.png");
+    write_png(&out, width, height, &behind).unwrap();
+    let rgb = |pixels: &[u8], x: u32, y: u32| {
+        let i = ((y * width + x) * 4) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2]]
+    };
+    assert_eq!(
+        rgb(&behind, 320, 200),
+        rgb(&wide, 320, 200),
+        "the glass behind the pane stays behind it"
+    );
+    assert_ne!(
+        rgb(&behind, 320 - 130, 180),
+        rgb(&wide, 320 - 130, 180),
+        "beside the disc the glass shows"
+    );
 }

@@ -100,6 +100,8 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   glass, with a faint rim, so a portal is a portal from afar. A pane
   becomes a window from a lens, and back, over 0.6 s. The panes are drawn
   after the sea and the clouds over a copy of the picture, which the lens
-  reads. A pane casts no shadow: light passes a portal.
+  reads, then laid into the depth, so glass behind a pane stays behind it
+  and glass before it stays over it. A pane casts no shadow: light passes
+  a portal.
 - What is drawn ahead and not built: the parts seen through it, the
   oblique near plane (sketches/portals.md).

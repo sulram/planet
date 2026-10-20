@@ -87,6 +87,15 @@ const WINDOW_BEND: f32 = 0.08;
 const WINDOW_FALL: f32 = 0.35;
 const WINDOW_SPLIT: f32 = 0.5;
 
+// The disc into the depth alone, once drawn: the quad's corners past the
+// rim are none of it.
+@fragment
+fn fs_seal(in: Varying) {
+    if length(in.disc) > 1.0 {
+        discard;
+    }
+}
+
 @fragment
 fn fs(in: Varying) -> @location(0) vec4<f32> {
     let ndc = in.screen.xy / in.screen.w;

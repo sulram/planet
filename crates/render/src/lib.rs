@@ -608,6 +608,26 @@ impl Renderer {
             pass.set_bind_group(2, behind, &[]);
             self.panes
                 .draw(&mut pass, &resources.panes, &frame.panes, through);
+            drop(pass);
+            // Then laid into the depth, so the glass behind a pane stays
+            // behind it and the glass before it stays over it.
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("panes into depth"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &targets.depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &resources.bind_group, &[]);
+            self.panes.seal(&mut pass, &resources.panes, &frame.panes);
         }
         // Glass, and what only a builder sees, go over the sea and the
         // clouds, tested against the depth of what is solid: drawn before
@@ -833,6 +853,10 @@ enum Surface {
     /// A portal's pane: opaque, tested against depth and writing none,
     /// drawn after the sea and the clouds over a copy of what is behind it.
     Lens,
+    /// A portal's pane laid into the depth once it is drawn: no colour,
+    /// writing depth, so the glass drawn after it stays behind it when it
+    /// is behind it. Its fragment entry is `fs_seal`.
+    Seal,
     Foliage,
     Shadow,
     ShadowCutout,
@@ -854,6 +878,7 @@ fn pipeline(
 ) -> wgpu::RenderPipeline {
     let module = shader(device, spec.label, spec.source);
     let shadow = matches!(spec.surface, Surface::Shadow | Surface::ShadowCutout);
+    let depth_only = shadow || spec.surface == Surface::Seal;
     let targets = [Some(wgpu::ColorTargetState {
         format,
         blend: matches!(
@@ -884,15 +909,21 @@ fn pipeline(
             entry_point: Some(match spec.surface {
                 _ if shadow => "fs_shadow",
                 Surface::Glass => "fs_glass",
+                Surface::Seal => "fs_seal",
                 _ => "fs",
             }),
-            targets: if shadow { &[] } else { &targets },
+            targets: if depth_only { &[] } else { &targets },
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
             cull_mode: (matches!(
                 spec.surface,
-                Surface::Solid | Surface::Glass | Surface::Ghost | Surface::Overlay | Surface::Lens
+                Surface::Solid
+                    | Surface::Glass
+                    | Surface::Ghost
+                    | Surface::Overlay
+                    | Surface::Lens
+                    | Surface::Seal
             ) || shadow)
                 .then_some(wgpu::Face::Back),
             ..Default::default()
@@ -901,7 +932,10 @@ fn pipeline(
         depth_stencil: (spec.surface != Surface::Translucent).then_some(wgpu::DepthStencilState {
             format: DEPTH_FORMAT,
             depth_write_enabled: Some(
-                spec.surface == Surface::Solid || spec.surface == Surface::Foliage || shadow,
+                matches!(
+                    spec.surface,
+                    Surface::Solid | Surface::Foliage | Surface::Seal
+                ) || shadow,
             ),
             // Reversed depth: nearer is greater. The sky sits at exactly 0. A
             // mark over everything passes whatever is there.
