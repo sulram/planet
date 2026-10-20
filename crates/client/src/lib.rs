@@ -1215,21 +1215,44 @@ impl Client {
         self.events.push(Event::Anchors { anchors });
     }
 
-    /// Where every landmark in view and within reach of a label lands on
-    /// the screen, the point over its star, as heads do.
+    /// Where every landmark and portal in view and within reach of a label
+    /// lands on the screen, the point over its top, as heads do: a star
+    /// bears its own name, a ring the name of the star it leads to. A ring
+    /// whose star is not known here asks the chart.
     fn labels(&mut self, camera: &scene::Camera) {
         let projection = Projection::of(camera, self.aspect);
         let body = self.controller.held_by();
+        let mut unknown = false;
         let labels: Vec<Label> = self
             .parts
             .all()
             .filter_map(|(id, seat, part)| {
-                let Shape::Landmark(name) = part.shape else {
+                if !matches!(
+                    part.shape,
+                    Shape::Landmark(_) | Shape::Portal(Portal { to: Some(_), .. })
+                ) {
                     return None;
-                };
+                }
                 if parts::away_m(&self.generator, seat, &part.pose, body) > LABEL_M {
                     return None;
                 }
+                let name = match part.shape {
+                    Shape::Portal(Portal { to: Some(to), .. }) => match self.parts.landmark(to) {
+                        Some((
+                            _,
+                            Part {
+                                shape: Shape::Landmark(name),
+                                ..
+                            },
+                        )) => name,
+                        _ => {
+                            unknown = true;
+                            return None;
+                        }
+                    },
+                    Shape::Landmark(name) => name,
+                    _ => return None,
+                };
                 let world = self.parts.transform(&self.generator, id)?;
                 let top = world.transform_point3(DVec3::new(0.0, 0.0, 1.0));
                 let (x, y, distance_m) = projection.project(top)?;
@@ -1242,6 +1265,9 @@ impl Client {
                 })
             })
             .collect();
+        if unknown {
+            self.parts.chart_for(self.clock_s);
+        }
         if labels.is_empty() && !self.had_labels {
             return;
         }

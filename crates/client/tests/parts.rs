@@ -422,6 +422,77 @@ fn a_landmark_on_the_moon_is_travelled_to_on_the_moon() {
     );
 }
 
+/// A portal bears the name of the star it leads to over its ring, as the
+/// star bears its own, so where it leads is read before it is walked.
+#[test]
+fn a_portal_bears_the_name_of_the_star_it_leads_to() {
+    let mut client = welcomed();
+    client.set_view([1600, 900]);
+    let feet = client.host("test").feet();
+    let seat = Seat::Sector(feet.point.sector);
+    let star = Part {
+        shape: Shape::Landmark(Name::new("Far").unwrap()),
+        pose: PartPose::upright(
+            [
+                feet.point.u,
+                feet.point.v + 8000.0,
+                feet.height_m / topology::BLOCK_M,
+            ],
+            [2.0, 2.0, 0.16],
+        ),
+        paint: 0,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+        name: None,
+        muted: false,
+        volume: 0.0,
+    };
+    let star = client.host("test").place_part(seat, star).unwrap();
+    let ring = Part {
+        shape: Shape::Portal(client::Portal {
+            to: Some(star),
+            rim: client::Portal::RIM,
+        }),
+        pose: PartPose::upright(
+            [
+                feet.point.u,
+                feet.point.v + 12.0,
+                feet.height_m / topology::BLOCK_M,
+            ],
+            [4.0, 0.1, 4.0],
+        ),
+        paint: 0,
+        solid: false,
+        shine: 0.0,
+        reach_m: 0.0,
+        name: None,
+        muted: false,
+        volume: 0.0,
+    };
+    let ring = client.host("test").place_part(seat, ring).unwrap();
+    let mut input = client::Input::default();
+    client.update(1.0 / 60.0, &mut input);
+    let labels: Vec<client::Label> = client
+        .drain_events()
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::Labels { labels } => Some(labels),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let over = labels
+        .iter()
+        .find(|label| label.id == ring.0)
+        .expect("the ring in view bears a label");
+    assert_eq!(over.text, "Far");
+    assert!(
+        labels.iter().all(|label| label.id != star.0),
+        "the star itself is too far for its own"
+    );
+}
+
 /// A portal seen through puts the star it leads to in the cells' look as a
 /// second eye, so what is built there comes and shows through the pane.
 #[test]

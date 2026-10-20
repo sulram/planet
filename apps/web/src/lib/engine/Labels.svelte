@@ -1,9 +1,10 @@
 <script lang="ts">
 	import type { Label } from './protocol';
 
-	// A landmark's name hung over its star. The engine says where every
-	// named part in view is on the screen each frame, within the reach of a
-	// nametag; this only draws there, as `Nametags` does over a head.
+	// A landmark's name hung over its star, and over a portal the name of
+	// the star it leads to. The engine says where every named part in view
+	// is on the screen each frame, within the reach of a nametag; this only
+	// draws there, as `Nametags` does over a head.
 	interface Props {
 		labels: Label[];
 	}
