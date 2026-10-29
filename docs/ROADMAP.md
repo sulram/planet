@@ -131,7 +131,7 @@ end to end.
 ### Avatars (28)
 
 - [ ] Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
-- [ ] A person's own VRM, once files are uploaded
+- [ ] A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, A profile's avatars)
 - [ ] A swim clip (the fly clip stands in)
 - [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
 - [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
