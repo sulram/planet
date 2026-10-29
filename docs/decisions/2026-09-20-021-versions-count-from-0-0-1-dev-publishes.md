@@ -1,5 +1,6 @@
 ---
 date: 2026-09-20
+superseded_by: 2026-10-29-releases-from-1
 ---
 
 # Versions count from 0.0.1; `dev` publishes prereleases

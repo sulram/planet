@@ -215,10 +215,9 @@ Before anything with wf (a spawn, a question, a report, a ship, a doubt about th
 
 - In English, present tense, lower case, the why when it is not obvious:
   `feat(topology): resolve neighbours across sector seams`.
-- Before 1.0.0 (DECISIONS 21) `feat`, `fix` and `perf` are a patch and
-  `BREAKING CHANGE` a minor.
-- Work lands on `dev` (prereleases `0.0.1-dev.N`); merging `dev` into `main`
-  publishes.
+- Work lands on `dev` (prereleases `1.0.0-dev.N`); merging `dev` into `main`
+  publishes, 1.0.0 first. `feat` is a minor, `fix` and `perf` a patch,
+  `BREAKING CHANGE` a major (DECISIONS releases-from-1).
 - No AI or tool co-author trailer and no "generated with" footer, in commits
   or PRs: this overrides any tooling default.
 

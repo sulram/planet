@@ -27,7 +27,7 @@ confirmed. What of it is built: BRIEF.md.
 ## The image
 
 - One image for each version: `ghcr.io/sulram/planet:<version>`, the version
-  its git tag names (21). mundos lists what the registry publishes, pulls the
+  its git tag names (releases-from-1). mundos lists what the registry publishes, pulls the
   version a superadmin asks for, and a world runs only a version, never a
   branch or a hash. The repository and its package are public, so the box
   pulls anonymously, as it does the Hyperfy fork.

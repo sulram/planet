@@ -30,7 +30,7 @@ bun run check      # everything CI runs
 
 ## Releases
 
-- Work lands on `dev`: prereleases `0.0.1-dev.N`.
+- Work lands on `dev`: prereleases `1.0.0-dev.N`.
 - Merging `dev` into `main` publishes the plain version.
 - Conventional Commits decide the bump: [release.config.js](release.config.js).
 
