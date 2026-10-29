@@ -180,3 +180,4 @@ end to end.
 - [ ] World snapshots anchored in Bitcoin; genesis inscription of the recipe
 - [ ] Cinema mode: cloud render with neural rendering, streamed over WebRTC
 - [ ] Curvature knob: morph flat <-> sphere in the vertex shader
+- [ ] A world's face from inside it: its builders set a title, a description and a cover that `/api/world` answers, which mundos shows where a superadmin set none (face-in-mundos)

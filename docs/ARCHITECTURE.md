@@ -21,9 +21,9 @@ not yet confirmed.
   to enter previews a planet offline, turns its knobs and founds the world
   from what is on the screen; the recipe is frozen from then on. Until then
   everyone else is told the world is on its way.
-- A world answers for itself at `GET /api/world`: what it says about itself,
-  for mundos's catalog and door, and what it speaks (91): the engine's
-  version, the wire's, and the plugins that are on.
+- A world answers for itself at `GET /api/world`: what it speaks (91), the
+  engine's version, the wire's and the plugins on. mundos's catalog shows its
+  name, with the description and cover a superadmin sets there (face-in-mundos).
 - An update is a copy: mundos copies the folder and the bucket folder into
   the next generation on the new version, and a promotion moves the address.
 
