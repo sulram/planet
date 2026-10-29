@@ -33,7 +33,7 @@ COPY package.json bun.lock .npmrc ./
 COPY apps/web/package.json apps/web/
 # A plugin's panel is a package of the workspace, in the plugin's folder.
 COPY plugins plugins
-# `@tekne/kb` comes from the studio's registry: the token is a BuildKit secret
+# `@tekne/kb` and `@tekne/wf` come from the studio's registry: the token is a BuildKit secret
 # (`--secret id=npmrc,src=$HOME/.npmrc`), never a layer of the image.
 RUN --mount=type=secret,id=npmrc,target=/root/.npmrc bun install --frozen-lockfile
 COPY apps/web apps/web

@@ -20,6 +20,6 @@ export default defineConfig({
 	},
 	// Comments that point at docs (`docs/x.md § Section`) point somewhere real.
 	code: { glob: '{crates/**/*.rs,plugins/**/*.{rs,ts,svelte},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}' },
-	agents: { modules: ['core', 'worktrees'] },
+	agents: { modules: ['core'] },
 	plugins: () => import('./scripts/kb-plugins')
 });

@@ -1,6 +1,7 @@
 // The checks only this repo needs, run by `kb check` after kb's own
 // (kb.config.ts). The rules they hold are in AGENTS.md § Docs and § How it
-// grows; a rule a script can hold lives here, never in a reader's memory.
+// grows, and docs/LAYOUT.md; a rule a script can hold lives here, never in a
+// reader's memory.
 import type { Problem } from '@tekne/kb/config';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
@@ -12,7 +13,6 @@ function planet(root: string): Problem[] {
 	const out: Problem[] = [];
 	const read = (p: string) => readFileSync(`${root}/${p}`, 'utf8');
 	const problem = (where: string, message: string) => out.push(err(where, message));
-	const agents = read('AGENTS.md');
 	const docs = readdirSync(`${root}/docs`)
 		.filter((f) => f.endsWith('.md'))
 		.map((f) => `docs/${f}`);
@@ -138,20 +138,21 @@ function planet(root: string): Problem[] {
 
 	/* ------------------------------------------- crate bullets match crates/ */
 
-	const layout = agents.slice(agents.indexOf('## Layout'), agents.indexOf('## Invariants'));
+	const layout = read('docs/LAYOUT.md');
+	const inCrates = layout.slice(layout.indexOf('## crates/'), layout.indexOf('## The other folders'));
 	const crates = cratesIn('crates');
-	for (const c of crates) if (!layout.includes(`\`${c}\``)) problem('AGENTS.md § Layout', `crate \`${c}\` has no bullet`);
-	for (const m of layout.matchAll(/^ {2}- `([a-z-]+)`/gm)) {
-		if (!crates.includes(m[1])) problem('AGENTS.md § Layout', `\`${m[1]}\` is not a crate`);
+	for (const c of crates) if (!inCrates.includes(`\`${c}\``)) problem('docs/LAYOUT.md § crates/', `crate \`${c}\` has no bullet`);
+	for (const m of inCrates.matchAll(/^- `([a-z-]+)`/gm)) {
+		if (!crates.includes(m[1])) problem('docs/LAYOUT.md § crates/', `\`${m[1]}\` is not a crate`);
 	}
-	for (const p of folders) if (!layout.includes(`\`${p}\``)) problem('AGENTS.md § Layout', `plugin \`${p}\` is not named`);
+	for (const p of folders) if (!layout.includes(`\`${p}\``)) problem('docs/LAYOUT.md', `plugin \`${p}\` is not named`);
 
 	/* -------------------------------------- bun run names match package.json */
 
 	const scripts = Object.keys(JSON.parse(read('package.json')).scripts as Record<string, string>);
 	const listed = [...layout.matchAll(/`bun run ([^`]+)`/g)].map((m) => m[1]).find((l) => l.includes('|'))?.split('|').map((s) => s.trim()) ?? [];
-	for (const s of scripts) if (!listed.includes(s)) problem('AGENTS.md § Layout', `script \`${s}\` is not in the bun run list`);
-	for (const s of listed) if (!scripts.includes(s)) problem('AGENTS.md § Layout', `\`bun run ${s}\` is not a script`);
+	for (const s of scripts) if (!listed.includes(s)) problem('docs/LAYOUT.md § Commands', `script \`${s}\` is not in the bun run list`);
+	for (const s of listed) if (!scripts.includes(s)) problem('docs/LAYOUT.md § Commands', `\`bun run ${s}\` is not a script`);
 	for (const file of [...docs, 'AGENTS.md', 'apps/web/AGENTS.md', 'server/AGENTS.md', 'README.md']) {
 		for (const m of read(file).matchAll(/bun run ([a-z]+)/g)) {
 			if (!scripts.includes(m[1])) problem(file, `\`bun run ${m[1]}\` is not a script`);

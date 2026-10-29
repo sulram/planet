@@ -64,7 +64,7 @@ jobs:
           tags: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           build-args: VERSION=${{ needs.release.outputs.version }}
-          # The studio's registry, for @tekne/kb in the web stage's install.
+          # The studio's registry, for @tekne/kb and @tekne/wf in the web stage's install.
           secrets: |
             npmrc=//npm.tekne.studio/:_authToken=${{ secrets.NPM_TOKEN }}
           cache-from: type=gha

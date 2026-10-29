@@ -5,6 +5,8 @@ lives_in:
   - /apps/web/CLAUDE.md
   - /server/CLAUDE.md
   - REFS.md
+amended_by:
+  - 2026-10-29-layout-is-a-doc
 ---
 
 # The root guide holds only what applies everywhere, under 200 lines

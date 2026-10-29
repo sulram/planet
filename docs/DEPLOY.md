@@ -42,7 +42,7 @@ confirmed. What of it is built: BRIEF.md.
 - The release workflow publishes it: when `dev` or `main` releases a version,
   the same run builds the image for amd64 and arm64 and pushes it under the
   version's number.
-- The web stage installs `@tekne/kb` from the studio's registry, so the build
+- The web stage installs `@tekne/kb` and `@tekne/wf` from the studio's registry, so the build
   takes the token as a BuildKit secret, `npmrc`: the workflow passes it from
   the repository secret `NPM_TOKEN`; a machine passes its own with
   `--secret id=npmrc,src=$HOME/.npmrc`. CI installs with the same secret.
