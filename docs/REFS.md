@@ -39,9 +39,10 @@ shapes a choice goes to DECISIONS.
 
 ## Models, not refs
 
-- `mundos` (`~/Dev/mundos`, a sibling and no ref): the host. Its
-  `docs/BRIEFING.md` holds the contract an instance type meets: the token,
-  the container, the generations (DECISIONS 87).
+- `mundos` (`~/Dev/mundos`, a sibling and no ref): the host. The contract an
+  instance type meets is in its docs: the adapter in `docs/instance-types.md`
+  (§ planet), the token in `docs/identity.md` (§ The keys), the generations
+  in `docs/upgrade.md` (DECISIONS 87).
 - `hyperfy`, as our fork `sulram/hyperfy` runs it under mundos: the first
   instance type. `packages/mundos` is the token's flow and `docs/plugins.md`
   the plugins composed at build (DECISIONS 88). GPL-3.0: ideas only, as above.

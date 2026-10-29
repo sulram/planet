@@ -8,4 +8,4 @@ since: 2026-10-04
 
 mundos's catalog and door show a title, a description and an image that a world's builders set inside it. A planet has nowhere to set them yet, and answers with its name alone
 
-**Context:** mundos `docs/BRIEFING.md` § Domain.
+**Context:** mundos `docs/domain.md` § Catalog, and § World for the description and cover.

@@ -8,8 +8,8 @@ order: 25
 # DEPLOY
 
 How a world is hosted: by mundos (87), from one image, with one folder. What
-mundos is and does lives in its own `docs/BRIEFING.md`; this is the instance
-type's side of that contract. A line marked (p) is proposed and not yet
+mundos is and does lives in its own docs, from `docs/product.md` (`bun kb docs`
+there maps the rest); this is the instance type's side of that contract. A line marked (p) is proposed and not yet
 confirmed. What of it is built: BRIEF.md.
 
 ## What the server carries
