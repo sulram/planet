@@ -139,7 +139,7 @@ end to end.
 ## Plugins: wishes
 
 - [ ] Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL
-- [ ] A video through Cloudflare Stream, when mundos offers it (mundos's roadmap, Video through Cloudflare Stream): the upload goes straight to Stream on a one-time URL mundos hands out, the part names the video's id beside its master file, and the shell plays its HLS into the same live texture as an MP4's. A spike first: HLS into a WebGPU texture across the browsers, Safari's included
+- [ ] A video through Cloudflare Stream, when mundos offers it (mundos's roadmap, Video through Cloudflare Stream): the upload goes straight to Stream on a one-time URL mundos hands out, the part names the video's id beside its master file, and the shell plays its HLS into the same live texture as an MP4's. The official world's sweep on start tells mundos the ids no record names any more, and mundos deletes them from Stream (mundos's decision stream-follows-the-official-generation). A spike first: HLS into a WebGPU texture across the browsers, Safari's included
 - [ ] Native audio: a video and a sound are heard on the web alone; the desktop has no audio stack. Voice by proximity enters as another source over the same list (SOUND.md). Playback in step between clients waits on the server's clock
 - [ ] An ambience for a volume: a sound on the volume's record, heard inside it with no fall off, the build plugin's
 - [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
