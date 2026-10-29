@@ -18,6 +18,8 @@ end to end.
   deployed by mundos (87); its upgrade is walked with the first version that
   carries plugin work.
 - [ ] A mundos button in the bar, as the Hyperfy fork's pane has: a visitor's sign in, the name of whoever is signed in, and for an admin the way to the world in mundos (`PUBLIC_MUNDOS_URL` + `/worlds/` + `PUBLIC_MUNDOS_WORLD`). The sign in stands only inside the panel of who is here. No new variable: the server holds both and says only the door (`/api/world`)
+- [ ] A 3D model beside the voxel one: a `.glb` goes up through `POST /api/files`, its kind read off its bytes, and is a shape of part drawn with its meshes, materials and textures under a budget of triangles and texels, placed with the one gizmo. In the menu today's `model` kind, which takes a `.vox`, is called Voxels, and the new one 3D model. `crates/avatar` reads a GLB already
+- [ ] Walking a world on a phone, as Hyperfy does (`refs/hyperfy`, `PlayerLocal.js`): a stick to walk, a drag to look, buttons to jump and fly, and the bar and panels laid out for a small screen. A phone offers no build mode
 
 ## The core
 
@@ -88,7 +90,7 @@ end to end.
 - [ ] A part picked by one hand shown picked to the others near
 - [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
 - [ ] A light part lights what is near, as a lamp among the cells does; a cube in the light finish and a landmark do already
-- [ ] Items beside the cube: a `.vox` model (its session: `crates/vox`, the upload route), a shape of part, a draw of its own and a row in the items menu. A picture stands (`Shape::Image`): its knobs, one side or both, a screen or a print, are read off its paint's finish until the panel offers them
+- [ ] A picture's knobs in the panel (`Shape::Image`): one side or both, a screen or a print, read off its paint's finish until then
 
 ### Bodies (108)
 
@@ -136,9 +138,6 @@ end to end.
 
 ## Plugins: wishes
 
-- [ ] Files: `POST /api/files` from a builder's session into the bucket folder (89), named by content hash, listed and served by the world; `.vox` first, GLB and images after (sketches/entities.md)
-- [ ] Models: a `.vox` file as a shape of a part, read and meshed by `crates/vox` with its own palette, solid or passable, placed with the one gizmo (sketches/entities.md)
-- [ ] Entities: GLB as a shape of a part, with budgets
 - [ ] Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL
 - [ ] Native audio: a video and a sound are heard on the web alone; the desktop has no audio stack. Voice by proximity enters as another source over the same list (SOUND.md). Playback in step between clients waits on the server's clock
 - [ ] An ambience for a volume: a sound on the volume's record, heard inside it with no fall off, the build plugin's
