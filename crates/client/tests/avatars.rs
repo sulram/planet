@@ -162,3 +162,21 @@ fn an_avatar_without_clips_stands_at_rest() {
             .all(|joint| joint.is_finite())
     );
 }
+
+/// A file that never came is forgotten: worn again, it is asked for again.
+#[test]
+fn an_avatar_that_never_came_is_asked_again() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    serve(&mut client); // manifest
+    let gone = "https://example.invalid/gone.vrm";
+    client.command(Command::SetAvatar { path: gone.into() });
+    serve(&mut client); // fails, and the default is asked for
+    serve(&mut client); // the default and the clips
+    client.command(Command::SetAvatar { path: gone.into() });
+    let asked: Vec<String> = client
+        .drain_asset_requests()
+        .into_iter()
+        .map(|request| request.path)
+        .collect();
+    assert_eq!(asked, [gone]);
+}

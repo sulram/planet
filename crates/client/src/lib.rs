@@ -574,24 +574,33 @@ impl Client {
         let Some(purpose) = self.requests.answer(id) else {
             return;
         };
-        let outcome = bytes.and_then(|bytes| match &purpose {
-            Purpose::Manifest => serde_json::from_slice::<Manifest>(&bytes)
-                .map(|manifest| self.adopt(manifest))
-                .map_err(|e| e.to_string()),
+        let outcome = match &purpose {
+            Purpose::Manifest => bytes.and_then(|bytes| {
+                serde_json::from_slice::<Manifest>(&bytes)
+                    .map(|manifest| self.adopt(manifest))
+                    .map_err(|e| e.to_string())
+            }),
+            // The wardrobe hears a file that never came too, so wearing it
+            // again asks again.
             Purpose::Avatar(path) => {
-                let avatar = avatar::Avatar::from_vrm(&bytes).map_err(|e| e.to_string());
+                let avatar = bytes
+                    .and_then(|bytes| avatar::Avatar::from_vrm(&bytes).map_err(|e| e.to_string()));
                 self.wardrobe.arrived(path, avatar).map(|_| ())
             }
-            Purpose::Clip(gait) => avatar::Clip::from_glb(&bytes)
-                .map(|clip| {
-                    self.clips.insert(*gait, clip);
-                })
-                .map_err(|e| e.to_string()),
-            Purpose::Model(hash) => vox::parse(&bytes)
-                .map(|model| self.parts.model_arrived(*hash, model))
-                .map_err(|e| format!("{e:?}")),
+            Purpose::Clip(gait) => bytes.and_then(|bytes| {
+                avatar::Clip::from_glb(&bytes)
+                    .map(|clip| {
+                        self.clips.insert(*gait, clip);
+                    })
+                    .map_err(|e| e.to_string())
+            }),
+            Purpose::Model(hash) => bytes.and_then(|bytes| {
+                vox::parse(&bytes)
+                    .map(|model| self.parts.model_arrived(*hash, model))
+                    .map_err(|e| format!("{e:?}"))
+            }),
             Purpose::Picture(id) => Err(format!("{}: a picture is answered as pixels", id.hex())),
-        });
+        };
         if let Err(message) = outcome {
             self.events.push(Event::Rejected {
                 message: format!("{purpose:?}: {message}"),
