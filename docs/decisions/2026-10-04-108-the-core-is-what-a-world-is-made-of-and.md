@@ -4,7 +4,7 @@ lives_in:
   - PLUGINS.md#the-core-and-a-plugin
   - ARCHITECTURE.md#the-core-and-its-plugins
   - GLOSSARY.md
-  - ROADMAP.md#the-core
+  - ROADMAP.md#bodies-108
   - questions/index.md
 amends:
   - 2026-10-04-088-the-core-is-the-sphere-and-what-is-done

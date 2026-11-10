@@ -30,3 +30,6 @@ out/
 
 # The baked fields: made by `bun run field`, too large to carry here.
 assets/fields/
+
+# Fizzy token, written by `fizzy setup` (AGENTS.md § Docs)
+.fizzy.yaml

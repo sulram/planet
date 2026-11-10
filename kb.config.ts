@@ -20,6 +20,8 @@ export default defineConfig({
 	},
 	// Comments that point at docs (`docs/x.md § Section`) point somewhere real.
 	code: { glob: '{crates/**/*.rs,plugins/**/*.{rs,ts,svelte},server/**/*.go,apps/web/src/**/*.{ts,svelte},scripts/*.ts}' },
-	agents: { modules: ['core'] },
+	// The roadmap in kb's shape (kb guide roadmap); the one campaign is its brief.
+	roadmap: { file: 'ROADMAP.md', briefs: 'BRIEF.md' },
+	agents: { modules: ['core', 'roadmap'] },
 	plugins: () => import('./scripts/kb-plugins')
 });

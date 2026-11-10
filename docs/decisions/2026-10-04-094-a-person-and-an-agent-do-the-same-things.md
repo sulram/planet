@@ -3,7 +3,7 @@ date: 2026-10-04
 lives_in:
   - PLUGINS.md#a-person-and-an-agent
   - /AGENTS.md
-  - ROADMAP.md#plugins-wishes
+  - ROADMAP.md#plugins-to-come
   - GLOSSARY.md
 ---
 

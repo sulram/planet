@@ -2,7 +2,6 @@
 date: 2026-10-04
 lives_in:
   - BRIEF.md
-  - ROADMAP.md#plugins-native
   - PLUGINS.md
 amends:
   - 2026-10-04-088-the-core-is-the-sphere-and-what-is-done

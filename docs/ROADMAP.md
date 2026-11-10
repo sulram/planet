@@ -7,178 +7,201 @@ order: 31
 
 # ROADMAP
 
-Intent, not contract. What is built lives in the theme docs and in git; this
-is what comes next. Add wishes freely, reorder as priorities shift, and strike
-what we drop with the DECISIONS number that says why. Every step ends runnable
-end to end.
+Intent, not contract: what comes next, in order, then the wishes. What is built
+lives in the theme docs; what we drop leaves with the DECISIONS fragment that says why.
 
 ## Now: a world mundos hosts
 
-- The campaign and its order of work: [BRIEF.md](BRIEF.md). A world is
-  deployed by mundos (87); its upgrade is walked with the first version that
-  carries plugin work.
-- [ ] A mundos button in the bar, as the Hyperfy fork's pane has: a visitor's sign in, the name of whoever is signed in, and for an admin the way to the world in mundos (`PUBLIC_MUNDOS_URL` + `/worlds/` + `PUBLIC_MUNDOS_WORLD`). The sign in stands only inside the panel of who is here. No new variable: the server holds both and says only the door (`/api/world`)
-- [ ] A 3D model beside the voxel one: a `.glb` goes up through `POST /api/files`, its kind read off its bytes, and is a shape of part drawn with its meshes, materials and textures under a budget of triangles and texels, placed with the one gizmo. In the menu today's `model` kind, which takes a `.vox`, is called Voxels, and the new one 3D model. `crates/avatar` reads a GLB already
-- [ ] Walking a world on a phone, as Hyperfy does (`refs/hyperfy`, `PlayerLocal.js`): a stick to walk, a drag to look, buttons to jump and fly, and the bar and panels laid out for a small screen. A phone offers no build mode
+### Walking a world on a phone
 
-## The core
+As Hyperfy does (`refs/hyperfy`, `PlayerLocal.js`): a stick to walk, a drag to <!-- card:75 -->
+look, buttons to jump and fly, the bar and panels laid out for a small screen.
+
+**Done when:** a phone walks, looks, jumps and flies a world, with the bar and panels fitting its screen and no build mode offered.
+
+### A 3D model beside the voxel one
+
+A `.glb` goes up through `POST /api/files`, its kind read off its bytes, and <!-- card:73 -->
+is a shape of part drawn with its meshes, materials and textures under a budget
+of triangles and texels, placed with the one gizmo. In the menu today's `model`
+kind (a `.vox`) is Voxels, the new one 3D model. `crates/avatar` reads a GLB already.
+
+**Done when:** a `.glb` uploaded from the menu stands in the world as a part placed with the gizmo, and one over the budget is refused with the reason.
+
+### Avatars through mundos
+
+mundos owns the avatars: the catalog, each account's list and its current one, the VRM files in its bucket, and the creator (its decisions avatars-live-in-mundos and the two beside it). <!-- card:102 --> A world wears what the token says: an `avatar` claim, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. The way back never writes into mundos as the person: a VRM dropped is a world asset until the person wears it, which sends them to mundos with its URL and back through `/enter` with a fresh token. Claim and route wait on a decision: the question below.
+
+**Done when:** a world wears the avatar an account chose in mundos on entry, and a VRM picked inside the world becomes that account's current one in mundos.
+
+### A mundos button in the bar
+
+As the Hyperfy fork's pane has: a visitor's sign in, the name of whoever is <!-- card:71 -->
+signed in, and for an admin the way to the world in mundos (`PUBLIC_MUNDOS_URL`
++ `/worlds/` + `PUBLIC_MUNDOS_WORLD`), inside the panel of who is here. No new
+variable: the server holds both and says only the door (`/api/world`).
+
+**Done when:** a visitor signs in from the bar, the bar shows the name of whoever is signed in, and an admin reaches the world's page in mundos from it.
+
+### The campaign: a core and its plugins
+
+A world deployed and updated by mundos (87), then the core as the host of <!-- card:94 -->
+plugins, cut by the plugins that need it: the order of work is in [BRIEF.md](./BRIEF.md).
+
+**Done when:** every step of the brief is ticked and the brief has dissolved into the theme docs and the decisions.
+
+## Later
 
 ### The shape
 
-- [ ] Fix the generated shape: only the Earth one reads right today. Three named faults, all in `plates.rs`
-  - [ ] `Plates::shape` takes no footprint at all, so a coarse patch reads the field at full detail and the shore lands somewhere else at every level: from orbit the coastline comes out in straight steps along the patch edges
-  - [ ] The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
-  - [ ] No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (45); this side needs its own answer
-- [ ] Golden hashes also run on WASM in CI (wasmtime)
-- [ ] Generator as WASM inside Go (wazero), when the server has to read the ground (09, 97)
-- [ ] Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
-- [ ] Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
-- [ ] More planets between the planet and the moon, each a body walked, built on and lit by the one sun (113): a sketch of the recipe's list of bodies and their orbits first, then the first body pulls the code
+- Fix the generated shape: only the Earth one reads right today. Three named faults, all in `plates.rs`
+  - `Plates::shape` takes no footprint at all, so a coarse patch reads the field at full detail and the shore lands somewhere else at every level: from orbit the coastline comes out in straight steps along the patch edges
+  - The coast and belt noise are raw `fbm` where the rest of the generator is band limited `filtered`: the same root, and two lines
+  - No shelf. Oceanic crust sits far enough below the blend that `deep` saturates everywhere, so the sea is a bathtub at the whole of `ocean_depth_m` with no shelf and no slope. The Earth side got `sea_curve` for this (45); this side needs its own answer
+- Golden hashes also run on WASM in CI (wasmtime)
+- Generator as WASM inside Go (wazero), when the server has to read the ground (09, 97)
+- Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
+- Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
+- More planets between the planet and the moon, each a body walked, built on and lit by the one sun (113): a sketch of the recipe's list of bodies and their orbits first, then the first body pulls the code
 
 ### What an admin picks when a world is founded
 
-- [ ] **Size.** A power of two per sector side, up to `2^16`, so a world can be a moon, an island or the planet we have. `sector_bits` is in the recipe (49, 50); the founding screen does not offer it yet. Growing past `2^16` is a separate question with its own numbers (45)
-- [ ] **A list of generators, not a pair.** `Source` already names one; the founding screen offers the ones this version has, and a new one is a module beside `plates` and `field` without the body of v3 knowing
-- [ ] **More fields than Earth.** The Moon and Mars from the same bake, a region of Earth at a kinder scale. Same code path, a different file
-- [ ] **Climate and soil as choices.** `material` today is one function: latitude, height, and a noise for moisture. A world should be able to be arid, frozen, tropical or drowned and say so at its founding
-- [ ] **Which plugins are on**, offered at the founding (91): the panel switches them once the world stands
-- Each of these is in the address, previewed before it is kept, and frozen with the world, the plugins excepted
+Each of these is in the address, previewed before it is kept, and frozen with the world, the plugins excepted.
+
+- **Size.** A power of two per sector side, up to `2^16`, so a world can be a moon, an island or the planet we have. `sector_bits` is in the recipe (49, 50); the founding screen does not offer it yet. Growing past `2^16` is a separate question with its own numbers (45) <!-- card:79 -->
+- **A list of generators, not a pair.** `Source` already names one; the founding screen offers the ones this version has, and a new one is a module beside `plates` and `field` without the body of v3 knowing
+- **More fields than Earth.** The Moon and Mars from the same bake, a region of Earth at a kinder scale. Same code path, a different file <!-- card:81 -->
+- **Climate and soil as choices.** `material` today is one function: latitude, height, and a noise for moisture. A world should be able to be arid, frozen, tropical or drowned and say so at its founding <!-- card:84 -->
+- **Which plugins are on**, offered at the founding (91): the panel switches them once the world stands
 
 ### The picture
 
-- [ ] The far field as baked field textures rather than a generator call per patch: alt, ruggedness, horizon and colour per sector, frozen with the recipe. Measure the settle against the 7.4 s the pyramid took (57)
-- [ ] A horizon map in the shader, so terrain self shadows at any range and nothing coarse enters a cascade (55, 57)
-- [ ] Per pixel voxelization of the far ground, so it reads as the same world as the near cubes without being the same data (57)
-- [ ] LOD by projected error with hysteresis; geomorph between levels. Nothing comes down before its replacement is up (53)
-- [ ] Patch building behind a job queue (workers native and web), measured budget. Load bearing: one volume patch is 10.7 ms of a 12 ms frame
-- [ ] Motion vector target
-- [ ] Atmosphere with real scattering
-- [ ] Snow and forest per pixel: continuous, footprint filtered cover fields in the vertex, the threshold in the shader
-- [ ] Caustics; the waterline when the camera straddles the surface; reflections of terrain on the sea
-- [ ] MSAA or filtered edges, after measuring cost
-- [ ] The sphere leaves the seam: `scene::Frame` names the planet four times (radius, moon, sun, sea) and the own-indices mesh is the exception in `render`. One `Sky` struct and the volume mesh as the primary shape, so a renderer with no sphere ignores one field (65)
-- [ ] What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), and the frame on a Pi and in a tab
+- The far field as baked field textures rather than a generator call per patch: alt, ruggedness, horizon and colour per sector, frozen with the recipe. Measure the settle against the 7.4 s the pyramid took (57)
+- A horizon map in the shader, so terrain self shadows at any range and nothing coarse enters a cascade (55, 57)
+- Per pixel voxelization of the far ground, so it reads as the same world as the near cubes without being the same data (57)
+- LOD by projected error with hysteresis; geomorph between levels. Nothing comes down before its replacement is up (53)
+- Patch building behind a job queue (workers native and web), measured budget. Load bearing: one volume patch is 10.7 ms of a 12 ms frame
+- Motion vector target
+- Atmosphere with real scattering
+- Snow and forest per pixel: continuous, footprint filtered cover fields in the vertex, the threshold in the shader
+- Caustics; the waterline when the camera straddles the surface; reflections of terrain on the sea
+- MSAA or filtered edges, after measuring cost
+- The sphere leaves the seam: `scene::Frame` names the planet four times (radius, moon, sun, sea) and the own-indices mesh is the exception in `render`. One `Sky` struct and the volume mesh as the primary shape, so a renderer with no sphere ignores one field (65)
+- What it must not cost, measured and not assumed: the far shimmer (29, 41, 43), and the frame on a Pi and in a tab
 
 ### Where you are
 
-- [ ] Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out
-- [ ] The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
-- [ ] A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
+- Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out <!-- card:88 -->
+- A person picks the landmark they are born at: every account chooses its starting landmark from the chart, once, and changes it when it likes (Fabio Ema) <!-- card:103 -->
+- The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
+- A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
 
 ### The cells (58, 75 to 86, 106)
 
-- [ ] The palette kept by the world (103): its sixteen colours in the cells' store, the version's for a new world. Later, a world's admin changes them, as an op
-- [ ] Op log; undo; a volume rolled back to an earlier moment (95). It grows without a ceiling and will outweigh the chunks long before they matter, so how it is kept is part of building it
-  - [ ] **An op is a gesture, not a cell.** One stroke is one permission-checked op carrying its shape and its parameters, never the thousands of cells it wrote
-  - [ ] **The log is not the world.** Stored chunks are, by copy on first write, so the log is never replayed to rebuild anything: it exists for undo, audit and rollback, which is what makes it safe to compact
-  - [ ] **Two tiers.** Inside the undo window an op is kept whole, with the chunk versions it bumped. Past the window it collapses to a digest: who, when, which chunks, how many cells
-  - [ ] **Chunk version retention is the real knob**: undo depth, and how far back a volume rolls, are bounded by how many versions of a chunk are kept, not by how many ops are
-  - [ ] **Compaction runs in the world actor**, off the hot path, on a schedule
-  - [ ] Measure before choosing the window: bytes per op, and bytes per stored chunk version after zstd
-- [ ] A client chunk cache, so a volume seen before is not sent again (SQLite native, OPFS web)
-- [ ] A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
-- [ ] First cut leftovers: the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
-- [ ] The light of a volume: flood fill sun baked at mesh time, so an interior is dark and a doorway a gradient; no leak where a volume meets the ground; a glow channel
-- [ ] A volume under the sea
-- [ ] The camera boom cut by a volume's cells, as it is by rock under the ground
-- [ ] Ramp, wedge and half slab beside the cube (75)
-- [ ] Blocky is a cosmetic toggle inside a volume, one viewer's choice, never the world's
+- The palette kept by the world (103): its sixteen colours in the cells' store, the version's for a new world. Later, a world's admin changes them, as an op <!-- card:95 -->
+- Op log; undo; a volume rolled back to an earlier moment (95). How it is kept is drawn in [sketches/op-log.md](./sketches/op-log.md) <!-- card:72 -->
+- A client chunk cache, so a volume seen before is not sent again (SQLite native, OPFS web)
+- A volume on a plot at the edge of a sector, and a build across the seam: the cells folded over it (77)
+- First cut leftovers: the volumes uniform buffer starts small and grows; gesture and trace tests across a chunk seam
+- The light of a volume: flood fill sun baked at mesh time, so an interior is dark and a doorway a gradient; no leak where a volume meets the ground; a glow channel <!-- card:76 -->
+- A volume under the sea
+- The camera boom cut by a volume's cells, as it is by rock under the ground
+- Ramp, wedge and half slab beside the cube (75)
+- Blocky is a cosmetic toggle inside a volume, one viewer's choice, never the world's
 
 ### The parts (111)
 
-- [ ] The gizmo's handles sized by the view, so a part far off is still taken by its handle; a drag snapped to blocks and to right angles with a key held
-- [ ] A part picked by one hand shown picked to the others near
-- [ ] Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
-- [ ] A light part lights what is near, as a lamp among the cells does; a cube in the light finish and a landmark do already
-- [ ] A picture's knobs in the panel (`Shape::Image`): one side or both, a screen or a print, read off its paint's finish until then
+- The gizmo's handles sized by the view, so a part far off is still taken by its handle; a drag snapped to blocks and to right angles with a key held
+- A part picked by one hand shown picked to the others near
+- Permission to place by plot, through the hook land answers (95): the parts' owner asks it for every plot a part's box covers
+- A light part lights what is near, as a lamp among the cells does; a cube in the light finish and a landmark do already
+- A picture's knobs in the panel (`Shape::Image`): one side or both, a screen or a print, read off its paint's finish until then
 
 ### Bodies (108)
 
-- [ ] A body that is no avatar: a vehicle, a ship, a thing carried. A session rides a body, and more than one answers to it (99). The first one cuts the system
-- [ ] Cells on a body that moves, a room aboard a ship: the second member of a seat (109)
-- [ ] Physics for every body, on the ground and on cells alike
-
-## Plugins: native
+- A body that is no avatar: a vehicle, a ship, a thing carried. A session rides a body, and more than one answers to it (99). The first one cuts the system <!-- card:77 -->
+- Cells on a body that moves, a room aboard a ship: the second member of a seat (109)
+- Physics for every body, on the ground and on cells alike
 
 ### The folder of a plugin (100)
 
-- [ ] A plugin's strings in its own folder, merged into the web front end's catalogue
-- [ ] Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
-- [ ] The image built with `plugins/` and the module in it: the `Dockerfile` copies the folder and embeds the module, and no machine here builds it
-- [ ] A plugin whose world half faults again and again is switched off by the host: each fault costs the room up to a deadline, 250 ms, and nothing stops the next (102)
-- [ ] An op has a rate for each session, asked before the module is: chat counts its lines inside its world half, after the call is paid
-- [ ] The room kept in the module, told who joins, moves and leaves, when a world's size makes a room sent whole with each op too much (102)
-- [ ] The memory ceiling and the deadline of the module measured against the cells: the ground under a plot is read in 5 to 10 ms (97), and a world of a field holds 25 MB
+- A plugin's strings in its own folder, merged into the web front end's catalogue
+- Name, version, limits and the seam's shapes said once, in the crate, and the panel's `.ts` generated from it
+- The image built with `plugins/` and the module in it: the `Dockerfile` copies the folder and embeds the module, and no machine here builds it
+- A plugin whose world half faults again and again is switched off by the host: each fault costs the room up to a deadline, 250 ms, and nothing stops the next (102)
+- An op has a rate for each session, asked before the module is: chat counts its lines inside its world half, after the call is paid
+- The room kept in the module, told who joins, moves and leaves, when a world's size makes a room sent whole with each op too much (102)
+- The memory ceiling and the deadline of the module measured against the cells: the ground under a plot is read in 5 to 10 ms (97), and a world of a field holds 25 MB
 
 ### Chat (69)
 
-- [ ] A mute: an answer over the permission hook, which answers by level alone (98)
+- A mute: an answer over the permission hook, which answers by level alone (98)
 
 ### Building (106)
 
-- [ ] Every op a tool makes has a command at the seam that asks for it by its parameters (94)
-- [ ] A key that lays a platform
-- [ ] Brushes inside a volume: dig, add, smooth, flatten
-- [ ] A second way of building, a proof of concept beside this one (BRIEF.md)
+- Every op a tool makes has a command at the seam that asks for it by its parameters (94)
+- A key that lays a platform
+- Brushes inside a volume: dig, add, smooth, flatten
+- A second way of building, a proof of concept beside this one (BRIEF.md)
 
 ### Land (14, 95)
 
-- [ ] Permission to build by volume, given to an account, a person's or an agent's: the second answer to the permission hook, and building never knows it (93)
-- [ ] A panel where an admin gives it, takes it and sees who holds what
-- [ ] Landlords (14): a holder who subdivides and names builders inside; drawn in world with a gizmo, translucent borders while building
-- [ ] The Atlas, the unfolded-cube 2D map
+- Permission to build by volume, given to an account, a person's or an agent's: the second answer to the permission hook, and building never knows it (93) <!-- card:82 -->
+- A panel where an admin gives it, takes it and sees who holds what <!-- card:85 -->
+- Landlords (14): a holder who subdivides and names builders inside; drawn in world with a gizmo, translucent borders while building
+- The Atlas, the unfolded-cube 2D map
 
 ### Avatars (28)
 
-- [ ] Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
-- [ ] A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, A profile's avatars)
-- [ ] A swim clip (the fly clip stands in)
-- [ ] Avatar changer: an entity you walk through that opens a dialog to pick an avatar
-- [ ] Avatar dropzone: drop a VRM on the map to place an avatar others can take
+- Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
+- A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, A profile's avatars) <!-- card:87 -->
+- A swim clip (the fly clip stands in)
+- Avatar changer: an entity you walk through that opens a dialog to pick an avatar <!-- card:89 -->
+- Avatar dropzone: drop a VRM on the map to place an avatar others can take <!-- card:92 -->
 
-## Plugins: wishes
+### Plugins to come
 
-- [ ] Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL
-- [ ] A video through Cloudflare Stream, the world's own: a Stream account and token are among its settings, read as marlus.com reads them (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_API_TOKEN`, `CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN`), which mundos passes to a world whose video setting is on (mundos's item Video through Cloudflare Stream), the world's server makes a one-time upload URL and the browser sends the file straight to Stream, the video carries the world's name in its meta, the part names the video's id beside its master file, and the shell plays its HLS into the same live texture as an MP4's. At its sweep on start the world deletes from Stream its own videos that no record names, unless `MUNDOS_OFFICIAL` reads `false`: a generation mundos does not run as the official one never deletes, and a world outside mundos is its own official. A spike first: HLS into a WebGPU texture across the browsers, Safari's included
-- [ ] Native audio: a video and a sound are heard on the web alone; the desktop has no audio stack. Voice by proximity enters as another source over the same list (SOUND.md). Playback in step between clients waits on the server's clock
-- [ ] An ambience for a volume: a sound on the volume's record, heard inside it with no fall off, the build plugin's
-- [ ] Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
-- [ ] Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes
-- [ ] Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
-- [ ] Scale bands: giant, human, bug; secrets streamed only to the right scale
-- [ ] Portals between places, scales and worlds, each leading to a landmark (sketches/portals.md); the ring, the crossing and the view through it stand (portal-is-a-ring): the builds seen through it, the wobble; magic as a capability
-- [ ] Gravity fields as placeable entities (19)
-- [ ] Scripts, server side
-- [ ] Agents (94): headless clients with a door of their own in mundos, permitted by volume as a person is
-  - [ ] Perception: readings of what is around a body, the ground, the cells, who is near, where it may build
-  - [ ] Building on their own: every op a tool makes, asked for by its parameters
-  - [ ] Capture: a picture from a pose, at low resolution, by the headless renderer, under a permission of its own
-- [ ] Animals and NPCs
-- [ ] Rockets, satellites on rails, buildable orbital grids
-- [ ] The moon as a voxel body (Cartesian ball topology): digging and building on it
+- Images by URL, beside the upload: a third-party picture is fetched by the owner's client alone, which makes the three files from it, and the record never names the URL <!-- card:93 -->
+- A video through Cloudflare Stream, the world's own: a Stream account and token are among its settings, read as marlus.com reads them (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_API_TOKEN`, `CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN`), which mundos passes to a world whose video setting is on (mundos's item Video through Cloudflare Stream), the world's server makes a one-time upload URL and the browser sends the file straight to Stream, the video carries the world's name in its meta, the part names the video's id beside its master file, and the shell plays its HLS into the same live texture as an MP4's. At its sweep on start the world deletes from Stream its own videos that no record names, unless `MUNDOS_OFFICIAL` reads `false`: a generation mundos does not run as the official one never deletes, and a world outside mundos is its own official. A spike first: HLS into a WebGPU texture across the browsers, Safari's included <!-- card:74 -->
+- Native audio: a video and a sound are heard on the web alone; the desktop has no audio stack. Voice by proximity enters as another source over the same list (SOUND.md). Playback in step between clients waits on the server's clock <!-- card:78 -->
+- An ambience for a volume: a sound on the volume's record, heard inside it with no fall off, the build plugin's
+- Wallets: the avatars and galleries a wallet holds, OBJKTs from Tezos; land deeds as tokens
+- Vehicles, over the core's bodies (108): hover first, raycast wheels later. An abstract vehicle first, then a motorcycle in the manner of Akira, blocky, on one fat wheel; `E` to mount, `E` to leave. It travels on the smooth collision surface like a person does, never on cubes <!-- card:80 -->
+- Destruction: ops and local debris; protected, ephemeral, permanent modes (16)
+- Scale bands: giant, human, bug; secrets streamed only to the right scale
+- Portals between places, scales and worlds, each leading to a landmark (sketches/portals.md); the ring, the crossing and the view through it stand (portal-is-a-ring): the builds seen through it, the wobble; magic as a capability <!-- card:83 -->
+- Gravity fields as placeable entities (19)
+- Scripts, server side
+- Agents (94): headless clients with a door of their own in mundos, permitted by volume as a person is <!-- card:86 -->
+  - Perception: readings of what is around a body, the ground, the cells, who is near, where it may build
+  - Building on their own: every op a tool makes, asked for by its parameters
+  - Capture: a picture from a pose, at low resolution, by the headless renderer, under a permission of its own
+- Animals and NPCs
+- Rockets, satellites on rails, buildable orbital grids
+- The moon as a voxel body (Cartesian ball topology): digging and building on it
 
-## Other screens
+### Other screens
 
-- [ ] The desktop opens the socket: `bun run desktop <url>` and `bun run shot --world <url>`, a world by the address a browser shows. It builds again then: with no world, no plugin is on (104)
-- [ ] A door for a device, in mundos: a code or a QR on a screen pairs a headset or a desktop with an account
-- [ ] A client reads what a world speaks before it enters (91)
-- [ ] A plugin's panel outside Svelte (an open question)
-- [ ] Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
-- [ ] The desktop remembers its settings
-- [ ] Raspberry Pi 5 build (KMS/DRM)
-- [ ] Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
-- [ ] Quest and Pico: OpenXR, two views
+- The desktop opens the socket: `bun run desktop <url>` and `bun run shot --world <url>`, a world by the address a browser shows. It builds again then: with no world, no plugin is on (104)
+- A door for a device, in mundos: a code or a QR on a screen pairs a headset or a desktop with an account <!-- card:90 -->
+- A client reads what a world speaks before it enters (91)
+- A plugin's panel outside Svelte (an open question)
+- Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
+- The desktop remembers its settings
+- Raspberry Pi 5 build (KMS/DRM)
+- Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
+- Quest and Pico: OpenXR, two views
 
-## Wishes (unordered)
+### The look, and the rest
 
-- [ ] Compatibility kept across versions: an old world on a new version, an old client in a new world (91)
-- [ ] Grass self shadowing: tufts in the contact cascade only, same bend as the visible pass; root occlusion first, it is free
-- [ ] Clouds: temporal reprojection to spend fewer samples; high cirrus; weather as a recipe param; shade on water
-- [ ] Flattened grass trails with timed recovery
-- [ ] Softer shadows: over the tent of 83, a penumbra that widens with distance from the caster
-- [ ] Shadow cascades fitted to the view, or a fourth between the first two: a cube 35 m from the eye is smaller than a texel of the cascade that holds it (80)
-- [ ] More of the compositor as knobs: cloud layer height, shadow quality in levels with off the lowest (84), a reduced preset for the Pi
-- [ ] World snapshots anchored in Bitcoin; genesis inscription of the recipe
-- [ ] Cinema mode: cloud render with neural rendering, streamed over WebRTC
-- [ ] Curvature knob: morph flat <-> sphere in the vertex shader
-- [ ] A world's face from inside it: its builders set a title, a description and a cover that `/api/world` answers, which mundos shows where a superadmin set none (face-in-mundos)
+- Compatibility kept across versions: an old world on a new version, an old client in a new world (91)
+- Grass self shadowing: tufts in the contact cascade only, same bend as the visible pass; root occlusion first, it is free
+- Clouds: temporal reprojection to spend fewer samples; high cirrus; weather as a recipe param; shade on water
+- Flattened grass trails with timed recovery
+- Softer shadows: over the tent of 83, a penumbra that widens with distance from the caster
+- Shadow cascades fitted to the view, or a fourth between the first two: a cube 35 m from the eye is smaller than a texel of the cascade that holds it (80)
+- More of the compositor as knobs: cloud layer height, shadow quality in levels with off the lowest (84), a reduced preset for the Pi
+- World snapshots anchored in Bitcoin; genesis inscription of the recipe
+- Cinema mode: cloud render with neural rendering, streamed over WebRTC
+- Curvature knob: morph flat <-> sphere in the vertex shader
+- A world's face from inside it: its builders set a title, a description and a cover that `/api/world` answers, which mundos shows where a superadmin set none (face-in-mundos) <!-- card:91 -->

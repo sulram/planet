@@ -1,7 +1,7 @@
 ---
 date: 2026-09-30
 lives_in:
-  - ROADMAP.md#wishes-unordered
+  - ROADMAP.md#the-look-and-the-rest
   - /crates/scene
   - /crates/render/src/shadow.rs
 ---

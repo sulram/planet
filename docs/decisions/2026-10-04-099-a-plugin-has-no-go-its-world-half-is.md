@@ -4,7 +4,6 @@ lives_in:
   - PLUGINS.md
   - ARCHITECTURE.md#the-server
   - BRIEF.md
-  - ROADMAP.md#plugins-native
   - GLOSSARY.md
   - questions/index.md
 amends:
