@@ -67,16 +67,14 @@ its pane is, in PORTALS.md.
 
 ## 3D models
 
-- A 3D model is a GLB a part shows (`Shape::Glb`): every mesh its scene places,
-  at rest (crate `glb`), facing −y as a picture does, fitted to the unit box at
-  its own size in metres (`client::model3d`). A body meets its box.
-- `render::models` draws it (`textured.wgsl`), a draw a material: its picture,
-  mip-mapped on the GPU, times its colours, lit, casting and receiving. Blended
-  is a cutout at half alpha; two-sided is two faces.
-- Weighed off the document and the pictures' headers, before the upload and on
-  arrival, a model over its budget (DECISIONS glb-budget) is refused with the
-  reason and keeps its glass box. One costs at most 32 draws, 7 MiB of vertices
-  and 22 MiB of pictures, held once a session however many parts show it.
+- A 3D model is a GLB a part shows (`Shape::Glb`): every mesh its scene places
+  at rest (crate `glb`), facing −y, fitted to the unit box at its own size in
+  metres (`client::model3d`), drawn by `render::models` a draw a material: its
+  picture, mip-mapped on the GPU, times its colours, lit, casting, receiving.
+  Blended is a cutout at half alpha; two-sided, two faces. A body meets its box.
+- Over its budget (DECISIONS glb-budget), weighed before the upload and on
+  arrival, it is refused with the reason and keeps its glass box. One costs at
+  most 32 draws, 7 MiB of vertices and 22 MiB of pictures, held once a session.
 
 ## Sea, sky and light
 
