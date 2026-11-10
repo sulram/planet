@@ -62,11 +62,12 @@ function planet(root: string): Problem[] {
 		voxel: [],
 		part: [],
 		vox: [],
+		glb: [],
 		seat: ['topology', 'worldgen', 'voxel', 'part', 'protocol'],
 		worldgen: ['topology'],
-		avatar: ['scene'],
+		avatar: ['scene', 'glb'],
 		render: ['scene'],
-		client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'vox', 'part', 'seat', 'protocol'],
+		client: ['topology', 'worldgen', 'scene', 'avatar', 'voxel', 'vox', 'glb', 'part', 'seat', 'protocol'],
 		'ui-native': ['client', 'scene'],
 		// What a plugin's world half stands on, and the host of world halves. It
 		// never imports `client`, and neither does the module that is its shell.

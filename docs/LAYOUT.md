@@ -23,6 +23,9 @@ A Rust workspace, cut by dependency, not by platform.
 - `protocol`: wire messages generated from `proto/`; `lib.rs` alone by hand.
 - `scene`: the plain data a client hands a renderer. No GPU, no generator.
 - `avatar`: VRM avatars and humanoid clips: parse, retarget, pose. No GPU, no IO.
+- `glb`: a binary glTF as data: its nodes at rest, the meshes its scene
+  places, their materials and pictures, and what it weighs. The one GLB
+  reader, `avatar`'s and a 3D model's. No GPU, no IO, no codec.
 - `voxel`: a volume's cells, gestures, sight, faces and footing. No sphere:
   it imports no `topology`.
 - `vox`: a MagicaVoxel file as one grid, its palette and its faces. No sphere.

@@ -10,7 +10,6 @@
 
 mod bones;
 mod clip;
-mod glb;
 mod model;
 
 pub use clip::{Animator, Clip, Pose};
@@ -37,3 +36,9 @@ impl core::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<glb::Error> for Error {
+    fn from(error: glb::Error) -> Error {
+        Error::Gltf(error.0)
+    }
+}

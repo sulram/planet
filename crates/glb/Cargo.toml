@@ -1,0 +1,18 @@
+[package]
+name = "glb"
+description = "A binary glTF as data: its nodes at rest, the meshes they place, their materials and pictures, and what it weighs. No GPU, no IO, no codec."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+gltf.workspace = true
+log.workspace = true
+# A picture's size from its header alone: the weight of a model is read
+# without decoding it, and decoding is the shell's.
+imagesize = { version = "0.15", default-features = false, features = ["png", "jpeg"] }
+
+[lints]
+workspace = true

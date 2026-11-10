@@ -8,7 +8,7 @@ use scene::{Image, MAX_JOINTS, SkinnedMesh, SkinnedPrimitive, SkinnedVertex};
 use crate::Error;
 use crate::bones::{self, BONES, HIPS};
 use crate::clip::Pose;
-use crate::glb::{Glb, Hierarchy};
+use glb::{Glb, Hierarchy};
 
 pub struct Avatar {
     /// Shared with the renderer; never changes after load.

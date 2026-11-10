@@ -195,6 +195,7 @@ name = "avatar"
 version = "0.0.0"
 dependencies = [
  "glam",
+ "glb",
  "gltf",
  "log",
  "png",
@@ -964,6 +965,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "glb"
+version = "0.0.0"
+dependencies = [
+ "glam",
+ "gltf",
+ "imagesize",
+ "log",
+]
+
+[[package]]
 name = "glifo"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1136,6 +1147,12 @@ dependencies = [
  "byteorder-lite",
  "quick-error 2.0.1",
 ]
+
+[[package]]
+name = "imagesize"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "indexmap"

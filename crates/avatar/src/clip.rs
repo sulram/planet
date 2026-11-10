@@ -12,7 +12,7 @@ use gltf::animation::util::ReadOutputs;
 
 use crate::Error;
 use crate::bones::{self, BONES, HIPS};
-use crate::glb::{Glb, Hierarchy};
+use glb::{Glb, Hierarchy};
 
 struct Track<T> {
     times: Vec<f32>,
