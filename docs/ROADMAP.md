@@ -30,7 +30,7 @@ kind (a `.vox`) is Voxels, the new one 3D model. `crates/avatar` reads a GLB alr
 
 ### Avatars through mundos
 
-mundos owns the avatars: the catalog, each account's list and its current one, the VRM files in its bucket, and the creator (its decisions avatars-live-in-mundos and the two beside it). <!-- card:102 --> A world wears what the token says: an `avatar` claim, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. The way back never writes into mundos as the person: a VRM dropped is a world asset until the person wears it, which sends them to mundos with its URL and back through `/enter` with a fresh token; a picker inside the world reads mundos's public catalog endpoint. mundos's items: The avatar catalog (before its freeze), then Own VRMs and the way back. Claim and route wait on a decision: the question below.
+mundos owns the avatars: the catalog, each account's list and its current one, the VRM files and the creator. <!-- card:102 --> A world wears the `avatar` claim of the entry token, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. A VRM picked or dropped is worn through the scoped token mundos hands the page at `/enter`: the page calls mundos, then tells its own server the new URL (avatar-by-scoped-token). A picker in the world reads mundos's public catalog. mundos's items: The avatar catalog before its freeze, then Own VRMs and the way back, which brings the field names.
 
 **Done when:** a world wears the avatar an account chose in mundos on entry, and a VRM picked inside the world becomes that account's current one in mundos.
 
