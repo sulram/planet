@@ -192,7 +192,7 @@ A plugin is one folder, `plugins/<name>/` (100):
 - **On the web**, a layer over the world, mounted while the plugin is on, and
   a `Seam` under its own name: commands out, its events in, the pointer let
   go and taken back, a file sent to the world under the page's key (114). The core's
-  readings come as props, the level and the palette; its keys are in the help.
+  readings come as props, `builds`, `touch` and the palette; its keys are in the help.
 - A hook is written when a plugin asks: who may do what and where, which
   avatars are offered.
 

@@ -47,6 +47,16 @@ textarea {
 	border-radius: var(--radius);
 }
 
+/* A phone zooms the page into a field typed in under 16px, and leaves it
+   zoomed: on a touch screen a field is never smaller. */
+@media (pointer: coarse) {
+	input,
+	select,
+	textarea {
+		font-size: max(16px, 1em);
+	}
+}
+
 a {
 	color: inherit;
 	text-underline-offset: 2px;

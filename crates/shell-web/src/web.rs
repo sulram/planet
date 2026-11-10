@@ -4,7 +4,7 @@ use std::rc::Rc;
 use client::{Chord, Client, Form, Input, Key, Outbound};
 use render::{Gpu, Renderer, View, surface_configuration, wgpu};
 
-use crate::{audio, moving};
+use crate::{audio, moving, touch};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, KeyboardEvent, MessageEvent, PointerEvent, WheelEvent};
 
@@ -43,6 +43,8 @@ pub(crate) struct State {
     /// Where the secondary button went down, in client pixels, while it is
     /// down: let go within a few pixels of it, it was a tap.
     secondary_down: Option<(f64, f64)>,
+    /// The fingers on the canvas: the stick, the one that looks, the pinch.
+    fingers: touch::Fingers,
     /// The pictures that move, playing into the renderer.
     pub(crate) playing: moving::Playing,
     /// What is heard, mixed at the eye.
@@ -101,6 +103,7 @@ impl Engine {
             looking: false,
             files: FILES.to_owned(),
             secondary_down: None,
+            fingers: touch::Fingers::default(),
             playing: moving::Playing::default(),
             audio: audio::Audio::default(),
             webgl,
@@ -118,6 +121,17 @@ impl Engine {
     /// One `client::Command` as JSON.
     pub fn command(&self, json: &str) {
         self.state.borrow_mut().client.command_json(json);
+    }
+
+    /// Presses a key or lets it go, by the name the web gives it (`Space`,
+    /// `KeyF`), as the keyboard does: what a button on the screen does in
+    /// place of a key.
+    pub fn key(&self, code: &str, down: bool) {
+        let mut state = self.state.borrow_mut();
+        if down {
+            state.audio.unlock();
+        }
+        press(&mut state, code, Chord::default(), down, false);
     }
 
     /// The ground a field world is shaped by. Sent before the recipe that
@@ -414,12 +428,17 @@ impl State {
             .apply_pictures(self.client.drain_picture_changes());
         self.renderer
             .apply_models(self.client.drain_model_changes());
-        let events: Vec<JsValue> = self
+        let mut events: Vec<JsValue> = self
             .client
             .drain_events()
             .iter()
             .map(|event| JsValue::from_str(&event.to_json()))
             .collect();
+        // The stick is the shell's, drawn by the page: said once a frame at
+        // most, while it changes.
+        if let Some(stick) = self.fingers.told() {
+            events.push(JsValue::from_str(&stick));
+        }
 
         use wgpu::CurrentSurfaceTexture::{Lost, Outdated, Suboptimal, Success};
         let texture = match self.surface.get_current_texture() {
@@ -581,44 +600,18 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
                 state.borrow_mut().audio.unlock();
             }
             let event: KeyboardEvent = event.unchecked_into();
-            let code = event.code();
             // Command on a Mac, Control elsewhere.
             let chord = Chord {
                 command: event.meta_key() || event.ctrl_key(),
                 shift: event.shift_key(),
             };
-            let mut state = state.borrow_mut();
-            state.input.chord = chord;
-            if !down {
-                state.input.hold(&code, false);
-            }
-            // Command Z takes back, with Shift puts back, as Command Y does:
-            // the core's chords, which no plugin asks for.
-            let taken = if chord.command && (code == "KeyZ" || code == "KeyY") {
-                if down && !event.repeat() {
-                    let key = match code == "KeyY" || chord.shift {
-                        true => Key::Redo,
-                        false => Key::Undo,
-                    };
-                    state.input.key(key, true);
-                }
-                true
-            } else if state.client.asks(&code, chord) {
-                // A key a plugin asked for is the plugin's, and the page has
-                // nothing of its own to do with it here.
-                if down && !event.repeat() {
-                    state.input.code(&code, chord, true);
-                }
-                true
-            } else if let Some(key) = binding(&code) {
-                // One shot keys must not fire again while held.
-                if !(down && event.repeat()) {
-                    state.input.key(key, down);
-                }
-                true
-            } else {
-                false
-            };
+            let taken = press(
+                &mut state.borrow_mut(),
+                &event.code(),
+                chord,
+                down,
+                event.repeat(),
+            );
             if taken {
                 event.prevent_default();
                 let _ = canvas.focus();
@@ -628,14 +621,23 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
     // While a plugin has the pointer, the primary button is its tool's and
     // the secondary one looks while it is held, so the pointer stays free to
     // aim. Otherwise a press captures the pointer, and the camera has it
-    // until Escape.
-    let press = {
+    // until Escape. A finger on a world no tool aims at walks and looks
+    // instead, and captures nothing.
+    let down = {
         let (state, canvas) = (state.clone(), canvas.clone());
         move |event: web_sys::Event| {
             let event: PointerEvent = event.unchecked_into();
             let _ = canvas.focus();
             let mut state = state.borrow_mut();
             state.audio.unlock();
+            if finger(&event) && !state.client.pointing() {
+                event.prevent_default();
+                let width = canvas.client_width() as f32;
+                state
+                    .fingers
+                    .down(event.pointer_id(), offset(&event), width);
+                return;
+            }
             if event.button() == SECONDARY {
                 state.secondary_down = Some((event.client_x().into(), event.client_y().into()));
             }
@@ -656,11 +658,16 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
             }
         }
     };
-    let release = {
+    // Let go, or taken back by the browser: a finger lifts either way.
+    let up = || {
         let state = state.clone();
         move |event: web_sys::Event| {
             let event: PointerEvent = event.unchecked_into();
             let mut state = state.borrow_mut();
+            let state = &mut *state;
+            if finger(&event) && state.fingers.up(event.pointer_id(), &mut state.input) {
+                return;
+            }
             match event.button() {
                 PRIMARY => state.input.key(Key::Use, false),
                 SECONDARY => {
@@ -684,6 +691,14 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
         move |event: web_sys::Event| {
             let event: PointerEvent = event.unchecked_into();
             let mut state = state.borrow_mut();
+            let state = &mut *state;
+            if finger(&event)
+                && state
+                    .fingers
+                    .moved(event.pointer_id(), offset(&event), &mut state.input)
+            {
+                return;
+            }
             let turning = locked(&canvas) || state.looking;
             if !locked(&canvas) {
                 state.input.pointer = Some(fraction(&canvas, &event));
@@ -717,28 +732,82 @@ fn listen(canvas: &HtmlCanvasElement, state: &Rc<RefCell<State>>) -> Vec<Listene
         }
     };
     // The canvas or the page losing focus lets every key go: what was held
-    // cannot be heard up again.
-    let blur = {
+    // cannot be heard up again. A finger lifting is always heard, so a
+    // button of the page touched beside the stick leaves the stick held;
+    // the page itself going lets the fingers go too.
+    let blur = |page: bool| {
         let state = state.clone();
         move |_: web_sys::Event| {
             let mut state = state.borrow_mut();
+            let state = &mut *state;
             state.input.release_all();
             state.looking = false;
             state.secondary_down = None;
+            if page {
+                state.fingers.release(&mut state.input);
+            }
         }
     };
 
     vec![
         Listener::add(page, "keydown", key(true)),
         Listener::add(page, "keyup", key(false)),
-        Listener::add(page, "blur", blur.clone()),
-        Listener::add(target, "pointerdown", press),
-        Listener::add(target, "pointerup", release),
+        Listener::add(page, "blur", blur(true)),
+        Listener::add(target, "pointerdown", down),
+        Listener::add(target, "pointerup", up()),
+        Listener::add(target, "pointercancel", up()),
         Listener::add(target, "pointermove", motion),
         Listener::add(target, "contextmenu", menu),
         Listener::add(target, "wheel", wheel),
-        Listener::add(target, "blur", blur),
+        Listener::add(target, "blur", blur(false)),
     ]
+}
+
+/// A key going down or up, by the name the web gives it, with what is held
+/// with it: the keyboard's and a button's on the screen alike. Says whether
+/// the world took it, so the page leaves it be.
+fn press(state: &mut State, code: &str, chord: Chord, down: bool, repeat: bool) -> bool {
+    state.input.chord = chord;
+    if !down {
+        state.input.hold(code, false);
+    }
+    // Command Z takes back, with Shift puts back, as Command Y does: the
+    // core's chords, which no plugin asks for.
+    if chord.command && (code == "KeyZ" || code == "KeyY") {
+        if down && !repeat {
+            let key = match code == "KeyY" || chord.shift {
+                true => Key::Redo,
+                false => Key::Undo,
+            };
+            state.input.key(key, true);
+        }
+        true
+    } else if state.client.asks(code, chord) {
+        // A key a plugin asked for is the plugin's, and the page has
+        // nothing of its own to do with it here.
+        if down && !repeat {
+            state.input.code(code, chord, true);
+        }
+        true
+    } else if let Some(key) = binding(code) {
+        // One shot keys must not fire again while held.
+        if !(down && repeat) {
+            state.input.key(key, down);
+        }
+        true
+    } else {
+        false
+    }
+}
+
+/// Whether a pointer is a finger on the glass.
+fn finger(event: &PointerEvent) -> bool {
+    event.pointer_type() == "touch"
+}
+
+/// Where a pointer is over the canvas, in CSS pixels from its top left.
+fn offset(event: &PointerEvent) -> [f32; 2] {
+    [event.offset_x() as f32, event.offset_y() as f32]
 }
 
 /// Keeps Alt in step with what a pointer event says of it. A plugin asks for

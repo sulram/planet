@@ -7,6 +7,11 @@
 //! a [`KeyAsk`], and a shell hands over the keys of its keyboard that a
 //! plugin asked for, by the name the web gives them.
 
+use crate::controller::ZOOM_PER_LINE;
+
+/// How far a stick is pushed, of its whole reach, when it runs.
+const RUN_EXTENT: f32 = 0.9;
+
 /// A held or pressed control.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
@@ -120,8 +125,14 @@ pub struct Input {
     inspected: bool,
     /// Pointer motion in pixels, x right, y down.
     pub look: [f32; 2],
-    /// Wheel motion in lines, positive zooms in.
+    /// Wheel motion in lines, positive zooms in: a line brings the eye a
+    /// tenth nearer.
     pub zoom: f32,
+    /// Where a stick points, `[right, forward]`, no longer than one: how
+    /// far of its reach it is pushed. The shell that has one, drawn on a
+    /// screen or on a pad, keeps it here while it is held and clears it as
+    /// it is let go; the keys add to it.
+    pub stick: [f32; 2],
     /// Where the pointer is, as fractions of the view from the top left.
     /// `None` while it is captured: then it aims through the middle.
     pub pointer: Option<[f32; 2]>,
@@ -173,10 +184,25 @@ impl Input {
         self.codes_held.iter().any(|held| held == code)
     }
 
-    /// `[right, forward]`, each `-1..=1`.
+    /// `[right, forward]`, each `-1..=1`: the keys and the stick together.
     pub fn movement(&self) -> [f32; 2] {
         let axis = |pos: Key, neg: Key| f32::from(self.held(pos)) - f32::from(self.held(neg));
-        [axis(Key::Right, Key::Left), axis(Key::Forward, Key::Back)]
+        let keys = [axis(Key::Right, Key::Left), axis(Key::Forward, Key::Back)];
+        [0, 1].map(|at| (keys[at] + self.stick[at]).clamp(-1.0, 1.0))
+    }
+
+    /// Whether to run: sprint held, or the stick pushed to its extent.
+    pub fn sprinting(&self) -> bool {
+        let [x, y] = self.stick;
+        self.held(Key::Sprint) || x * x + y * y >= RUN_EXTENT * RUN_EXTENT
+    }
+
+    /// Brings the eye nearer by a ratio, as two fingers spreading apart do:
+    /// at two the eye is half as far, at a half twice as far.
+    pub fn zoom_by(&mut self, ratio: f32) {
+        if ratio > 0.0 && ratio.is_finite() {
+            self.zoom += (1.0 - 1.0 / ratio) / ZOOM_PER_LINE as f32;
+        }
     }
 
     /// Releases everything, for when the window loses focus. What a held key
@@ -278,6 +304,38 @@ mod tests {
         // Letting everything go lets these go too.
         input.release_all();
         assert!(!input.code_held("KeyZ"));
+    }
+
+    #[test]
+    fn a_stick_adds_to_the_keys_and_runs_at_its_extent() {
+        let mut input = Input {
+            stick: [0.5, 0.0],
+            ..Input::default()
+        };
+        assert_eq!(input.movement(), [0.5, 0.0]);
+        assert!(!input.sprinting());
+        input.key(Key::Right, true);
+        input.key(Key::Forward, true);
+        assert_eq!(input.movement(), [1.0, 1.0]);
+        input.stick = [0.0, -0.95];
+        assert!(input.sprinting());
+        // Letting the keys go leaves the stick: the shell clears it.
+        input.release_all();
+        assert_eq!(input.movement(), [0.0, -0.95]);
+    }
+
+    #[test]
+    fn a_ratio_zooms_as_far_as_it_says() {
+        let mut input = Input::default();
+        input.zoom_by(2.0);
+        let lines = input.take_frame().zoom;
+        assert!((1.0 - lines * ZOOM_PER_LINE as f32 - 0.5).abs() < 1e-6);
+        input.zoom_by(0.5);
+        let lines = input.take_frame().zoom;
+        assert!((1.0 - lines * ZOOM_PER_LINE as f32 - 2.0).abs() < 1e-6);
+        input.zoom_by(0.0);
+        input.zoom_by(f32::INFINITY);
+        assert_eq!(input.take_frame().zoom, 0.0);
     }
 
     #[test]

@@ -4,9 +4,10 @@
 	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Spinner, Stat, ThemeToggle } from '$lib/ds';
 	import { upload } from '$lib/files';
 	import { t } from '$lib/i18n';
-	import type { Link } from '$lib/instance';
+	import { builds, type Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
 	import { plugins, type Seam } from '$lib/plugins';
+	import { touch } from '$lib/touch.svelte';
 	import type { Recipe } from '$lib/world';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
@@ -15,6 +16,7 @@
 	import Labels from './Labels.svelte';
 	import Nametags from './Nametags.svelte';
 	import Settings from './Settings.svelte';
+	import Touch from './Touch.svelte';
 	import {
 		isPluginEvent,
 		NAME_CHARS,
@@ -27,7 +29,8 @@
 		type PeerInfo,
 		type PluginEvent,
 		type PluginOn,
-		type SessionStatus
+		type SessionStatus,
+		type Stick
 	} from './index';
 	import { who } from './who';
 
@@ -39,7 +42,9 @@
 	// keeps; a panel opening puts the hand down, and a plugin taking the
 	// pointer closes the panel. The keys live behind the help button. The
 	// page may bring a panel of its own, in the top left corner, where a
-	// plugin's menu otherwise sits.
+	// plugin's menu otherwise sits. A touch screen walks, looks, jumps and
+	// flies: the stick and the buttons of `Touch`, the help in the bar, and
+	// no building offered to any plugin, whatever the level.
 	// The compass point a bearing lands on, and the angle beside it. A rose has
 	// sixteen points, so each is 22.5 degrees wide. `null` is a pole, where a
 	// bearing is not a thing that exists.
@@ -128,6 +133,10 @@
 	let peers = $state<PeerInfo[]>([]);
 	let anchors = $state.raw<Anchor[]>([]);
 	let labels = $state.raw<Label[]>([]);
+	/** The stick a finger holds, while one does. */
+	let stick = $state.raw<Stick | null>(null);
+	/** Whether this session builds here: a level that builds, on a screen that is no touch screen. */
+	const building = $derived(builds(level) && !touch.current);
 
 	/** The paints a cell can take: the world's palette, which a plugin's layer shows. */
 	let palette = $state.raw<string[]>([]);
@@ -232,7 +241,7 @@
 	}
 
 	/** The panel open under the bar, if any. */
-	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings';
+	type Opened = 'location' | 'here' | 'language' | 'plugins' | 'settings' | 'help';
 	let opened = $state<Opened | null>(null);
 
 	/** Opens one panel, or none. A panel opening has the engine's hand put down what it holds. */
@@ -259,6 +268,7 @@
 		else if (event.type === 'statement') spoken = event.plugins;
 		else if (event.type === 'anchors') anchors = event.anchors;
 		else if (event.type === 'labels') labels = event.labels;
+		else if (event.type === 'stick') stick = event.stick;
 		else if (event.type === 'palette') palette = event.colors;
 		else if (event.type === 'effects_changed') {
 			defaults ??= event.effects;
@@ -287,7 +297,7 @@
 	<Labels {labels} />
 	{#each mounted as plugin (plugin.name)}
 		{#if plugin.Layer}
-			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} {level} {palette} {peers} {anchors} />
+			<plugin.Layer seam={seamOf(plugin.name)} online={session === 'online'} {me} builds={building} touch={touch.current} {palette} {peers} {anchors} />
 		{/if}
 	{/each}
 	{#if children}
@@ -295,7 +305,11 @@
 			{@render children()}
 		</Panel>
 	{/if}
-	<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} browse={!ownAvatar} />
+	{#if touch.current}
+		<Touch {stick} {mode} onkey={(code, down) => view?.key(code, down)} />
+	{:else}
+		<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} browse={!ownAvatar} />
+	{/if}
 	{#if fetching}
 		<div class="fetching">
 			<Spinner label={t('engine.avatar.loading')} />
@@ -318,6 +332,9 @@
 			<IconButton icon="puzzle" label={t('engine.plugins')} aria-expanded={opened === 'plugins'} onclick={() => toggle('plugins')} />
 		{/if}
 		<IconButton icon="settings" label={t('engine.settings')} aria-expanded={opened === 'settings'} onclick={() => toggle('settings')} />
+		{#if touch.current}
+			<IconButton icon="circle-help" label={t('engine.help')} aria-expanded={opened === 'help'} onclick={() => toggle('help')} />
+		{/if}
 		<ThemeToggle />
 	</nav>
 	{#if opened === 'location'}
@@ -398,6 +415,8 @@
 		</Panel>
 	{:else if opened === 'settings'}
 		<Settings {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => show(null)} />
+	{:else if opened === 'help'}
+		<Help touch browse={!ownAvatar} onclose={() => show(null)} />
 	{/if}
 </div>
 
@@ -418,6 +437,13 @@
 	}
 	.bar {
 		--control-bg: var(--bg-overlay);
+	}
+	/* The bar leaves room for the first button of the top left corner, a
+	   plugin's menu: on the narrowest phone its buttons narrow instead. */
+	@media (pointer: coarse) {
+		.bar {
+			max-width: calc(100% - 3 * var(--sp-4) - var(--control-h));
+		}
 	}
 	/* The wait for an avatar on its way, at the bottom middle, in the voice
 	   of the engine's own waits. It shows after a beat, so a file that lands

@@ -5,6 +5,7 @@
 	import { Alert, Button, Field, Input, Segmented, Slider, Stack } from '$lib/ds';
 	import { readFieldSidecar } from '$lib/fields';
 	import { t } from '$lib/i18n';
+	import { touch } from '$lib/touch.svelte';
 	import {
 		buildParams,
 		FIELD_PATH,
@@ -27,6 +28,8 @@
 	// in the offline preview and freezes the one on the screen. The seed, the
 	// shape and the knobs live in the address, so a candidate can be shared
 	// before it is chosen; arriving without a valid seed lands on a fresh one.
+	// A touch screen founds nothing: it walks the candidate, with no panel,
+	// and the founding waits for a desktop.
 	interface Props {
 		/** Asset path of the admin's avatar. */
 		avatar: string | null;
@@ -150,7 +153,9 @@
 	}
 </script>
 
-{#if grounds && seed}
+{#if grounds && seed && touch.current}
+	<Stage title={t('found.title')} {recipe} {fieldPath} {avatar} onready={(version) => (generatorVersion = version)} />
+{:else if grounds && seed}
 	<Stage title={t('found.title')} {recipe} {fieldPath} {avatar} onready={(version) => (generatorVersion = version)}>
 		<p>{t('found.lede')}</p>
 		<form onsubmit={regenerate}>

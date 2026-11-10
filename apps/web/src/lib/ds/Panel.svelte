@@ -64,6 +64,15 @@
 		top: calc(2 * var(--sp-4) + var(--control-h) + 2 * var(--bw));
 		max-height: calc(100% - 3 * var(--sp-4) - var(--sp-5) - 2 * var(--control-h) - 4 * var(--bw));
 	}
+	/* A phone is too narrow for a panel beside the row of buttons across
+	   from it: on a touch screen every top panel stands under the rows. */
+	@media (pointer: coarse) {
+		.panel--top-left,
+		.panel--top-right {
+			top: calc(2 * var(--sp-4) + var(--control-h) + 2 * var(--bw));
+			max-height: calc(100% - 3 * var(--sp-4) - var(--sp-5) - 2 * var(--control-h) - 4 * var(--bw));
+		}
+	}
 	.panel--bottom-left {
 		bottom: var(--sp-4);
 		left: var(--sp-4);

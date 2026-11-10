@@ -102,8 +102,20 @@ export interface Label {
 	distance_m: number;
 }
 
+/** A stick a finger holds on the canvas, in CSS pixels from its top left. */
+export interface Stick {
+	/** Its centre, which follows the finger pulled past the reach. */
+	center: [number, number];
+	/** The finger. */
+	at: [number, number];
+	/** How far from the centre the finger walks before it runs and drags the centre. */
+	reach: number;
+}
+
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }
+	/** The web shell's own, not the client's: a stick awake, whenever it moves, and null once it goes. */
+	| { type: 'stick'; stick: Stick | null }
 	/** The link to the world server, whenever it changes. */
 	/** `level` is null until a world has spoken; its last word stands through a dropped link. */
 	| { type: 'session'; status: SessionStatus; session: number | null; level: Level | null }
@@ -152,6 +164,7 @@ export type EngineEvent =
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'ready',
+	'stick',
 	'recipe_changed',
 	'rejected',
 	'settled',

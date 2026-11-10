@@ -12,13 +12,6 @@ lives in the theme docs; what we drop leaves with the DECISIONS fragment that sa
 
 ## Now: a world mundos hosts
 
-### Walking a world on a phone
-
-As Hyperfy does (`refs/hyperfy`, `PlayerLocal.js`): a stick to walk, a drag to <!-- card:75 -->
-look, buttons to jump and fly, the bar and panels laid out for a small screen.
-
-**Done when:** a phone walks, looks, jumps and flies a world, with the bar and panels fitting its screen and no build mode offered.
-
 ### A 3D model beside the voxel one
 
 A `.glb` goes up through `POST /api/files`, its kind read off its bytes, and <!-- card:73 -->
@@ -188,6 +181,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - A plugin's panel outside Svelte (an open question)
 - Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - The desktop remembers its settings
+- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow
 - Raspberry Pi 5 build (KMS/DRM)
 - Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
 - Quest and Pico: OpenXR, two views
