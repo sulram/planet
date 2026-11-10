@@ -58,9 +58,11 @@ pub enum Command {
     SetAvatar {
         path: String,
     },
-    /// Wear any avatar the manifest offers.
+    /// Wear any avatar the manifest offers. Nothing while the account wears
+    /// its own, as the world's welcome says it.
     RandomAvatar,
-    /// Wear the next avatar on offer, after the current one.
+    /// Wear the next avatar on offer, after the current one. Nothing while
+    /// the account wears its own.
     NextAvatar,
     /// How the picture is made. Fields left out take their default.
     SetEffects {
@@ -104,7 +106,8 @@ pub enum Event {
         mode: Mode,
     },
     /// The avatar this body is in, or on its way into, whenever either
-    /// changes. `path` is the choice: a UI persists it as the person's.
+    /// changes. `path` is the choice: a UI persists it as the person's,
+    /// unless it is the account's own.
     /// While `worn` is false the file is on its way and the body stays as
     /// it was: a UI shows the wait. `None` is the box figure, nothing wanted.
     AvatarChanged {

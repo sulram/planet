@@ -134,6 +134,9 @@ type entered struct {
 	Level string `json:"level"`
 	// The account's name, as mundos signed it. Empty for a visitor.
 	Name string `json:"name"`
+	// The account's avatar, as mundos signed it: the VRM's URL. Empty when
+	// the account has none, and for a visitor.
+	Avatar string `json:"avatar"`
 	// What the page shows on the socket and on a founding. Empty for a
 	// visitor, who enters as a guest.
 	Key string `json:"key"`
@@ -154,12 +157,12 @@ func (s *Server) enter(w http.ResponseWriter, r *http.Request) {
 		claims, err := mundos.Verify(asked.Identity, s.cfg.PublicKey, s.cfg.Name, s.now())
 		level, known := world.ParseLevel(claims.Level)
 		if err == nil && known {
-			identity = world.Identity{UserID: claims.Sub, Name: claims.Name, Level: level}
+			identity = world.Identity{UserID: claims.Sub, Name: claims.Name, Level: level, Avatar: claims.Avatar}
 		} else {
 			log.Print("enter: a token was refused, entering as a visitor")
 		}
 	}
-	who := entered{Level: identity.Level.String(), Name: identity.Name}
+	who := entered{Level: identity.Level.String(), Name: identity.Name, Avatar: identity.Avatar}
 	if !identity.Visitor() {
 		who.Key = s.keys.Mint(identity)
 	}
@@ -176,7 +179,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusUnauthorized, "key")
 		return
 	}
-	answer(w, http.StatusOK, entered{Level: identity.Level.String(), Name: identity.Name, Key: key})
+	answer(w, http.StatusOK, entered{Level: identity.Level.String(), Name: identity.Name, Avatar: identity.Avatar, Key: key})
 }
 
 // bearer is the key a request carries, or nothing.

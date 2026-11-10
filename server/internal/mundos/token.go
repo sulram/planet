@@ -21,13 +21,15 @@ const Leeway = 30 * time.Second
 // holds a bad token is a visitor either way.
 var ErrToken = errors.New("the token is not valid")
 
-// Claims is what a token says: the account's id, its name, and its level in
+// Claims is what a token says: the account's id, its name, its level in
 // this world as mundos writes it (`admin`, `builder`, `signed_in`,
-// `anonymous`).
+// `anonymous`), and the avatar it wears.
 type Claims struct {
 	Sub   string `json:"sub"`
 	Name  string `json:"name"`
 	Level string `json:"level"`
+	// The VRM's URL on mundos's CDN. Absent when the account has none.
+	Avatar string `json:"avatar,omitempty"`
 }
 
 // ParsePublicKey reads the key as mundos hands it over: PEM (SPKI), with its

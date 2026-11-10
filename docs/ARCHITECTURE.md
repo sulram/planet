@@ -35,12 +35,12 @@ not yet confirmed.
   `<mundos>/enter?host=<host>`, back with a token or `guest`, and `?lang=`: the
   newest pick, there or here, is the page's. The pose is kept across the hop.
 - The token is a JWT signed with Ed25519 (`EdDSA`): `iss` `mundos`, `aud` the
-  world's name, `sub` the account's id, `name`, `level`, `exp` a minute on,
-  read with 30 s of leeway. The server checks it with `MUNDOS_PUBLIC_KEY`.
+  world's name, `sub` the account's id, `name`, `level`, `avatar` (its VRM's URL,
+  if any), `exp` a minute on, 30 s of leeway. `MUNDOS_PUBLIC_KEY` checks it.
 - The page hands the token to the world once, on entering, and gets a key:
   kept in the page's memory, shown on the socket's URL and on a founding, held
-  by the server in memory for half a day. The level holds for the life of the
-  page; a role changed in mundos holds on the next load.
+  by the server in memory for half a day. The level and the avatar hold for the
+  life of the page; a change in mundos holds on the next load.
 - A link that drops opens again with the same key. A key stands while the
   server remembers it; past a restart or its half day, the page goes through
   the door for a new one.
@@ -52,9 +52,9 @@ not yet confirmed.
 | `signed_in` | an account with no role here | walk, under the account's name |
 | `anonymous` | a guest | walk, under a name of their own choosing |
 
-- `Welcome` says the session's level, and the client offers its tools by it.
-  A stroke that is an op is checked by the actor against the same level,
-  through the permission hook.
+- `Welcome` says the session's level, by which the client offers its tools,
+  and the account's avatar, which it wears. A stroke that is an op is checked
+  by the actor against the same level, through the permission hook.
 - Alone, where `MUNDOS_PUBLIC_KEY` is unset, every session has
   `PLANET_DEV_LEVEL`: `anonymous` by default, `admin` under `bun run dev`.
 

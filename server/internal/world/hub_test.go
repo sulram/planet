@@ -210,6 +210,10 @@ func TestTwoPeopleSeeEachOther(t *testing.T) {
 		t.Fatalf("a change of avatar is relayed: %v", wearing)
 	}
 
+	if welcome.Avatar != "" || welcomeB.Avatar != "" {
+		t.Fatalf("a visitor's welcome says no avatar: %q %q", welcome.Avatar, welcomeB.Avatar)
+	}
+
 	b.leave()
 	left := a.hearUntil(func(m *pb.ServerMessage) bool { return m.GetLeft() != nil }).GetLeft()
 	if left.Session != welcomeB.Session {
@@ -229,10 +233,11 @@ func TestTwoPeopleSeeEachOther(t *testing.T) {
 func TestAKeyNamesAPerson(t *testing.T) {
 	now := time.Unix(1790000000, 0)
 	keys := newKeys(func() time.Time { return now })
-	key := keys.Mint(Identity{UserID: "u1", Name: "Ada", Level: LevelBuilder})
+	const vrm = "https://mundos-assets.tekne.studio/avatars/av1/0123abcd.vrm"
+	key := keys.Mint(Identity{UserID: "u1", Name: "Ada", Level: LevelBuilder, Avatar: vrm})
 	who, ok := keys.Find(key)
-	if !ok || who.Name != "Ada" || who.Level != LevelBuilder || who.Visitor() {
-		t.Fatalf("a key names its person and their level: %v %v", who, ok)
+	if !ok || who.Name != "Ada" || who.Level != LevelBuilder || who.Avatar != vrm || who.Visitor() {
+		t.Fatalf("a key names its person, their level and their avatar: %v %v", who, ok)
 	}
 	if _, again := keys.Find(key); !again {
 		t.Fatal("a key stands for the next link too")
@@ -247,8 +252,8 @@ func TestAKeyNamesAPerson(t *testing.T) {
 
 	hub := NewHub(founded(recipe(t)), nil, nil)
 	a := connectAs(t, hub, who, hello())
-	if welcome := a.hear().GetWelcome(); welcome == nil || welcome.Level != pb.Level_LEVEL_BUILDER {
-		t.Fatalf("a person is welcome, and told their level: %v", welcome)
+	if welcome := a.hear().GetWelcome(); welcome == nil || welcome.Level != pb.Level_LEVEL_BUILDER || welcome.Avatar != vrm {
+		t.Fatalf("a person is welcome, and told their level and their avatar: %v", welcome)
 	}
 	b := connect(t, hub, hello())
 	welcome := b.hear().GetWelcome()

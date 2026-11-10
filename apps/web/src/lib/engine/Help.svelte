@@ -5,8 +5,9 @@
 
 	// The keys, behind a button in the bottom left corner: read once, then
 	// out of the way of the world. The core's own, and between them the keys
-	// of each plugin that is on in this world.
-	let { plugins = [] }: { plugins?: readonly Hint[] } = $props();
+	// of each plugin that is on in this world. `V` browses the avatars on
+	// offer, unless the account wears its own.
+	let { plugins = [], browse = true }: { plugins?: readonly Hint[]; browse?: boolean } = $props();
 	let open = $state(false);
 
 	const hints = $derived([
@@ -16,7 +17,7 @@
 		{ keys: 'C', does: t('engine.hint.down') },
 		{ keys: 'Shift', does: t('engine.hint.sprint') },
 		{ keys: 'F', does: t('engine.hint.mode') },
-		{ keys: 'V', does: t('engine.hint.avatar') },
+		...(browse ? [{ keys: 'V', does: t('engine.hint.avatar') }] : []),
 		{ keys: t('engine.hint.undo.keys'), does: t('engine.hint.undo') },
 		...plugins.map((hint) => ({ keys: typeof hint.keys === 'string' ? hint.keys : hint.keys(), does: hint.does() })),
 		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },

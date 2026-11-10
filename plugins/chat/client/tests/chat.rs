@@ -29,6 +29,7 @@ fn welcome(client: &Client) -> Vec<u8> {
             version: chat_client::VERSION,
         }],
         clock_ms: 0,
+        avatar: String::new(),
     }))
 }
 

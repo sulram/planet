@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { wornAvatar } from '$lib/avatar';
+	import { offered, wornAvatar } from '$lib/avatar';
 	import { Button, Veil } from '$lib/ds';
 	import { arrival, pass } from '$lib/door';
 	import Found from '$lib/engine/Found.svelte';
@@ -73,7 +73,9 @@
 				// left with comes back: the place, or a planet being chosen.
 				await goto(came.address, { replaceState: true, keepFocus: true, noScroll: true });
 			}
-			[me, avatar] = await Promise.all([enter(identity), wornAvatar()]);
+			const [entered, offer] = await Promise.all([enter(identity), offered()]);
+			me = entered;
+			avatar = wornAvatar(entered.avatar, offer);
 			await show(here);
 		} catch {
 			face = 'unreachable';
@@ -121,6 +123,7 @@
 		fieldPath={fieldPath ?? undefined}
 		{avatar}
 		name={me.name || (kept('name') ?? '')}
+		ownAvatar={me.avatar !== ''}
 		{link}
 		level={me.level}
 		key={me.key}

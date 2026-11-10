@@ -14,25 +14,34 @@ its pane is, in PORTALS.md.
 ## Avatars
 
 - An avatar is a VRM, named by an **asset reference**: a path under the asset
-  root (`avatars/Kyle.vrm`) or an absolute URL (a person's own upload, ROADMAP). The
-  client never tells them apart; nothing addresses an avatar by index.
+  root (`avatars/Kyle.vrm`) or an absolute URL (an account's own, on mundos's
+  CDN). The client never tells them apart; nothing addresses an avatar by index.
 - `assets/manifest.json` is the config of a version's default set:
   `default_avatar`, `avatars` on offer, `clips` per gait. Edited by hand.
-- Which avatar a person wears: the choice this browser kept, else a random
-  one from the offer, which becomes the choice. What is offered is a hook
-  (88). A failed load wears `default_avatar`; the box figure covers the time
-  nothing is loaded.
+- Which avatar a person wears: the account's own, when the entry token says
+  one (ARCHITECTURE.md#identity-and-levels); else the choice this browser
+  kept, else a random one from the offer, which becomes the choice. What is
+  offered is a hook (88). A failed load wears `default_avatar`; the box
+  figure covers the time nothing is loaded.
+- The account's own is the client's to wear: `Welcome` says it, and the
+  client wears it and tells the others, whatever the body wore. The page
+  reads it on entering too and starts the body in it, so nothing else is
+  fetched first; this browser keeps nothing of it, and `V` and a random pick
+  pass while it holds.
 - Clips are authored once on a Mixamo rig and retargeted at load to the VRM
   humanoid (crate `avatar`), so every avatar shares every clip. Gaits: idle,
   walk, run, jump, fall, fly. VRM 0.x, one skin, PNG textures for now.
 - Asset seam: the client does no IO. It queues requests by reference, the
   platform shell fetches (disk on desktop, `fetch` in the browser) and answers.
+  A URL on another origin needs `Access-Control-Allow-Origin` on its answer;
+  the desktop reaches no URL yet, and wears the default.
 - `V` wears the next avatar on offer. The first press holds the whole offer
   (DECISIONS hold-the-offer): fetched one by one in the order of pressing,
   after the next has landed, so every press after lands at once.
 - The engine reports `avatar_changed` with the choice and whether the body is
-  in it yet. The front end keeps the choice as this browser's, and shows the
-  wait at the bottom of the screen while the file is on its way.
+  in it yet. The front end keeps the choice as this browser's, unless it is
+  the account's own, and shows the wait at the bottom of the screen while the
+  file is on its way.
 
 ## Volumes
 

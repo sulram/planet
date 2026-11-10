@@ -57,6 +57,11 @@
 		fieldPath?: string;
 		/** Asset path of the visitor's avatar, from the page load. */
 		avatar: string | null;
+		/**
+		 * The avatar is the account's, as mundos signed it: the engine holds it
+		 * from the world's welcome, `V` passes, and this browser keeps nothing.
+		 */
+		ownAvatar?: boolean;
 		/** What this person is called, from the page load. Empty when nobody said. */
 		name?: string;
 		/** The world's socket, when this is a world other people can be in. */
@@ -77,7 +82,7 @@
 		children?: Snippet;
 	}
 
-	let { title, recipe, fieldPath, avatar, name = '', link, level = null, key = '', account = false, onsignin, onswitch, onready, children }: Props =
+	let { title, recipe, fieldPath, avatar, ownAvatar = false, name = '', link, level = null, key = '', account = false, onsignin, onswitch, onready, children }: Props =
 		$props();
 
 	// A visitor's name, edited where it is shown. The engine hears it at once,
@@ -261,7 +266,7 @@
 		}
 		else if (event.type === 'avatar_changed') {
 			fetching = event.path !== null && !event.worn;
-			if (event.path && event.path !== avatar) remember(event.path);
+			if (event.path && event.path !== avatar && !ownAvatar) remember(event.path);
 		}
 	}
 
@@ -290,7 +295,7 @@
 			{@render children()}
 		</Panel>
 	{/if}
-	<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} />
+	<Help plugins={mounted.flatMap((plugin) => plugin.hints ?? [])} browse={!ownAvatar} />
 	{#if fetching}
 		<div class="fetching">
 			<Spinner label={t('engine.avatar.loading')} />

@@ -42,8 +42,9 @@ export interface Effects {
 export type Command =
 	| { type: 'set_recipe'; recipe: Recipe }
 	| { type: 'set_mode'; mode: Mode }
-	/** `path` is an asset path from `assets/manifest.json`, such as `avatars/Kyle.vrm`. */
+	/** `path` is an asset reference: a path from `assets/manifest.json`, such as `avatars/Kyle.vrm`, or a URL. */
 	| { type: 'set_avatar'; path: string }
+	/** Nothing while the account wears its own avatar, as `next_avatar`. */
 	| { type: 'random_avatar' }
 	| { type: 'next_avatar' }
 	/** Fields left out take the engine's default. */
@@ -123,7 +124,8 @@ export type EngineEvent =
 	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. Once, at the start. */
 	| { type: 'palette'; colors: string[] }
 	/**
-	 * The avatar you are in, or on your way into. `path` is the choice: keep it as this browser's.
+	 * The avatar you are in, or on your way into. `path` is the choice: keep it as this browser's,
+	 * unless it is the account's own.
 	 * While `worn` is false the file is on its way and the body stays as it was: show the wait.
 	 * A null path is the box figure, nothing wanted.
 	 */

@@ -962,7 +962,10 @@ type Welcome struct {
 	// The world's clock as the server reads it, milliseconds since the Unix
 	// epoch. Every client sets its own by it, so the sun, the moon and the
 	// weather are the same in every eye.
-	ClockMs       uint64 `protobuf:"varint,6,opt,name=clock_ms,json=clockMs,proto3" json:"clock_ms,omitempty"`
+	ClockMs uint64 `protobuf:"varint,6,opt,name=clock_ms,json=clockMs,proto3" json:"clock_ms,omitempty"`
+	// The account's avatar, as mundos signed it with the entry: the VRM's URL.
+	// Empty when the account has none, and for a visitor. The client wears it.
+	Avatar        string `protobuf:"bytes,7,opt,name=avatar,proto3" json:"avatar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1037,6 +1040,13 @@ func (x *Welcome) GetClockMs() uint64 {
 		return x.ClockMs
 	}
 	return 0
+}
+
+func (x *Welcome) GetAvatar() string {
+	if x != nil {
+		return x.Avatar
+	}
+	return ""
 }
 
 // The plugins that are on, said again whenever the admin switches one.
@@ -1684,14 +1694,15 @@ const file_planet_v1_world_proto_rawDesc = "" +
 	"\x06stance\x18\x05 \x01(\v2\x11.planet.v1.StanceR\x06stance\"6\n" +
 	"\x06Plugin\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\rR\aversion\"\xe5\x01\n" +
+	"\aversion\x18\x02 \x01(\rR\aversion\"\xfd\x01\n" +
 	"\aWelcome\x12\x18\n" +
 	"\asession\x18\x01 \x01(\rR\asession\x12)\n" +
 	"\x06recipe\x18\x02 \x01(\v2\x11.planet.v1.RecipeR\x06recipe\x12%\n" +
 	"\x05peers\x18\x03 \x03(\v2\x0f.planet.v1.PeerR\x05peers\x12&\n" +
 	"\x05level\x18\x04 \x01(\x0e2\x10.planet.v1.LevelR\x05level\x12+\n" +
 	"\aplugins\x18\x05 \x03(\v2\x11.planet.v1.PluginR\aplugins\x12\x19\n" +
-	"\bclock_ms\x18\x06 \x01(\x04R\aclockMs\"6\n" +
+	"\bclock_ms\x18\x06 \x01(\x04R\aclockMs\x12\x16\n" +
+	"\x06avatar\x18\a \x01(\tR\x06avatar\"6\n" +
 	"\aPlugins\x12+\n" +
 	"\aplugins\x18\x01 \x03(\v2\x11.planet.v1.PluginR\aplugins\"-\n" +
 	"\x06Joined\x12#\n" +
