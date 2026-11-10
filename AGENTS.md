@@ -184,6 +184,8 @@ Before anything with wf (a spawn, a question, a report, a ship, a doubt about th
 - Cost per sample is a design constraint, like determinism: what is the same
   for every sample is computed once, in `Generator::new`.
 - A budget is raised only on purpose, with the why in a decision.
+- `bun run bench` runs alone: no build, dev server or headless Chrome beside
+  it, or it reports false OVERs.
 
 ## Do NOT add
 

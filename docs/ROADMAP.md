@@ -12,15 +12,6 @@ lives in the theme docs; what we drop leaves with the DECISIONS fragment that sa
 
 ## Now: a world mundos hosts
 
-### A 3D model beside the voxel one
-
-A `.glb` goes up through `POST /api/files`, its kind read off its bytes, and <!-- card:73 -->
-is a shape of part drawn with its meshes, materials and textures under a budget
-of triangles and texels, placed with the one gizmo. In the menu today's `model`
-kind (a `.vox`) is Voxels, the new one 3D model. `crates/avatar` reads a GLB already.
-
-**Done when:** a `.glb` uploaded from the menu stands in the world as a part placed with the gizmo, and one over the budget is refused with the reason.
-
 ### Avatars through mundos
 
 mundos owns the avatars: the catalog, each account's list and its current one, the VRM files and the creator. <!-- card:102 --> A world wears the `avatar` claim of the entry token, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. A VRM picked or dropped is worn through the scoped token mundos hands the page at `/enter`: the page calls mundos, then tells its own server the new URL (avatar-by-scoped-token). A picker in the world reads mundos's public catalog. The token's half stands on dev; the way back waits for mundos's item Own VRMs and the way back, which brings the field names; a change mid-visit updates the identity the key holds, so a reconnect keeps it.
@@ -181,7 +172,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - A plugin's panel outside Svelte (an open question)
 - Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - The desktop remembers its settings
-- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow; in the same batch, `gofmt -l` flags `server/internal/files/files_test.go`
+- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow; in the same batch, `gofmt -l` flags `server/internal/files/files_test.go`, and a plugin's web tests cannot import `$lib` under `bun test` (a bunfig preload or tsconfig paths for `plugins/*/web`)
 - Raspberry Pi 5 build (KMS/DRM)
 - Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
 - Quest and Pico: OpenXR, two views
