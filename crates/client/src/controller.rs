@@ -103,6 +103,8 @@ const GROUND_M: f64 = STEP_M / 2.0;
 const FIGURE_SETTLE_PER_S: f64 = 48.0;
 const EYE_SETTLE_PER_S: f64 = 16.0;
 const LOOK_RAD_PER_PX: f64 = 0.0025;
+/// How much nearer a line of zoom brings the eye, of the boom's length.
+pub(crate) const ZOOM_PER_LINE: f64 = 0.1;
 const PITCH_LIMIT: f64 = 1.45;
 const TURN_PER_S: f64 = 12.0;
 
@@ -789,7 +791,8 @@ impl Controller {
         self.view = DQuat::from_axis_angle(up, yaw) * self.view;
         self.pitch = (self.pitch - f64::from(wish.look[1]) * LOOK_RAD_PER_PX)
             .clamp(-PITCH_LIMIT, PITCH_LIMIT);
-        self.boom_m = (self.boom_m * (1.0 - f64::from(wish.zoom) * 0.1)).clamp(2.0, 400.0);
+        self.boom_m =
+            (self.boom_m * (1.0 - f64::from(wish.zoom) * ZOOM_PER_LINE)).clamp(2.0, 400.0);
     }
 
     /// Moves by a world space displacement: in address space on the planet,

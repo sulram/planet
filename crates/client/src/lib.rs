@@ -1090,7 +1090,7 @@ impl Client {
             movement: input.movement(),
             up: input.held(Key::Up),
             down: input.held(Key::Down),
-            sprint: input.held(Key::Sprint),
+            sprint: input.sprinting(),
             look,
             zoom,
         };
