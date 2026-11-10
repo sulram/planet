@@ -181,6 +181,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - A plugin's panel outside Svelte (an open question)
 - Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - The desktop remembers its settings
+- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow
 - Raspberry Pi 5 build (KMS/DRM)
 - Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
 - Quest and Pico: OpenXR, two views
