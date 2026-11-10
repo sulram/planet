@@ -104,7 +104,7 @@ this file in the same change.
 | Link (code) | The socket between a client and a world server, as the platform shell holds it. The client owns the protocol, the shell owns the socket. |
 | Volume | An integer address box inside one sector, over one plot. The only place voxels exist. |
 | Gizmo | The handles over the item picked, one a bar along each of its own axes with a tip: dragged, they move, turn or stretch it, as the mode says. Drawn over everything, cast by nothing. |
-| Item | What the items menu offers to place: a cube in a paint, a model from a file, a picture, a landmark. Taken in hand, a click places it as a part. |
+| Item | What the items menu offers to place: a cube in a paint, voxels or a 3D model from a file, a picture, a landmark. Taken in hand, a click places it as a part. |
 | Part | A placed thing that is no cell, kept by its seat: a pose, a shape, a paint, whether it is solid, how much it shines and how far its light goes. A cube first; a model, a picture, a landmark, a light are shapes of it. Rigid in the frame of its anchor, moved in the world and read back. |
 | Stamp | A flatten and blend footprint, applied when the ground is sampled. How what is not a volume seats into terrain, at every level, without being an edit. The ground it holds is worked earth, where nothing grows. |
 | Horizon map | Per texel of a field, the angle of the horizon in two directions. Terrain self shadowing at any range with no shadow map. |
@@ -143,10 +143,12 @@ this file in the same change.
 | Footprint | What one sample covers: the spacing of the mesh asking the generator, or what a pixel covers of the sea. Detail finer than it is faded out. |
 | Anchor | A patch origin wrapped to the detail period in f64: what fixes shader detail to the planet. |
 | Entity | The family a part belongs to: GLB, part, light, field, portal, media frame, script. What is built of it is a part. |
-| Model | A `.vox` file placed in the world: its voxels in their own palette, named by the hash of its content, read and meshed by `crates/vox`. |
+| Model | What a file gives a part to show, named by the hash of its content: voxels or a 3D model. |
+| Voxels | A `.vox` file as a model: its voxels in their own palette, read and meshed by `crates/vox`. The menu's "Voxels", item `model`. |
+| 3D model | A `.glb` file as a model: the meshes its scene places at rest, their materials and pictures, read by `crates/glb` and drawn within its budget. The menu's "3D model", item `glb`. |
 | Asset | A heavy file, named by the hash of its content, in the world's bucket folder. |
 | Placement | The use of an asset by an entity. Counts against budgets. |
-| Budget | Per-volume limit on triangles, texture size and bytes. |
+| Budget | A limit on what one thing costs to draw, kept whatever its file holds: a 3D model's triangles, vertices, texels and materials (DECISIONS glb-budget); the decoders and resident texels of pictures. |
 | Picture | A part whose shape is an image: the front of its box, drawn with a texture, seen from both sides, a screen in a light finish. Its record is a `Media`: its size in texels, how long it plays, and three content ids. |
 | Moving picture | A picture whose original plays: a GIF, an animated WebP or a video, its record saying how long. A poster out of view; in view the shell plays it into a live texture, under the decoder budget. |
 | Media LOD | Thumb far, low version mid, original near and in view: picked by the quad's height on the screen, with hysteresis, under a budget of resident texels. A moving picture has two levels: its poster, and playing, within the play distance. |

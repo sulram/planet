@@ -56,6 +56,19 @@ its pane is, in PORTALS.md.
 
 - A picture, still or moving, is a textured quad: PICTURES.md.
 
+## 3D models
+
+- A 3D model is a GLB a part shows (`Shape::Glb`): every mesh its scene places,
+  at rest (crate `glb`), facing −y as a picture does, fitted to the unit box at
+  its own size in metres (`client::model3d`). A body meets its box.
+- `render::models` draws it (`textured.wgsl`), a draw a material: its picture,
+  mip-mapped on the GPU, times its colours, lit, casting and receiving. Blended
+  is a cutout at half alpha; two-sided is two faces.
+- Weighed off the document and the pictures' headers, before the upload and on
+  arrival, a model over its budget (DECISIONS glb-budget) is refused with the
+  reason and keeps its glass box. One costs at most 32 draws, 7 MiB of vertices
+  and 22 MiB of pictures, held once a session however many parts show it.
+
 ## Sea, sky and light
 
 - The terrain mesh is the real ground, sea floor included. A patch that dips
