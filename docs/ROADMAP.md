@@ -23,7 +23,7 @@ kind (a `.vox`) is Voxels, the new one 3D model. `crates/avatar` reads a GLB alr
 
 ### Avatars through mundos
 
-mundos owns the avatars: the catalog, each account's list and its current one, the VRM files and the creator. <!-- card:102 --> A world wears the `avatar` claim of the entry token, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. A VRM picked or dropped is worn through the scoped token mundos hands the page at `/enter`: the page calls mundos, then tells its own server the new URL (avatar-by-scoped-token). A picker in the world reads mundos's public catalog. mundos's items: The avatar catalog before its freeze, then Own VRMs and the way back, which brings the field names.
+mundos owns the avatars: the catalog, each account's list and its current one, the VRM files and the creator. <!-- card:102 --> A world wears the `avatar` claim of the entry token, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. A VRM picked or dropped is worn through the scoped token mundos hands the page at `/enter`: the page calls mundos, then tells its own server the new URL (avatar-by-scoped-token). A picker in the world reads mundos's public catalog. The token's half stands on dev; the way back waits for mundos's item Own VRMs and the way back, which brings the field names; a change mid-visit updates the identity the key holds, so a reconnect keeps it.
 
 **Done when:** a world wears the avatar an account chose in mundos on entry, and a VRM picked inside the world becomes that account's current one in mundos.
 
@@ -181,7 +181,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - A plugin's panel outside Svelte (an open question)
 - Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - The desktop remembers its settings
-- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow
+- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow; in the same batch, `gofmt -l` flags `server/internal/files/files_test.go`
 - Raspberry Pi 5 build (KMS/DRM)
 - Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
 - Quest and Pico: OpenXR, two views
