@@ -208,9 +208,9 @@ fn mesh(glb: &Glb, skin: usize) -> Result<SkinnedMesh, Error> {
             .pbr_metallic_roughness()
             .base_color_texture();
         let image = texture.and_then(|info| {
-            let index = info.texture().source().index();
-            *decoded[index].get_or_insert_with(|| {
-                let image = image(glb, glb.document.images().nth(index)?)?;
+            let source = glb.source(&info.texture())?;
+            *decoded[source.index()].get_or_insert_with(|| {
+                let image = image(glb, source)?;
                 out.images.push(image);
                 Some(out.images.len() - 1)
             })

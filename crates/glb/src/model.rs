@@ -2,6 +2,7 @@
 //! its node stands, in the file's own frame and metres, its triangles
 //! gathered by material.
 
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use glam::{Mat3, Mat4, Vec3};
@@ -58,7 +59,7 @@ pub struct Run {
     pub material: usize,
 }
 
-/// A picture as the file holds it, PNG or JPEG, with the size its header
+/// A picture as the file holds it, PNG, JPEG or WebP, with the size its header
 /// says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Picture {
@@ -94,6 +95,8 @@ pub struct Weight {
     pub texels: u64,
     /// Materials drawn.
     pub materials: u32,
+    /// Vertices read: each primitive's once, however many nodes place it.
+    pub vertices: u64,
 }
 
 impl Glb {
@@ -107,6 +110,7 @@ impl Glb {
         let plain = self.document.materials().len();
         let mut materials = vec![false; plain + 1];
         let mut pictures = vec![false; self.document.images().len()];
+        let mut read = HashSet::new();
         for node in self.placed(&hierarchy) {
             let Some(mesh) = node.mesh() else {
                 continue;
@@ -122,6 +126,12 @@ impl Glb {
                         .map_or(0, |positions| positions.count()),
                 };
                 let triangles = (corners / 3) as u64;
+                if read.insert((mesh.index(), primitive.index())) {
+                    weight.vertices += primitive
+                        .get(&gltf::Semantic::Positions)
+                        .map_or(0, |positions| positions.count())
+                        as u64;
+                }
                 let material = primitive.material();
                 weight.triangles += triangles;
                 if material.double_sided() {
@@ -130,7 +140,7 @@ impl Glb {
                 if !std::mem::replace(&mut materials[material.index().unwrap_or(plain)], true) {
                     weight.materials += 1;
                 }
-                if let Some(image) = base_image(&material)
+                if let Some(image) = self.base_image(&material)
                     && !std::mem::replace(&mut pictures[image.index()], true)
                     && let Some(picture) = self.sized(&image)
                 {
@@ -173,8 +183,15 @@ impl Glb {
         placed
     }
 
-    /// A picture the file holds whose size its header says. One it does
-    /// not, or one outside the file, is not drawn and costs nothing.
+    /// The picture of a material's base colour, if it has one.
+    fn base_image<'a>(&'a self, material: &gltf::Material<'a>) -> Option<gltf::Image<'a>> {
+        let info = material.pbr_metallic_roughness().base_color_texture()?;
+        self.source(&info.texture())
+    }
+
+    /// A picture the file holds whose size its header says, a PNG, a JPEG
+    /// or a WebP. One it does not, or one outside the file, is not drawn
+    /// and costs nothing.
     fn sized(&self, image: &gltf::Image<'_>) -> Option<Picture> {
         let bytes = self.picture(image)?;
         let size = imagesize::blob_size(bytes)
@@ -188,17 +205,13 @@ impl Glb {
     }
 }
 
-/// The picture of a material's base colour, if it has one.
-fn base_image<'a>(material: &gltf::Material<'a>) -> Option<gltf::Image<'a>> {
-    let info = material.pbr_metallic_roughness().base_color_texture()?;
-    Some(info.texture().source())
-}
-
 impl Model {
     /// Every mesh the scene of a GLB places, at rest: a mesh where its node
     /// stands, a skinned one where its joints stand. Only triangles are
     /// read; a primitive of points or lines, or one whose indices reach
-    /// past its vertices, is left out.
+    /// past its vertices, is left out. A primitive is read once however
+    /// many nodes place it, and each place keeps the corners its triangles
+    /// use: what is built is bounded by what [`Glb::weigh`] counts.
     pub fn read(glb: &Glb) -> Result<Model, Error> {
         let hierarchy = Hierarchy::read(&glb.document);
         let world = hierarchy.world(&hierarchy.rest);
@@ -208,6 +221,10 @@ impl Model {
         let mut materials: Vec<Option<usize>> = vec![None; glb.document.materials().len() + 1];
         let mut pictures: Vec<Option<Option<usize>>> = vec![None; glb.document.images().len()];
         let mut runs: Vec<Vec<u32>> = Vec::new();
+        // Each primitive as read, by its mesh and its place in it, and the
+        // scratch `place` keeps its corners in.
+        let mut read: HashMap<(usize, usize), Option<Attributes>> = HashMap::new();
+        let mut kept: Vec<u32> = Vec::new();
 
         for node in glb.placed(&hierarchy) {
             let Some(mesh) = node.mesh() else {
@@ -217,7 +234,12 @@ impl Model {
                 let inverse_bind: Vec<Mat4> = skin
                     .reader(|buffer| glb.buffer(buffer))
                     .read_inverse_bind_matrices()
-                    .map(|matrices| matrices.map(|m| Mat4::from_cols_array_2d(&m)).collect())
+                    .map(|matrices| {
+                        matrices
+                            .take(skin.joints().len())
+                            .map(|m| Mat4::from_cols_array_2d(&m))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 skin.joints()
                     .enumerate()
@@ -233,7 +255,7 @@ impl Model {
                 let gltf_material = primitive.material();
                 let slot = gltf_material.index().unwrap_or(materials.len() - 1);
                 let material = *materials[slot].get_or_insert_with(|| {
-                    let picture = base_image(&gltf_material).and_then(|image| {
+                    let picture = glb.base_image(&gltf_material).and_then(|image| {
                         *pictures[image.index()].get_or_insert_with(|| {
                             let mut picture = glb.sized(&image)?;
                             picture.bytes = glb.picture(&image)?.to_vec();
@@ -256,14 +278,12 @@ impl Model {
                     Some(joints) => Place::Joints(joints),
                     None => Place::Node(world[node.index()]),
                 };
-                read_primitive(
-                    glb,
-                    &primitive,
-                    set,
-                    place,
-                    &mut model.vertices,
-                    &mut runs[material],
-                );
+                let attributes = read
+                    .entry((mesh.index(), primitive.index()))
+                    .or_insert_with(|| Attributes::read(glb, &primitive, set));
+                if let Some(attributes) = attributes {
+                    attributes.place(place, &mut model.vertices, &mut runs[material], &mut kept);
+                }
             }
         }
 
@@ -307,11 +327,12 @@ fn material_of(material: &gltf::Material<'_>, picture: Option<usize>) -> Materia
     }
 }
 
-/// An attribute read whole: one a vertex, or none.
-fn complete<T>(values: Option<impl Iterator<Item = T>>, count: usize) -> Option<Vec<T>> {
+/// An attribute read whole, one a vertex, or none: one of another length is
+/// never read.
+fn complete<T>(values: Option<impl ExactSizeIterator<Item = T>>, count: usize) -> Option<Vec<T>> {
     values
-        .map(Iterator::collect::<Vec<T>>)
         .filter(|values| values.len() == count)
+        .map(Iterator::collect)
 }
 
 /// Where a primitive's vertices stand.
@@ -324,55 +345,72 @@ enum Place<'a> {
     Joints(&'a [Mat4]),
 }
 
-/// One primitive's triangles, placed: its vertices appended to `vertices`
-/// and its triangles to `indices`. With no normals said, each triangle gets
-/// its own corners and its own flat normal, as glTF asks.
-fn read_primitive(
-    glb: &Glb,
-    primitive: &gltf::Primitive<'_>,
-    set: u32,
-    place: Place<'_>,
-    vertices: &mut Vec<Vertex>,
-    indices: &mut Vec<u32>,
-) {
-    let reader = primitive.reader(|buffer| glb.buffer(buffer));
-    let Some(positions) = reader.read_positions() else {
-        return;
-    };
-    let positions: Vec<[f32; 3]> = positions.collect();
-    let count = positions.len();
-    let corners: Vec<u32> = match reader.read_indices() {
-        Some(read) => read.into_u32().collect(),
-        None => (0..count as u32).collect(),
-    };
-    let corners = &corners[..corners.len() / 3 * 3];
-    if corners.iter().any(|&i| i as usize >= count) {
-        log::warn!("a primitive whose indices reach past its vertices is left out");
-        return;
-    }
-    let normals = complete(reader.read_normals(), count);
-    let uvs = complete(reader.read_tex_coords(set).map(|uv| uv.into_f32()), count);
-    let colors = complete(
-        reader.read_colors(0).map(|color| color.into_rgba_f32()),
-        count,
-    );
-    let skin = match place {
-        Place::Joints(_) => complete(
-            reader
-                .read_joints(0)
-                .zip(reader.read_weights(0))
-                .map(|(joints, weights)| joints.into_u16().zip(weights.into_f32())),
-            count,
-        ),
-        Place::Node(_) => None,
-    };
+/// What one primitive holds, in its mesh's space.
+struct Attributes {
+    positions: Vec<[f32; 3]>,
+    /// Three a triangle, each a position's index.
+    corners: Vec<u32>,
+    normals: Option<Vec<[f32; 3]>>,
+    uvs: Option<Vec<[f32; 2]>>,
+    colors: Option<Vec<[f32; 4]>>,
+    /// Each vertex's joints and their weights.
+    skin: Option<Vec<([u16; 4], [f32; 4])>>,
+}
 
-    // Each vertex's matrix: one for a mesh where its node stands, and for a
-    // skinned one its joints' blended by its weights.
-    let (node, blended): (Mat4, Option<Vec<Mat4>>) = match (place, skin) {
-        (Place::Node(matrix), _) => (matrix, None),
-        (Place::Joints(joints), Some(skin)) => {
-            let blend = |(which, weights): ([u16; 4], [f32; 4])| {
+impl Attributes {
+    /// A primitive's triangles and what its vertices say, the corners of its
+    /// picture from texture coordinates `set`. `None` for one with no
+    /// positions, or whose indices reach past them.
+    fn read(glb: &Glb, primitive: &gltf::Primitive<'_>, set: u32) -> Option<Attributes> {
+        let reader = primitive.reader(|buffer| glb.buffer(buffer));
+        let positions: Vec<[f32; 3]> = reader.read_positions()?.collect();
+        let count = positions.len();
+        let mut corners: Vec<u32> = match reader.read_indices() {
+            Some(read) => read.into_u32().collect(),
+            None => (0..count as u32).collect(),
+        };
+        corners.truncate(corners.len() / 3 * 3);
+        if corners.iter().any(|&i| i as usize >= count) {
+            log::warn!("a primitive whose indices reach past its vertices is left out");
+            return None;
+        }
+        Some(Attributes {
+            normals: complete(reader.read_normals(), count),
+            uvs: complete(reader.read_tex_coords(set).map(|uv| uv.into_f32()), count),
+            colors: complete(
+                reader.read_colors(0).map(|color| color.into_rgba_f32()),
+                count,
+            ),
+            skin: complete(
+                reader
+                    .read_joints(0)
+                    .zip(reader.read_weights(0))
+                    .map(|(joints, weights)| joints.into_u16().zip(weights.into_f32())),
+                count,
+            ),
+            positions,
+            corners,
+        })
+    }
+
+    /// One place of the primitive: the corners its triangles use, placed,
+    /// appended to `vertices`, and its triangles to `indices`. With no
+    /// normals said, each triangle gets its own corners and its own flat
+    /// normal, as glTF asks. `kept` is where a position went in `vertices`
+    /// at this place, `u32::MAX` for nowhere yet, and is left so.
+    fn place(
+        &self,
+        place: Place<'_>,
+        vertices: &mut Vec<Vertex>,
+        indices: &mut Vec<u32>,
+        kept: &mut Vec<u32>,
+    ) {
+        // Each vertex's matrix: one for a mesh where its node stands, and
+        // for a skinned one its joints' blended by its weights.
+        let matrix = |i: usize| match (place, &self.skin) {
+            (Place::Node(matrix), _) => matrix,
+            (Place::Joints(joints), Some(skin)) => {
+                let (which, weights) = skin[i];
                 let sum: f32 = weights.iter().sum();
                 let share = if sum > 0.0 { sum } else { 1.0 };
                 which
@@ -382,58 +420,59 @@ fn read_primitive(
                         Some(*joints.get(usize::from(joint))? * (weight / share))
                     })
                     .fold(Mat4::ZERO, |matrix, joint| matrix + joint)
-            };
-            (Mat4::IDENTITY, Some(skin.into_iter().map(blend).collect()))
-        }
-        // A skin with no joints or weights read: its mesh as it is.
-        (Place::Joints(_), None) => (Mat4::IDENTITY, None),
-    };
-    let matrix = |i: usize| blended.as_ref().map_or(node, |blended| blended[i]);
-    let placed: Vec<Vertex> = (0..count)
-        .map(|i| {
+            }
+            // A skin with no joints or weights read: its mesh as it is.
+            (Place::Joints(_), None) => Mat4::IDENTITY,
+        };
+        let vertex = |i: usize| {
             let m = matrix(i);
-            let normal = normals.as_ref().map_or(Vec3::Y, |n| Vec3::from(n[i]));
+            let normal = self.normals.as_ref().map_or(Vec3::Y, |n| Vec3::from(n[i]));
             let turn = Mat3::from_mat4(m);
             let normal = match turn.determinant().abs() > f32::EPSILON {
                 true => turn.inverse().transpose() * normal,
                 false => turn * normal,
             };
             Vertex {
-                position: m.transform_point3(Vec3::from(positions[i])).into(),
+                position: m.transform_point3(Vec3::from(self.positions[i])).into(),
                 normal: normal.normalize_or(Vec3::Y).into(),
-                uv: uvs.as_ref().map_or([0.0; 2], |uv| uv[i]),
-                color: colors.as_ref().map_or([1.0; 4], |c| c[i]),
+                uv: self.uvs.as_ref().map_or([0.0; 2], |uv| uv[i]),
+                color: self.colors.as_ref().map_or([1.0; 4], |c| c[i]),
             }
-        })
-        .collect();
-    // A node that mirrors turns its triangles inside out: wound back.
-    let mirrored = |i: u32| Mat3::from_mat4(matrix(i as usize)).determinant() < 0.0;
+        };
+        // A node that mirrors turns its triangles inside out: wound back.
+        let mirrored = |i: usize| Mat3::from_mat4(matrix(i)).determinant() < 0.0;
 
-    match normals {
-        Some(_) => {
-            let base = vertices.len() as u32;
-            vertices.extend(placed);
-            for triangle in corners.chunks_exact(3) {
-                let [a, b, c] = [triangle[0], triangle[1], triangle[2]];
-                let (b, c) = if mirrored(a) { (c, b) } else { (b, c) };
-                indices.extend([base + a, base + b, base + c]);
+        if kept.len() < self.positions.len() {
+            kept.resize(self.positions.len(), u32::MAX);
+        }
+        for triangle in self.corners.chunks_exact(3) {
+            let [a, b, c] = [triangle[0], triangle[1], triangle[2]].map(|i| i as usize);
+            let (b, c) = if mirrored(a) { (c, b) } else { (b, c) };
+            match self.normals {
+                Some(_) => {
+                    for i in [a, b, c] {
+                        if kept[i] == u32::MAX {
+                            kept[i] = vertices.len() as u32;
+                            vertices.push(vertex(i));
+                        }
+                        indices.push(kept[i]);
+                    }
+                }
+                None => {
+                    let corners = [a, b, c].map(vertex);
+                    let [pa, pb, pc] = corners.map(|corner| Vec3::from(corner.position));
+                    let normal = (pb - pa).cross(pc - pa).normalize_or(Vec3::Y);
+                    let base = vertices.len() as u32;
+                    vertices.extend(corners.map(|corner| Vertex {
+                        normal: normal.into(),
+                        ..corner
+                    }));
+                    indices.extend([base, base + 1, base + 2]);
+                }
             }
         }
-        None => {
-            for triangle in corners.chunks_exact(3) {
-                let [a, b, c] = [triangle[0], triangle[1], triangle[2]];
-                let (b, c) = if mirrored(a) { (c, b) } else { (b, c) };
-                let [pa, pb, pc] = [a, b, c].map(|i| Vec3::from(placed[i as usize].position));
-                let normal = (pb - pa).cross(pc - pa).normalize_or(Vec3::Y);
-                let base = vertices.len() as u32;
-                for i in [a, b, c] {
-                    vertices.push(Vertex {
-                        normal: normal.into(),
-                        ..placed[i as usize]
-                    });
-                }
-                indices.extend([base, base + 1, base + 2]);
-            }
+        for &i in &self.corners {
+            kept[i as usize] = u32::MAX;
         }
     }
 }
@@ -562,8 +601,83 @@ mod tests {
                 both_sides: 3,
                 texels: 2048 * 1024,
                 materials: 1,
+                vertices: 3,
             }
         );
+    }
+
+    #[test]
+    fn a_place_keeps_the_corners_its_triangles_use_and_a_mesh_is_read_once() {
+        // Four positions with their normals, the last used by no triangle,
+        // placed by two nodes.
+        let mut bin = Vec::new();
+        for corner in [
+            [0.0f32, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [9.0, 9.0, 9.0],
+        ] {
+            bin.extend(corner.iter().flat_map(|value| value.to_le_bytes()));
+        }
+        for _ in 0..4 {
+            bin.extend(
+                [0.0f32, 0.0, 1.0]
+                    .iter()
+                    .flat_map(|value| value.to_le_bytes()),
+            );
+        }
+        bin.extend([0u16, 1, 2].iter().flat_map(|index| index.to_le_bytes()));
+        let json = r#"{
+            "asset": {"version": "2.0"},
+            "scenes": [{"nodes": [0, 1]}],
+            "nodes": [{"mesh": 0}, {"mesh": 0, "translation": [2, 0, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2}]}],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 4, "type": "VEC3",
+                    "min": [0, 0, 0], "max": [9, 9, 9]},
+                {"bufferView": 1, "componentType": 5126, "count": 4, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5123, "count": 3, "type": "SCALAR"}
+            ],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 48},
+                {"buffer": 0, "byteOffset": 48, "byteLength": 48},
+                {"buffer": 0, "byteOffset": 96, "byteLength": 6}
+            ],
+            "buffers": [{"byteLength": 104}]
+        }"#;
+        let glb = Glb::open(&glb(json, &bin)).unwrap();
+        let weight = glb.weigh();
+        assert_eq!((weight.triangles, weight.vertices), (2, 4));
+        let model = Model::read(&glb).unwrap();
+        assert_eq!(model.vertices.len(), 6, "three corners at each place");
+        assert_eq!(model.indices, [0, 1, 2, 3, 4, 5]);
+        assert_eq!(
+            model.max,
+            [3.0, 1.0, 0.0],
+            "the unused position is not kept"
+        );
+    }
+
+    #[test]
+    fn a_picture_an_extension_names_is_read_and_one_in_no_form_read_is_not() {
+        let webp = PLACED_THRICE.replace(
+            r#""textures": [{"source": 0}]"#,
+            r#""textures": [{"extensions": {"EXT_texture_webp": {"source": 0}}}]"#,
+        );
+        let glb_webp = Glb::open(&glb(&webp, &triangle_and_picture())).unwrap();
+        assert_eq!(glb_webp.weigh().texels, 2048 * 1024);
+        assert_eq!(
+            Model::read(&glb_webp).unwrap().materials[0].picture,
+            Some(0)
+        );
+
+        let basisu = PLACED_THRICE.replace(
+            r#""textures": [{"source": 0}]"#,
+            r#""textures": [{"extensions": {"KHR_texture_basisu": {"source": 0}}}]"#,
+        );
+        let glb_basisu = Glb::open(&glb(&basisu, &triangle_and_picture())).unwrap();
+        assert_eq!(glb_basisu.weigh().texels, 0);
+        assert_eq!(Model::read(&glb_basisu).unwrap().materials[0].picture, None);
     }
 
     #[test]

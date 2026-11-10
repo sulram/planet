@@ -44,7 +44,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 proptest = "1"
 prost = "0.14"
-gltf = { version = "1.4", default-features = false, features = ["extensions", "names", "utils"] }
+# allow_empty_texture: a texture whose picture an extension names has no
+# source, and is read as having none rather than unwrapped.
+gltf = { version = "1.4", default-features = false, features = ["allow_empty_texture", "extensions", "names", "utils"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

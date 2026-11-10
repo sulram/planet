@@ -40,6 +40,17 @@ impl Glb {
         (buffer.index() == 0).then_some(self.blob.as_slice())
     }
 
+    /// The picture a texture shows: its source, else the WebP that
+    /// `EXT_texture_webp` names in its place. `None` for one whose picture
+    /// is in a form never read, such as a KTX2 of `KHR_texture_basisu`.
+    pub fn source<'a>(&'a self, texture: &gltf::Texture<'a>) -> Option<gltf::Image<'a>> {
+        texture.source().or_else(|| {
+            let webp = texture.extensions()?.get("EXT_texture_webp")?;
+            let index = usize::try_from(webp.get("source")?.as_u64()?).ok()?;
+            self.document.images().nth(index)
+        })
+    }
+
     /// The bytes of a picture the file holds, as they were written. `None`
     /// for a picture outside the file, which is never fetched.
     pub fn picture(&self, image: &gltf::Image<'_>) -> Option<&[u8]> {

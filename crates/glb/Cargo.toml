@@ -12,7 +12,7 @@ gltf.workspace = true
 log.workspace = true
 # A picture's size from its header alone: the weight of a model is read
 # without decoding it, and decoding is the shell's.
-imagesize = { version = "0.15", default-features = false, features = ["png", "jpeg"] }
+imagesize = { version = "0.15", default-features = false, features = ["png", "jpeg", "webp"] }
 
 [lints]
 workspace = true
