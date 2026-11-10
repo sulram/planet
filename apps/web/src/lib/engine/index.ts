@@ -11,6 +11,8 @@ export * from './protocol';
 /** A running engine bound to one canvas. `free()` stops its loop and listeners. */
 export interface Engine {
 	command(command: Command | PluginCommand): void;
+	/** Presses a key or lets it go, by the name the web gives it (`Space`), as the keyboard does: a button on the screen in place of a key. */
+	key(code: string, down: boolean): void;
 	/** The ground a recipe names. Sent before the recipe that names it. */
 	set_field(bytes: Uint8Array): void;
 	/** Where the world's files are: the base an `asset://` reference is read under. */
@@ -30,6 +32,7 @@ export interface EngineModule {
 /** The shape `wasm-bindgen --target web` emits for `shell-web`. */
 interface RawEngine {
 	command(json: string): void;
+	key(code: string, down: boolean): void;
 	set_field(bytes: Uint8Array): void;
 	set_files(base: string): void;
 	connect(url: string): void;
@@ -60,6 +63,7 @@ async function load(): Promise<EngineModule | null> {
 			});
 			return {
 				command: (command) => engine.command(JSON.stringify(command)),
+				key: (code, down) => engine.key(code, down),
 				set_field: (bytes) => engine.set_field(bytes),
 				set_files: (base) => engine.set_files(base),
 				connect: (url) => engine.connect(url),

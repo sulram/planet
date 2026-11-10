@@ -5,6 +5,12 @@ describe('parseEvent', () => {
 	test('parses the known events', () => {
 		expect(parseEvent('{"type":"ready","generator_version":1}')).toEqual({ type: 'ready', generator_version: 1 });
 		expect(parseEvent('{"type":"mode_changed","mode":"fly"}')).toEqual({ type: 'mode_changed', mode: 'fly' });
+		// The shell's own, as `touch.rs` writes it.
+		expect(parseEvent('{"type":"stick","stick":{"center":[100.0,600.0],"at":[100.0,576.0],"reach":48}}')).toEqual({
+			type: 'stick',
+			stick: { center: [100, 600], at: [100, 576], reach: 48 }
+		});
+		expect(parseEvent('{"type":"stick","stick":null}')).toEqual({ type: 'stick', stick: null });
 		const effects: Effects = {
 			shadows: true,
 			grass: true,
