@@ -30,7 +30,7 @@ kind (a `.vox`) is Voxels, the new one 3D model. `crates/avatar` reads a GLB alr
 
 ### Avatars through mundos
 
-mundos owns the avatars: the catalog, each account's list and its current one, the VRM files in its bucket, and the creator (its decisions avatars-live-in-mundos and the two beside it). <!-- card:102 --> A world wears what the token says: an `avatar` claim, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. The way back never writes into mundos as the person: a VRM dropped is a world asset until the person wears it, which sends them to mundos with its URL and back through `/enter` with a fresh token. Claim and route wait on a decision: the question below.
+mundos owns the avatars: the catalog, each account's list and its current one, the VRM files in its bucket, and the creator (its decisions avatars-live-in-mundos and the two beside it). <!-- card:102 --> A world wears what the token says: an `avatar` claim, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. The way back never writes into mundos as the person: a VRM dropped is a world asset until the person wears it, which sends them to mundos with its URL and back through `/enter` with a fresh token; a picker inside the world reads mundos's public catalog endpoint. mundos's items: The avatar catalog (before its freeze), then Own VRMs and the way back. Claim and route wait on a decision: the question below.
 
 **Done when:** a world wears the avatar an account chose in mundos on entry, and a VRM picked inside the world becomes that account's current one in mundos.
 
@@ -154,7 +154,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 ### Avatars (28)
 
 - Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
-- A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, A profile's avatars) <!-- card:87 -->
+- A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, The avatar catalog, then Own VRMs and the way back) <!-- card:87 -->
 - A swim clip (the fly clip stands in)
 - Avatar changer: an entity you walk through that opens a dialog to pick an avatar <!-- card:89 -->
 - Avatar dropzone: drop a VRM on the map to place an avatar others can take <!-- card:92 -->
