@@ -12,13 +12,6 @@ lives in the theme docs; what we drop leaves with the DECISIONS fragment that sa
 
 ## Now: a world mundos hosts
 
-### Walking a world on a phone
-
-As Hyperfy does (`refs/hyperfy`, `PlayerLocal.js`): a stick to walk, a drag to <!-- card:75 -->
-look, buttons to jump and fly, the bar and panels laid out for a small screen.
-
-**Done when:** a phone walks, looks, jumps and flies a world, with the bar and panels fitting its screen and no build mode offered.
-
 ### A 3D model beside the voxel one
 
 A `.glb` goes up through `POST /api/files`, its kind read off its bytes, and <!-- card:73 -->
