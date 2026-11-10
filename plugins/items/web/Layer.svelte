@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { builds } from '$lib/instance';
 	import type { LayerProps } from '$lib/plugins/plugin';
 	import Drop from './Drop.svelte';
 	import Panel from './Panel.svelte';
@@ -12,9 +11,7 @@
 	// says it is editing, from its button or from a key. The chart, the
 	// landmarks of the world, is anyone's: a line travels there through the
 	// engine's own `go_to`, as a shared link does.
-	let { seam, level, palette }: LayerProps = $props();
-
-	const builder = $derived(builds(level));
+	let { seam, builds: builder, palette }: LayerProps = $props();
 
 	let editing = $state(false);
 	let item = $state<Item | null>(null);

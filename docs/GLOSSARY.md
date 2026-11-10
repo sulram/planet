@@ -46,6 +46,8 @@ this file in the same change.
 | Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. Said at `GET /api/world`, in the welcome, and again when the admin switches a plugin. |
 | Layer | What a plugin draws over the world in the web front end, mounted while the plugin is on. |
 | Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands and renders events; the rules are the core's. |
+| Touch screen | A screen read by fingers, as the page tells one: touch points and a coarse or hoverless pointer. It walks, looks, jumps and flies a world, and founds and builds nothing, whatever the level. |
+| Stick | On a touch screen, the walk under the left thumb: it opens where a finger lands on the left half of the world, walks as far as it is pushed and runs near its reach. |
 | World | One recipe and one world folder. An instance is exactly one. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |
 | Generator | The deterministic function from recipe + address to terrain. Versioned, frozen per world. |

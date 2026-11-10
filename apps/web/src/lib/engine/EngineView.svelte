@@ -4,6 +4,7 @@
 	import { t } from '$lib/i18n';
 	import { fieldId, type Recipe } from '$lib/world';
 	import type { Link } from '$lib/instance';
+	import { touch } from '$lib/touch.svelte';
 	import {
 		isPluginEvent,
 		loadEngine,
@@ -62,10 +63,15 @@
 		engine?.command(command);
 	}
 
-	/** Hands the world back: the canvas takes focus and the pointer. */
+	/** Presses a key or lets it go, by the name the web gives it, as the keyboard does. */
+	export function key(code: string, down: boolean) {
+		engine?.key(code, down);
+	}
+
+	/** Hands the world back: the canvas takes focus and the pointer, where there is one to lock. */
 	export function take() {
 		canvas?.focus();
-		canvas?.requestPointerLock();
+		if (!touch.current) canvas?.requestPointerLock();
 	}
 
 	/** Lets the world go, so a form can have the keys and the pointer. */
@@ -348,5 +354,8 @@
 		width: 100%;
 		height: 100%;
 		outline: none;
+		/* A finger on the world is the engine's: the browser neither scrolls
+		   nor zooms the page under it, nor takes it back to do so. */
+		touch-action: none;
 	}
 </style>

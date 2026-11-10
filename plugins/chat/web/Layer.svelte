@@ -9,7 +9,7 @@
 	// Chat over the world: the bar where a line is said, and a balloon over
 	// the head that said it. Lines are what was heard while here, never
 	// stored: the last hundred, each with the name its speaker had then.
-	let { seam, online, me, peers, anchors }: LayerProps = $props();
+	let { seam, online, me, peers, anchors, touch }: LayerProps = $props();
 
 	const LINES_KEPT = 100;
 	let lines = $state<Line[]>([]);
@@ -38,4 +38,4 @@
 </script>
 
 <Balloons {anchors} {me} {lines} />
-<Bar {lines} {online} onsay={say} ongo={(place) => seam.core({ type: 'go_to', place })} onopen={seam.release} onclose={seam.take} />
+<Bar {lines} {online} {touch} onsay={say} ongo={(place) => seam.core({ type: 'go_to', place })} onopen={seam.release} onclose={seam.take} />

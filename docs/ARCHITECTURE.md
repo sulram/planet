@@ -8,8 +8,7 @@ order: 20
 # ARCHITECTURE
 
 The shape as decided. The why lives in `decisions/`, open points in `questions/`,
-and how much of it is built in BRIEF.md. A line marked (p) is proposed and
-not yet confirmed.
+and how much of it is built in BRIEF.md.
 
 ## A world, hosted
 
@@ -138,12 +137,11 @@ not yet confirmed.
 | Raspberry Pi | `shell-desktop` on KMS/DRM | minimal |
 | Quest, Pico | `shell-xr`, Android + OpenXR + Vulkan | minimal |
 
-- One command/event seam between the core and any UI: a front end sends
-  commands and renders events, and tool logic stays in Rust so every client
-  shares it. JSON tagged by `type`: `client::Command`, `client::Event`.
-- A front end sends commands and renders events (90). The web one is static
-  files, so what any front end does goes through the seam and the world's
-  routes. Language, theme, avatar and a visitor's name are the browser's.
+- One command/event seam between the core and any front end (90): it sends
+  commands and renders events, JSON tagged by `type` (`client::Command`,
+  `client::Event`), and tool logic stays in Rust so every client shares it.
+  The web's is static files, so what it does goes through the seam and the
+  world's routes; language, theme, avatar and a visitor's name are the browser's.
 - Web: the page asks the world what it is, hands the engine the recipe and
   the socket's URL with its key, and shows the founding screen to an admin of
   an unfounded world. It reconnects with a doubling wait, a second to thirty.
@@ -190,6 +188,8 @@ not yet confirmed.
   parallel transported, so seams and corners need no special case.
 - On foot the body takes a step at once; figure and eye come after on springs
   of their own, along up only. Ground, a quarter block a frame, at once (81).
+- Phone: a touch screen walks, looks, jumps and flies, and founds and builds
+  nothing (`$lib/touch.svelte.ts`); fingers reach `Input`, buttons `Engine.key`.
 - Design system: `apps/web/src/lib/ds`, planet's own (74); catalogue at `/ds`.
   Components reference semantic tokens only. i18n: flat dotted keys, `en.ts`
   is the source, `pt.ts` and `zh.ts` match it. A plugin's words are in its own
