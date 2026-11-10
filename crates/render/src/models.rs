@@ -1,15 +1,23 @@
-//! Model meshes: the cubes of parts, each mesh in its own space and placed
-//! by one matrix a frame, relative to the camera, as an avatar is. The
-//! sides are the volumes' own (`shaders/cubes.wgsl`), so a part is lit,
-//! edged and glazed as the cells are.
+//! Model meshes: the cubes of parts and the meshes of 3D models, each in
+//! its own space and placed by one matrix a frame, relative to the camera,
+//! as an avatar is. Cubes are drawn with the volumes' own sides
+//! (`shaders/cubes.wgsl`), so a part is lit, edged and glazed as the cells
+//! are; a 3D model with its pictures (`shaders/textured.wgsl`), a run of
+//! triangles a material, each picture with its mip chain.
 
 use std::collections::HashMap;
+use std::ops::Range;
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{DAffine3, DMat4, DVec3, Vec3};
-use scene::{ModelChange, ModelDraw, ModelId, ModelPass, VolumeVertex};
+use scene::{
+    Image, ModelChange, ModelDraw, ModelId, ModelPass, TexturedMesh, TexturedRun, TexturedVertex,
+    VolumeVertex,
+};
 use wgpu::util::DeviceExt;
 
+use crate::mips::{FORMAT, Mips, fit};
 use crate::{PipelineSpec, Surface, pipeline};
 
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -19,12 +27,28 @@ struct InstanceUniform {
     normal_from_model: [[f32; 4]; 4],
 }
 
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+struct MaterialUniform {
+    /// `x`: the alpha under which a pixel is not drawn.
+    cutoff: [f32; 4],
+}
+
 struct Mesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     count: u32,
     /// How far a corner reaches from the mesh's anchor, in its own units.
     reach: f32,
+    /// The runs of a mesh drawn with pictures, each with its material;
+    /// empty for cubes.
+    runs: Vec<(Range<u32>, wgpu::BindGroup)>,
+}
+
+impl Mesh {
+    fn textured(&self) -> bool {
+        !self.runs.is_empty()
+    }
 }
 
 pub struct Models {
@@ -32,7 +56,17 @@ pub struct Models {
     shadow_pipeline: wgpu::RenderPipeline,
     glass_pipeline: wgpu::RenderPipeline,
     over_pipeline: wgpu::RenderPipeline,
+    textured_pipeline: wgpu::RenderPipeline,
+    textured_shadow_pipeline: wgpu::RenderPipeline,
     instance_layout: wgpu::BindGroupLayout,
+    material_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    /// The picture of a run that has none: white, so its corners' colour
+    /// is all it shows.
+    white: wgpu::TextureView,
+    mips: Mips,
+    /// The widest texture the device takes on a side.
+    max_side: u32,
     meshes: HashMap<ModelId, Mesh>,
 }
 
@@ -48,9 +82,11 @@ fn source() -> String {
 impl Models {
     pub fn new(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         view_layout: &wgpu::BindGroupLayout,
         shadow_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
+        mips: Mips,
     ) -> Models {
         let instance_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("model instance"),
@@ -86,48 +122,186 @@ impl Models {
                 },
             )
         };
+        let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model material"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let textured_buffers = &[Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<TexturedVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![
+                0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Unorm8x4
+            ],
+        })];
+        let textured = |layout: &wgpu::BindGroupLayout, surface: Surface| {
+            pipeline(
+                device,
+                format,
+                PipelineSpec {
+                    label: "textured model",
+                    source: include_str!("shaders/textured.wgsl"),
+                    layouts: &[layout, &instance_layout, &material_layout],
+                    buffers: textured_buffers,
+                    surface,
+                },
+            )
+        };
+        // A model's pictures repeat: a glTF's coordinates may run past one.
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("model picture"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: 4,
+            ..Default::default()
+        });
+        let white = device
+            .create_texture_with_data(
+                queue,
+                &wgpu::TextureDescriptor {
+                    label: Some("white"),
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: FORMAT,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                },
+                wgpu::util::TextureDataOrder::LayerMajor,
+                &[255; 4],
+            )
+            .create_view(&wgpu::TextureViewDescriptor::default());
         Models {
             pipeline: make(view_layout, Surface::Solid),
             shadow_pipeline: make(shadow_layout, Surface::Shadow),
             glass_pipeline: make(view_layout, Surface::Glass),
             over_pipeline: make(view_layout, Surface::Overlay),
+            textured_pipeline: textured(view_layout, Surface::Solid),
+            textured_shadow_pipeline: textured(shadow_layout, Surface::ShadowCutout),
             instance_layout,
+            material_layout,
+            sampler,
+            white,
+            mips,
+            max_side: device.limits().max_texture_dimension_2d,
             meshes: HashMap::new(),
         }
     }
 
-    pub fn apply(&mut self, device: &wgpu::Device, change: ModelChange) {
+    pub fn apply(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, change: ModelChange) {
         match change {
             ModelChange::Add(id, mesh) if !mesh.indices.is_empty() => {
-                let reach = mesh
-                    .vertices
-                    .iter()
-                    .map(|v| Vec3::from(v.position).length())
-                    .fold(0.0, f32::max);
-                let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("model"),
-                    contents: bytemuck::cast_slice(&mesh.vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-                let indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("model indices"),
-                    contents: bytemuck::cast_slice(&mesh.indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-                self.meshes.insert(
-                    id,
-                    Mesh {
-                        vertices,
-                        indices,
-                        count: mesh.indices.len() as u32,
-                        reach,
-                    },
-                );
+                let positions = mesh.vertices.iter().map(|v| v.position);
+                let mesh = Mesh::new(device, &mesh.vertices, &mesh.indices, positions, Vec::new());
+                self.meshes.insert(id, mesh);
             }
-            ModelChange::Add(id, _) | ModelChange::Remove(id) => {
+            ModelChange::Textured(id, mesh) if !mesh.runs.is_empty() => {
+                let TexturedMesh {
+                    vertices,
+                    indices,
+                    runs,
+                    images,
+                } = mesh;
+                let runs = self.materials(device, queue, &runs, images);
+                let positions = vertices.iter().map(|v| v.position);
+                let mesh = Mesh::new(device, &vertices, &indices, positions, runs);
+                self.meshes.insert(id, mesh);
+            }
+            ModelChange::Add(id, _) | ModelChange::Textured(id, _) | ModelChange::Remove(id) => {
                 self.meshes.remove(&id);
             }
         }
+    }
+
+    /// Each run of a mesh drawn with pictures, with its material: its
+    /// picture uploaded once with its mip chain, however many runs show it.
+    fn materials(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        runs: &[TexturedRun],
+        images: Vec<Image>,
+    ) -> Vec<(Range<u32>, wgpu::BindGroup)> {
+        let pictures: Vec<wgpu::TextureView> = images
+            .into_iter()
+            .map(|image| {
+                let image = fit(&Arc::new(image), self.max_side);
+                let texture = self
+                    .mips
+                    .create(device, "model picture", image.width, image.height);
+                self.mips.write(queue, &texture, &image);
+                self.mips.generate(device, queue, &texture);
+                texture.create_view(&wgpu::TextureViewDescriptor::default())
+            })
+            .collect();
+        runs.iter()
+            .map(|run| {
+                let picture = run
+                    .image
+                    .and_then(|image| pictures.get(image))
+                    .unwrap_or(&self.white);
+                let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("model material"),
+                    contents: bytemuck::bytes_of(&MaterialUniform {
+                        cutoff: [run.cutoff, 0.0, 0.0, 0.0],
+                    }),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
+                let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("model material"),
+                    layout: &self.material_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(picture),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: uniform.as_entire_binding(),
+                        },
+                    ],
+                });
+                (run.indices.clone(), group)
+            })
+            .collect()
     }
 
     /// Draws the solid models [`InstanceUniforms::write`] placed.
@@ -137,12 +311,39 @@ impl Models {
         uniforms: &InstanceUniforms,
         placed: &Placed,
     ) {
-        if placed.solid.is_empty() {
-            return;
-        }
-        pass.set_pipeline(&self.pipeline);
-        for &(slot, id, _, _) in &placed.solid {
-            self.draw_one(pass, uniforms, slot, id);
+        let solid: Vec<_> = placed
+            .solid
+            .iter()
+            .map(|&(slot, id, _, _)| (slot, id))
+            .collect();
+        self.draw_solid(
+            pass,
+            uniforms,
+            &solid,
+            [&self.pipeline, &self.textured_pipeline],
+        );
+    }
+
+    /// Solid models, the cubes and then the meshes drawn with pictures,
+    /// each kind with its pipeline.
+    fn draw_solid(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        uniforms: &InstanceUniforms,
+        drawn: &[(usize, ModelId)],
+        [cubes, textured]: [&wgpu::RenderPipeline; 2],
+    ) {
+        for (pipeline, kind) in [(cubes, false), (textured, true)] {
+            let mut set = false;
+            for &(slot, id) in drawn {
+                if self.meshes[&id].textured() != kind {
+                    continue;
+                }
+                if !std::mem::replace(&mut set, true) {
+                    pass.set_pipeline(pipeline);
+                }
+                self.draw_one(pass, uniforms, slot, id);
+            }
         }
     }
 
@@ -157,14 +358,14 @@ impl Models {
             .solid
             .iter()
             .filter(|&&(_, _, center, radius)| crate::shadow::intersects(matrix, center, radius))
+            .map(|&(slot, id, _, _)| (slot, id))
             .collect();
-        if casting.is_empty() {
-            return;
-        }
-        pass.set_pipeline(&self.shadow_pipeline);
-        for &(slot, id, _, _) in casting {
-            self.draw_one(pass, uniforms, slot, id);
-        }
+        self.draw_solid(
+            pass,
+            uniforms,
+            &casting,
+            [&self.shadow_pipeline, &self.textured_shadow_pipeline],
+        );
     }
 
     /// The glass, after everything opaque, the sea and the clouds: it tests
@@ -184,8 +385,11 @@ impl Models {
                 continue;
             }
             pass.set_pipeline(pipeline);
+            // Glass and marks are cubes: a 3D model is always solid.
             for &(slot, id) in drawn {
-                self.draw_one(pass, uniforms, slot, id);
+                if !self.meshes[&id].textured() {
+                    self.draw_one(pass, uniforms, slot, id);
+                }
             }
         }
     }
@@ -201,7 +405,42 @@ impl Models {
         pass.set_bind_group(1, &uniforms.slots[slot].1, &[]);
         pass.set_vertex_buffer(0, mesh.vertices.slice(..));
         pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..mesh.count, 0, 0..1);
+        if mesh.runs.is_empty() {
+            pass.draw_indexed(0..mesh.count, 0, 0..1);
+        }
+        for (indices, material) in &mesh.runs {
+            pass.set_bind_group(2, material, &[]);
+            pass.draw_indexed(indices.clone(), 0, 0..1);
+        }
+    }
+}
+
+impl Mesh {
+    fn new<V: Pod>(
+        device: &wgpu::Device,
+        vertices: &[V],
+        indices: &[u32],
+        positions: impl Iterator<Item = [f32; 3]>,
+        runs: Vec<(Range<u32>, wgpu::BindGroup)>,
+    ) -> Mesh {
+        let reach = positions
+            .map(|position| Vec3::from(position).length())
+            .fold(0.0, f32::max);
+        Mesh {
+            vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("model"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            }),
+            indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("model indices"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            }),
+            count: indices.len() as u32,
+            reach,
+            runs,
+        }
     }
 }
 

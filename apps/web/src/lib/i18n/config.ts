@@ -59,4 +59,9 @@ export function formatDate(locale: Locale, iso: string): string {
 	return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
 }
 
+/** A count in the reader's locale: 65,536 in English, 65.536 in Portuguese. */
+export function formatNumber(locale: Locale, value: number): string {
+	return new Intl.NumberFormat(locale).format(value);
+}
+
 export type { Messages, MessageKey };

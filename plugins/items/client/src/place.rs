@@ -1,12 +1,13 @@
 //! Placing an item: a click puts it where the pointer meets the world, on a
 //! side of a cell, on a part or on the ground, standing up (DECISIONS 111).
-//! A model stands as big as its file says, a voxel an eighth of a cell. A
+//! A model stands as big as its file says: of voxels, a voxel an eighth of
+//! a cell; a 3D model in its own metres, its front turned to the eye. A
 //! picture stands a metre tall in its own aspect, its face turned to the
 //! eye, as a pane nobody collides with; a portal stands as a ring two
 //! metres across, turned the same way. Placed, the part is picked, so
 //! the hand that put it there moves it next.
 
-use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape, VOXEL};
+use client::{CUBE, Eye, Feet, Host, PartPose, REACH_M, Shape};
 use glam::{DQuat, DVec3};
 use topology::BLOCK_M;
 
@@ -22,7 +23,7 @@ const OVER_M: f64 = 6.0;
 /// front of it rather than landing on a ground it cannot see.
 const HOLD_M: f64 = 2.0;
 
-use crate::{Item, Items, Refusal, refuse};
+use crate::{Item, Items, Refusal, item_of, refuse};
 
 /// How thick a picture's pane is, in blocks: enough to pick, nothing to see.
 const PANE: f64 = 0.1;
@@ -85,18 +86,30 @@ impl Items {
                 muted: false,
                 volume: 0.0,
             },
-            Item::Model => {
-                // With no file taken there is nothing to place yet.
-                let Some(hash) = self.model else {
+            Item::Model | Item::Glb => {
+                // With no file of this kind taken there is nothing to place
+                // yet.
+                let Some(shape) = self.model.filter(|&shape| item_of(shape) == item) else {
                     return;
                 };
-                let Some(size) = host.model_size(hash) else {
-                    return refuse(host, Refusal::Unread);
+                let size = match host.model_size(shape) {
+                    None => return refuse(host, Refusal::Unread),
+                    Some(Err(why)) => return refuse(host, why.into()),
+                    Some(Ok(size)) => size,
+                };
+                // A 3D model has a front, turned to the eye as a picture's.
+                let rotation = match shape {
+                    Shape::Glb(_) => facing(host, from, at),
+                    _ => DQuat::IDENTITY,
                 };
                 client::Part {
-                    shape: Shape::Vox(hash),
-                    pose: PartPose::upright(at, size.map(|n| f64::from(n) * VOXEL)),
-                    paint: self.made_of(),
+                    shape,
+                    pose: PartPose {
+                        at,
+                        rotation,
+                        scale: size,
+                    },
+                    paint: self.paint_of(shape),
                     solid: true,
                     shine: 0.0,
                     reach_m: 0.0,
@@ -110,17 +123,12 @@ impl Items {
                 let Some(media) = self.picture else {
                     return;
                 };
-                // The picture's front, its box's `-y` side, turned to face
-                // where the eye stands, by the eye's column of the seat.
-                let eye = host.feet_at(from);
-                let toward = [eye.point.u - at[0], eye.point.v - at[1]];
-                let yaw = libm::atan2(toward[0], -toward[1]);
                 let shape = Shape::Image(media);
                 client::Part {
                     shape,
                     pose: PartPose {
                         at,
-                        rotation: DQuat::from_rotation_z(yaw),
+                        rotation: facing(host, from, at),
                         scale: [CUBE[2] * media.aspect(), PANE, CUBE[2]],
                     },
                     paint: self.paint_of(shape),
@@ -151,11 +159,7 @@ impl Items {
                 }
             }
             Item::Portal => {
-                // A ring four metres across, its front, its box's `-y` side,
-                // turned to face where the eye stands, as a picture is.
-                let eye = host.feet_at(from);
-                let toward = [eye.point.u - at[0], eye.point.v - at[1]];
-                let yaw = libm::atan2(toward[0], -toward[1]);
+                // A ring four metres across, facing the eye as a picture.
                 let shape = Shape::Portal(client::Portal {
                     to: self.to,
                     rim: self.rim,
@@ -164,7 +168,7 @@ impl Items {
                     shape,
                     pose: PartPose {
                         at,
-                        rotation: DQuat::from_rotation_z(yaw),
+                        rotation: facing(host, from, at),
                         scale: RING,
                     },
                     paint: self.paint_of(shape),
@@ -256,4 +260,13 @@ fn met(host: &Host<'_>, from: DVec3, toward: DVec3) -> Option<Feet> {
         offer(away_m, feet);
     }
     nearest.map(|(_, feet)| feet)
+}
+
+/// The turn that faces a part's front, its box's `-y` side, toward where
+/// the eye stands, by the eye's column of the seat: a picture's, a
+/// portal's, a 3D model's.
+fn facing(host: &Host<'_>, from: DVec3, at: [f64; 3]) -> DQuat {
+    let eye = host.feet_at(from);
+    let toward = [eye.point.u - at[0], eye.point.v - at[1]];
+    DQuat::from_rotation_z(libm::atan2(toward[0], -toward[1]))
 }

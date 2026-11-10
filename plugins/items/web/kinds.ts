@@ -11,6 +11,7 @@ import type { Seam } from '$lib/plugins/plugin';
 import Picture from './Picture.svelte';
 import Video from './Video.svelte';
 import Model from './Model.svelte';
+import Glb from './Glb.svelte';
 import Landmark from './Landmark.svelte';
 import Sound from './Sound.svelte';
 import Portal from './Portal.svelte';
@@ -39,6 +40,7 @@ export const kinds: readonly Kind[] = [
 	{ name: 'picture', icon: 'image', label: () => t('kind.picture'), Extra: Picture },
 	{ name: 'video', icon: 'video', label: () => t('kind.video'), Extra: Video },
 	{ name: 'model', icon: 'package', label: () => t('kind.model'), Extra: Model },
+	{ name: 'glb', icon: 'pyramid', label: () => t('kind.glb'), Extra: Glb },
 	{ name: 'sound', icon: 'volume-2', label: () => t('kind.sound'), Extra: Sound },
 	{ name: 'landmark', icon: 'star', label: () => t('kind.landmark'), Extra: Landmark, adds: true },
 	{ name: 'portal', icon: 'circle', label: () => t('kind.portal'), Extra: Portal, adds: true }

@@ -16,11 +16,12 @@
 //!
 //! A part is drawn as a model: a mesh in its own space, a cube of one voxel
 //! in one paint, placed by one matrix a frame. A cube's mesh is made once a
-//! paint and shared by every cube in it. A model of a file (`Shape::Vox`) is
-//! asked for over the asset seam when a part first names it, meshed once it
+//! paint and shared by every cube in it. A model of a file, of voxels
+//! (`Shape::Vox`) or a 3D model (`Shape::Glb`, `crate::model3d`), is asked
+//! for over the asset seam when a part first names it, meshed once it
 //! arrives, and shared by every part that names it; until it arrives the
-//! part stands undrawn, and its box holds a body up. A picture is drawn
-//! apart, by `pictures`.
+//! part stands as a glass box, and its box holds a body up. A picture is
+//! drawn apart, by `pictures`.
 //!
 //! In a world, the world keeps the parts (DECISIONS 111): a part placed here
 //! is placed at once and asked of the world, which names it; what the world
@@ -37,19 +38,20 @@ use part::{Gap, Part, PartId, Portal, Pose, Shape};
 use protocol::parts as wire;
 use protocol::{Body, Message};
 use scene::{
-    Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PaneDraw, PictureDraw,
-    VolumeVertex,
+    Image, Lamp, ModelChange, ModelDraw, ModelId, ModelMesh, ModelPass, PaneDraw, PictureDraw,
+    TexturedMesh, VolumeVertex,
 };
 use seat::Seat;
 use topology::{BLOCK_M, SurfacePoint};
 use voxel::{Finish, Paint};
 use worldgen::Generator;
 
-use crate::assets::Requests;
+use crate::assets::{Purpose, Requests};
 use crate::cells::{
     Ask, LAMP_FAR_M, LAMP_GAIN, LAMP_GROWS_M, LAMP_REACH_M, LAMP_SIDES, paint_look, paint_rgb,
 };
 use crate::collision::{BODY_HALF, Footing, STEP_M};
+use crate::model3d::{self, ModelRefusal, PICTURE_SIDE};
 use crate::pictures::{Pictures, Placed, Screen};
 use crate::speakers::Speakers;
 
@@ -118,6 +120,32 @@ const SHAPES: u64 = 1 << 24;
 const RINGS: u64 = 1 << 8;
 /// The bit that marks the model of a file.
 const FILE: u64 = 1 << 63;
+
+/// A model's file, from when it is first asked for.
+enum File {
+    /// On its way.
+    Asked,
+    /// A model of voxels: a body stands on its own voxels.
+    Vox(vox::Grid),
+    /// A 3D model: its size in blocks, and its mesh while its pictures are
+    /// decoded.
+    Glb {
+        size: [f64; 3],
+        decoding: Option<Box<Decoding>>,
+    },
+    /// Never drawn, and why: its box stays glass, with no mark over it.
+    Refused(ModelRefusal),
+}
+
+/// A 3D model's mesh waiting for its pictures. Every picture answers,
+/// decoded or failed, before the mesh is announced, so a model is never
+/// seen bare and then dressed.
+struct Decoding {
+    mesh: TexturedMesh,
+    images: Vec<Option<Image>>,
+    /// The pictures that have not answered.
+    left: usize,
+}
 
 /// A set or a remove asked before the world named the part.
 enum Deferred {
@@ -225,12 +253,11 @@ pub struct Parts {
     /// The models announced, by id.
     meshed: Vec<ModelId>,
     changes: Vec<ModelChange>,
-    /// The grid of every model of a file that arrived, by the file's hash.
-    grids: HashMap<[u8; 32], vox::Grid>,
-    /// The files asked for, so none is asked for twice.
-    asked: Vec<[u8; 32]>,
+    /// Every model's file asked for, by its hash, so none is asked for
+    /// twice: on its way, arrived or refused.
+    files: HashMap<[u8; 32], File>,
     /// The files to ask for, since last asked.
-    wanted: Vec<[u8; 32]>,
+    wanted: Vec<Shape>,
     /// Where the moon is now, from the planet's centre.
     moon: DVec3,
     /// The marks a hand shows over the world this frame: cubes in a paint,
@@ -981,9 +1008,9 @@ impl Parts {
             }
             let transform = self.place_of(generator, seat, &part.pose);
             // A model whose file is still on its way: its box in glass, and
-            // a mark turning over it.
-            if let Shape::Vox(hash) = part.shape
-                && !self.grids.contains_key(&hash)
+            // a mark turning over it. One refused keeps the glass box alone.
+            if let Shape::Vox(hash) | Shape::Glb(hash) = part.shape
+                && let Some(waiting) = self.waiting(hash)
             {
                 let Some(mesh) = model_id(Shape::Cube, LOADING_PAINT) else {
                     continue;
@@ -993,7 +1020,7 @@ impl Parts {
                     transform,
                     pass: ModelPass::Glass,
                 });
-                if let Some(mesh) = model_id(Shape::Cube, WAITING_PAINT) {
+                if waiting && let Some(mesh) = model_id(Shape::Cube, WAITING_PAINT) {
                     drawn.push(ModelDraw {
                         mesh,
                         transform: waiting_mark(&transform, clock_s),
@@ -1005,10 +1032,13 @@ impl Parts {
             let Some(mesh) = model_of(part) else {
                 continue;
             };
-            // A landmark and a portal are solid to the eye whatever their
-            // paint says.
+            // A landmark, a portal and a 3D model are solid to the eye
+            // whatever their paint says.
             let glass = Paint::of(part.paint).finish == Finish::Glass
-                && !matches!(part.shape, Shape::Landmark(_) | Shape::Portal(_));
+                && !matches!(
+                    part.shape,
+                    Shape::Landmark(_) | Shape::Portal(_) | Shape::Glb(_)
+                );
             drawn.push(ModelDraw {
                 mesh,
                 transform,
@@ -1144,12 +1174,12 @@ impl Parts {
                     self.changes
                         .push(ModelChange::Add(id, ring(paint, portal.rim_of_width())));
                 }
-                Shape::Vox(hash) => {
+                Shape::Vox(_) | Shape::Glb(_) => {
                     // Until the file arrives, its place is a glass box with
                     // a mark turning over it.
                     self.ensure(Shape::Cube, LOADING_PAINT);
                     self.ensure(Shape::Cube, WAITING_PAINT);
-                    self.want(hash);
+                    self.want(shape);
                 }
                 // A picture is no model: drawn by `pictures`. A sound is
                 // nothing to the eye.
@@ -1159,36 +1189,170 @@ impl Parts {
         Some(id)
     }
     /// Asks for a model's file, once: what a hand wants before it places
-    /// the model, to know its size.
-    pub(crate) fn want(&mut self, hash: [u8; 32]) {
-        if self.grids.contains_key(&hash) || self.asked.contains(&hash) {
+    /// the model, to know its size. Any other shape names no file.
+    pub(crate) fn want(&mut self, shape: Shape) {
+        let (Shape::Vox(hash) | Shape::Glb(hash)) = shape else {
+            return;
+        };
+        if self.files.contains_key(&hash) {
             return;
         }
-        self.asked.push(hash);
-        self.wanted.push(hash);
+        self.files.insert(hash, File::Asked);
+        self.wanted.push(shape);
     }
 
     /// The files asked for since last taken.
-    pub(crate) fn wanted(&mut self) -> Vec<[u8; 32]> {
+    pub(crate) fn wanted(&mut self) -> Vec<Shape> {
         core::mem::take(&mut self.wanted)
     }
 
-    /// A model's file arrived: its grid is kept and its mesh announced, the
-    /// voxels filling the unit box.
-    pub(crate) fn model_arrived(&mut self, hash: [u8; 32], model: vox::Model) {
+    /// A model's file arrived. Unread or over the budget, it is refused, and
+    /// why is said for the log.
+    pub(crate) fn file_arrived(
+        &mut self,
+        shape: Shape,
+        bytes: &[u8],
+        requests: &mut Requests,
+    ) -> Result<(), String> {
+        match shape {
+            Shape::Vox(hash) => match vox::parse(bytes) {
+                Ok(model) => {
+                    self.vox_arrived(hash, model);
+                    Ok(())
+                }
+                Err(error) => {
+                    self.files.insert(hash, File::Refused(ModelRefusal::Broken));
+                    Err(format!("{error:?}"))
+                }
+            },
+            Shape::Glb(hash) => self
+                .glb_arrived(hash, bytes, requests)
+                .map_err(|why| why.code().to_string()),
+            _ => Ok(()),
+        }
+    }
+
+    /// A model of voxels arrived: its grid is kept and its mesh announced,
+    /// the voxels filling the unit box.
+    pub(crate) fn vox_arrived(&mut self, hash: [u8; 32], model: vox::Model) {
         let id = model_of_file(hash);
         if !self.meshed.contains(&id) {
             self.meshed.push(id);
             self.changes
                 .push(ModelChange::Add(id, boxed(&model.grid, &model.palette)));
         }
-        self.grids.insert(hash, model.grid);
+        self.files.insert(hash, File::Vox(model.grid));
     }
 
-    /// How many voxels a model of a file has along each axis, once it
-    /// arrived.
-    pub fn size_of(&self, hash: [u8; 32]) -> Option<[u32; 3]> {
-        self.grids.get(&hash).map(|grid| grid.size)
+    /// A 3D model's file arrived: read within the budget, its size kept and
+    /// each of its pictures asked to be decoded. Its mesh is announced once
+    /// they all answered.
+    fn glb_arrived(
+        &mut self,
+        hash: [u8; 32],
+        bytes: &[u8],
+        requests: &mut Requests,
+    ) -> Result<(), ModelRefusal> {
+        let laid = model3d::read(bytes).inspect_err(|&why| {
+            self.files.insert(hash, File::Refused(why));
+        })?;
+        let name = Shape::Glb(hash).asset().unwrap_or_default();
+        for (index, bytes) in laid.pictures.iter().enumerate() {
+            let purpose = Purpose::ModelPicture(hash, index);
+            requests.ask_embedded(name.clone(), purpose, bytes.clone(), PICTURE_SIDE);
+        }
+        let decoding = Decoding {
+            mesh: laid.mesh,
+            images: laid.pictures.iter().map(|_| None).collect(),
+            left: laid.pictures.len(),
+        };
+        self.files.insert(
+            hash,
+            File::Glb {
+                size: laid.size,
+                decoding: Some(Box::new(decoding)),
+            },
+        );
+        self.dress(hash);
+        Ok(())
+    }
+
+    /// A picture of a 3D model answered: its pixels, or `None` when it
+    /// could not be decoded, and the triangles that show it are drawn in
+    /// their corners' colour alone.
+    pub(crate) fn picture_decoded(&mut self, hash: [u8; 32], index: usize, image: Option<Image>) {
+        let Some(File::Glb {
+            decoding: Some(decoding),
+            ..
+        }) = self.files.get_mut(&hash)
+        else {
+            return;
+        };
+        if let Some(slot) = decoding.images.get_mut(index) {
+            *slot = image;
+            decoding.left = decoding.left.saturating_sub(1);
+        }
+        self.dress(hash);
+    }
+
+    /// Announces a 3D model's mesh once every picture answered, with those
+    /// that decoded.
+    fn dress(&mut self, hash: [u8; 32]) {
+        let Some(File::Glb { decoding, .. }) = self.files.get_mut(&hash) else {
+            return;
+        };
+        if decoding.as_ref().is_none_or(|decoding| decoding.left > 0) {
+            return;
+        }
+        let Some(decoding) = decoding.take() else {
+            return;
+        };
+        let Decoding {
+            mut mesh, images, ..
+        } = *decoding;
+        let mut place = Vec::with_capacity(images.len());
+        for image in images {
+            place.push(image.map(|image| {
+                mesh.images.push(image);
+                mesh.images.len() - 1
+            }));
+        }
+        for run in &mut mesh.runs {
+            run.image = run
+                .image
+                .and_then(|image| place.get(image).copied().flatten());
+        }
+        let id = model_of_file(hash);
+        if !self.meshed.contains(&id) {
+            self.meshed.push(id);
+        }
+        self.changes.push(ModelChange::Textured(id, mesh));
+    }
+
+    /// Whether a model of a file is drawn as its box: `Some(true)` while it
+    /// is on its way, `Some(false)` refused, `None` once its mesh is
+    /// announced.
+    fn waiting(&self, hash: [u8; 32]) -> Option<bool> {
+        match self.files.get(&hash) {
+            Some(File::Vox(_) | File::Glb { decoding: None, .. }) => None,
+            Some(File::Refused(_)) => Some(false),
+            Some(File::Asked | File::Glb { .. }) | None => Some(true),
+        }
+    }
+
+    /// A model of a file's size as a hand places it, in blocks: a voxel of
+    /// a model of voxels is [`VOXEL`], a 3D model's own metre two blocks.
+    /// `None` while it is on its way.
+    pub fn size_of(&self, shape: Shape) -> Option<Result<[f64; 3], ModelRefusal>> {
+        let (Shape::Vox(hash) | Shape::Glb(hash)) = shape else {
+            return None;
+        };
+        match self.files.get(&hash)? {
+            File::Asked => None,
+            File::Vox(grid) => Some(Ok(grid.size.map(|n| f64::from(n) * VOXEL))),
+            File::Glb { size, .. } => Some(Ok(*size)),
+            File::Refused(why) => Some(Err(*why)),
+        }
     }
 
     /// What a body standing at `foot` in the world has under and over it of
@@ -1204,12 +1368,14 @@ impl Parts {
         feet: &[DVec3],
     ) -> Option<Gap> {
         let boxed = part::gap_along(inward, foot, up, feet, STEP_M)?;
+        // A 3D model is met as its box: what a body meets inside one is
+        // docs/questions/what-a-body-collides-with-inside-a-glb-shell.md.
         let Shape::Vox(hash) = part.shape else {
             return Some(boxed);
         };
-        match self.grids.get(&hash) {
-            Some(grid) => model_gap(grid, inward, foot, up, feet, STEP_M),
-            None => Some(boxed),
+        match self.files.get(&hash) {
+            Some(File::Vox(grid)) => model_gap(grid, inward, foot, up, feet, STEP_M),
+            _ => Some(boxed),
         }
     }
 }
@@ -1260,7 +1426,7 @@ pub fn is_lamp(part: &Part) -> bool {
         Shape::Landmark(_) => true,
         // A portal with no rim has nothing to shine.
         Shape::Portal(portal) => portal.rim > 0,
-        Shape::Vox(_) | Shape::Image(_) | Shape::Sound(_) => false,
+        Shape::Vox(_) | Shape::Glb(_) | Shape::Image(_) | Shape::Sound(_) => false,
     }
 }
 
@@ -1282,7 +1448,7 @@ fn model_id(shape: Shape, paint: u8) -> Option<ModelId> {
         Shape::Landmark(_) => 1,
         Shape::Portal(Portal { rim: 0, .. }) => return None,
         Shape::Portal(portal) => RINGS | u64::from(portal.rim),
-        Shape::Vox(hash) => return Some(model_of_file(hash)),
+        Shape::Vox(hash) | Shape::Glb(hash) => return Some(model_of_file(hash)),
         Shape::Image(_) | Shape::Sound(_) => return None,
     };
     debug_assert!(shape < SHAPES >> 8);
@@ -1838,7 +2004,7 @@ mod tests {
         };
         parts.place(&generator, seat, part);
         parts.place(&generator, seat, part);
-        assert_eq!(parts.wanted(), vec![hash]);
+        assert_eq!(parts.wanted(), vec![Shape::Vox(hash)]);
         assert!(parts.wanted().is_empty());
         // Before the file comes, the place it will fill is drawn: a glass
         // box and the mark turning over it, one mesh each.
@@ -1852,8 +2018,8 @@ mod tests {
         assert!(near(boxed.floor_m, 14.0 * BLOCK_M), "{boxed:?}");
 
         parts.drain_changes();
-        parts.model_arrived(hash, model);
-        assert_eq!(parts.size_of(hash), Some([4, 1, 4]));
+        parts.vox_arrived(hash, model);
+        assert_eq!(parts.size_of(Shape::Vox(hash)), Some(Ok([0.5, 0.125, 0.5])));
         // Its mesh; the glass box and the mark of its loading were
         // announced before.
         let changes = parts.drain_changes();

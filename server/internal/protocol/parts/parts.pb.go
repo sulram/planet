@@ -152,6 +152,7 @@ type Shape struct {
 	//	*Shape_Landmark
 	//	*Shape_Portal
 	//	*Shape_Clip
+	//	*Shape_Glb
 	Shape         isShape_Shape `protobuf_oneof:"shape"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -248,6 +249,15 @@ func (x *Shape) GetClip() *Clip {
 	return nil
 }
 
+func (x *Shape) GetGlb() []byte {
+	if x != nil {
+		if x, ok := x.Shape.(*Shape_Glb); ok {
+			return x.Glb
+		}
+	}
+	return nil
+}
+
 type isShape_Shape interface {
 	isShape_Shape()
 }
@@ -278,6 +288,12 @@ type Shape_Clip struct {
 	Clip *Clip `protobuf:"bytes,6,opt,name=clip,proto3,oneof"`
 }
 
+type Shape_Glb struct {
+	// A 3D model from a `.glb` file: the SHA-256 of its content, 32 bytes,
+	// the file named `asset://<hex>.glb`.
+	Glb []byte `protobuf:"bytes,7,opt,name=glb,proto3,oneof"`
+}
+
 func (*Shape_Cube) isShape_Shape() {}
 
 func (*Shape_Vox) isShape_Shape() {}
@@ -289,6 +305,8 @@ func (*Shape_Landmark) isShape_Shape() {}
 func (*Shape_Portal) isShape_Shape() {}
 
 func (*Shape_Clip) isShape_Shape() {}
+
+func (*Shape_Glb) isShape_Shape() {}
 
 // A sound: a file played where the part stands, looping, heard within the
 // part's reach, nothing drawn of it but its gizmo when picked. The SHA-256
@@ -1524,14 +1542,15 @@ var File_planet_parts_v1_parts_proto protoreflect.FileDescriptor
 
 const file_planet_parts_v1_parts_proto_rawDesc = "" +
 	"\n" +
-	"\x1bplanet/parts/v1/parts.proto\x12\x0fplanet.parts.v1\x1a\x1bplanet/cells/v1/cells.proto\"\x9a\x02\n" +
+	"\x1bplanet/parts/v1/parts.proto\x12\x0fplanet.parts.v1\x1a\x1bplanet/cells/v1/cells.proto\"\xae\x02\n" +
 	"\x05Shape\x12+\n" +
 	"\x04cube\x18\x01 \x01(\v2\x15.planet.parts.v1.CubeH\x00R\x04cube\x12\x12\n" +
 	"\x03vox\x18\x02 \x01(\fH\x00R\x03vox\x12.\n" +
 	"\x05image\x18\x03 \x01(\v2\x16.planet.parts.v1.MediaH\x00R\x05image\x127\n" +
 	"\blandmark\x18\x04 \x01(\v2\x19.planet.parts.v1.LandmarkH\x00R\blandmark\x121\n" +
 	"\x06portal\x18\x05 \x01(\v2\x17.planet.parts.v1.PortalH\x00R\x06portal\x12+\n" +
-	"\x04clip\x18\x06 \x01(\v2\x15.planet.parts.v1.ClipH\x00R\x04clipB\a\n" +
+	"\x04clip\x18\x06 \x01(\v2\x15.planet.parts.v1.ClipH\x00R\x04clip\x12\x12\n" +
+	"\x03glb\x18\a \x01(\fH\x00R\x03glbB\a\n" +
 	"\x05shape\"a\n" +
 	"\x04Clip\x12\x12\n" +
 	"\x04file\x18\x01 \x01(\fR\x04file\x12-\n" +
@@ -1701,6 +1720,7 @@ func file_planet_parts_v1_parts_proto_init() {
 		(*Shape_Landmark)(nil),
 		(*Shape_Portal)(nil),
 		(*Shape_Clip)(nil),
+		(*Shape_Glb)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

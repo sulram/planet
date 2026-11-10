@@ -25,6 +25,9 @@ message Shape {
     Landmark landmark = 4;
     Portal portal = 5;
     Clip clip = 6;
+    // A 3D model from a `.glb` file: the SHA-256 of its content, 32 bytes,
+    // the file named `asset://<hex>.glb`.
+    bytes glb = 7;
   }
 }
 

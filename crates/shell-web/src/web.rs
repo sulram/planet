@@ -14,6 +14,17 @@ fn start() {
     let _ = console_log::init_with_level(log::Level::Info);
 }
 
+/// Weighs a `.glb` against what a world draws of one 3D model, before its
+/// bytes leave for the world: the code of why it is refused (`broken`,
+/// `triangles`, `texels`, `materials`, `vertices`), or empty within the
+/// budget. The client checks the same when a file arrives.
+#[wasm_bindgen]
+pub fn weigh_glb(bytes: &[u8]) -> String {
+    client::model3d::weigh(bytes)
+        .err()
+        .map_or_else(String::new, |why| why.code().to_owned())
+}
+
 /// The engine on one canvas. It owns its animation loop and its input
 /// listeners; dropping it (`free()` in JS) stops both.
 #[wasm_bindgen]
@@ -248,8 +259,9 @@ impl Drop for Engine {
 }
 
 /// The browser side of the asset seam: one `fetch` per request, answered
-/// whenever it lands, decoded by the browser when pixels were asked for. A
-/// dropped engine simply never hears the answer.
+/// whenever it lands, decoded by the browser when pixels were asked for; a
+/// picture inside a file the client holds is decoded with nothing fetched.
+/// A dropped engine simply never hears the answer.
 fn fetch_assets(state: &Rc<RefCell<State>>) {
     let requests = state.borrow_mut().client.drain_asset_requests();
     for request in requests {
@@ -265,6 +277,12 @@ fn fetch_assets(state: &Rc<RefCell<State>>) {
                 }
                 Form::Picture { max_side } => {
                     let image = decode(&url, max_side).await;
+                    if let Some(state) = state.upgrade() {
+                        state.borrow_mut().client.picture_loaded(request.id, image);
+                    }
+                }
+                Form::Embedded { bytes, max_side } => {
+                    let image = decode_bytes(&url, &bytes, max_side).await;
                     if let Some(state) = state.upgrade() {
                         state.borrow_mut().client.picture_loaded(request.id, image);
                     }
@@ -308,9 +326,33 @@ async fn fetch(url: &str) -> Result<Vec<u8>, String> {
     Ok(js_sys::Uint8Array::new(&buffer).to_vec())
 }
 
+/// A picture fetched and decoded by the browser.
+async fn decode(url: &str, max_side: u32) -> Result<scene::Image, String> {
+    let describe = |error: JsValue| format!("{url}: {error:?}");
+    let response = respond(url).await?;
+    let blob = wasm_bindgen_futures::JsFuture::from(response.blob().map_err(describe)?)
+        .await
+        .map_err(describe)?
+        .unchecked_into();
+    decode_blob(url, &blob, max_side).await
+}
+
+/// A picture the client holds the bytes of, from the file at `url`,
+/// decoded by the browser.
+async fn decode_bytes(url: &str, bytes: &[u8], max_side: u32) -> Result<scene::Image, String> {
+    let describe = |error: JsValue| format!("{url}: {error:?}");
+    let parts = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes));
+    let blob = web_sys::Blob::new_with_u8_array_sequence(&parts).map_err(describe)?;
+    decode_blob(url, &blob, max_side).await
+}
+
 /// A picture as the browser decodes it, off the frame's thread, no wider
 /// than `max_side` on a side: RGBA, sRGB, straight alpha, top row first.
-async fn decode(url: &str, max_side: u32) -> Result<scene::Image, String> {
+async fn decode_blob(
+    url: &str,
+    blob: &web_sys::Blob,
+    max_side: u32,
+) -> Result<scene::Image, String> {
     use wasm_bindgen_futures::JsFuture;
     use web_sys::{
         ImageBitmap, ImageBitmapOptions, OffscreenCanvas, OffscreenCanvasRenderingContext2d,
@@ -318,16 +360,11 @@ async fn decode(url: &str, max_side: u32) -> Result<scene::Image, String> {
     };
     let describe = |error: JsValue| format!("{url}: {error:?}");
     let window = web_sys::window().ok_or("no window")?;
-    let response = respond(url).await?;
-    let blob: web_sys::Blob = JsFuture::from(response.blob().map_err(describe)?)
-        .await
-        .map_err(describe)?
-        .unchecked_into();
     let options = ImageBitmapOptions::new();
     options.set_premultiply_alpha(PremultiplyAlpha::None);
     let bitmap: ImageBitmap = JsFuture::from(
         window
-            .create_image_bitmap_with_blob_and_image_bitmap_options(&blob, &options)
+            .create_image_bitmap_with_blob_and_image_bitmap_options(blob, &options)
             .map_err(describe)?,
     )
     .await

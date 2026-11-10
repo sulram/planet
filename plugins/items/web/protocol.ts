@@ -8,8 +8,8 @@
  */
 
 /** What the menu offers to place. A kind another plugin's session adds enters `kinds.ts` under its own name. */
-export type Item = 'cube' | 'model' | 'picture' | 'video' | 'sound' | 'landmark' | 'portal';
-export const items = ['cube', 'model', 'picture', 'video', 'sound', 'landmark', 'portal'] as const satisfies readonly Item[];
+export type Item = 'cube' | 'model' | 'glb' | 'picture' | 'video' | 'sound' | 'landmark' | 'portal';
+export const items = ['cube', 'model', 'glb', 'picture', 'video', 'sound', 'landmark', 'portal'] as const satisfies readonly Item[];
 
 /** How what is placed takes the light: lit, see-through, or shining and lighting what is near. */
 export type Finish = 'matte' | 'glass' | 'light';
@@ -19,9 +19,21 @@ export const finishes = ['matte', 'glass', 'light'] as const satisfies readonly 
 export type Edge = 'none' | 'black' | 'white';
 export const edges = ['none', 'black', 'white'] as const satisfies readonly Edge[];
 
-/** Why an item was not handed over or a part not placed. */
-export type Refusal = 'level' | 'pose' | 'gone' | 'unread' | 'name' | 'nowhere';
-const refusals = ['level', 'pose', 'gone', 'unread', 'name', 'nowhere'] as const satisfies readonly Refusal[];
+/** Why an item was not handed over or a part not placed: the last five, why the model in hand is not drawn. */
+export type Refusal = 'level' | 'pose' | 'gone' | 'unread' | 'name' | 'nowhere' | 'broken' | 'triangles' | 'texels' | 'materials' | 'vertices';
+const refusals = [
+	'level',
+	'pose',
+	'gone',
+	'unread',
+	'name',
+	'nowhere',
+	'broken',
+	'triangles',
+	'texels',
+	'materials',
+	'vertices'
+] as const satisfies readonly Refusal[];
 
 /** What a drag of a handle does to the part picked. */
 export type Mode = 'move' | 'rotate' | 'scale';

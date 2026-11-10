@@ -12,7 +12,7 @@
 //! the system sees it.
 
 use glam::{DAffine3, DQuat, DVec3};
-use part::{Part, PartId, Pose as PartPose};
+use part::{Part, PartId, Pose as PartPose, Shape};
 use protocol::Body;
 use serde::Serialize;
 use serde_json::Value;
@@ -26,6 +26,7 @@ use crate::collision;
 use crate::controller::Controller;
 use crate::history::{History, Owner};
 use crate::input::{Chord, Input, Key, KeyAsk};
+use crate::model3d::ModelRefusal;
 use crate::parts::{Landmarked, Mark, PartRefusal, Parts};
 use crate::place::Pose;
 use crate::seam::{Event, Level, PluginOn};
@@ -658,15 +659,16 @@ impl Host<'_> {
     }
 
     /// Asks for a model's file, once, so a hand knows its size before it
-    /// places it. What arrives is kept and drawn for every part that names
-    /// it.
-    pub fn want_model(&mut self, hash: [u8; 32]) {
-        self.lent.parts.want(hash);
+    /// places it: a model of voxels or a 3D model. What arrives is kept and
+    /// drawn for every part that names it.
+    pub fn want_model(&mut self, shape: Shape) {
+        self.lent.parts.want(shape);
     }
 
-    /// How many voxels a model has along each axis, once its file arrived.
-    pub fn model_size(&self, hash: [u8; 32]) -> Option<[u32; 3]> {
-        self.lent.parts.size_of(hash)
+    /// A model's size as a hand places it, in blocks, once its file
+    /// arrived, or why it is not drawn. `None` while it is on its way.
+    pub fn model_size(&self, shape: Shape) -> Option<Result<[f64; 3], ModelRefusal>> {
+        self.lent.parts.size_of(shape)
     }
 
     /// Removes a part by its name.

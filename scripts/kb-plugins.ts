@@ -176,6 +176,23 @@ function planet(root: string): Problem[] {
 		}
 	}
 
+	/* ------------------ a 3D model's budget is the same number on both sides */
+
+	// The engine weighs a 3D model and the panel's words say the budget it
+	// was weighed against: one number each, held to each other here.
+	{
+		const rust = read('crates/client/src/model3d.rs');
+		const web = read('plugins/items/web/budget.ts');
+		// A Rust literal may group its digits and multiply two.
+		const value = (literal: string) => literal.replaceAll('_', '').split(' * ').reduce((product, n) => product * Number(n), 1);
+		for (const name of ['MAX_TRIANGLES', 'MAX_TEXELS', 'MAX_MATERIALS', 'MAX_VERTICES']) {
+			const inRust = rust.match(new RegExp(`^pub const ${name}: u\\d+ = ([\\d_ *]+);`, 'm'))?.[1];
+			const inWeb = web.match(new RegExp(`^export const ${name} = (\\d+);`, 'm'))?.[1];
+			if (!inRust || !inWeb) problem(name, 'not found in both crates/client/src/model3d.rs and plugins/items/web/budget.ts');
+			else if (value(inRust) !== Number(inWeb)) problem(name, `${inRust} in crates/client/src/model3d.rs, ${inWeb} in plugins/items/web/budget.ts`);
+		}
+	}
+
 	/* ------------------------------------------------------------ no em dash */
 
 	for (const file of files) {

@@ -25,6 +25,8 @@ export interface Engine {
 export interface EngineModule {
 	/** Rejects when the browser cannot give the engine a GPU surface. */
 	create(canvas: HTMLCanvasElement, onevent: (event: EngineEvent | PluginEvent) => void): Promise<Engine>;
+	/** Why a 3D model's file is over what a world draws of one, or `''` within it. */
+	weigh(bytes: Uint8Array): string;
 }
 
 /** The shape `wasm-bindgen --target web` emits for `shell-web`. */
@@ -39,6 +41,7 @@ interface RawEngine {
 interface RawModule {
 	default(): Promise<unknown>;
 	Engine: { create(canvas: HTMLCanvasElement, onEvent: (json: string) => void): Promise<RawEngine> };
+	weigh_glb(bytes: Uint8Array): string;
 }
 
 // A glob resolves to nothing when the package was never built, so the app
@@ -66,7 +69,8 @@ async function load(): Promise<EngineModule | null> {
 				disconnect: () => engine.disconnect(),
 				free: () => engine.free()
 			};
-		}
+		},
+		weigh: (bytes) => raw.weigh_glb(bytes)
 	};
 }
 

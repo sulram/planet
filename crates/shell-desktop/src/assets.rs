@@ -32,20 +32,32 @@ pub fn locate(reference: &str) -> Option<PathBuf> {
 }
 
 /// Answers every pending request from disk. Reads are small and local, so
-/// they happen inline.
-pub fn serve(client: &mut Client) {
-    for request in client.drain_asset_requests() {
-        let path = locate(&request.path);
-        let bytes = match path {
-            Some(path) => std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display())),
-            None => Err(format!("{}: out of the desktop's reach", request.path)),
-        };
+/// they happen inline. Whether there was any: an answer may ask for more,
+/// a 3D model for the pictures it holds.
+pub fn serve(client: &mut Client) -> bool {
+    let requests = client.drain_asset_requests();
+    let any = !requests.is_empty();
+    for request in requests {
         match request.form {
-            Form::Bytes => client.asset_loaded(request.id, bytes),
-            Form::Picture { max_side } => {
-                client.picture_loaded(request.id, bytes.and_then(|bytes| decode(&bytes, max_side)))
+            Form::Bytes => client.asset_loaded(request.id, read(&request.path)),
+            Form::Picture { max_side } => client.picture_loaded(
+                request.id,
+                read(&request.path).and_then(|bytes| decode(&bytes, max_side)),
+            ),
+            // A picture inside a file the client holds: nothing to read.
+            Form::Embedded { bytes, max_side } => {
+                client.picture_loaded(request.id, decode(&bytes, max_side))
             }
         }
+    }
+    any
+}
+
+/// The bytes of the file a reference names.
+fn read(reference: &str) -> Result<Vec<u8>, String> {
+    match locate(reference) {
+        Some(path) => std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display())),
+        None => Err(format!("{reference}: out of the desktop's reach")),
     }
 }
 

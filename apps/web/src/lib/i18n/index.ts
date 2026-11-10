@@ -7,7 +7,7 @@
  * On the server (actions, load, hooks) use `translate(locals.locale, key)`.
  */
 import { page } from '$app/state';
-import { fill, formatDate, translate, type Locale, type MessageKey } from './config';
+import { fill, formatDate, formatNumber, translate, type Locale, type MessageKey } from './config';
 
 export * from './config';
 
@@ -29,4 +29,9 @@ export function words<M extends Record<string, string>>(catalogs: Record<Locale,
 /** Component date formatter, in the request locale. */
 export function d(iso: string): string {
 	return formatDate(page.data.locale, iso);
+}
+
+/** Component count formatter, in the request locale. */
+export function n(value: number): string {
+	return formatNumber(page.data.locale, value);
 }

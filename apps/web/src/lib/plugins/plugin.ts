@@ -27,6 +27,13 @@ export interface Seam {
 	 * `Refused` with the world's code: `kind`, `size`, `level`, `key`.
 	 */
 	upload(file: Blob): Promise<string>;
+	/**
+	 * Weighs a 3D model (`.glb`) against what a world draws of one, before
+	 * it is sent: the engine reads it. Throws a `Refused` with why it is
+	 * not drawn: `broken`, `triangles`, `texels`, `materials` or
+	 * `vertices`.
+	 */
+	weigh(file: Blob): Promise<void>;
 }
 
 /** What a plugin's layer is mounted with, while its plugin is on in this world. */

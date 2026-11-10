@@ -1,5 +1,5 @@
 // Package files is what a world keeps of heavy files (DECISIONS 89): a
-// model, an image, a video, each named by the hash of its content and never
+// voxel model, a 3D model, an image, a video, each named by the hash of its content and never
 // changed.
 // A session that may build sends one; the world reads its kind off its bytes,
 // names it and keeps it. Alone, the files sit in the world folder and the
@@ -36,6 +36,10 @@ func Kind(head []byte) (string, bool) {
 	switch {
 	case bytes.HasPrefix(head, []byte("VOX ")):
 		return "vox", true
+	// A binary glTF opens with `glTF` and its version, a little endian 2:
+	// version 1 is a format of its own no engine reads.
+	case bytes.HasPrefix(head, []byte("glTF\x02\x00\x00\x00")):
+		return "glb", true
 	case bytes.HasPrefix(head, []byte("\x89PNG\r\n\x1a\n")):
 		return "png", true
 	case bytes.HasPrefix(head, []byte{0xff, 0xd8, 0xff}):

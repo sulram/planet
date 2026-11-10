@@ -3,9 +3,9 @@
 //! gizmo that moves, turns and stretches a part picked (DECISIONS 111).
 //! Building is the cells; this is everything placed that is no cell.
 //!
-//! An item is what the menu offers: a cube in a paint, a model from a
-//! `.vox` file, named by its asset, and a picture, taken with the record of
-//! its file. Each is a shape of part, and each enters here as a kind with the words it
+//! An item is what the menu offers: a cube in a paint, a model of voxels
+//! from a `.vox` file or a 3D model from a `.glb`, each named by its asset,
+//! and a picture, taken with the record of its file. Each is a shape of part, and each enters here as a kind with the words it
 //! needs. The parts are the core's: this plugin asks its host to place and
 //! set them and holds no part.
 //!
@@ -13,7 +13,8 @@
 //! `set`, `remove`, `paint`, `finish`, `edge` and `state`; the events
 //! `hand`, `picked` and `refused`. `take` with a model carries its file:
 //! `{"type":"items.take","item":"model","asset":"asset://<sha256>.vox"}`,
-//! and the file is asked for at once, so its size is known when it is placed.
+//! or `"item":"glb"` with a `.glb`, and the file is asked for at once, so
+//! its size is known when it is placed.
 
 mod cross;
 mod gizmo;
@@ -40,9 +41,13 @@ pub use items_world::{NAME, VERSION};
 pub enum Item {
     /// A cube of a metre, in the paint in hand.
     Cube,
-    /// A model from a `.vox` file, the one taken in hand, a voxel an eighth
-    /// of a cell (`client::VOXEL`).
+    /// A model of voxels from a `.vox` file, the one taken in hand, a voxel
+    /// an eighth of a cell (`client::VOXEL`).
     Model,
+    /// A 3D model from a `.glb` file, the one taken in hand, in its own
+    /// metres, its front facing the eye as a picture's. Drawn in its own
+    /// colours whatever the paint in hand; a body meets its box.
+    Glb,
     /// A picture a metre tall in its own aspect, facing the eye, a pane
     /// nobody collides with: a screen in a light finish, a print in any
     /// other. Taken with its `media`, what the owner's client made of the
@@ -84,12 +89,35 @@ pub enum Refusal {
     Gone,
     /// The model in hand is still on its way: its size is not known yet.
     Unread,
+    /// The model in hand is no model this engine reads.
+    Broken,
+    /// The 3D model in hand draws more triangles than a model may
+    /// (`client::model3d::MAX_TRIANGLES`).
+    Triangles,
+    /// Its pictures hold more texels than a model's may.
+    Texels,
+    /// It draws with more materials than a model may.
+    Materials,
+    /// Its meshes hold more vertices than a model's may.
+    Vertices,
     /// The name given is no name: empty, over sixty four bytes, or with a
     /// control character in it; or the part picked bears no name.
     Name,
     /// The destination given is no landmark this client holds, or the part
     /// picked is no portal.
     Nowhere,
+}
+
+impl From<client::ModelRefusal> for Refusal {
+    fn from(refusal: client::ModelRefusal) -> Refusal {
+        match refusal {
+            client::ModelRefusal::Broken => Refusal::Broken,
+            client::ModelRefusal::Triangles => Refusal::Triangles,
+            client::ModelRefusal::Texels => Refusal::Texels,
+            client::ModelRefusal::Materials => Refusal::Materials,
+            client::ModelRefusal::Vertices => Refusal::Vertices,
+        }
+    }
 }
 
 impl From<client::PartRefusal> for Refusal {
@@ -105,7 +133,8 @@ impl From<client::PartRefusal> for Refusal {
 /// `items.edit`: open the menu, the pointer picking parts, or close it.
 pub const EDIT: &str = "edit";
 /// `items.take`: take an item in hand, or `null` to put it down. With
-/// `asset`, the file of the model taken in hand, `asset://<sha256>.vox`. A
+/// `asset`, the file of the model taken in hand, `asset://<sha256>.vox` or
+/// `.glb`, of the item's kind. A
 /// picture rides with its `media`, or with none while its file is still to
 /// pick.
 pub const TAKE: &str = "take";
@@ -426,9 +455,9 @@ pub struct Items {
     picture: Option<Media>,
     /// The sound placed next, once its file is given.
     clip: Option<Clip>,
-    /// The model in hand, by the hash of its file: what the model item
-    /// places. None until a file is taken.
-    model: Option<[u8; 32]>,
+    /// The model in hand, by its file: what the model or the 3D model item
+    /// places, the one of its kind. None until a file is taken.
+    model: Option<Shape>,
     /// Whether the model in hand was still on its way, as last said.
     loading: bool,
     /// The name the next landmark bears. None until one is given.
@@ -532,6 +561,8 @@ impl Items {
             }
             .byte(),
             Shape::Cube | Shape::Vox(_) | Shape::Image(_) | Shape::Sound(_) => self.made_of(),
+            // A 3D model's colours are its file's: its paint is nobody's.
+            Shape::Glb(_) => 0,
         }
     }
 
@@ -576,14 +607,17 @@ impl Items {
     /// the file is asked for at once, so its size is known by the click.
     fn take_with(&mut self, item: Option<Item>, asset: Option<String>, host: &mut Host<'_>) {
         if let Some(name) = asset {
-            let Some(Shape::Vox(hash)) = Shape::of_asset(&name) else {
-                return host.reject(format!("`{name}` is no model's asset"));
+            // A model's file, of the kind of the item taken.
+            let Some(shape) = Shape::of_asset(&name).filter(|&shape| {
+                matches!(shape, Shape::Vox(_) | Shape::Glb(_)) && Some(item_of(shape)) == item
+            }) else {
+                return host.reject(format!("`{name}` is no file of a {item:?}"));
             };
             if !host.may_change() {
                 return refuse(host, Refusal::Level);
             }
-            self.model = Some(hash);
-            host.want_model(hash);
+            self.model = Some(shape);
+            host.want_model(shape);
         }
         self.take(item, host);
     }
@@ -720,7 +754,11 @@ impl Items {
                 paint: self.paint,
                 finish: self.finish,
                 edge: self.edge,
-                model: self.model.and_then(|hash| Shape::Vox(hash).asset()),
+                // The model in hand is said while its kind is the item's.
+                model: self
+                    .model
+                    .filter(|&shape| Some(item_of(shape)) == self.item)
+                    .and_then(|shape| shape.asset()),
                 loading: self.loading,
                 name: self.name.map(|name| name.to_string()),
                 to: self.to.map(|to| to.0),
@@ -798,7 +836,7 @@ impl Items {
     /// Whether the model in hand is still on its way.
     fn is_loading(&self, host: &Host<'_>) -> bool {
         self.model
-            .is_some_and(|hash| host.model_size(hash).is_none())
+            .is_some_and(|shape| host.model_size(shape).is_none())
     }
 
     fn say_picked(&self, host: &mut Host<'_>) {
@@ -947,10 +985,11 @@ fn mode_of(mode: Mode, gizmo: &Gizmo) -> Mode {
     }
 }
 
-fn item_of(shape: Shape) -> Item {
+pub(crate) fn item_of(shape: Shape) -> Item {
     match shape {
         Shape::Cube => Item::Cube,
         Shape::Vox(_) => Item::Model,
+        Shape::Glb(_) => Item::Glb,
         Shape::Image(media) if media.kind == ImageKind::Mp4 => Item::Video,
         Shape::Image(_) => Item::Picture,
         Shape::Landmark(_) => Item::Landmark,
@@ -1151,8 +1190,10 @@ impl Plugin for Items {
         if loading != self.loading {
             self.loading = loading;
             self.say_hand(host);
-            self.place_when_ready(host);
         }
+        // A place that waits on a file is tried every turn: a file read from
+        // disk may be in before any turn saw it on its way.
+        self.place_when_ready(host);
         if turn.inspected && host.may_change() {
             let (from, toward) = turn.eye.sight();
             if let Some((id, _)) = host.pick(from, toward) {
@@ -1368,6 +1409,125 @@ mod tests {
         click(&mut fresh, [0.5, 0.7]);
         assert!(events(&mut fresh).is_empty());
         assert_eq!(fresh.parts().all().count(), 0);
+    }
+
+    /// A GLB of one triangle standing in its own `xy` plane, 2 m wide and
+    /// 1 m tall, its front toward `+z`; with a picture of `side` texels
+    /// square, its header alone, when one is given.
+    fn standing_glb(side: Option<u32>) -> Vec<u8> {
+        let mut bin = Vec::new();
+        for value in [-1.0f32, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0] {
+            bin.extend(value.to_le_bytes());
+        }
+        let material = match side {
+            Some(side) => {
+                bin.extend([0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+                bin.extend(13u32.to_be_bytes());
+                bin.extend(b"IHDR");
+                bin.extend(side.to_be_bytes());
+                bin.extend(side.to_be_bytes());
+                bin.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+                r#""materials": [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}],
+                "textures": [{"source": 0}],
+                "images": [{"bufferView": 1, "mimeType": "image/png"}],"#
+            }
+            None => "",
+        };
+        let picture = bin.len() - 36;
+        let json = format!(
+            r#"{{"asset": {{"version": "2.0"}},
+            "scenes": [{{"nodes": [0]}}],
+            "nodes": [{{"mesh": 0}}],
+            "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0}}{}}}]}}],
+            {material}
+            "accessors": [{{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3",
+                "min": [-1, 0, 0], "max": [1, 1, 0]}}],
+            "bufferViews": [{{"buffer": 0, "byteLength": 36}},
+                {{"buffer": 0, "byteOffset": 36, "byteLength": {picture}}}],
+            "buffers": [{{"byteLength": {}}}]}}"#,
+            if side.is_some() {
+                r#", "material": 0"#
+            } else {
+                ""
+            },
+            bin.len(),
+        );
+        let mut json = json.into_bytes();
+        json.resize(json.len().next_multiple_of(4), b' ');
+        bin.resize(bin.len().next_multiple_of(4), 0);
+        let mut out = b"glTF".to_vec();
+        out.extend(2u32.to_le_bytes());
+        out.extend(((12 + 8 + json.len() + 8 + bin.len()) as u32).to_le_bytes());
+        out.extend((json.len() as u32).to_le_bytes());
+        out.extend(b"JSON");
+        out.extend(json);
+        out.extend((bin.len() as u32).to_le_bytes());
+        out.extend(b"BIN\0");
+        out.extend(bin);
+        out
+    }
+
+    #[test]
+    fn a_3d_model_stands_facing_the_eye_and_one_over_the_budget_is_refused() {
+        let mut client = client();
+        let asset = format!("asset://{}.glb", "cd".repeat(32));
+        // A 3D model's file is no voxel model's.
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"model","asset":"{asset}"}}"#
+        ));
+        assert!(
+            client
+                .drain_events()
+                .iter()
+                .any(|event| matches!(event, Event::Rejected { .. }))
+        );
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"glb","asset":"{asset}"}}"#
+        ));
+        let hand = events(&mut client);
+        assert_eq!(hand.last().unwrap()["model"], asset);
+        let asked = client.drain_asset_requests();
+        let asked = asked.iter().find(|request| request.path == asset).unwrap();
+        client.asset_loaded(asked.id, Ok(standing_glb(None)));
+        // With no picture to wait for, its mesh is announced at once.
+        assert!(
+            client
+                .drain_model_changes()
+                .iter()
+                .any(|change| matches!(change, scene::ModelChange::Textured(..)))
+        );
+        click(&mut client, [0.5, 0.7]);
+        let placed: Vec<Part> = client.parts().all().map(|(_, _, part)| *part).collect();
+        assert_eq!(placed.len(), 1);
+        assert!(matches!(placed[0].shape, Shape::Glb(_)));
+        // In its own metres, two blocks each; a sheet as thin as a part is.
+        assert_eq!(placed[0].pose.scale, [4.0, part::MIN_SCALE, 2.0]);
+        assert_eq!(placed[0].paint, 0, "its colours are its file's");
+        let frame = client.settled_frame();
+        let model = frame
+            .models
+            .iter()
+            .find(|model| model.pass == scene::ModelPass::Solid)
+            .expect("drawn solid");
+        let to_eye = frame.camera.position - model.transform.translation;
+        assert!(
+            -model.transform.matrix3.y_axis.dot(to_eye) > 0.0,
+            "its front faces the eye"
+        );
+
+        // A picture of 4096 texels square is over the budget: the click
+        // says why, and places nothing.
+        let heavy = format!("asset://{}.glb", "ef".repeat(32));
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"glb","asset":"{heavy}"}}"#
+        ));
+        let asked = client.drain_asset_requests();
+        let asked = asked.iter().find(|request| request.path == heavy).unwrap();
+        client.asset_loaded(asked.id, Ok(standing_glb(Some(4096))));
+        events(&mut client);
+        click(&mut client, [0.5, 0.7]);
+        assert_eq!(events(&mut client).last().unwrap()["reason"], "texels");
+        assert_eq!(client.parts().all().count(), 1);
     }
 
     #[test]
@@ -1669,6 +1829,23 @@ mod tests {
                 .iter()
                 .any(|event| matches!(event, Event::Rejected { .. }))
         );
+    }
+
+    /// A model's file read from disk is in before the next turn: the place
+    /// that waited on it is not missed.
+    #[test]
+    fn a_take_ahead_of_a_model_is_placed_when_its_file_came_before_a_turn() {
+        let mut client = client();
+        let asset = format!("asset://{}.glb", "ab".repeat(32));
+        client.command_json(&format!(
+            r#"{{"type":"items.take","item":"glb","asset":"{asset}","ahead":true}}"#
+        ));
+        assert_eq!(client.parts().all().count(), 0, "the file is on its way");
+        let asked = client.drain_asset_requests();
+        let asked = asked.iter().find(|request| request.path == asset).unwrap();
+        client.asset_loaded(asked.id, Ok(standing_glb(None)));
+        client.update(1.0 / 60.0, &mut client::Input::default());
+        assert_eq!(client.parts().all().count(), 1);
     }
 
     #[test]

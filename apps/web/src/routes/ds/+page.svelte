@@ -263,7 +263,8 @@
 				<Icon name="rotate-3d" label="Rotate" />
 				<Icon name="scale-3d" label="Scale" />
 				<Icon name="rotate-ccw" label="Reset" />
-				<Icon name="package" label="Model" />
+				<Icon name="package" label="Voxels" />
+				<Icon name="pyramid" label="3D model" />
 				<Icon name="star" label="Landmark" />
 				<Icon name="circle" label="Portal" />
 				<Icon name="lock" label="Locked" />

@@ -9,13 +9,15 @@ import { Refused } from './instance';
 export type Asset = `asset://${string}`;
 
 /** The kinds the world takes, each read off the first bytes and never off a name. */
-export type Kind = 'vox' | 'png' | 'jpg' | 'webp' | 'gif' | 'mp4' | 'mp3' | 'm4a' | 'ogg';
+export type Kind = 'vox' | 'glb' | 'png' | 'jpg' | 'webp' | 'gif' | 'mp4' | 'mp3' | 'm4a' | 'ogg';
 
 /** The kind of some bytes, as the server reads it. Null for bytes of no kind the world takes. */
 export function kindOf(head: Uint8Array): Kind | null {
 	const starts = (bytes: number[], at = 0) => bytes.every((byte, i) => head[at + i] === byte);
 	const ascii = (text: string, at = 0) => starts([...text].map((c) => c.charCodeAt(0)), at);
 	if (ascii('VOX ')) return 'vox';
+	// A binary glTF opens with `glTF` and its version, a little endian 2.
+	if (ascii('glTF') && starts([2, 0, 0, 0], 4)) return 'glb';
 	if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'png';
 	if (starts([0xff, 0xd8, 0xff])) return 'jpg';
 	if (head.length >= 12 && ascii('RIFF') && ascii('WEBP', 8)) return 'webp';

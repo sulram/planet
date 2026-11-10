@@ -1,6 +1,6 @@
 //! A part: a placed thing that is no cell (DECISIONS 111). A cube first; a
-//! model, a picture, a landmark, a portal, a light are shapes of the same
-//! thing.
+//! voxel model, a 3D model, a picture, a landmark, a portal, a light are
+//! shapes of the same thing.
 //!
 //! A part knows no sphere (CLAUDE.md, How it grows). It stands in a flat
 //! frame, blocks along `x` and `y` and up `z`, the frame of the seat it is
@@ -11,8 +11,8 @@
 //!
 //! A part's own space is the unit box: `x` and `y` from `-0.5` to `0.5`,
 //! `z` from `0` to `1`, its anchor the middle of its bottom. Its pose turns
-//! and stretches that box, so a cube of scale 1 is one cell, and a model's
-//! unit is one of its own voxels.
+//! and stretches that box, so a cube of scale 1 is one cell, and a model,
+//! of voxels or of meshes, fills it whole.
 
 use glam::{DAffine3, DQuat, DVec3};
 
@@ -30,6 +30,11 @@ pub enum Shape {
     /// is nobody's. What a body meets of it is its own grid, read through
     /// the pose by whoever holds the file; here it is its box.
     Vox([u8; 32]),
+    /// A 3D model: a `.glb` file, named by the SHA-256 of its content, the
+    /// meshes its scene places filling the unit box in their own materials
+    /// and pictures (`glb`), its front toward the box's `y = -0.5` side. The
+    /// paint is nobody's. What a body meets of it is its box.
+    Glb([u8; 32]),
     /// A picture: the box's front, its `y = -0.5` side, drawn with an image
     /// and seen from both sides. Wide as the box is along `x`, tall as it is
     /// along `z`; a hand places it in the picture's own aspect.
@@ -125,10 +130,16 @@ impl core::fmt::Debug for Name {
 }
 
 impl Shape {
-    /// The model a file's asset name, `asset://<sha256>.vox`, stands for.
-    /// `None` for a name that is no model's.
+    /// The model a file's asset name stands for: `asset://<sha256>.vox` a
+    /// voxel model, `asset://<sha256>.glb` a 3D model. `None` for a name
+    /// that is no model's.
     pub fn of_asset(name: &str) -> Option<Shape> {
-        let hex = name.strip_prefix("asset://")?.strip_suffix(".vox")?;
+        let (hex, kind) = name.strip_prefix("asset://")?.split_once('.')?;
+        let model = match kind {
+            "vox" => Shape::Vox,
+            "glb" => Shape::Glb,
+            _ => return None,
+        };
         if hex.len() != 64 {
             return None;
         }
@@ -136,22 +147,22 @@ impl Shape {
         for (byte, pair) in hash.iter_mut().zip(hex.as_bytes().chunks(2)) {
             *byte = u8::from_str_radix(core::str::from_utf8(pair).ok()?, 16).ok()?;
         }
-        Some(Shape::Vox(hash))
+        Some(model(hash))
     }
 
     /// The asset name of a model's file. `None` for a shape of the core's.
     pub fn asset(self) -> Option<String> {
-        match self {
-            Shape::Vox(hash) => {
-                let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
-                Some(format!("asset://{hex}.vox"))
-            }
+        let (hash, kind) = match self {
+            Shape::Vox(hash) => (hash, "vox"),
+            Shape::Glb(hash) => (hash, "glb"),
             Shape::Cube
             | Shape::Image(_)
             | Shape::Landmark(_)
             | Shape::Sound(_)
-            | Shape::Portal(_) => None,
-        }
+            | Shape::Portal(_) => return None,
+        };
+        let hex: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+        Some(format!("asset://{hex}.{kind}"))
     }
 }
 
@@ -759,8 +770,14 @@ mod tests {
         assert_eq!(shape, Shape::Vox([0x0a; 32]));
         assert_eq!(shape.asset().as_deref(), Some(name.as_str()));
         assert_eq!(Shape::Cube.asset(), None);
+        let name = format!("asset://{}.glb", "0b".repeat(32));
+        let shape = Shape::of_asset(&name).unwrap();
+        assert_eq!(shape, Shape::Glb([0x0b; 32]));
+        assert_eq!(shape.asset().as_deref(), Some(name.as_str()));
         for wrong in [
             "asset://0a0a.vox",
+            &format!("asset://{}.gltf", "0a".repeat(32)),
+            &format!("asset://{}.vox.glb", "0a".repeat(32)),
             &format!("asset://{}.png", "0a".repeat(32)),
             &format!("{}.vox", "0a".repeat(32)),
             &format!("asset://{}.vox", "zz".repeat(32)),

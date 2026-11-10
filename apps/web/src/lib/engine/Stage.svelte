@@ -4,7 +4,7 @@
 	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Spinner, Stat, ThemeToggle } from '$lib/ds';
 	import { upload } from '$lib/files';
 	import { t } from '$lib/i18n';
-	import type { Link } from '$lib/instance';
+	import { Refused, type Link } from '$lib/instance';
 	import { keep } from '$lib/kept';
 	import { plugins, type Seam } from '$lib/plugins';
 	import type { Recipe } from '$lib/world';
@@ -17,6 +17,7 @@
 	import Settings from './Settings.svelte';
 	import {
 		isPluginEvent,
+		loadEngine,
 		NAME_CHARS,
 		type Anchor,
 		type Label,
@@ -150,11 +151,20 @@
 				},
 				release: () => view?.release(),
 				take: () => view?.take(),
-				upload: (file) => upload(file, key)
+				upload: (file) => upload(file, key),
+				weigh
 			};
 			seams.set(plugin, seam);
 		}
 		return seam;
+	}
+
+	// The engine weighs a 3D model: the budget is the one it draws by.
+	// With no engine built there is no world to send it to.
+	async function weigh(file: Blob) {
+		const engine = await loadEngine();
+		const refused = engine?.weigh(new Uint8Array(await file.arrayBuffer()));
+		if (refused) throw new Refused(refused);
 	}
 
 	function heard(event: PluginEvent) {

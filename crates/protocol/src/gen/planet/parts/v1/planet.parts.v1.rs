@@ -4,7 +4,7 @@
 /// a variant beside the cube.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Shape {
-    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4, 5, 6")]
+    #[prost(oneof="shape::Shape", tags="1, 2, 3, 4, 5, 6, 7")]
     pub shape: ::core::option::Option<shape::Shape>,
 }
 /// Nested message and enum types in `Shape`.
@@ -25,6 +25,10 @@ pub mod shape {
         Portal(super::Portal),
         #[prost(message, tag="6")]
         Clip(super::Clip),
+        /// A 3D model from a `.glb` file: the SHA-256 of its content, 32 bytes,
+        /// the file named `asset://<hex>.glb`.
+        #[prost(bytes, tag="7")]
+        Glb(::prost::alloc::vec::Vec<u8>),
     }
 }
 /// A sound: a file played where the part stands, looping, heard within the

@@ -1,6 +1,7 @@
 /**
  * A file given to items, dropped anywhere on the page or chosen in the
- * panel, becomes the item it is: a picture, or a model from a `.vox`. It is
+ * panel, becomes the item it is: a picture, a sound, a model of voxels from
+ * a `.vox` or a 3D model from a `.glb`. It is
  * sent to the world through the seam and taken in hand, so the next click
  * places it; with a picture picked in the world, a picture given takes that
  * picture's place instead. Pure of the DOM: it reads the file alone.
@@ -11,8 +12,8 @@ import type { Seam } from '$lib/plugins/plugin';
 import { isPicture, isVideo, prepareImage, type Media } from './image';
 import type { Picked } from './protocol';
 
-/** What a file is to items, by its name and type: a picture, a model, a sound, or none of them. */
-export type Given = 'picture' | 'model' | 'sound';
+/** What a file is to items, by its name and type: a picture, a model of voxels, a 3D model, a sound, or none of them. */
+export type Given = 'picture' | 'model' | 'glb' | 'sound';
 
 /** The audio kinds the world takes: what every browser plays. */
 const SOUND_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/ogg'];
@@ -21,17 +22,23 @@ const SOUND_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/ogg'];
 export type NotTaken = 'kind' | 'size' | 'level' | 'key' | 'unreachable' | 'canvas';
 const refusals: readonly NotTaken[] = ['kind', 'size', 'level', 'key', 'unreachable', 'canvas'];
 
+/** Why a 3D model was not sent: the engine's weighing, against what a world draws of one. */
+export type Unfit = 'broken' | 'triangles' | 'texels' | 'materials' | 'vertices';
+const unfits: readonly Unfit[] = ['broken', 'triangles', 'texels', 'materials', 'vertices'];
+
 /** What a file would be, by its name and type, before it is read. Null for one items takes no interest in. */
 export function givenOf(name: string, type: string): Given | null {
 	if (/\.vox$/i.test(name)) return 'model';
+	if (/\.glb$/i.test(name)) return 'glb';
 	if (isPicture({ type } as Blob) || /\.(png|jpe?g|webp|gif|mp4)$/i.test(name)) return 'picture';
 	if (SOUND_TYPES.includes(type) || /\.(mp3|m4a|ogg|oga|opus)$/i.test(name)) return 'sound';
 	return null;
 }
 
-/** What a file being dragged over the page would be, from the types a drag says before the drop: a picture, still or moving, is known by its type, a `.vox` says nothing until dropped. */
+/** What a file being dragged over the page would be, from the types a drag says before the drop: a picture, still or moving, is known by its type, a `.glb` by the type a browser may give it, a `.vox` says nothing until dropped. */
 export function draggedOf(types: readonly string[]): Given | 'any' {
 	if (types.some((type) => type.startsWith('image/') || type.startsWith('video/'))) return 'picture';
+	if (types.includes('model/gltf-binary')) return 'glb';
 	if (types.some((type) => type.startsWith('audio/'))) return 'sound';
 	return 'any';
 }
@@ -40,6 +47,12 @@ export function draggedOf(types: readonly string[]): Given | 'any' {
 export function notTaken(error: unknown): NotTaken {
 	const code = error instanceof Error ? error.message : '';
 	return refusals.find((known) => known === code) ?? 'unreachable';
+}
+
+/** Reads the refusal code of what was thrown where a model may be given: a 3D model's weighing too. */
+export function notTakenOrUnfit(error: unknown): NotTaken | Unfit {
+	const code = error instanceof Error ? error.message : '';
+	return unfits.find((known) => known === code) ?? notTaken(error);
 }
 
 /** How long an audio file plays, in milliseconds, off an audio element loaded from it; 0 when the browser cannot say. */
@@ -70,7 +83,8 @@ export interface Taken {
 /**
  * Takes a file: sends it to the world and places the item it is in front
  * of the body, as soon as it is ready, or puts it into the picture picked.
- * Throws an `Error` whose message is a `NotTaken` code.
+ * Throws an `Error` whose message is a `NotTaken` code, or an `Unfit` one
+ * for a 3D model.
  */
 export async function takeFile(seam: Seam, file: File, picked?: Picked | null): Promise<Taken> {
 	const given = givenOf(file.name, file.type);
@@ -80,6 +94,15 @@ export async function takeFile(seam: Seam, file: File, picked?: Picked | null): 
 		if (kindOf(head) !== 'vox') throw new Refused('kind');
 		const asset = await seam.upload(file);
 		seam.command('take', { item: 'model', asset, ahead: true });
+		return { given };
+	}
+	if (given === 'glb') {
+		const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+		if (kindOf(head) !== 'glb') throw new Refused('kind');
+		// Weighed before it leaves: a model over the budget is never sent.
+		await seam.weigh(file);
+		const asset = await seam.upload(file);
+		seam.command('take', { item: 'glb', asset, ahead: true });
 		return { given };
 	}
 	if (given === 'sound') {

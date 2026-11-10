@@ -2,6 +2,7 @@
 	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, RenameField, Segmented, Slider, Spinner, VectorInput, type IconName } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import type { Seam } from '$lib/plugins/plugin';
+	import { budget } from './budget';
 	import { kinds } from './kinds';
 	import { edges, finishes, modes, type Edge, type Finish, type Item, type LandmarkOne, type Mode, type NearOne, type Picked, type Refusal } from './protocol';
 	import { t } from './words';
@@ -202,7 +203,7 @@
 				</section>
 			{/if}
 			{#if refused}
-				<Alert variant="info">{t(`refused.${refused}`)}</Alert>
+				<Alert variant="info">{t(`refused.${refused}`, budget())}</Alert>
 			{/if}
 			{#if picked}
 				<section>

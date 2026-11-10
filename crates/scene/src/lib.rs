@@ -368,19 +368,57 @@ pub const MAX_JOINTS: usize = 128;
 pub struct ModelId(pub u64);
 
 /// A mesh of cubes in its own space, drawn where a part puts it: a cube is
-/// a model of one voxel, a model of many. Its units are the model's own,
-/// one a voxel of it, and the anchor is the middle of its bottom. Its
-/// vertices are a volume's, so it is lit, edged and glazed as the cells are.
+/// a model of one voxel, a model of many. Its space is the part's unit box,
+/// the anchor the middle of its bottom. Its vertices are a volume's, so it
+/// is lit, edged and glazed as the cells are.
 #[derive(Clone, Debug)]
 pub struct ModelMesh {
     pub vertices: Vec<VolumeVertex>,
     pub indices: Vec<u32>,
 }
 
+/// A corner of a mesh drawn with pictures, in its own space.
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct TexturedVertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    /// Where on its run's picture, `(0, 0)` its top left corner.
+    pub uv: [f32; 2],
+    /// `rgb`: sRGB albedo, times the picture's. `a`: alpha, times the
+    /// picture's.
+    pub color: [u8; 4],
+}
+
+/// A run of a textured mesh's indices drawn with one picture.
+#[derive(Clone, Debug)]
+pub struct TexturedRun {
+    pub indices: Range<u32>,
+    /// Index into [`TexturedMesh::images`]. `None` draws the corners'
+    /// colour alone.
+    pub image: Option<usize>,
+    /// The alpha under which a pixel is not drawn: 0 draws every one.
+    pub cutoff: f32,
+}
+
+/// A mesh drawn with pictures in its own space, as a model of cubes is
+/// placed: a 3D model, its anchor the middle of the bottom of its box. It
+/// is lit and casts as the cubes do, with no edge and no glass.
+#[derive(Clone, Debug)]
+pub struct TexturedMesh {
+    pub vertices: Vec<TexturedVertex>,
+    /// Three a triangle, wound counter clockwise seen from its front.
+    pub indices: Vec<u32>,
+    pub runs: Vec<TexturedRun>,
+    pub images: Vec<Image>,
+}
+
 /// A change to the set of model meshes a renderer holds.
 #[derive(Clone, Debug)]
 pub enum ModelChange {
     Add(ModelId, ModelMesh),
+    /// A mesh drawn with pictures, under the same ids as the cubes.
+    Textured(ModelId, TexturedMesh),
     Remove(ModelId),
 }
 

@@ -1,13 +1,14 @@
 <script lang="ts">
-	import { Icon, Spinner } from '$lib/ds';
+	import { Icon, Spinner, type IconName } from '$lib/ds';
 	import type { Seam } from '$lib/plugins/plugin';
+	import { budget } from './budget';
 	import type { Picked } from './protocol';
-	import { draggedOf, givenOf, notTaken, takeFile, type Given, type NotTaken } from './takeFile';
+	import { draggedOf, givenOf, notTakenOrUnfit, takeFile, type Given, type NotTaken, type Unfit } from './takeFile';
 	import { t } from './words';
 
 	// A file dragged anywhere over the page: an overlay over the world says
-	// what dropping it does, a picture or a model by what the drag says of
-	// it, and Esc cancels. Dropped, the file is taken as the item it is and
+	// what dropping it does, a picture, a sound or a model by what the drag
+	// says of it, and Esc cancels. Dropped, the file is taken as the item it is and
 	// the next click places it; a file items takes no interest in is said
 	// so, until Esc or a click.
 	interface Props {
@@ -17,7 +18,8 @@
 
 	let { seam, picked }: Props = $props();
 
-	type State = { over: Given | 'any' } | { sending: Given } | { refused: NotTaken } | null;
+	type State = { over: Given | 'any' } | { sending: Given } | { refused: NotTaken | Unfit } | null;
+	const icons: Record<Given | 'any', IconName> = { picture: 'image', model: 'package', glb: 'pyramid', sound: 'volume-2', any: 'image' };
 	let state = $state<State>(null);
 	/** Nested enters and leaves of a drag over the page's elements, counted. */
 	let depth = 0;
@@ -67,7 +69,7 @@
 			await takeFile(seam, file, picked);
 			state = null;
 		} catch (error) {
-			state = { refused: notTaken(error) };
+			state = { refused: notTakenOrUnfit(error) };
 		}
 	}
 
@@ -84,7 +86,7 @@
 	<div class="drop" role="status">
 		<div class="card">
 			{#if 'over' in state}
-				<Icon name={state.over === 'model' ? 'package' : 'image'} />
+				<Icon name={icons[state.over]} />
 				<p class="says">{t(`drop.${state.over}`)}</p>
 				<p class="esc">{t('drop.esc')}</p>
 			{:else if 'sending' in state}
@@ -92,7 +94,7 @@
 				<p class="says">{t('drop.sending')}</p>
 			{:else}
 				<Icon name="x" />
-				<p class="says">{t(`drop.refused.${state.refused}`)}</p>
+				<p class="says">{t(`drop.refused.${state.refused}`, budget())}</p>
 				<button type="button" class="close" onclick={() => (state = null)}>{t('drop.close')}</button>
 			{/if}
 		</div>

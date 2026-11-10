@@ -44,9 +44,8 @@ pub fn run(shot: Shot) -> Result<(), String> {
         None => client.pose(shot.altitude_m, pitch, boom_m),
     }
     assets::wear(&mut client, shot.avatar.as_deref());
-    // Manifest first, then what it names: two rounds.
-    assets::serve(&mut client);
-    assets::serve(&mut client);
+    // Manifest first, then what it names, until nothing more is asked.
+    while assets::serve(&mut client) {}
     for event in client.drain_events() {
         if let client::Event::Rejected { message } = event {
             log::warn!("{message}");
@@ -71,6 +70,10 @@ pub fn run(shot: Shot) -> Result<(), String> {
                 tick(&mut client, &mut input);
             }
         }
+        // What a step asked for lands before the next, as a file read from
+        // disk does in the window: a model taken in hand, then placed by a
+        // click.
+        while assets::serve(&mut client) {}
     }
     for event in client.drain_events() {
         match event {
@@ -81,8 +84,6 @@ pub fn run(shot: Shot) -> Result<(), String> {
             _ => {}
         }
     }
-    // What the steps asked for, a picture placed, lands before the shot.
-    assets::serve(&mut client);
     input.key(client::Key::Forward, true);
     for _ in 0..(shot.walk_s * 60.0) as u32 {
         client.update(1.0 / 60.0, &mut input);

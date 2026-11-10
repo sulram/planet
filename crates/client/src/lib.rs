@@ -15,6 +15,7 @@ mod figure;
 mod grass;
 mod history;
 mod input;
+pub mod model3d;
 mod parts;
 mod peers;
 mod pictures;
@@ -43,6 +44,7 @@ pub use controller::{Built, Controller, Wish};
 use figure::{Clips, Figure, Gait, Motion};
 pub use history::{History, Owner};
 pub use input::{Chord, Input, Key, KeyAsk};
+pub use model3d::ModelRefusal;
 pub use part::{
     Clip, ClipKind, ContentId, ImageKind, Media, NAME_BYTES, Name, Part, PartId, PictureLevel,
     Portal, Pose as PartPose, Shape,
@@ -545,9 +547,9 @@ impl Client {
     /// Files the client wants. The shell fetches each one and answers with
     /// [`Client::asset_loaded`].
     pub fn drain_asset_requests(&mut self) -> Vec<AssetRequest> {
-        for hash in self.parts.wanted() {
-            if let Some(name) = part::Shape::Vox(hash).asset() {
-                self.requests.ask(name, Purpose::Model(hash));
+        for shape in self.parts.wanted() {
+            if let Some(name) = shape.asset() {
+                self.requests.ask(name, Purpose::Model(shape));
             }
         }
         self.requests.drain()
@@ -557,12 +559,25 @@ impl Client {
     /// there are none. A level that fails is logged and asked for again
     /// when wanted.
     pub fn picture_loaded(&mut self, id: u64, image: Result<scene::Image, String>) {
-        let Some(Purpose::Picture(content)) = self.requests.answer(id) else {
-            return;
+        let (name, outcome) = match self.requests.answer(id) {
+            Some(Purpose::Picture(content)) => {
+                (content.hex(), self.pictures.arrived(content, image))
+            }
+            // A 3D model is drawn whatever its pictures do: one that fails
+            // leaves its triangles their corners' colour.
+            Some(Purpose::ModelPicture(hash, index)) => {
+                let (image, outcome) = match image {
+                    Ok(image) => (Some(image), Ok(())),
+                    Err(message) => (None, Err(message)),
+                };
+                self.parts.picture_decoded(hash, index, image);
+                (format!("{} of a 3D model", index), outcome)
+            }
+            _ => return,
         };
-        if let Err(message) = self.pictures.arrived(content, image) {
+        if let Err(message) = outcome {
             self.events.push(Event::Rejected {
-                message: format!("picture {}: {message}", content.hex()),
+                message: format!("picture {name}: {message}"),
             });
         }
     }
@@ -587,10 +602,10 @@ impl Client {
                     self.clips.insert(*gait, clip);
                 })
                 .map_err(|e| e.to_string()),
-            Purpose::Model(hash) => vox::parse(&bytes)
-                .map(|model| self.parts.model_arrived(*hash, model))
-                .map_err(|e| format!("{e:?}")),
-            Purpose::Picture(id) => Err(format!("{}: a picture is answered as pixels", id.hex())),
+            Purpose::Model(shape) => self.parts.file_arrived(*shape, &bytes, &mut self.requests),
+            Purpose::Picture(_) | Purpose::ModelPicture(..) => {
+                Err("a picture is answered as pixels".into())
+            }
         });
         if let Err(message) = outcome {
             self.events.push(Event::Rejected {

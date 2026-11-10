@@ -325,6 +325,7 @@ pub fn part_wire(seat: Seat, part: &part::Part) -> parts_wire::Part {
     let shape = match part.shape {
         part::Shape::Cube => parts_wire::shape::Shape::Cube(parts_wire::Cube {}),
         part::Shape::Vox(hash) => parts_wire::shape::Shape::Vox(hash.to_vec()),
+        part::Shape::Glb(hash) => parts_wire::shape::Shape::Glb(hash.to_vec()),
         part::Shape::Image(media) => parts_wire::shape::Shape::Image(parts_wire::Media {
             width: media.width,
             height: media.height,
@@ -396,6 +397,7 @@ pub fn part_from_wire(part: &parts_wire::Part) -> Option<(Seat, part::Part)> {
     let shape = match part.shape.as_ref()?.shape.as_ref()? {
         parts_wire::shape::Shape::Cube(_) => part::Shape::Cube,
         parts_wire::shape::Shape::Vox(bytes) => part::Shape::Vox(hash(bytes)?),
+        parts_wire::shape::Shape::Glb(bytes) => part::Shape::Glb(hash(bytes)?),
         parts_wire::shape::Shape::Image(media) => part::Shape::Image(part::Media {
             width: media.width,
             height: media.height,
@@ -543,6 +545,7 @@ mod tests {
         for shape in [
             part::Shape::Cube,
             part::Shape::Vox([7; 32]),
+            part::Shape::Glb([8; 32]),
             part::Shape::Image(media),
             part::Shape::Image(video),
             part::Shape::Landmark(part::Name::new("Praça da Sé").unwrap()),

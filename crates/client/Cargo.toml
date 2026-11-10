@@ -15,6 +15,7 @@ avatar.workspace = true
 protocol.workspace = true
 voxel.workspace = true
 vox.workspace = true
+glb.workspace = true
 part.workspace = true
 seat.workspace = true
 glam.workspace = true

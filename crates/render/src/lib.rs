@@ -15,6 +15,7 @@ mod compose;
 mod gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless;
+mod mips;
 mod models;
 mod panes;
 mod pictures;
@@ -209,8 +210,15 @@ impl Renderer {
         );
         let boxes = boxes::Boxes::new(&device, &view_layout, &shadow_layout, scene);
         let skinned = skinned::Skinned::new(&device, &view_layout, &shadow_layout, scene);
-        let pictures =
-            pictures::Pictures::new(&device, &gpu.queue, &view_layout, &shadow_layout, scene);
+        let mips = mips::Mips::new(&device);
+        let pictures = pictures::Pictures::new(
+            &device,
+            &gpu.queue,
+            &view_layout,
+            &shadow_layout,
+            scene,
+            mips.clone(),
+        );
         let panes = panes::Panes::new(
             &device,
             &gpu.queue,
@@ -218,7 +226,14 @@ impl Renderer {
             composer.behind_layout(),
             scene,
         );
-        let models = models::Models::new(&device, &view_layout, &shadow_layout, scene);
+        let models = models::Models::new(
+            &device,
+            &gpu.queue,
+            &view_layout,
+            &shadow_layout,
+            scene,
+            mips,
+        );
         let sky = sky_pipeline(&device, &view_layout, scene);
         let clouds = clouds::Clouds::new(&device, &gpu.queue);
         Renderer {
@@ -278,10 +293,11 @@ impl Renderer {
         self.pictures.write(&self.device, &self.queue, id, frame);
     }
 
-    /// Uploads and drops the meshes of models (parts).
+    /// Uploads and drops the meshes of models (parts), and a 3D model's
+    /// pictures with their mip chains.
     pub fn apply_models(&mut self, changes: Vec<ModelChange>) {
         for change in changes {
-            self.models.apply(&self.device, change);
+            self.models.apply(&self.device, &self.queue, change);
         }
     }
 
