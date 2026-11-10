@@ -118,6 +118,10 @@ pub struct Client {
     wants_random_avatar: bool,
     /// The asset reference of the avatar asked for last.
     wanted_avatar: Option<String>,
+    /// The account's avatar, as the world's welcome says mundos signed it.
+    /// While it holds, `V` and a random pick pass: the choice is made in
+    /// mundos.
+    account_avatar: Option<String>,
     /// What the front end was last told of the player's avatar: the choice,
     /// and whether the body is in it yet.
     told_avatar: (Option<String>, bool),
@@ -196,6 +200,7 @@ impl Client {
             manifest: None,
             wants_random_avatar: false,
             wanted_avatar: None,
+            account_avatar: None,
             told_avatar: (None, false),
             wanted_name: String::new(),
             events: vec![
@@ -589,24 +594,32 @@ impl Client {
         let Some(purpose) = self.requests.answer(id) else {
             return;
         };
-        let outcome = bytes.and_then(|bytes| match &purpose {
-            Purpose::Manifest => serde_json::from_slice::<Manifest>(&bytes)
-                .map(|manifest| self.adopt(manifest))
-                .map_err(|e| e.to_string()),
+        let outcome = match &purpose {
+            Purpose::Manifest => bytes.and_then(|bytes| {
+                serde_json::from_slice::<Manifest>(&bytes)
+                    .map(|manifest| self.adopt(manifest))
+                    .map_err(|e| e.to_string())
+            }),
+            // The wardrobe hears a file that never came too, so wearing it
+            // again asks again.
             Purpose::Avatar(path) => {
-                let avatar = avatar::Avatar::from_vrm(&bytes).map_err(|e| e.to_string());
+                let avatar = bytes
+                    .and_then(|bytes| avatar::Avatar::from_vrm(&bytes).map_err(|e| e.to_string()));
                 self.wardrobe.arrived(path, avatar).map(|_| ())
             }
-            Purpose::Clip(gait) => avatar::Clip::from_glb(&bytes)
-                .map(|clip| {
-                    self.clips.insert(*gait, clip);
-                })
-                .map_err(|e| e.to_string()),
-            Purpose::Model(shape) => self.parts.file_arrived(*shape, &bytes, &mut self.requests),
-            Purpose::Picture(_) | Purpose::ModelPicture(..) => {
-                Err("a picture is answered as pixels".into())
+            Purpose::Clip(gait) => bytes.and_then(|bytes| {
+                avatar::Clip::from_glb(&bytes)
+                    .map(|clip| {
+                        self.clips.insert(*gait, clip);
+                    })
+                    .map_err(|e| e.to_string())
+            }),
+            Purpose::Model(shape) => {
+                bytes.and_then(|bytes| self.parts.file_arrived(*shape, &bytes, &mut self.requests))
             }
-        });
+            Purpose::Picture(id) => Err(format!("{}: a picture is answered as pixels", id.hex())),
+            Purpose::ModelPicture(..) => Err("a picture is answered as pixels".into()),
+        };
         if let Err(message) = outcome {
             self.events.push(Event::Rejected {
                 message: format!("{purpose:?}: {message}"),
@@ -619,8 +632,8 @@ impl Client {
     }
 
     /// Asks for the avatar at an asset reference. Every way of choosing an
-    /// avatar ends here, whether the reference came from the manifest, a
-    /// cookie or, later, a user's own uploads.
+    /// avatar ends here, whether the reference came from the manifest, the
+    /// front end's choice or the account's, as the welcome says it.
     fn wear(&mut self, path: String) {
         self.wanted_avatar = Some(path.clone());
         self.session.wear(&path);
@@ -706,8 +719,11 @@ impl Client {
     /// The avatar on offer after the one worn, wrapping around. The first
     /// press holds the whole offer, fetched one by one in the order of
     /// pressing once the next has landed: browsing is one wait, and every
-    /// press after lands at once.
+    /// press after lands at once. Nothing while the account's avatar holds.
     fn next_avatar(&mut self) {
+        if self.account_avatar.is_some() {
+            return;
+        }
         let Some(manifest) = &self.manifest else {
             return;
         };
@@ -735,7 +751,12 @@ impl Client {
         }
     }
 
+    /// Any avatar on offer, once the manifest says the offer. Nothing while
+    /// the account's avatar holds.
     fn random_avatar(&mut self) {
+        if self.account_avatar.is_some() {
+            return;
+        }
         let Some(manifest) = &self.manifest else {
             self.wants_random_avatar = true;
             return;
@@ -833,6 +854,18 @@ impl Client {
                     return;
                 }
                 self.session.welcomed(welcome.session);
+                // The body wears the account's avatar. The client is the one
+                // place that decides what a body wears, so it takes it from
+                // the welcome itself: every front end and every agent is
+                // dressed by the same rule. Through `wear`, so the others hear
+                // it as any change; a page that read it on entering started
+                // the body in it, and then nothing goes out.
+                self.account_avatar = Some(welcome.avatar.clone()).filter(|a| !a.is_empty());
+                if let Some(avatar) = self.account_avatar.clone()
+                    && self.wanted_avatar.as_ref() != Some(&avatar)
+                {
+                    self.wear(avatar);
+                }
                 // The world's clock is the server's from here on.
                 self.set_clock(welcome.clock_ms as f64 / 1000.0);
                 self.level = Some(Level::from_wire(welcome.level));
@@ -1105,7 +1138,7 @@ impl Client {
             movement: input.movement(),
             up: input.held(Key::Up),
             down: input.held(Key::Down),
-            sprint: input.held(Key::Sprint),
+            sprint: input.sprinting(),
             look,
             zoom,
         };

@@ -6,12 +6,16 @@
 	// A bar at the foot of the world. Closed, it shows what was just said and
 	// fades it; Enter opens it, takes the pointer out of the world and puts
 	// the caret in it. Enter again says the line and hands the world back.
+	// On a touch screen a tap opens it and leaving the field closes it, since
+	// an open log covers the world the stick is held on.
 	// The `@here` word is the bar's own, in the reader's language, and leaves
 	// as a flag; the place comes back from the server, never from what was
 	// typed.
 	interface Props {
 		lines: Line[];
 		online: boolean;
+		/** A touch screen, where a bar is tapped open: there is no Enter. */
+		touch: boolean;
 		onsay: (scope: Scope, text: string, here: boolean) => void;
 		ongo: (place: string) => void;
 		/** Chat is opening: let go of the world. */
@@ -20,7 +24,7 @@
 		onclose: () => void;
 	}
 
-	let { lines, online, onsay, ongo, onopen, onclose }: Props = $props();
+	let { lines, online, touch, onsay, ongo, onopen, onclose }: Props = $props();
 
 	/** How long a line stays on a closed bar. */
 	const RECENT_MS = 10_000;
@@ -139,12 +143,13 @@
 		<Input
 			bind:element={input}
 			bind:value={draft}
-			placeholder={!online ? t('offline') : open ? t('placeholder', { here }) : t('closed')}
+			placeholder={!online ? t('offline') : open ? t('placeholder', { here }) : touch ? t('closed.touch') : t('closed')}
 			disabled={!online}
 			enterkeyhint="send"
 			autocomplete="off"
 			aria-label={t('title')}
 			onfocus={show}
+			onblur={() => touch && hide(false)}
 			onkeydown={onkeyInput}
 		/>
 		{#if open}

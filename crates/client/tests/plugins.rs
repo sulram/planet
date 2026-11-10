@@ -74,6 +74,7 @@ fn welcome(client: &Client, plugins: Vec<protocol::Plugin>) -> Vec<u8> {
         level: protocol::Level::Anonymous.into(),
         plugins,
         clock_ms: 0,
+        avatar: String::new(),
     }))
 }
 

@@ -73,10 +73,22 @@
 	--page-narrow: 360px;
 	--page-wide: 960px;
 	--panel-w: 260px;
+	/* What a thumb holds down: the buttons that stand in for keys on a
+	   touch screen. */
+	--thumb-h: 56px;
 
 	/* ---- Layers ---- */
 	--z-panel: 10;
 	--z-topbar: 20;
+}
+
+/* A finger is wider than a cursor and a phone is read nearer the eye: on a
+   touch screen every control is a finger wide and the type a size up. */
+@media (pointer: coarse) {
+	:root {
+		--fs: 12px;
+		--control-h: 40px;
+	}
 }
 
 :root[data-theme='light'] {

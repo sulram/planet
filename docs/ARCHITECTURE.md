@@ -8,8 +8,7 @@ order: 20
 # ARCHITECTURE
 
 The shape as decided. The why lives in `decisions/`, open points in `questions/`,
-and how much of it is built in BRIEF.md. A line marked (p) is proposed and
-not yet confirmed.
+and how much of it is built in BRIEF.md.
 
 ## A world, hosted
 
@@ -35,12 +34,12 @@ not yet confirmed.
   `<mundos>/enter?host=<host>`, back with a token or `guest`, and `?lang=`: the
   newest pick, there or here, is the page's. The pose is kept across the hop.
 - The token is a JWT signed with Ed25519 (`EdDSA`): `iss` `mundos`, `aud` the
-  world's name, `sub` the account's id, `name`, `level`, `exp` a minute on,
-  read with 30 s of leeway. The server checks it with `MUNDOS_PUBLIC_KEY`.
+  world's name, `sub` the account's id, `name`, `level`, `avatar` (its VRM's URL,
+  if any), `exp` a minute on, 30 s of leeway. `MUNDOS_PUBLIC_KEY` checks it.
 - The page hands the token to the world once, on entering, and gets a key:
   kept in the page's memory, shown on the socket's URL and on a founding, held
-  by the server in memory for half a day. The level holds for the life of the
-  page; a role changed in mundos holds on the next load.
+  by the server in memory for half a day. The level and the avatar hold for the
+  life of the page; a change in mundos holds on the next load.
 - A link that drops opens again with the same key. A key stands while the
   server remembers it; past a restart or its half day, the page goes through
   the door for a new one.
@@ -52,9 +51,9 @@ not yet confirmed.
 | `signed_in` | an account with no role here | walk, under the account's name |
 | `anonymous` | a guest | walk, under a name of their own choosing |
 
-- `Welcome` says the session's level, and the client offers its tools by it.
-  A stroke that is an op is checked by the actor against the same level,
-  through the permission hook.
+- `Welcome` says the session's level, by which the client offers its tools,
+  and the account's avatar, which it wears. A stroke that is an op is checked
+  by the actor against the same level, through the permission hook.
 - Alone, where `MUNDOS_PUBLIC_KEY` is unset, every session has
   `PLANET_DEV_LEVEL`: `anonymous` by default, `admin` under `bun run dev`.
 
@@ -138,12 +137,11 @@ not yet confirmed.
 | Raspberry Pi | `shell-desktop` on KMS/DRM | minimal |
 | Quest, Pico | `shell-xr`, Android + OpenXR + Vulkan | minimal |
 
-- One command/event seam between the core and any UI: a front end sends
-  commands and renders events, and tool logic stays in Rust so every client
-  shares it. JSON tagged by `type`: `client::Command`, `client::Event`.
-- A front end sends commands and renders events (90). The web one is static
-  files, so what any front end does goes through the seam and the world's
-  routes. Language, theme, avatar and a visitor's name are the browser's.
+- One command/event seam between the core and any front end (90): it sends
+  commands and renders events, JSON tagged by `type` (`client::Command`,
+  `client::Event`), and tool logic stays in Rust so every client shares it.
+  The web's is static files, so what it does goes through the seam and the
+  world's routes; language, theme, avatar and a visitor's name are the browser's.
 - Web: the page asks the world what it is, hands the engine the recipe and
   the socket's URL with its key, and shows the founding screen to an admin of
   an unfounded world. It reconnects with a doubling wait, a second to thirty.
@@ -190,6 +188,8 @@ not yet confirmed.
   parallel transported, so seams and corners need no special case.
 - On foot the body takes a step at once; figure and eye come after on springs
   of their own, along up only. Ground, a quarter block a frame, at once (81).
+- Phone: a touch screen walks, looks, jumps and flies, and founds and builds
+  nothing (`$lib/touch.svelte.ts`); fingers reach `Input`, buttons `Engine.key`.
 - Design system: `apps/web/src/lib/ds`, planet's own (74); catalogue at `/ds`.
   Components reference semantic tokens only. i18n: flat dotted keys, `en.ts`
   is the source, `pt.ts` and `zh.ts` match it. A plugin's words are in its own

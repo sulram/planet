@@ -42,8 +42,9 @@ export interface Effects {
 export type Command =
 	| { type: 'set_recipe'; recipe: Recipe }
 	| { type: 'set_mode'; mode: Mode }
-	/** `path` is an asset path from `assets/manifest.json`, such as `avatars/Kyle.vrm`. */
+	/** `path` is an asset reference: a path from `assets/manifest.json`, such as `avatars/Kyle.vrm`, or a URL. */
 	| { type: 'set_avatar'; path: string }
+	/** Nothing while the account wears its own avatar, as `next_avatar`. */
 	| { type: 'random_avatar' }
 	| { type: 'next_avatar' }
 	/** Fields left out take the engine's default. */
@@ -101,8 +102,20 @@ export interface Label {
 	distance_m: number;
 }
 
+/** A stick a finger holds on the canvas, in CSS pixels from its top left. */
+export interface Stick {
+	/** Its centre, which follows the finger pulled past the reach. */
+	center: [number, number];
+	/** The finger. */
+	at: [number, number];
+	/** How far from the centre the finger walks before it runs and drags the centre. */
+	reach: number;
+}
+
 export type EngineEvent =
 	| { type: 'ready'; generator_version: number }
+	/** The web shell's own, not the client's: a stick awake, whenever it moves, and null once it goes. */
+	| { type: 'stick'; stick: Stick | null }
 	/** The link to the world server, whenever it changes. */
 	/** `level` is null until a world has spoken; its last word stands through a dropped link. */
 	| { type: 'session'; status: SessionStatus; session: number | null; level: Level | null }
@@ -123,7 +136,8 @@ export type EngineEvent =
 	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. Once, at the start. */
 	| { type: 'palette'; colors: string[] }
 	/**
-	 * The avatar you are in, or on your way into. `path` is the choice: keep it as this browser's.
+	 * The avatar you are in, or on your way into. `path` is the choice: keep it as this browser's,
+	 * unless it is the account's own.
 	 * While `worn` is false the file is on its way and the body stays as it was: show the wait.
 	 * A null path is the box figure, nothing wanted.
 	 */
@@ -150,6 +164,7 @@ export type EngineEvent =
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'ready',
+	'stick',
 	'recipe_changed',
 	'rejected',
 	'settled',

@@ -49,13 +49,21 @@ func hosted(t *testing.T) (*httptest.Server, ed25519.PrivateKey) {
 // token is what mundos would sign for this world.
 func token(t *testing.T, private ed25519.PrivateKey, level string) string {
 	t.Helper()
+	return tokenWith(t, private, map[string]any{"level": level})
+}
+
+// tokenWith is a token whose claims are these over the usual ones.
+func tokenWith(t *testing.T, private ed25519.PrivateKey, claims map[string]any) string {
+	t.Helper()
 	part := func(v any) string {
 		raw, _ := json.Marshal(v)
 		return base64.RawURLEncoding.EncodeToString(raw)
 	}
-	signed := part(map[string]string{"alg": "EdDSA", "typ": "JWT"}) + "." + part(map[string]any{
-		"iss": "mundos", "sub": "acc1", "aud": "oficina", "name": "Ada", "level": level, "exp": now.Unix() + 60,
-	})
+	body := map[string]any{"iss": "mundos", "sub": "acc1", "aud": "oficina", "name": "Ada", "level": "signed_in", "exp": now.Unix() + 60}
+	for name, value := range claims {
+		body[name] = value
+	}
+	signed := part(map[string]string{"alg": "EdDSA", "typ": "JWT"}) + "." + part(body)
 	return signed + "." + base64.RawURLEncoding.EncodeToString(ed25519.Sign(private, []byte(signed)))
 }
 
@@ -143,6 +151,25 @@ func TestAWorldIsBornUnfoundedAndItsAdminFoundsIt(t *testing.T) {
 	}
 	if _, about := call(t, "GET", web.URL+"/api/world", "", nil); about["recipe"].(map[string]any)["seed"] != "00000000deadbeef" {
 		t.Fatalf("and keeps the first recipe: %v", about)
+	}
+}
+
+func TestTheAccountsAvatarIsSaidOnEntering(t *testing.T) {
+	web, private := hosted(t)
+	const vrm = "https://mundos-assets.tekne.studio/avatars/av1/0123abcd.vrm"
+
+	worn := enter(t, web, tokenWith(t, private, map[string]any{"avatar": vrm}))
+	if worn["avatar"] != vrm || worn["level"] != "signed_in" {
+		t.Fatalf("an account wears what mundos signed: %v", worn)
+	}
+	if status, me := call(t, "GET", web.URL+"/api/me", worn["key"].(string), nil); status != http.StatusOK || me["avatar"] != vrm {
+		t.Fatalf("for as long as its key stands: %d %v", status, me)
+	}
+	if bare := enter(t, web, token(t, private, "builder")); bare["avatar"] != "" {
+		t.Fatalf("an account with none says none: %v", bare)
+	}
+	if guest := enter(t, web, "guest"); guest["avatar"] != "" {
+		t.Fatalf("a guest wears what the page picks: %v", guest)
 	}
 }
 

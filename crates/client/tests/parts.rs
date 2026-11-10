@@ -30,6 +30,7 @@ fn welcomed() -> Client {
             level: protocol::Level::Builder.into(),
             plugins: vec![],
             clock_ms: 0,
+            avatar: String::new(),
         },
     )));
     client.drain_events();

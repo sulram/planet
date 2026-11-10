@@ -70,6 +70,7 @@ fn welcome_at(
         level: level.into(),
         plugins: vec![],
         clock_ms,
+        avatar: String::new(),
     }))
 }
 
@@ -236,6 +237,7 @@ fn another_recipe_is_another_world() {
             level: protocol::Level::Admin.into(),
             plugins: vec![],
             clock_ms: 0,
+            avatar: String::new(),
         },
     )));
     assert!(client.drain_outbound().contains(&Outbound::Close));

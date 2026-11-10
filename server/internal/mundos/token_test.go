@@ -107,6 +107,27 @@ func TestWhatIsRefused(t *testing.T) {
 	}
 }
 
+func TestTheAvatarIsSaidWhenTheAccountHasOne(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1790000000, 0)
+	eddsa := map[string]any{"alg": "EdDSA", "typ": "JWT"}
+	body := map[string]any{"iss": "mundos", "sub": "a1", "aud": "oficina", "name": "Ada", "level": "signed_in", "exp": now.Unix() + 60}
+
+	claims, err := Verify(sign(t, private, eddsa, body), public, "oficina", now)
+	if err != nil || claims.Avatar != "" {
+		t.Fatalf("an account with no avatar says none: %+v %v", claims, err)
+	}
+	const vrm = "https://mundos-assets.tekne.studio/avatars/av1/0123abcd.vrm"
+	body["avatar"] = vrm
+	claims, err = Verify(sign(t, private, eddsa, body), public, "oficina", now)
+	if err != nil || claims.Avatar != vrm || claims.Level != "signed_in" {
+		t.Fatalf("the avatar rides beside the rest: %+v %v", claims, err)
+	}
+}
+
 func TestTheKeyIsReadAsMundosWritesIt(t *testing.T) {
 	public, _, _ := ed25519.GenerateKey(rand.Reader)
 	der, _ := x509.MarshalPKIXPublicKey(public)

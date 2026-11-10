@@ -4,7 +4,7 @@
  * plugin's own name (docs/PLUGINS.md).
  */
 import type { Component } from 'svelte';
-import type { Anchor, Command, Level, PeerInfo } from '$lib/engine';
+import type { Anchor, Command, PeerInfo } from '$lib/engine';
 
 /** The seam, as one plugin reaches it. */
 export interface Seam {
@@ -43,8 +43,13 @@ export interface LayerProps {
 	online: boolean;
 	/** This client's own session, while online. */
 	me: number | null;
-	/** What the world said this person may do. */
-	level: Level | null;
+	/**
+	 * Whether this session builds here: the world said its level builds, and
+	 * the screen is no touch screen, which walks a world and builds nothing.
+	 */
+	builds: boolean;
+	/** A touch screen: fingers and no keys, a small screen held in the hand. */
+	touch: boolean;
 	/** The paints a cell can take, as `#rrggbb`, in order: the world's palette. */
 	palette: string[];
 	peers: PeerInfo[];

@@ -28,6 +28,8 @@ export interface Entered {
 	level: Level;
 	/** The account's name, as mundos signed it. Empty for a visitor. */
 	name: string;
+	/** The account's avatar, as mundos signed it: the VRM's URL. Empty when it has none, and for a visitor. */
+	avatar: string;
 	/** Shown on the socket and on a founding. Empty for a visitor, who enters as a guest. */
 	key: string;
 }

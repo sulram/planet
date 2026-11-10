@@ -1,13 +1,61 @@
 //! The avatar flow over the asset seam, against the committed default set.
 
-use client::{Client, Command, Event, Recipe};
+use client::{Client, Command, Event, Outbound, Recipe};
+use protocol::{Message, client_message, server_message};
+
+/// An account's own avatar, on mundos's CDN: served here with the bytes of
+/// a committed one.
+const OWN: &str = "https://mundos-assets.tekne.studio/avatars/av1/0123abcd.vrm";
 
 fn serve(client: &mut Client) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     for request in client.drain_asset_requests() {
-        let bytes = std::fs::read(root.join(&request.path)).map_err(|e| e.to_string());
+        let path = if request.path == OWN {
+            "avatars/Olivia.vrm"
+        } else {
+            &request.path
+        };
+        let bytes = std::fs::read(root.join(path)).map_err(|e| e.to_string());
         client.asset_loaded(request.id, bytes);
     }
+}
+
+/// A hosted world's welcome to an account that wears `avatar`, empty for
+/// none, with `peers` already here.
+fn welcome(client: &Client, avatar: &str, peers: Vec<protocol::Peer>) -> Vec<u8> {
+    let recipe = client.recipe();
+    protocol::encode(&protocol::ServerMessage {
+        message: Some(server_message::Message::Welcome(protocol::Welcome {
+            session: 1,
+            recipe: Some(protocol::Recipe {
+                seed: worldgen::format_seed(recipe.seed),
+                generator_version: recipe.generator_version,
+                params_json: serde_json::to_string(&recipe.params).unwrap(),
+            }),
+            peers,
+            level: protocol::Level::SignedIn.into(),
+            avatar: avatar.into(),
+            ..Default::default()
+        })),
+    })
+}
+
+/// The avatars the client said it wears on the link, in Hello and Wear.
+fn said(client: &mut Client) -> Vec<String> {
+    client
+        .drain_outbound()
+        .into_iter()
+        .filter_map(|out| match out {
+            Outbound::Frame(frame) => {
+                match protocol::ClientMessage::decode(&frame[..]).unwrap().message {
+                    Some(client_message::Message::Hello(hello)) => Some(hello.avatar),
+                    Some(client_message::Message::Wear(wear)) => Some(wear.avatar),
+                    _ => None,
+                }
+            }
+            Outbound::Close => None,
+        })
+        .collect()
 }
 
 /// What the front end hears of the avatar: the choice, and whether it is worn.
@@ -161,4 +209,109 @@ fn an_avatar_without_clips_stands_at_rest() {
             .iter()
             .all(|joint| joint.is_finite())
     );
+}
+
+/// A file that never came is forgotten: worn again, it is asked for again.
+#[test]
+fn an_avatar_that_never_came_is_asked_again() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    serve(&mut client); // manifest
+    let gone = "https://example.invalid/gone.vrm";
+    client.command(Command::SetAvatar { path: gone.into() });
+    serve(&mut client); // fails, and the default is asked for
+    serve(&mut client); // the default and the clips
+    client.command(Command::SetAvatar { path: gone.into() });
+    let asked: Vec<String> = client
+        .drain_asset_requests()
+        .into_iter()
+        .map(|request| request.path)
+        .collect();
+    assert_eq!(asked, [gone]);
+}
+
+/// The world's welcome dresses an account in its own avatar, whatever the
+/// body wore before, and tells the others; `V` and a random pick pass.
+#[test]
+fn the_welcome_dresses_an_account_in_its_own_avatar() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command(Command::SetAvatar {
+        path: "avatars/Kyle.vrm".into(),
+    });
+    serve(&mut client); // manifest and Kyle
+    serve(&mut client); // the clips
+    client.link_opened();
+    assert_eq!(said(&mut client), ["avatars/Kyle.vrm"]);
+    heard(&mut client);
+
+    client.receive(&welcome(&client, OWN, vec![]));
+    assert_eq!(said(&mut client), [OWN]);
+    assert_eq!(heard(&mut client), [told(OWN, false)]);
+    serve(&mut client);
+    assert_eq!(heard(&mut client), [told(OWN, true)]);
+
+    client.command(Command::NextAvatar);
+    client.command(Command::RandomAvatar);
+    assert!(heard(&mut client).is_empty());
+    assert!(said(&mut client).is_empty());
+    assert!(client.drain_asset_requests().is_empty());
+}
+
+/// A page that read the avatar on entering starts the body in it: the
+/// welcome then changes nothing, and nothing more goes out.
+#[test]
+fn a_body_started_in_its_own_avatar_is_welcomed_as_it_is() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command(Command::SetAvatar { path: OWN.into() });
+    serve(&mut client); // manifest and the avatar
+    client.link_opened();
+    assert_eq!(said(&mut client), [OWN]);
+    heard(&mut client);
+
+    client.receive(&welcome(&client, OWN, vec![]));
+    assert!(said(&mut client).is_empty());
+    assert!(heard(&mut client).is_empty());
+}
+
+/// With no avatar in the welcome, the choice stays the front end's.
+#[test]
+fn a_welcome_with_no_avatar_leaves_the_choice() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command(Command::SetAvatar {
+        path: "avatars/Skull.vrm".into(),
+    });
+    serve(&mut client);
+    client.link_opened();
+    client.receive(&welcome(&client, "", vec![]));
+    assert_eq!(said(&mut client), ["avatars/Skull.vrm"]);
+
+    client.command(Command::NextAvatar);
+    assert_eq!(said(&mut client), ["avatars/Bizdude.vrm"]);
+}
+
+/// A peer in an account's avatar is dressed from its URL, as any reference.
+#[test]
+fn a_peer_in_its_own_avatar_is_fetched_by_its_url() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    serve(&mut client); // manifest
+    client.link_opened();
+    let peer = protocol::Peer {
+        session: 2,
+        name: "Ada".into(),
+        avatar: OWN.into(),
+        stance: Some(protocol::Stance {
+            v: 30_000.0,
+            u: 30_000.0,
+            height_m: 5.0,
+            facing_z: -1.0,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    client.receive(&welcome(&client, "", vec![peer]));
+    let asked: Vec<String> = client
+        .drain_asset_requests()
+        .iter()
+        .map(|request| request.path.clone())
+        .collect();
+    assert!(asked.iter().any(|path| path == OWN), "{asked:?}");
 }

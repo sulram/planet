@@ -12,13 +12,6 @@ lives in the theme docs; what we drop leaves with the DECISIONS fragment that sa
 
 ## Now: a world mundos hosts
 
-### Walking a world on a phone
-
-As Hyperfy does (`refs/hyperfy`, `PlayerLocal.js`): a stick to walk, a drag to <!-- card:75 -->
-look, buttons to jump and fly, the bar and panels laid out for a small screen.
-
-**Done when:** a phone walks, looks, jumps and flies a world, with the bar and panels fitting its screen and no build mode offered.
-
 ### A 3D model beside the voxel one
 
 A `.glb` goes up through `POST /api/files`, its kind read off its bytes, and <!-- card:73 -->
@@ -30,7 +23,7 @@ kind (a `.vox`) is Voxels, the new one 3D model. `crates/avatar` reads a GLB alr
 
 ### Avatars through mundos
 
-mundos owns the avatars: the catalog, each account's list and its current one, the VRM files in its bucket, and the creator (its decisions avatars-live-in-mundos and the two beside it). <!-- card:102 --> A world wears what the token says: an `avatar` claim, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. The way back never writes into mundos as the person: a VRM dropped is a world asset until the person wears it, which sends them to mundos with its URL and back through `/enter` with a fresh token. Claim and route wait on a decision: the question below.
+mundos owns the avatars: the catalog, each account's list and its current one, the VRM files and the creator. <!-- card:102 --> A world wears the `avatar` claim of the entry token, the VRM's public URL, read when the token is traded for the key; the server tells the others and each client loads it from mundos's CDN. A VRM picked or dropped is worn through the scoped token mundos hands the page at `/enter`: the page calls mundos, then tells its own server the new URL (avatar-by-scoped-token). A picker in the world reads mundos's public catalog. The token's half stands on dev; the way back waits for mundos's item Own VRMs and the way back, which brings the field names; a change mid-visit updates the identity the key holds, so a reconnect keeps it.
 
 **Done when:** a world wears the avatar an account chose in mundos on entry, and a VRM picked inside the world becomes that account's current one in mundos.
 
@@ -154,7 +147,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 ### Avatars (28)
 
 - Extracted: the core draws a figure for a body, the plugin says which, and a hook says what is offered
-- A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, A profile's avatars) <!-- card:87 -->
+- A person's own VRM: the current one of their profile, which mundos's token carries as it carries the name (mundos's roadmap, The avatar catalog, then Own VRMs and the way back) <!-- card:87 -->
 - A swim clip (the fly clip stands in)
 - Avatar changer: an entity you walk through that opens a dialog to pick an avatar <!-- card:89 -->
 - Avatar dropzone: drop a VRM on the map to place an avatar others can take <!-- card:92 -->
@@ -188,6 +181,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - A plugin's panel outside Svelte (an open question)
 - Strings generated from `en.ts` into a Rust module, so the one source of truth survives a second front end
 - The desktop remembers its settings
+- The dev world's default port leaves 8090 to mundos's PocketBase on the same machine: `scripts/dev.ts` starts its search at 8190, and the docs that say 8090 follow; in the same batch, `gofmt -l` flags `server/internal/files/files_test.go`
 - Raspberry Pi 5 build (KMS/DRM)
 - Native video through GStreamer (shared with the vybe work): the desktop's backend of a moving picture, which plays a GIF and a WebP today and shows a video's poster
 - Quest and Pico: OpenXR, two views

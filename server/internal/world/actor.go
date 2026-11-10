@@ -125,6 +125,7 @@ func (a *actor) join(s *session) {
 		Recipe:  a.recipe.Wire(),
 		Peers:   peers,
 		Level:   s.identity.Level.wire(),
+		Avatar:  s.identity.Avatar,
 		Plugins: wirePlugins(spoken(a.plugins)),
 		ClockMs: uint64(time.Now().UnixMilli()),
 	}}})

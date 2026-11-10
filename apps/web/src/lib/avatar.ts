@@ -1,7 +1,7 @@
 import { keep, kept } from './kept';
 
 /** What `assets/manifest.json` says about avatars: the set this version offers. */
-async function offered(): Promise<string[]> {
+export async function offered(): Promise<string[]> {
 	try {
 		const manifest: unknown = await (await fetch('/assets/manifest.json')).json();
 		const avatars = (manifest as { avatars?: unknown }).avatars;
@@ -14,19 +14,21 @@ async function offered(): Promise<string[]> {
 /**
  * The asset reference of the avatar this person wears. An avatar is always a
  * reference (a path under the asset root, or a URL), never an index, so a
- * person's own avatars will load exactly like the offered ones.
+ * person's own avatars load exactly like the offered ones.
  *
- * What this browser kept from an earlier choice, while it is still on offer;
- * else a random avatar from the offer, which then becomes the choice. Null
- * when nothing is offered: the engine then wears its own default.
+ * The account's, when mundos signed one with the entry: the choice is made in
+ * mundos, so this browser keeps nothing of it. Else what this browser kept
+ * from an earlier choice, while it is still on `offer`; else a random avatar
+ * from the offer, which then becomes the choice. Null when nothing is
+ * offered: the engine then wears its own default.
  */
-export async function wornAvatar(): Promise<string | null> {
-	const set = await offered();
+export function wornAvatar(account: string, offer: readonly string[]): string | null {
+	if (account) return account;
 	const before = kept('avatar');
-	if (before && set.includes(before)) return before;
-	if (set.length === 0) return null;
+	if (before && offer.includes(before)) return before;
+	if (offer.length === 0) return null;
 
-	const picked = set[crypto.getRandomValues(new Uint32Array(1))[0] % set.length];
+	const picked = offer[crypto.getRandomValues(new Uint32Array(1))[0] % offer.length];
 	keep('avatar', picked);
 	return picked;
 }

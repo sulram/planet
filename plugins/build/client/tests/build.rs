@@ -34,6 +34,7 @@ fn welcome(client: &Client, level: protocol::Level) -> Vec<u8> {
         level: level.into(),
         plugins: build_on(),
         clock_ms: 0,
+        avatar: String::new(),
     }))
 }
 

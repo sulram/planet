@@ -31,7 +31,11 @@
 		| 'list'
 		| 'star'
 		| 'volume-2'
-		| 'circle';
+		| 'circle'
+		| 'circle-help'
+		| 'chevrons-up'
+		| 'chevrons-down'
+		| 'plane';
 
 	interface Props {
 		name: IconName;
@@ -74,6 +78,11 @@
 		pyramid: 'M2.5 16.88a1 1 0 0 1-.32-1.43l9-13.02a1 1 0 0 1 1.64 0l9 13.01a1 1 0 0 1-.32 1.44l-8.51 4.86a2 2 0 0 1-1.98 0ZM12 2v20',
 		// Lucide's circle, spelled as two arcs.
 		circle: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z',
+		// Lucide's circle-help, the circle spelled as two arcs.
+		'circle-help': 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01',
+		'chevrons-up': 'm17 11-5-5-5 5M17 18l-5-5-5 5',
+		'chevrons-down': 'm7 6 5 5 5-5M7 13l5 5 5-5',
+		plane: 'M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z',
 		'rotate-ccw': 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5',
 		'move-3d': 'M5 3v16h16M5 19l6-6M2 6l3-3 3 3m10 10 3 3-3 3',
 		// Lucide's two ellipse arcs, as it draws them.

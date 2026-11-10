@@ -45,6 +45,9 @@ type Identity struct {
 	Name string
 	// What the session may do, for its life.
 	Level Level
+	// The account's avatar, as mundos signed it: the VRM's URL. Empty when
+	// the account has none, and for a visitor.
+	Avatar string
 }
 
 // Visitor is a session without an account.

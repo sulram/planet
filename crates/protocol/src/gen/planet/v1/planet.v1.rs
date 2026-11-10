@@ -177,6 +177,10 @@ pub struct Welcome {
     /// weather are the same in every eye.
     #[prost(uint64, tag="6")]
     pub clock_ms: u64,
+    /// The account's avatar, as mundos signed it with the entry: the VRM's URL.
+    /// Empty when the account has none, and for a visitor. The client wears it.
+    #[prost(string, tag="7")]
+    pub avatar: ::prost::alloc::string::String,
 }
 /// The plugins that are on, said again whenever the admin switches one.
 #[derive(Clone, PartialEq, ::prost::Message)]

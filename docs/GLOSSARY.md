@@ -21,7 +21,7 @@ this file in the same change.
 | Unfounded | A world as mundos creates it: a door, waiting for its recipe. |
 | Founding | The first admin choosing a recipe for an unfounded world, from the offline preview. Done once: it freezes the recipe. |
 | Door | mundos's `/enter`: every load passes through it and comes back with a token, or as a guest. |
-| Token | What mundos signs for one entry into one world: the account's id, its name and its level, good for a minute. Traded once, on entering, for a key. |
+| Token | What mundos signs for one entry into one world: the account's id, its name, its level and its avatar when it has one, good for a minute. Traded once, on entering, for a key. |
 | Key | What the world gives a page that entered with a token: kept in the page's memory, shown on the socket and on a founding. It stands for the life of the page. |
 | Level | What a session may do, as mundos says it: `admin`, `builder`, `signed_in`, `anonymous`. |
 | Core | What a world is made of and how it behaves, and the host of plugins: today the sphere, a body walking it and the cells. Runs with every plugin off. |
@@ -46,6 +46,8 @@ this file in the same change.
 | Statement | What a world says it speaks: the engine's version, the wire's, and the plugins that are on. Said at `GET /api/world`, in the welcome, and again when the admin switches a plugin. |
 | Layer | What a plugin draws over the world in the web front end, mounted while the plugin is on. |
 | Front end | What a person sees and touches over the seam: the Svelte page on the web, egui on the desktop. Sends commands and renders events; the rules are the core's. |
+| Touch screen | A screen read by fingers, as the page tells one: touch points and a coarse or hoverless pointer. It walks, looks, jumps and flies a world, and founds and builds nothing, whatever the level. |
+| Stick | On a touch screen, the walk under the left thumb: it opens where a finger lands on the left half of the world, walks as far as it is pushed and runs near its reach. |
 | World | One recipe and one world folder. An instance is exactly one. |
 | Recipe | Seed + params + generator version. Enough to regenerate all untouched terrain. |
 | Generator | The deterministic function from recipe + address to terrain. Versioned, frozen per world. |

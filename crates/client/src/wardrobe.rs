@@ -60,8 +60,8 @@ impl Wardrobe {
         }
     }
 
-    /// The answer to a request. A file that is not an avatar is forgotten, so
-    /// asking again asks again.
+    /// The answer to a request. A file that is not an avatar, or never came,
+    /// is forgotten, so asking again asks again.
     pub fn arrived(&mut self, path: &str, avatar: Result<Avatar, String>) -> Result<Worn, String> {
         self.loading.remove(path);
         let avatar = avatar?;

@@ -145,7 +145,7 @@
 			<section class:first={!editing}>
 				{#if editing}<h3>{t('landmarks')}</h3>{/if}
 				{#if landmarks.length === 0}
-					<p class="muted">{t('landmarks.empty')}</p>
+					<p class="muted">{builder ? t('landmarks.empty') : t('landmarks.none')}</p>
 				{:else}
 					<ul class="near">
 						{#each landmarks as one (one.id)}

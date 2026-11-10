@@ -167,6 +167,9 @@ message Welcome {
   // epoch. Every client sets its own by it, so the sun, the moon and the
   // weather are the same in every eye.
   uint64 clock_ms = 6;
+  // The account's avatar, as mundos signed it with the entry: the VRM's URL.
+  // Empty when the account has none, and for a visitor. The client wears it.
+  string avatar = 7;
 }
 
 // The plugins that are on, said again whenever the admin switches one.

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { builds } from '$lib/instance';
 	import type { LayerProps } from '$lib/plugins/plugin';
 	import Panel from './Panel.svelte';
 	import { parseHand, parseHistory, parseOver, parseRefused, parseStroke, type Base, type Edge, type Finish, type Refusal, type Tool } from './protocol';
@@ -9,7 +8,7 @@
 	// take back. A front end only: it shows
 	// those and asks for others, and what a tool, a stroke and a platform do
 	// is the plugin's crate's.
-	let { seam, level, palette }: LayerProps = $props();
+	let { seam, builds, palette }: LayerProps = $props();
 
 	let tool = $state<Tool | null>(null);
 	let paint = $state(0);
@@ -57,7 +56,7 @@
 	}
 </script>
 
-{#if builds(level)}
+{#if builds}
 	<Panel
 		{tool}
 		{paint}

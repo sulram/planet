@@ -84,6 +84,7 @@ impl World {
                     version: build_client::VERSION,
                 }],
                 clock_ms: 0,
+                avatar: String::new(),
             },
         )));
         self.here.push(Here {
