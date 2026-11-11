@@ -18,6 +18,12 @@ mundos owns the avatars: the catalog, each account's list and its current one, t
 
 **Done when:** a world wears the avatar an account chose in mundos on entry, and a VRM picked inside the world becomes that account's current one in mundos.
 
+### An avatar picker inside the world
+
+A panel where a person picks an avatar without leaving the world: mundos's public catalog <!-- card:106 --> (`GET /api/avatars`, filtered to what planet wears) and the VRMs the world holds, a dropped one among them. The pick reaches the account through the scoped token (avatar-by-scoped-token), so it comes after mundos's item Own VRMs and the way back.
+
+**Done when:** a person picks an avatar from the panel inside the world, wears it at once, and wears it again on the next entry anywhere mundos signs them in.
+
 ### A mundos button in the bar
 
 As the Hyperfy fork's pane has: a visitor's sign in, the name of whoever is <!-- card:71 -->
