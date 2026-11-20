@@ -7,6 +7,7 @@
 //   bun run webshot --eval "document.querySelector('.toggle button').click()"
 //   bun run webshot --port 9334   (a second Chrome beside the first: two people in one world)
 //   bun run webshot --eval "..." --after 6   (seconds between the script and the picture)
+//   bun run webshot --eval "..." --film 2   (every frame painted for two seconds after the script: out/web-000.png on, their times in out/web.txt)
 //   bun run webshot --lang pt-BR   (the page in the language a browser of that locale asks for)
 //   bun run webshot --profile out/ada   (a browser kept between runs: what a page kept is there on the next)
 import { mkdirSync, mkdtempSync } from 'node:fs';
@@ -25,6 +26,9 @@ const waitMs = Number(option('wait', '15')) * 1000;
 // Run in the page once it has settled, before the picture: a click, a walk.
 const script = option('eval', '');
 const afterMs = Number(option('after', '1')) * 1000;
+// A motion is a film: every frame the page paints after the script, each
+// named by its order and said with its time since the script.
+const filmMs = Number(option('film', '0')) * 1000;
 const PORT = Number(option('port', '9333'));
 const lang = option('lang', '');
 // A fresh browser each run, unless one is named to keep.
@@ -49,6 +53,17 @@ const chrome = Bun.spawn(
 	],
 	{ stdout: 'ignore', stderr: 'ignore' }
 );
+
+let filming = 0;
+const times: string[] = [];
+function film(params: { data: string; sessionId: number }) {
+	socket.send(JSON.stringify({ id: ++sent, method: 'Page.screencastFrameAck', params: { sessionId: params.sessionId } }));
+	if (!filming) return;
+	const frame = out.replace(/\.png$/, `-${String(times.length).padStart(3, '0')}.png`);
+	mkdirSync(dirname(frame), { recursive: true });
+	Bun.write(frame, Buffer.from(params.data, 'base64'));
+	times.push(`${frame}\t${((performance.now() - filming) / 1000).toFixed(2)} s`);
+}
 
 type Target = { type: string; webSocketDebuggerUrl: string };
 let targets: Target[] = [];
@@ -76,6 +91,7 @@ socket.onmessage = (event) => {
 	const message = JSON.parse(event.data as string);
 	if (message.id) return waiting.get(message.id)?.(message.result);
 	const { method, params } = message;
+	if (method === 'Page.screencastFrame') return film(params);
 	if (method === 'Runtime.consoleAPICalled') {
 		const text = params.args.map((arg: any) => arg.value ?? arg.description ?? '').join(' ');
 		console.log(`[${params.type}] ${text}`);
@@ -91,7 +107,17 @@ await send('Log.enable');
 await send('Page.enable');
 await send('Page.navigate', { url });
 await Bun.sleep(waitMs);
-if (script) {
+if (filmMs > 0) {
+	await send('Page.startScreencast', { format: 'png' });
+	filming = performance.now();
+	if (script) await send('Runtime.evaluate', { expression: script });
+	await Bun.sleep(filmMs);
+	await send('Page.stopScreencast');
+	filming = 0;
+	const index = out.replace(/\.png$/, '.txt');
+	await Bun.write(index, `${times.join('\n')}\n`);
+	console.log(`${times.length} frames -> ${index}`);
+} else if (script) {
 	await send('Runtime.evaluate', { expression: script });
 	await Bun.sleep(afterMs);
 }
