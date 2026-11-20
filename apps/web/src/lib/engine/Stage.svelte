@@ -431,10 +431,20 @@
 </div>
 
 <style>
+	/* Nothing over the world is text to select: a finger that drags the
+	   world and then taps a button would otherwise paint the whole page
+	   selected. What is typed into stays selectable. */
 	.stage {
 		position: fixed;
 		inset: 0;
 		overflow: hidden;
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-touch-callout: none;
+	}
+	.stage :global(:is(input, textarea)) {
+		user-select: text;
+		-webkit-user-select: text;
 	}
 	.bar {
 		position: absolute;
