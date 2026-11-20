@@ -50,11 +50,17 @@ export type Command =
 	/** Fields left out take the engine's default. */
 	| { type: 'set_effects'; effects: Partial<Effects> }
 	/**
-	 * Stand at a place code, `4-K7M42Q`: how a shared address opens where it
-	 * says, and how a place someone shared is reached. A short code names a
-	 * box and you land in the middle of it.
+	 * Stand at a place code, `4-K7M42Q`, at once: an arrival, how a shared
+	 * address opens where it says and a body is born at home, under the
+	 * veil. A short code names a box and you land in the middle of it.
 	 */
 	| { type: 'go_to'; place: string }
+	/**
+	 * Travel to a place code as `go_to` reads it, through the passage a
+	 * portal takes a body by: how a place chosen inside the world is
+	 * reached, a line of the chart, a place shared in chat. Never veiled.
+	 */
+	| { type: 'travel'; place: string }
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
 	| { type: 'set_name'; name: string }
 	/** The plugin with the pointer puts it down, with what it had in hand: a panel of the page opened. */

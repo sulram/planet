@@ -58,7 +58,7 @@ pub struct Say {
 
 /// `chat.said`: a line someone said, this client's own included, so what the
 /// world heard is what a UI shows. `place` is where the speaker stood when
-/// they shared it, as `GoTo` takes it; `None` when they did not.
+/// they shared it, as `Travel` takes it; `None` when they did not.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 pub struct Said {
     pub session: u32,

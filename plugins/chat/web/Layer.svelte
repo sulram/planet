@@ -38,4 +38,4 @@
 </script>
 
 <Balloons {anchors} {me} {lines} />
-<Bar {lines} {online} {touch} onsay={say} ongo={(place) => seam.core({ type: 'go_to', place })} onopen={seam.release} onclose={seam.take} />
+<Bar {lines} {online} {touch} onsay={say} ongo={(place) => seam.core({ type: 'travel', place })} onopen={seam.release} onclose={seam.take} />

@@ -1,6 +1,6 @@
 //! The crossing: a body that walks through a portal's pane is taken to
 //! stand on the landmark it leads to, facing the way the star points,
-//! through the one `go_to` a link and the chart travel by. Read in the
+//! through the passage the chart travels by too. Read in the
 //! plugin's turn, after the body moved: the line from where the feet stood
 //! last turn to where they stand now passes the pane's plane where the
 //! body, feet to head, meets the ring's circle. A leap, a link's or a

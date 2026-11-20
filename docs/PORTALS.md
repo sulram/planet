@@ -34,9 +34,9 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   (`plugins/items/client/src/cross.rs`): the feet's step from last turn to
   this one passes the pane's plane where the body, feet to head, meets the
   ring's circle, from either side.
-- The body goes through the one `go_to` a link and the chart travel by
-  (`Host::go_to`), to the landmark's place with the star's bearing: arriving
-  is standing on the star, facing the way its point toward `+y` points.
+- The body goes through to the landmark's place with the star's bearing
+  (`Host::go_through`): arriving is standing on the star, facing the way
+  its point toward `+y` points.
 - The star is the one known here, held or charted: a portal in sight asks
   the chart ahead. One not known yet takes the body into the portal at
   once all the same (`Host::fall_into`), held there while the chart
@@ -59,12 +59,22 @@ lives in WORLD.md; how the picture is made in RENDER.md.
   streaks it along the pull, the colours parting a little, while a black
   hole opens there with a hot rim and the rest goes dark; then the same
   let go. The point is the pane's middle on the way in and the body's
-  waist on the way out. Before the bloom, which takes the rim's light.
+  waist on the way out; the middle of the view when the waist is out of
+  it. Before the bloom, which takes the rim's light.
 - Deep in, the fall goes on: rings are born round the point and close in
   on it one after another, fading there, a tunnel that loops for as long
   as the body is held, as a tone that always rises.
 - The plugin asks `Host::go_through(place, portal)`; the core keeps the
-  time and travels, as a link does, when the fall is done.
+  time and puts the body at the place when the fall is done.
+- Travelling inside the world goes through the passage, with no portal: a
+  line of the chart, a place shared in chat, an agent's `travel`
+  (`Command::Travel`). The picture is drawn into the body's waist and
+  bursts out of it, one point all the way. A place refused lets the body
+  out where it stood; a travel during a passage leads it on, falling in
+  again from as deep as the picture is.
+- Arriving is no passage: the page opened at an address, a link pasted
+  into its bar, a body born at home take the body there at once
+  (`Command::GoTo`), under the page's veil until the ground is drawn.
 
 ## The view through it
 

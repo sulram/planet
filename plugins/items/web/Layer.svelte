@@ -10,7 +10,7 @@
 	// drag moves is the plugin's crate's. The menu is open while the plugin
 	// says it is editing, from its button or from a key. The chart, the
 	// landmarks of the world, is anyone's: a line travels there through the
-	// engine's own `go_to`, as a shared link does; a star on a line makes
+	// engine's own `travel`, the passage a portal takes; a star on a line makes
 	// it a favourite and a house makes it the home, the world's to keep for
 	// an account and the engine's to hand this browser for a visitor.
 	let { seam, builds: builder, palette }: LayerProps = $props();
@@ -113,7 +113,7 @@
 	onchart={chart}
 	ongo={(place) => {
 		chart(false);
-		seam.core({ type: 'go_to', place });
+		seam.core({ type: 'travel', place });
 	}}
 	onsearch={(next) => (typed = next)}
 	onrelease={() => {

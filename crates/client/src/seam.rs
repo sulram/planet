@@ -73,11 +73,21 @@ pub enum Command {
     /// facing south and looking a little down. A code shorter than full
     /// precision names a box, and the middle of it is where you land.
     ///
-    /// Arrival and travel both: how a shared address opens where it says,
-    /// how `--at` aims a headless render, and how a place someone shared is
-    /// reached at a click. Walking, flying and, later, portals are the other
-    /// ways about a world.
+    /// An arrival, at once: how a shared address opens where it says, how
+    /// a body is born at home, how `--at` aims a headless render. A front
+    /// end veils it until [`Event::Settled`]. A place chosen inside the
+    /// world is reached by [`Command::Travel`].
     GoTo {
+        place: String,
+    },
+    /// Travel to a place as [`Command::GoTo`] reads it, through the passage
+    /// a portal takes a body by, with no portal: the picture drawn into the
+    /// body, held while the ground at the place comes, and bursting out of
+    /// it there. How a place chosen inside the world is reached, a line of
+    /// the chart, a place shared in chat, by a person's click and by an
+    /// agent alike; a front end never veils it. Walking and flying are the
+    /// other ways about a world.
+    Travel {
         place: String,
     },
     /// What to be called: said in Hello and, while online, changed at once.

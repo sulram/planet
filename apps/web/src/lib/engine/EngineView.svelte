@@ -22,7 +22,10 @@
 	// Owns the canvas lifecycle: create on mount, free on destroy. The engine
 	// runs its own frame loop, input listeners and resize tracking; this
 	// component keeps `recipe` and `mode` in sync through commands, and keeps
-	// a veil over the picture until it is the world the page asked for.
+	// a veil over the picture until it is the world the page asked for. It
+	// veils an arrival, the address bar's place and the home, and never a
+	// travel: a place chosen inside the world is the engine's `travel`, its
+	// passage the picture from start to end.
 	interface Props {
 		/** Null until the caller knows the whole recipe; nothing is sent meanwhile. */
 		recipe: Recipe | null;
@@ -147,6 +150,7 @@
 
 	function arrive() {
 		if (!engine || !standing || !pending) return;
+		settled = false;
 		engine.command({ type: 'go_to', place: pending });
 		pending = null;
 	}
@@ -213,7 +217,6 @@
 			homing = false;
 			if (event.place) {
 				pending = event.place;
-				settled = false;
 				arrive();
 			}
 		}

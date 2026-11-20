@@ -53,13 +53,12 @@ What would follow, in this order:
 Built: in the plugin's turn, after the body moved, the feet's step passes
 the pane where the body, feet to head, meets the ring's circle, from
 either side, and the body goes through
-`Host::go_to` to the landmark's place with the star's bearing. A leap arms
+`Host::go_through` to the landmark's place with the star's bearing. A leap arms
 the crossing again only once the body stands clear of every pane, so a
 return ring on the star sends nobody straight back. What would follow: the
 body keeping its velocity, so a run through a door is a run out of the
 other; a flag in the stance for a leap, so another client snaps the figure
-instead of sliding it 67 ms through the ground as it does now; the veil
-lowered for a leap whose ground is not built.
+instead of sliding it 67 ms through the ground as it does now.
 
 ## The transition
 
@@ -71,9 +70,10 @@ the body that crosses, instead of sliding it through the ground.
 
 ## Agents and the seam
 
-`items.take { item: 'portal', to }` places one; the crossing asks `go_to` as a
-link does. Nothing a hand does an agent cannot ask by its parameters (94), and
-a headless client walks through a portal as a person does.
+`items.take { item: 'portal', to }` places one; the crossing asks
+`go_through`, and `travel` takes the same passage with no portal, as the chart
+does. Nothing a hand does an agent cannot ask by its parameters (94), and a
+headless client walks through a portal as a person does.
 
 ## Costs, measured before chosen
 

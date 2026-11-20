@@ -12,7 +12,7 @@ export const LINE_CHARS = 500;
 /**
  * `chat.said`: a line someone said, your own included, so what the world
  * heard is what is shown. `place` is where the speaker stood when they shared
- * it, ready for `go_to`, or null.
+ * it, ready for `travel`, or null.
  */
 export interface Said {
 	session: number;

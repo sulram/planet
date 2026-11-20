@@ -71,6 +71,8 @@ this file in the same change.
 | Address space | The flat grid view where every block is a unit cube. Where simulation runs. |
 | Place code | The address as a person says it: a sector digit and up to seven base32 characters, `4-K7M42Q`, plus `@h` in blocks when the ground does not decide the height. A prefix is a box, length is precision. Crockford's alphabet, so it survives being read out. |
 | Pose | What a link carries: a body letter, a place code, a bearing and a pitch, `m4-K7M42Q@40,180,-5`, and `,0` after them in first person. Puts whoever opens it where you stood, looking at what you looked at. |
+| Arrival | The body taken to a place from outside the world: the page opened at an address, a link pasted into its bar, a body born at home. At once, under the page's veil until the ground there is drawn (`go_to`). |
+| Travel | The body taken to a place chosen inside the world: a line of the chart, a place shared in chat, an agent's choice, a portal. Through the passage: the picture drawn into the portal or the body, held while the ground there comes, and bursting out at the place (`travel`, PORTALS.md). Never veiled. |
 | Bearing | Degrees clockwise from north, `0..360`. North is the `+Y` pole, the axis the sun turns about. Undefined at a pole. |
 | World space | True 3D coordinates. For rendering and flight above the band. |
 | Chunk | A 16x16x16 block of cells. Unit of storage, streaming and meshing. |

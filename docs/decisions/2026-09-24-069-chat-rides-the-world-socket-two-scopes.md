@@ -5,6 +5,8 @@ lives_in:
   - /server/internal/world
   - /plugins/chat
   - /crates/ui-native
+amended_by:
+  - 2026-11-20-travel-through-the-passage
 ---
 
 # Chat rides the world socket: two scopes, near and world, a line is never stored, and @here is a place to teleport to

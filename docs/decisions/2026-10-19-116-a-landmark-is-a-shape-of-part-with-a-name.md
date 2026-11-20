@@ -15,6 +15,7 @@ lives_in:
   - /apps/web/src/lib/engine/Labels.svelte
 amended_by:
   - 2026-11-20-home-and-favourites
+  - 2026-11-20-travel-through-the-passage
 ---
 
 # A landmark is a shape of part with a name, and the world charts them

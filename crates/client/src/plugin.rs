@@ -190,7 +190,7 @@ pub(crate) struct Lent<'a> {
     pub level: Option<Level>,
     /// The plugin that has the pointer, while one does.
     pub pointer: &'a mut Option<&'static str>,
-    /// A body's passage through a portal, while it lasts.
+    /// A body's passage, through a portal or travelling, while it lasts.
     pub passage: &'a mut Option<Passage>,
     pub clock_s: f64,
 }
@@ -300,16 +300,12 @@ impl Host<'_> {
     pub fn go_through(&mut self, place: &str, portal: PartId) -> Result<(), String> {
         let grid = self.sphere().blocks();
         Pose::parse(grid, place)?;
-        match self.lent.passage {
-            Some(passage) if passage.waits_in(portal) => passage.lead(place.to_owned()),
-            _ => {
-                *self.lent.passage = Some(Passage::new(
-                    Some(place.to_owned()),
-                    portal,
-                    self.lent.clock_s,
-                ))
-            }
-        }
+        Passage::lead(
+            self.lent.passage,
+            place.to_owned(),
+            Some(portal),
+            self.lent.clock_s,
+        );
         Ok(())
     }
 
@@ -318,7 +314,7 @@ impl Host<'_> {
     /// until [`Host::go_through`] says the place or [`Host::let_out`] that
     /// there is none.
     pub fn fall_into(&mut self, portal: PartId) {
-        *self.lent.passage = Some(Passage::new(None, portal, self.lent.clock_s));
+        *self.lent.passage = Some(Passage::new(None, Some(portal), self.lent.clock_s));
     }
 
     /// Lets out where it fell in a body held in a portal that leads
@@ -327,19 +323,6 @@ impl Host<'_> {
         if let Some(passage) = self.lent.passage {
             passage.let_out(self.lent.clock_s);
         }
-    }
-
-    /// Takes the body to a place, as a link does: what a portal's crossing
-    /// asks. Wrong, the text says what is wrong and the body stays.
-    pub fn go_to(&mut self, place: &str) -> Result<(), String> {
-        let moon = self.lent.cells.centre(Body::Moon);
-        crate::travel(
-            self.lent.controller,
-            self.lent.generator,
-            moon,
-            self.lent.events,
-            place,
-        )
     }
 
     /// Where the centre of a body is this frame, from the planet's: the
