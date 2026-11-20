@@ -281,6 +281,14 @@
 		show(opened === panel ? null : panel);
 	}
 
+	// Escape closes the panel, as it drops a plugin's hand in the engine. A
+	// field that took the key for itself (a name being edited, the chat) says
+	// so with preventDefault, and keeps its panel.
+	function onEscape(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || event.defaultPrevented || !opened) return;
+		show(null);
+	}
+
 	function receive(event: EngineEvent | PluginEvent) {
 		if (event.type === 'pointer_changed' && event.plugin) opened = null;
 		if (isPluginEvent(event)) return heard(event);
@@ -311,6 +319,8 @@
 		keep('avatar', path);
 	}
 </script>
+
+<svelte:window onkeydown={onEscape} />
 
 <div class="stage">
 	<EngineView bind:this={view} {recipe} {fieldPath} {mode} {avatar} name={myName} {link} stand={arrival} effects={wanted} onevent={receive} />
@@ -419,7 +429,7 @@
 			{#snippet aside()}
 				<IconButton icon="x" label={t('common.close')} onclick={() => show(null)} />
 			{/snippet}
-			<LangSwitch />
+			<LangSwitch layout="list" onchoose={() => show(null)} />
 		</Panel>
 	{:else if opened === 'plugins' && onswitch && link}
 		<Panel title={t('engine.plugins')} corner="top-right" under>

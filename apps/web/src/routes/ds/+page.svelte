@@ -221,6 +221,14 @@
 		</section>
 
 		<section>
+			<h2>Language switch</h2>
+			<div class="row">
+				<LangSwitch />
+				<LangSwitch layout="list" />
+			</div>
+		</section>
+
+		<section>
 			<h2>Checkbox, Slider and Select</h2>
 			<div class="row">
 				<Checkbox checked={shadows} onchange={(value) => (shadows = value)}>Shadows</Checkbox>

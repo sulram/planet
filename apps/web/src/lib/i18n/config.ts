@@ -15,6 +15,8 @@ const catalogs: Record<Locale, Messages> = { en, pt, zh };
 
 /** What `<html lang>` says for each: the script and region a font is picked by. */
 export const htmlLang: Record<Locale, string> = { en: 'en', pt: 'pt-BR', zh: 'zh-CN' };
+/** Each language's name in itself, the one word every reader of it knows, whatever the page speaks. */
+export const languageNames: Record<Locale, string> = { en: 'English', pt: 'Português', zh: '中文' };
 
 export function isLocale(value: string): value is Locale {
 	return (locales as readonly string[]).includes(value);
