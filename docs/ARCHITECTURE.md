@@ -72,10 +72,9 @@ and how much of it is built in BRIEF.md.
 
 ## The server
 
-- One Go executable is the instance (90): the world socket, the world's
-  routes, the files when there is no bucket, and the web front end as static
-  files. `cmd/planet` is the entry, `internal/world` the core, `internal/api`
-  the routes.
+- One Go executable is the instance (90): its socket and routes, the files
+  when there is no bucket, and the web front end as static files. The entry
+  is `cmd/planet`, the core `internal/world`, the routes `internal/api`.
 - A plugin's world half is its Rust, run in one WASM module through wazero
   (97, 99): `internal/module` embeds it and hands each plugin to the core. Go
   offers services, a store among them, and reads no payload. The bridge is
@@ -148,9 +147,10 @@ and how much of it is built in BRIEF.md.
 - Where you stand is the client's, never the page's (62). A new recipe keeps
   your place while the new ground is dry under it and spawns you otherwise.
   The address bar's place is honoured each time a hand puts one there, once
-  the engine stands in the world the page asked for; what the page writes
-  there as you move never comes back. Until that world stands and is drawn
-  where you land (`settled`), a veil covers the picture (73).
+  the engine stands in the world the page asked for; with none, the body is
+  born at the person's home, as the first chart says it (home-and-favourites).
+  What the page writes there as you move never comes back. Until that world
+  stands and is drawn where you land (`settled`), a veil covers the picture (73).
 - Settings are `scene::Effects`: set with `set_effects`, clamped by the client,
   answered with `effects_changed`, carried in every `Frame`. The renderer holds
   no setting of its own. Both UIs put a button in the top right corner; the

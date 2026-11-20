@@ -114,7 +114,7 @@ this file in the same change.
 | Landlord | A wish: the role on a volume that builds, subdivides and names builders inside, in the land plugin. |
 | Builder | The level `builder`: builds, anywhere in the world. |
 | Admin | The level `admin`: founds the world, chooses its plugins, builds. A superadmin of mundos, or an admin of this world there. |
-| Visitor | A guest: a session at the level `anonymous`. Walks, under a name of their own choosing. |
+| Visitor | A guest: a session with no account, at the level `anonymous` under mundos. Walks, under a name of their own choosing. |
 | Agent | An AI client without a renderer: an account with the same protocol, levels, commands and readings as a person. |
 | Offline preview | The engine with no server: how a planet is looked at before a world is founded, and the desktop explorer. Permanent. |
 | Engine | The Rust client as the web app sees it: `shell-web` compiled to WASM. |
@@ -160,7 +160,9 @@ this file in the same change.
 | Gravity field | An entity defining "down" inside a shape, with range and priority. |
 | Scale band | A discrete avatar scale (giant, human, bug) that selects which levels are streamed. |
 | Landmark | A part whose shape is a five pointed star bearing a name, up to 64 bytes, inline in the record. Lit with its own light whatever its paint, a lamp, so it is seen at night. A place one travels to: its place code is its anchor's, and arriving is standing on it. |
-| Chart | The landmarks of a world, wherever they stand: the parts' answer to `chart`, the nearest the asker first, at most 256, at any level. The star icon beside the cube opens it. |
+| Chart | The landmarks of a world, wherever they stand: the parts' answer to `chart`, the asker's home first, then its favourites, then the rest, each the nearest the asker first, at most 256, at any level. The star icon beside the cube opens it, a search by name over it. |
+| Home | The landmark a person is born on when the page opens with no place; one at a time, chosen by the house on its line of the chart. An account's is kept by the world under its id, a visitor's by its browser (DECISIONS home-and-favourites). |
+| Favourite | A landmark a person starred on its line of the chart, which climbs to the top under the home. Kept as the home is. |
 | Label | A landmark's name hung over its star, within a nametag's reach, by the core, as a nametag is hung over a head. |
 | Portal | A shape of part: a standing ring four metres across, a dark pane in a rim lit with its own light, leading to a landmark by the name the world gave it. A body that walks through the pane stands on that star, facing where it points, and the pane is a window on the world past it (PORTALS.md). |
 | Atlas | The 2D map: the quad sphere unfolded as a cube net. |

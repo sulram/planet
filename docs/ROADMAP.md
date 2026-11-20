@@ -82,7 +82,6 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 ### Where you are
 
 - Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out <!-- card:88 -->
-- A person picks the landmark they are born at: every account chooses its starting landmark from the chart, once, and changes it when it likes (Fabio Ema) <!-- card:103 -->
 - The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
 - A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
 
