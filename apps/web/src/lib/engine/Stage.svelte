@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { page } from '$app/state';
 	import { Badge, Button, Checkbox, Icon, IconButton, Input, LangSwitch, Panel, Spinner, Stat, ThemeToggle } from '$lib/ds';
 	import { upload } from '$lib/files';
 	import { t } from '$lib/i18n';
@@ -203,17 +202,26 @@
 
 	// The address bar is where you are. What this page writes there as you
 	// move is where you already stand; what a hand puts there is somewhere to
-	// go: the link that brought you here, a place pasted over it, a world
-	// entered from another. `page.url` moves on those alone, since the page's
-	// own `replaceState` leaves it be, and a new object each time makes the
-	// same place pasted twice two requests. The engine view walks there once
-	// it stands in the world this page asked for (DECISIONS 73). Empty on the
-	// server, where no address bar has a hash.
+	// go: the link that brought you here, or a place pasted over it. The
+	// browser's own `hashchange` says the second and nothing else: the
+	// page's `replaceState` never fires it, and nor does a rerun of the
+	// loads, which hands `page.url` the hash of the last navigation, the
+	// link's, long after the body walked away. A new object each time makes
+	// the same place pasted twice two requests. The engine view walks there
+	// once it stands in the world this page asked for (DECISIONS 73,
+	// address-bar-hashchange).
 	/** The last pose this page wrote, so standing still writes nothing. */
 	const own = { pose: '' };
-	const arrival = $derived.by(() => {
-		const place = page.url.hash.slice(1);
-		return place && place !== own.pose ? { place } : null;
+	let arrival = $state<{ place: string } | null>(null);
+
+	onMount(() => {
+		const read = () => {
+			const place = location.hash.slice(1);
+			arrival = place && place !== own.pose ? { place } : null;
+		};
+		read();
+		addEventListener('hashchange', read);
+		return () => removeEventListener('hashchange', read);
 	});
 
 	// Replaced and never pushed: the back button is the way out of the world,

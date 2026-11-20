@@ -5,6 +5,8 @@ lives_in:
   - WORLD.md
   - /apps/web/src/lib/engine/Stage.svelte
   - /apps/web/src/lib/engine/EngineView.svelte
+amended_by:
+  - 2026-11-20-address-bar-hashchange
 ---
 
 # The address bar is honoured each time a hand changes it, and the picture waits behind a veil for the world the page asked for
