@@ -7,6 +7,7 @@
 //! drives the same type and simply never renders.
 
 mod assets;
+mod boom;
 mod box_figure;
 mod cells;
 pub mod collision;
@@ -361,6 +362,9 @@ impl Client {
                 self.controller.view().to_array(),
             ),
             pitch_deg: Some(self.controller.pitch().to_degrees()),
+            // How far back a person watches from is theirs; the eye is a way
+            // of looking, and a link copied there opens there.
+            boom_m: self.controller.first_person().then_some(0.0),
             chars: topology::CODE_MAX,
         }
     }
@@ -1120,6 +1124,7 @@ impl Client {
                     self.command(Command::SetRecipe { recipe });
                 }
                 Key::NextAvatar => self.next_avatar(),
+                Key::FirstPerson => self.controller.toggle_first_person(),
                 Key::Undo => self.take_back(),
                 Key::Redo => self.put_back(),
                 _ => {}
@@ -1225,22 +1230,26 @@ impl Client {
         self.frame(camera, patches, pictures, through.zip(seen))
     }
 
-    /// Where every head in view lands on the screen, own body first, with
-    /// the renderer's own projection: reversed infinite depth has no far
-    /// plane, so only what is behind the camera or off the sides is left out.
+    /// Where every head in view lands on the screen, own body first unless
+    /// the camera is in it, with the renderer's own projection: reversed
+    /// infinite depth has no far plane, so only what is behind the camera or
+    /// off the sides is left out.
     fn anchors(&mut self, camera: &scene::Camera) {
         let own = match self.session.link() {
             session::Link::Online { session } => Some(session),
             _ => None,
         };
         let moon = self.moon_position();
-        let own_head = own.map(|session| {
-            let up = self.controller.body_basis().y_axis;
-            (
-                session,
-                self.controller.drawn_position() + up * self.figure.label_m(),
-            )
-        });
+        // The own head is the eye in first person: no tag hangs over it.
+        let own_head = own
+            .filter(|_| self.controller.sees_own_body())
+            .map(|session| {
+                let up = self.controller.body_basis().y_axis;
+                (
+                    session,
+                    self.controller.drawn_position() + up * self.figure.label_m(),
+                )
+            });
         let projection = Projection::of(camera, self.aspect);
         let anchors: Vec<Anchor> = own_head
             .into_iter()
@@ -1671,23 +1680,31 @@ impl Client {
         let sun = DVec3::new(angle.cos(), 0.35, angle.sin()).normalize();
 
         // Every body, the player's first: an avatar when its file has
-        // landed, the box figure until then.
+        // landed, the box figure until then. With the camera in its head the
+        // player's casts its shadow and is not seen; the world past a portal
+        // draws no body at all, so this is the main view's alone.
         let mut boxes = Vec::new();
         let mut skinned = Vec::new();
-        let charge = self.charge();
-        let bodies = core::iter::once((&self.figure, self.motion(), charge)).chain(
+        let own = (self.charge(), !self.controller.sees_own_body());
+        let bodies = core::iter::once((&self.figure, self.motion(), own)).chain(
             self.peers
                 .bodies(self.moon_position())
-                .map(|(figure, motion)| (figure, motion, 0.0)),
+                .map(|(figure, motion)| (figure, motion, (0.0, false))),
         );
-        for (figure, motion, shine) in bodies {
+        for (figure, motion, (shine, shadow_only)) in bodies {
             match figure.instance(&motion, &self.clips) {
-                Some(instance) => skinned.push(scene::SkinnedInstance { shine, ..instance }),
-                None => boxes.extend(
-                    box_figure::parts(&motion)
-                        .into_iter()
-                        .map(|part| scene::BoxPart { shine, ..part }),
-                ),
+                Some(instance) => skinned.push(scene::SkinnedInstance {
+                    shine,
+                    shadow_only,
+                    ..instance
+                }),
+                None => boxes.extend(box_figure::parts(&motion).into_iter().map(|part| {
+                    scene::BoxPart {
+                        shine,
+                        shadow_only,
+                        ..part
+                    }
+                })),
             }
         }
         Frame {
@@ -1960,6 +1977,9 @@ pub(crate) fn travel(
     }
     if let Some(pitch) = pose.pitch_deg {
         controller.set_pitch(pitch.to_radians());
+    }
+    if let Some(boom_m) = pose.boom_m {
+        controller.set_boom(boom_m);
     }
     // A height off the ground is a flight, and a front end that showed a
     // walker has to hear it: the panel says what the body does.

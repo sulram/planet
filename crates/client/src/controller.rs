@@ -12,6 +12,7 @@ use scene::Camera;
 use topology::{Grid, QuadSphere, SurfacePoint};
 use worldgen::Generator;
 
+use crate::boom::{self, Boom};
 use crate::cells::{Cells, Seat};
 use crate::collision::{self, BODY_M, Footing, STEP_M};
 use crate::parts::Parts;
@@ -103,8 +104,6 @@ const GROUND_M: f64 = STEP_M / 2.0;
 const FIGURE_SETTLE_PER_S: f64 = 48.0;
 const EYE_SETTLE_PER_S: f64 = 16.0;
 const LOOK_RAD_PER_PX: f64 = 0.0025;
-/// How much nearer a line of zoom brings the eye, of the boom's length.
-pub(crate) const ZOOM_PER_LINE: f64 = 0.1;
 const PITCH_LIMIT: f64 = 1.45;
 const TURN_PER_S: f64 = 12.0;
 
@@ -158,8 +157,8 @@ pub struct Controller {
     view: DVec3,
     /// Camera pitch, radians, positive looks up.
     pitch: f64,
-    /// Camera distance behind the avatar, metres.
-    boom_m: f64,
+    /// How far behind the eye the camera hangs: zero in first person.
+    boom: Boom,
     /// Speed over the last step, metres per second.
     speed_mps: f64,
     /// The part of it along the ground.
@@ -230,7 +229,7 @@ impl Controller {
             facing: view,
             view,
             pitch: -0.25,
-            boom_m: 6.0,
+            boom: Boom::at(6.0),
             speed_mps: 0.0,
             ground_mps: 0.0,
             stride_m: 0.0,
@@ -640,7 +639,7 @@ impl Controller {
         *self = Controller {
             mode: self.mode,
             pitch: self.pitch,
-            boom_m: self.boom_m,
+            boom: self.boom,
             ..Controller::spawn(point, generator)
         };
     }
@@ -651,15 +650,36 @@ impl Controller {
         self.pitch = pitch.clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
 
-    /// Aims the preview camera: `pitch` in radians, `boom_m` behind the avatar.
+    /// Puts the camera `boom_m` behind the eye at once, or at the eye at zero.
+    pub fn set_boom(&mut self, boom_m: f64) {
+        self.boom.set(boom_m);
+    }
+
+    /// Whether the camera is at the eye, or swinging there.
+    pub fn first_person(&self) -> bool {
+        self.boom.eye()
+    }
+
+    /// Swings the camera to the eye, or out of it to the boom it had.
+    pub fn toggle_first_person(&mut self) {
+        self.boom.toggle();
+    }
+
+    /// Whether the camera is far enough out of the body to see it.
+    pub fn sees_own_body(&self) -> bool {
+        !self.boom.inside()
+    }
+
+    /// Aims the preview camera: `pitch` in radians, `boom_m` behind the eye,
+    /// zero at it.
     pub fn pose_view(&mut self, pitch: f64, boom_m: f64) {
         self.pitch = pitch.clamp(-PITCH_LIMIT, PITCH_LIMIT);
-        self.boom_m = boom_m;
+        self.set_boom(boom_m);
     }
 
     /// Places the avatar and the camera for a preview shot: `altitude_m` above
     /// the ground (flying when positive), camera `pitch` in radians, `boom_m`
-    /// behind the avatar.
+    /// behind the eye, zero at it.
     pub fn pose(&mut self, altitude_m: f64, pitch: f64, boom_m: f64, generator: &Generator) {
         let ground = self.ground_m(generator);
         // Negative altitudes are depths under the sea, never under the ground.
@@ -693,6 +713,7 @@ impl Controller {
         let up = self.frame_up;
         let gravity = self.gravity_up();
         self.look(wish, up);
+        self.boom.advance(dt);
 
         let right = self.view.cross(up);
         let [x, y] = wish.movement.map(f64::from);
@@ -791,8 +812,7 @@ impl Controller {
         self.view = DQuat::from_axis_angle(up, yaw) * self.view;
         self.pitch = (self.pitch - f64::from(wish.look[1]) * LOOK_RAD_PER_PX)
             .clamp(-PITCH_LIMIT, PITCH_LIMIT);
-        self.boom_m =
-            (self.boom_m * (1.0 - f64::from(wish.zoom) * ZOOM_PER_LINE)).clamp(2.0, 400.0);
+        self.boom.zoom(f64::from(wish.zoom));
     }
 
     /// Moves by a world space displacement: in address space on the planet,
@@ -1017,20 +1037,23 @@ impl Controller {
         self.facing = flatten(self.facing, self.view);
     }
 
-    /// The third person camera: behind and above the avatar, never underground.
+    /// The camera at the end of the boom: behind and above the eye in third
+    /// person, at it in first, never underground.
     pub fn camera(&self, generator: &Generator) -> Camera {
         let up = self.frame_up;
         let forward = self.view * self.pitch.cos() + up * self.pitch.sin();
         let target = self.position() + up * (EYE_M + self.eye.off_m);
-        let mut position = target - forward * self.boom_m;
+        let boom_m = self.boom.length_m();
+        let mut position = target - forward * boom_m;
 
         // Never inside the body the avatar stands on, as drawn. In a cave
         // that rule would yank the camera out through the roof, so there the
         // boom is cut by the rock behind it instead: the camera stays in the
-        // cave with the body, as near to it as the walls allow.
+        // cave with the body, as near to it as the walls allow. A boom of
+        // zero has no run to cut, and the camera stays at the eye.
         let (center, datum_m) = self.body();
         if self.underground(self.ground_m(generator)) {
-            let run_m = collision::clear_run_m(generator, target, -forward, self.boom_m);
+            let run_m = collision::clear_run_m(generator, target, -forward, boom_m);
             position = target - forward * run_m;
         } else {
             let from_center = position - center;
@@ -1041,8 +1064,12 @@ impl Controller {
             }
         }
 
-        // Aim at the target from wherever the camera ended up.
-        let look = (target - position).normalize();
+        // Aim at the target from wherever the camera ended up. Nearer than
+        // the nearest third person boom the aim turns to where the view looks,
+        // all there is at the eye, wherever the floor over the ground put it.
+        let aim = (target - position).normalize_or(forward);
+        let at_eye = 1.0 - (boom_m / boom::NEAREST_M).min(1.0);
+        let look = aim.lerp(forward, at_eye).normalize();
         let right = look.cross(up).normalize();
         let rotation = DQuat::from_mat3(&DMat3::from_cols(right, right.cross(look), -look));
         Camera {
@@ -1209,6 +1236,35 @@ mod tests {
         controller.figure = Spring::default();
         controller.stand_on(controller.height_m + 2.0 * BLOCK_M);
         assert_eq!(controller.figure, Spring::default());
+    }
+
+    #[test]
+    fn in_first_person_the_camera_is_the_eye_over_the_ground_and_in_rock() {
+        let generator = Generator::new(Recipe::new(1)).unwrap();
+        let side = f64::from(generator.sphere().blocks().side());
+        let point = SurfacePoint::new(Sector::new(4).unwrap(), side * 0.41, side * 0.37);
+        let mut controller = Controller::spawn(point, &generator);
+        controller.set_pitch(-0.4);
+        let ground_m = controller.ground_m(&generator);
+        // On the ground, then in rock: a body under it is in a cave, where
+        // the boom is cut by the rock behind it, and here all of it is rock.
+        for (feet_m, behind_m) in [(ground_m, 6.0), (ground_m - 6.0, 0.0)] {
+            controller.height_m = feet_m;
+            let up = controller.frame_up;
+            let eye = controller.position() + up * EYE_M;
+            let forward = controller.view * controller.pitch.cos() + up * controller.pitch.sin();
+
+            controller.set_boom(6.0);
+            let third = controller.camera(&generator);
+            assert!(((third.position - eye).length() - behind_m).abs() < 0.1);
+
+            controller.set_boom(0.0);
+            let first = controller.camera(&generator);
+            assert!((first.position - eye).length() < 1e-9, "{feet_m}");
+            let look = first.rotation * DVec3::NEG_Z;
+            assert!(look.dot(forward) > 1.0 - 1e-9, "{look} {forward}");
+            assert!(!controller.sees_own_body());
+        }
     }
 
     #[test]

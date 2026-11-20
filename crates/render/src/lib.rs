@@ -423,7 +423,7 @@ impl Renderer {
             camera.position,
         );
         let placed = sight.whole.then(|| {
-            let box_count =
+            let boxes =
                 resources
                     .boxes
                     .write(&self.device, &self.queue, &frame.boxes, camera.position);
@@ -447,7 +447,7 @@ impl Renderer {
                 &frame.models,
                 camera.position,
             );
-            (box_count, skinned, models)
+            (boxes, skinned, models)
         });
 
         if shadows {
@@ -465,7 +465,7 @@ impl Renderer {
                 &wanted,
                 camera.position,
             );
-            let (box_count, skinned, models) = placed.as_ref().expect("whole");
+            let (boxes, skinned, models) = placed.as_ref().expect("whole");
             for (cascade, matrix) in matrices.iter().enumerate() {
                 let mut light = uniform;
                 light.clip_from_relative = matrix.to_cols_array_2d();
@@ -494,8 +494,7 @@ impl Renderer {
                     .draw_shadow(&mut pass, &resources.casters, &casters, *matrix);
                 self.volumes
                     .draw_shadow(&mut pass, &resources.volumes, &volumes, *matrix);
-                self.boxes
-                    .draw_shadow(&mut pass, &resources.boxes, *box_count);
+                self.boxes.draw_shadow(&mut pass, &resources.boxes, *boxes);
                 self.skinned
                     .draw_shadow(&mut pass, &resources.skinned, skinned);
                 self.pictures
@@ -541,13 +540,13 @@ impl Renderer {
         pass.set_bind_group(0, &resources.bind_group, &[]);
         self.terrain.draw(&mut pass, &resources.patches, &drawn);
         self.volumes.draw(&mut pass, &resources.volumes, &volumes);
-        if let Some((box_count, skinned, models)) = &placed {
+        if let Some((boxes, skinned, models)) = &placed {
             if frame.effects.grass {
                 self.terrain
                     .draw_grass(&mut pass, &resources.patches, &drawn);
             }
             self.models.draw(&mut pass, &resources.models, models);
-            self.boxes.draw(&mut pass, &resources.boxes, *box_count);
+            self.boxes.draw(&mut pass, &resources.boxes, *boxes);
             self.skinned.draw(&mut pass, &resources.skinned, skinned);
             self.pictures
                 .draw(&mut pass, &resources.pictures, &frame.pictures);

@@ -7,9 +7,10 @@
 	// shell's: it reads the fingers and says where the stick is, and this
 	// draws it. The buttons press the keys a keyboard would, through the
 	// engine's own key path: up held jumps on foot and rises in flight, down
-	// held sinks in flight, and the plane takes flight or lands. They sit in
-	// the bottom right corner, where the right thumb rests; the left half of
-	// the world is the stick's.
+	// held sinks in flight, the plane takes flight or lands, and the eye
+	// swings the camera into the head and out. They sit in the bottom right
+	// corner, where the right thumb rests; the left half of the world is the
+	// stick's.
 	interface Props {
 		stick: Stick | null;
 		mode: Mode;
@@ -57,6 +58,9 @@
 {/if}
 
 <div class="thumbs" role="group" aria-label={t('engine.touch')}>
+	<button type="button" class="eye" aria-label={t('engine.touch.eye')} {...tap('KeyP')}>
+		<Icon name="eye" />
+	</button>
 	<button type="button" class="fly" aria-label={t('engine.touch.fly')} aria-pressed={mode === 'fly'} {...tap('KeyF')}>
 		<Icon name="plane" />
 	</button>
@@ -98,14 +102,15 @@
 		box-shadow: 0 0 var(--sp-1) var(--on-world-shadow);
 	}
 	/* Up at the corner, under the thumb; the plane over it, down beside it
-	   in flight. Above the foot of the world, where a plugin's bar sits. */
+	   in flight, the eye, pressed least, farthest. Above the foot of the
+	   world, where a plugin's bar sits. */
 	.thumbs {
 		position: absolute;
 		right: var(--sp-4);
 		bottom: calc(2 * var(--sp-5) + var(--control-h));
 		z-index: var(--z-panel);
 		display: grid;
-		grid-template: 'fly fly' auto 'down up' auto / auto auto;
+		grid-template: 'eye fly' auto 'down up' auto / auto auto;
 		justify-items: end;
 		gap: var(--sp-4);
 	}
@@ -127,6 +132,9 @@
 	button[aria-pressed='true'] {
 		background: var(--action);
 		color: var(--action-text);
+	}
+	.eye {
+		grid-area: eye;
 	}
 	.fly {
 		grid-area: fly;

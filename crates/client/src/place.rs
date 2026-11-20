@@ -25,6 +25,9 @@ pub struct Pose {
     pub bearing_deg: Option<f64>,
     /// Degrees, positive looks up. `None` when nobody said.
     pub pitch_deg: Option<f64>,
+    /// How far behind the eye the camera hangs, metres: zero is first
+    /// person. `None` when nobody said, which leaves it as it was.
+    pub boom_m: Option<f64>,
     /// Characters of code given. A short one names a box, and this is what
     /// lets arrival land in the middle of it rather than on its corner.
     pub chars: usize,
@@ -49,6 +52,7 @@ impl Pose {
             h: airborne.then(|| (f64::from(stance.height_m) / topology::BLOCK_M) as i16),
             bearing_deg: None,
             pitch_deg: None,
+            boom_m: None,
             chars: topology::CODE_MAX,
         })
     }
@@ -68,9 +72,12 @@ impl Pose {
     pub fn text(&self, grid: Grid) -> String {
         let mut out = self.place(grid);
         // Pitch without a bearing would be a half aim, so the two go together
-        // or neither does.
+        // or neither does, and the boom comes after them.
         if let (Some(bearing), Some(pitch)) = (self.bearing_deg, self.pitch_deg) {
             out.push_str(&format!(",{bearing:.0},{pitch:.0}"));
+            if let Some(boom_m) = self.boom_m {
+                out.push_str(&format!(",{boom_m:.0}"));
+            }
         }
         out
     }
@@ -87,19 +94,24 @@ impl Pose {
         };
         let found = topology::place(grid, code).map_err(|e| format!("place {code}: {e:?}"))?;
 
-        let angle = |part: Option<&str>, name: &str| -> Result<Option<f64>, String> {
+        let number = |part: Option<&str>, name: &str, unit: &str| -> Result<Option<f64>, String> {
             match part.map(str::trim).filter(|text| !text.is_empty()) {
                 None => Ok(None),
                 Some(text) => text
                     .parse::<f64>()
+                    .ok()
+                    .filter(|number| number.is_finite())
                     .map(Some)
-                    .map_err(|_| format!("{name} {text}: not degrees")),
+                    .ok_or_else(|| format!("{name} {text}: not {unit}")),
             }
         };
-        let bearing_deg = angle(parts.next(), "bearing")?;
-        let pitch_deg = angle(parts.next(), "pitch")?;
+        let bearing_deg = number(parts.next(), "bearing", "degrees")?;
+        let pitch_deg = number(parts.next(), "pitch", "degrees")?;
+        let boom_m = number(parts.next(), "boom", "metres")?;
         if parts.next().is_some() {
-            return Err(format!("{text}: more than a place, a bearing and a pitch"));
+            return Err(format!(
+                "{text}: more than a place, a bearing, a pitch and a boom"
+            ));
         }
 
         Ok(Pose {
@@ -108,6 +120,7 @@ impl Pose {
             h: found.h,
             bearing_deg,
             pitch_deg,
+            boom_m,
             chars: found.chars,
         })
     }
@@ -129,6 +142,7 @@ mod tests {
             h: None,
             bearing_deg: None,
             pitch_deg: None,
+            boom_m: None,
             chars: topology::CODE_MAX,
         }
     }
@@ -136,18 +150,21 @@ mod tests {
     #[test]
     fn a_pose_round_trips_whole_and_in_parts() {
         let g = grid();
-        for (on_moon, h, look) in [
-            (false, None, None),
-            (true, None, None),
-            (false, Some(40i16), None),
-            (true, Some(-12), Some((180.0, -5.0))),
-            (false, Some(0), Some((0.0, 0.0))),
+        for (on_moon, h, look, boom_m) in [
+            (false, None, None, None),
+            (true, None, None, None),
+            (false, Some(40i16), None, None),
+            (true, Some(-12), Some((180.0, -5.0)), None),
+            (false, Some(0), Some((0.0, 0.0)), None),
+            (false, None, Some((90.0, -10.0)), Some(0.0)),
+            (true, Some(40), Some((270.0, 20.0)), Some(12.0)),
         ] {
             let want = Pose {
                 on_moon,
                 h,
                 bearing_deg: look.map(|(b, _)| b),
                 pitch_deg: look.map(|(_, p)| p),
+                boom_m,
                 ..pose()
             };
             let text = want.text(g);
@@ -172,6 +189,12 @@ mod tests {
         // A link is the place with more said about it, never a different place.
         assert!(aimed.text(g).starts_with(&aimed.place(g)));
         assert!(aimed.place(g).starts_with(MOON_MARK));
+        // First person is the aim with a boom of zero after it.
+        let eye = Pose {
+            boom_m: Some(0.0),
+            ..aimed
+        };
+        assert_eq!(eye.text(g), format!("{},0", aimed.text(g)));
     }
 
     #[test]
@@ -185,7 +208,13 @@ mod tests {
                 .contains("bearing")
         );
         assert!(
-            Pose::parse(g, "4-ABC,0,0,0")
+            Pose::parse(g, "4-ABC,0,0,near")
+                .unwrap_err()
+                .contains("boom")
+        );
+        assert!(Pose::parse(g, "4-ABC,0,0,NaN").is_err());
+        assert!(
+            Pose::parse(g, "4-ABC,0,0,0,0")
                 .unwrap_err()
                 .contains("more than")
         );

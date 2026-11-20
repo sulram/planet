@@ -246,6 +246,7 @@ impl Figure {
             transform,
             joints,
             shine: 0.0,
+            shadow_only: false,
         })
     }
 }

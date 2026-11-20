@@ -263,6 +263,8 @@ pub struct BoxPart {
     /// How much it shines white with its own light in place of its colour,
     /// 0 to 1: a body charged by its passage through a portal.
     pub shine: f32,
+    /// Casts its shadow and is not drawn: the body the camera is inside of.
+    pub shadow_only: bool,
 }
 
 /// Stable identity of a volume mesh while it is in the scene: one chunk of
@@ -503,6 +505,8 @@ pub struct SkinnedInstance {
     /// How much it shines white with its own light in place of its colour,
     /// 0 to 1: a body charged by its passage through a portal.
     pub shine: f32,
+    /// Casts its shadow and is not drawn: the body the camera is inside of.
+    pub shadow_only: bool,
 }
 
 #[derive(Clone, Copy, Debug)]

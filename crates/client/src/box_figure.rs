@@ -112,6 +112,7 @@ pub fn parts(motion: &Motion) -> Vec<BoxPart> {
                 transform: body * pose * local,
                 color: part.color,
                 shine: 0.0,
+                shadow_only: false,
             }
         })
         .collect()

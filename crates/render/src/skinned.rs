@@ -209,38 +209,45 @@ impl Skinned {
         })
     }
 
-    /// Draws the instances [`InstanceUniforms::write`] placed, in the same order.
+    /// Draws the instances [`InstanceUniforms::write`] placed that are seen.
     pub fn draw(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         uniforms: &InstanceUniforms,
-        drawn: &[SkinnedMeshId],
+        placed: &[Placed],
     ) {
-        if drawn.is_empty() {
-            return;
-        }
-        self.draw_with(pass, uniforms, drawn, &self.pipeline);
+        self.draw_with(pass, uniforms, placed, true, &self.pipeline);
     }
 
+    /// Draws every instance placed into a shadow, the unseen with the rest.
     pub fn draw_shadow(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         uniforms: &InstanceUniforms,
-        drawn: &[SkinnedMeshId],
+        placed: &[Placed],
     ) {
-        self.draw_with(pass, uniforms, drawn, &self.shadow_pipeline);
+        self.draw_with(pass, uniforms, placed, false, &self.shadow_pipeline);
     }
 
     fn draw_with(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         uniforms: &InstanceUniforms,
-        drawn: &[SkinnedMeshId],
+        placed: &[Placed],
+        seen_only: bool,
         pipeline: &wgpu::RenderPipeline,
     ) {
+        let mut drawn = placed
+            .iter()
+            .enumerate()
+            .filter(|(_, placed)| placed.seen || !seen_only)
+            .peekable();
+        if drawn.peek().is_none() {
+            return;
+        }
         pass.set_pipeline(pipeline);
-        for (slot, id) in drawn.iter().enumerate() {
-            let mesh = &self.meshes[id];
+        for (slot, placed) in drawn {
+            let mesh = &self.meshes[&placed.mesh];
             pass.set_bind_group(1, &uniforms.slots[slot].1, &[]);
             pass.set_vertex_buffer(0, mesh.vertices.slice(..));
             pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -252,6 +259,14 @@ impl Skinned {
     }
 }
 
+/// A skinned instance a view placed, in its slot: its mesh, and whether it
+/// is seen or only casts its shadow.
+#[derive(Clone, Copy)]
+pub struct Placed {
+    mesh: SkinnedMeshId,
+    seen: bool,
+}
+
 /// One uniform block per skinned instance a view draws. Grows, never shrinks:
 /// avatars in view are few.
 #[derive(Default)]
@@ -260,8 +275,8 @@ pub struct InstanceUniforms {
 }
 
 impl InstanceUniforms {
-    /// Writes the instances whose mesh the renderer holds and returns their
-    /// meshes in slot order.
+    /// Writes the instances whose mesh the renderer holds and returns them
+    /// in slot order.
     pub fn write(
         &mut self,
         device: &wgpu::Device,
@@ -269,7 +284,7 @@ impl InstanceUniforms {
         skinned: &Skinned,
         instances: &[SkinnedInstance],
         camera: DVec3,
-    ) -> Vec<SkinnedMeshId> {
+    ) -> Vec<Placed> {
         let mut drawn = Vec::new();
         for instance in instances
             .iter()
@@ -291,7 +306,10 @@ impl InstanceUniforms {
                 *out = joint.to_cols_array_2d();
             }
             queue.write_buffer(&self.slots[slot].0, 0, bytemuck::bytes_of(&uniform));
-            drawn.push(instance.mesh);
+            drawn.push(Placed {
+                mesh: instance.mesh,
+                seen: !instance.shadow_only,
+            });
         }
         drawn
     }

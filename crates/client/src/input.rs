@@ -7,7 +7,7 @@
 //! a [`KeyAsk`], and a shell hands over the keys of its keyboard that a
 //! plugin asked for, by the name the web gives them.
 
-use crate::controller::ZOOM_PER_LINE;
+use crate::boom::ZOOM_PER_LINE;
 
 /// How far a stick is pushed, of its whole reach, when it runs.
 const RUN_EXTENT: f32 = 0.9;
@@ -30,6 +30,8 @@ pub enum Key {
     NewSeed,
     /// Wear the next avatar on offer.
     NextAvatar,
+    /// Swing the camera to the eye, or out of it: first person and third.
+    FirstPerson,
     /// The pointer's button while a plugin has the pointer: what its hand
     /// does is the plugin's.
     Use,
@@ -125,8 +127,8 @@ pub struct Input {
     inspected: bool,
     /// Pointer motion in pixels, x right, y down.
     pub look: [f32; 2],
-    /// Wheel motion in lines, positive zooms in: a line brings the eye a
-    /// tenth nearer.
+    /// Wheel motion in lines, positive zooms in: a line brings the camera a
+    /// tenth nearer, and a line past the nearest takes it to the eye.
     pub zoom: f32,
     /// Where a stick points, `[right, forward]`, no longer than one: how
     /// far of its reach it is pushed. The shell that has one, drawn on a
@@ -263,7 +265,7 @@ fn held_slot(key: Key) -> Option<usize> {
         Key::Sprint => Some(6),
         Key::Use => Some(7),
         Key::Undo | Key::Redo => None,
-        Key::ToggleMode | Key::NewSeed | Key::NextAvatar => None,
+        Key::ToggleMode | Key::NewSeed | Key::NextAvatar | Key::FirstPerson => None,
     }
 }
 

@@ -285,6 +285,8 @@ impl Host<'_> {
             bearing_deg,
             // A bearing with no pitch would be half an aim: level, then.
             pitch_deg: bearing_deg.map(|_| 0.0),
+            // How far back the one who goes there watches from stays theirs.
+            boom_m: None,
             chars: topology::CODE_MAX,
         };
         pose.text(grid)

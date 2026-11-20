@@ -60,13 +60,14 @@ ARCHITECTURE.md; how the picture is made is in RENDER.md.
   gallery gets shared:
 
 ```text
-m4-K7M42Q@40,180,-5
-│└──┬───┘ └┬┘ └┬┘ └┬┘
-│   │      │   │   └── pitch, degrees, positive looks up
-│   │      │   └────── bearing, degrees clockwise from north
-│   │      └────────── height in blocks from the datum, when not on the ground
-│   └───────────────── the place code
-└───────────────────── the body: nothing is the planet, `m` is the moon
+m4-K7M42Q@40,180,-5,0
+│└──┬───┘└┬┘ └┬┘ └┬ ┬
+│   │     │   │   │ └── boom, said only in first person: 0
+│   │     │   │   └──── pitch, degrees, positive looks up
+│   │     │   └──────── bearing, degrees clockwise from north
+│   │     └──────────── height in blocks from the datum, when not on the ground
+│   └────────────────── the place code
+└────────────────────── the body: nothing is the planet, `m` is the moon
 ```
 
 - Everything is optional from the right but the code, so the common case stays
@@ -83,9 +84,8 @@ m4-K7M42Q@40,180,-5
 - The compass reads where the **camera** looks, not where the body points:
   turning the mouse leaves the body where it was, and "which way am I looking"
   is a question about the eyes.
-- The rose is not in Rust. N, S, E and W are English and the Portuguese rose
-  runs N, NNE, NE, ENE, **L**, so the engine sends the angle and the front end
-  names it.
+- The rose is not in Rust: N, S, E and W are English, the Portuguese rose runs
+  N, NNE, NE, ENE, **L**; the engine sends the angle, the front end names it.
 
 ## Two layers: a surface, and volumes
 
@@ -189,9 +189,9 @@ m4-K7M42Q@40,180,-5
   the camera moved (29, 43).
 - A node keeps drawing itself until its children are ready: never a hole. Six
   patches are built an update, closest first, one of them for its grass (86).
-- Streaming is around the body, never around the camera: the camera is a boom
-  that swings metres away and may look from orbit, and the ground under the
-  avatar may not depend on where it points.
+- Streaming is around the body, never the camera: the camera hangs on a boom
+  that swings metres away, out to orbit or in to the eye (first person), and
+  the ground under the avatar may not depend on where it points.
 - One read path inside a volume: `chunk(addr)` is the stored chunk if there is
   one and the generated chunk otherwise. On arrival the client asks which
   chunks near it are stored, at what version, and the server sends only those.

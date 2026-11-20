@@ -871,6 +871,7 @@ fn binding(code: &str) -> Option<Key> {
         "KeyF" => Key::ToggleMode,
         "KeyR" => Key::NewSeed,
         "KeyV" => Key::NextAvatar,
+        "KeyP" => Key::FirstPerson,
         _ => return None,
     })
 }

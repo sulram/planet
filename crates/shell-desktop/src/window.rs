@@ -405,6 +405,7 @@ fn binding(code: KeyCode) -> Option<Key> {
         KeyCode::KeyF => Key::ToggleMode,
         KeyCode::KeyR => Key::NewSeed,
         KeyCode::KeyV => Key::NextAvatar,
+        KeyCode::KeyP => Key::FirstPerson,
         _ => return None,
     })
 }

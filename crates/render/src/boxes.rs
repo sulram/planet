@@ -91,33 +91,50 @@ impl Boxes {
         }
     }
 
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, instances: &Instances, count: u32) {
-        if count == 0 {
-            return;
-        }
-        self.draw_with(pass, instances, count, &self.pipeline);
+    /// Draws the boxes [`Instances::write`] placed that are seen.
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, instances: &Instances, placed: Placed) {
+        self.draw_with(
+            pass,
+            instances,
+            placed.seen_from..placed.count,
+            &self.pipeline,
+        );
     }
 
-    pub fn draw_shadow(&self, pass: &mut wgpu::RenderPass<'_>, instances: &Instances, count: u32) {
-        if count == 0 {
-            return;
-        }
-        self.draw_with(pass, instances, count, &self.shadow_pipeline);
+    /// Draws every box placed into a shadow, the unseen with the rest.
+    pub fn draw_shadow(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        instances: &Instances,
+        placed: Placed,
+    ) {
+        self.draw_with(pass, instances, 0..placed.count, &self.shadow_pipeline);
     }
 
     fn draw_with(
         &self,
         pass: &mut wgpu::RenderPass<'_>,
         instances: &Instances,
-        count: u32,
+        range: std::ops::Range<u32>,
         pipeline: &wgpu::RenderPipeline,
     ) {
+        if range.is_empty() {
+            return;
+        }
         pass.set_pipeline(pipeline);
         pass.set_vertex_buffer(0, self.vertices.slice(..));
         pass.set_vertex_buffer(1, instances.buffer.slice(..));
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
-        pass.draw_indexed(0..36, 0, 0..count);
+        pass.draw_indexed(0..36, 0, range);
     }
+}
+
+/// The boxes a view placed: how many, and from which on they are seen.
+/// Those before only cast their shadow.
+#[derive(Clone, Copy)]
+pub struct Placed {
+    count: u32,
+    seen_from: u32,
 }
 
 /// The boxes one view draws this frame, camera-relative.
@@ -144,19 +161,22 @@ impl Instances {
         })
     }
 
+    /// Writes the boxes, the ones that only cast their shadow first.
     pub fn write(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         boxes: &[BoxPart],
         camera: DVec3,
-    ) -> u32 {
+    ) -> Placed {
         if boxes.len() > self.capacity {
             self.capacity = boxes.len().next_power_of_two();
             self.buffer = Self::allocate(device, self.capacity);
         }
-        let data: Vec<Instance> = boxes
-            .iter()
+        let unseen = boxes.iter().filter(|part| part.shadow_only);
+        let data: Vec<Instance> = unseen
+            .clone()
+            .chain(boxes.iter().filter(|part| !part.shadow_only))
             .map(|part| {
                 // Subtract the camera in f64, only then drop to f32.
                 let relative = DAffine3::from_translation(-camera) * part.transform;
@@ -168,7 +188,10 @@ impl Instances {
             })
             .collect();
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&data));
-        boxes.len() as u32
+        Placed {
+            count: boxes.len() as u32,
+            seen_from: unseen.count() as u32,
+        }
     }
 }
 

@@ -70,7 +70,7 @@ this file in the same change.
 | Address | Integer location: sector, u, v, h, then chunk and block index. The save format. |
 | Address space | The flat grid view where every block is a unit cube. Where simulation runs. |
 | Place code | The address as a person says it: a sector digit and up to seven base32 characters, `4-K7M42Q`, plus `@h` in blocks when the ground does not decide the height. A prefix is a box, length is precision. Crockford's alphabet, so it survives being read out. |
-| Pose | What a link carries: a body letter, a place code, a bearing and a pitch, `m4-K7M42Q@40,180,-5`. Puts whoever opens it where you stood, looking at what you looked at. |
+| Pose | What a link carries: a body letter, a place code, a bearing and a pitch, `m4-K7M42Q@40,180,-5`, and `,0` after them in first person. Puts whoever opens it where you stood, looking at what you looked at. |
 | Bearing | Degrees clockwise from north, `0..360`. North is the `+Y` pole, the axis the sun turns about. Undefined at a pole. |
 | World space | True 3D coordinates. For rendering and flight above the band. |
 | Chunk | A 16x16x16 block of cells. Unit of storage, streaming and meshing. |
@@ -142,6 +142,8 @@ this file in the same change.
 | Site | The body an avatar's position is stored relative to. Changes at a sphere of influence. |
 | Frame | An avatar's own up, view and facing. Turns toward gravity by rotation; in flight it wins. |
 | Figure | What an avatar looks like in the client: a worn VRM and its clips, or the box figure. |
+| Boom | How far behind the eye the camera hangs: metres in third person, drawn in and out by the wheel or a pinch. Streaming never follows it. |
+| First person | The boom pulled all the way in: the camera at the eye, the own body casting its shadow and not drawn. A line of the wheel past the nearest boom, or `P`. |
 | Footprint | What one sample covers: the spacing of the mesh asking the generator, or what a pixel covers of the sea. Detail finer than it is faded out. |
 | Anchor | A patch origin wrapped to the detail period in f64: what fixes shader detail to the planet. |
 | Entity | The family a part belongs to: GLB, part, light, field, portal, media frame, script. What is built of it is a part. |

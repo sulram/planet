@@ -30,6 +30,7 @@
 		{ keys: 'Shift', does: t('engine.hint.sprint') },
 		{ keys: 'F', does: t('engine.hint.mode') },
 		...(browse ? [{ keys: 'V', does: t('engine.hint.avatar') }] : []),
+		{ keys: 'P', does: t('engine.hint.eye') },
 		{ keys: t('engine.hint.undo.keys'), does: t('engine.hint.undo') },
 		...plugins.map((hint) => ({ keys: typeof hint.keys === 'string' ? hint.keys : hint.keys(), does: hint.does() })),
 		{ keys: t('engine.hint.zoom.keys'), does: t('engine.hint.zoom') },
@@ -44,7 +45,8 @@
 		{ keys: t('engine.hint.zoom.touch'), does: t('engine.hint.zoom') },
 		{ icon: 'chevrons-up', does: t('engine.hint.up') },
 		{ icon: 'chevrons-down', does: t('engine.hint.down') },
-		{ icon: 'plane', does: t('engine.hint.mode') }
+		{ icon: 'plane', does: t('engine.hint.mode') },
+		{ icon: 'eye', does: t('engine.hint.eye') }
 	]);
 </script>
 

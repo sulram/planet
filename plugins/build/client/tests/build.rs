@@ -575,3 +575,50 @@ fn on_the_moon_a_volume_opens_and_a_drag_builds_from_its_ground() {
     let moon = frame.moon.position;
     assert!(frame.volumes.iter().all(|cubes| cubes.body_center == moon));
 }
+
+#[test]
+fn a_cell_laid_from_the_eye_lands_where_the_pointer_aims_and_the_tool_stays() {
+    let mut client = rehearsed();
+    client.command_json(LAY);
+    laid(&mut client);
+    // At the eye, looking down at the slab under the feet.
+    let mut input = Input::default();
+    input.key(Key::FirstPerson, true);
+    input.look = [0.0, 300.0];
+    for _ in 0..30 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    client.command_json(TAKE_CREATE);
+    input.pointer = Some([0.5, 0.5]);
+    let frame = client.update(1.0 / 60.0, &mut input);
+    assert!(
+        frame.boxes.iter().all(|part| part.shadow_only),
+        "the camera is in the head"
+    );
+    let toward = frame.camera.rotation * glam::DVec3::NEG_Z;
+    let aim = client
+        .host("build")
+        .sight(frame.camera.position, toward, None)
+        .aim()
+        .expect("the slab is under the pointer");
+    let cell = aim.hit.before();
+    assert!(client.cells().cell(aim.seat, cell).is_air());
+    input.key(Key::Use, true);
+    client.update(1.0 / 60.0, &mut input);
+    input.key(Key::Use, false);
+    client.update(1.0 / 60.0, &mut input);
+    assert!(!client.cells().cell(aim.seat, cell).is_air(), "{cell:?}");
+
+    // Out by the wheel and back in by the key, the tool still in hand.
+    said(&mut client);
+    input.zoom = -1.0;
+    for _ in 0..30 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    input.key(Key::FirstPerson, true);
+    for _ in 0..30 {
+        client.update(1.0 / 60.0, &mut input);
+    }
+    assert!(client.pointing());
+    assert!(!said(&mut client).iter().any(|(kind, _)| kind == "hand"));
+}

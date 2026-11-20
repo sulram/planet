@@ -123,8 +123,9 @@ its pane is, in PORTALS.md.
 - Collision is the ground in full detail, never the filtered one: what a body
   stands on may not change with where the camera is. It reaches as deep as the
   field does, which is deeper than the volume is drawn.
-- Inside the ground the third person boom is cut by the rock behind it instead
-  of lifted over the terrain, so the camera stays in the cave with the body.
+- Inside the ground the boom is cut by the rock behind it instead of lifted
+  over the terrain, so the camera stays in the cave with the body. At the eye
+  (first person) there is nothing to cut, and the body casts its shadow unseen.
   Flight keeps its own floor over the drawn ground, except under the ground,
   where the footing takes over. With no tool in hand a volume's cells are
   floor, roof and walls to a flyer too; building, it flies through (76).
