@@ -568,7 +568,21 @@ impl Host<'_> {
         self.lent.parts.chart();
     }
 
-    /// The chart's answer since last taken, the nearest the body first.
+    /// Makes a landmark one of this person's favourites, or no longer one:
+    /// an account's are asked of the world, a visitor's are kept by its
+    /// front end. The next chart says it.
+    pub fn favour(&mut self, id: u64, on: bool) {
+        self.lent.parts.favour(id, on);
+    }
+
+    /// Makes a landmark this person's home, in the place of the last, or
+    /// clears it with `None`, as [`Host::favour`] keeps a favourite.
+    pub fn home(&mut self, id: Option<u64>) {
+        self.lent.parts.home(id);
+    }
+
+    /// The chart's answer since last taken: the home first, then the
+    /// favourites, then the rest, each the nearest the body first.
     pub fn take_charted(&mut self) -> Option<Vec<Landmarked>> {
         self.lent
             .parts

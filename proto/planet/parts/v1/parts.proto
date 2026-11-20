@@ -3,8 +3,8 @@
 // whose owner is `parts`.
 //
 // Up, the ops: `place`, `set`, `remove`, `take_back`, `put_back`, `look`,
-// `chart`. Down, the events: `placed`, `changed`, `removed`, `seen`,
-// `charted`.
+// `chart`, `favour`, `home`. Down, the events: `placed`, `changed`,
+// `removed`, `seen`, `charted`.
 syntax = "proto3";
 
 package planet.parts.v1;
@@ -209,9 +209,38 @@ message Seen {
 // answers the asker with `charted`.
 message Chart {}
 
-// `charted`: the landmarks of the world as they stand, the nearest the
-// asker first, at most 256. The answer to `chart`, always given, empty when
-// the world has none.
+// `charted`: the landmarks of the world as they stand, at most 256: the
+// asker's home first, then its favourites, then the rest, each the nearest
+// the asker first. The answer to `chart`, always given, empty when the
+// world has none.
 message Charted {
   repeated Record records = 1;
+  // Of the records, the asker's home, by its name in the world; 0 when it
+  // has none among them. A visitor's is never the world's to say.
+  uint64 home = 2;
+  // Of the records, the asker's favourites, by their names in the world.
+  repeated uint64 favourites = 3;
+}
+
+// `favour`: makes a landmark one of the asker's favourites, or no longer
+// one. An account's alone, kept by the world under its id.
+message Favour {
+  uint64 id = 1;
+  bool on = 2;
+}
+
+// `home`: makes a landmark the asker's home, where its body is born when a
+// page opens with no place; 0 clears it. One home at a time: a new one
+// takes the place of the last. An account's alone, kept by the world under
+// its id.
+message Home {
+  uint64 id = 1;
+}
+
+// What an account chose of the chart, as the world keeps it under the
+// account's id: its home, 0 for none, and its favourites, each a landmark
+// by its name in the world. Kept, never sent.
+message Choices {
+  uint64 home = 1;
+  repeated uint64 favourites = 2;
 }

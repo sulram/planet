@@ -90,6 +90,14 @@ pub enum Command {
     /// what a front end asks when a panel of its own opens, so one thing
     /// is open at a time.
     PutDown,
+    /// A visitor's home and favourites in the chart, as its front end kept
+    /// them from [`Event::Choices`]: each a landmark by its name in the
+    /// world. An account's are the world's, and these are not.
+    SetChoices {
+        home: Option<u64>,
+        #[serde(default)]
+        favourites: Vec<u64>,
+    },
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize)]
@@ -173,7 +181,8 @@ pub enum Event {
     },
     /// The streamer has nothing left to build for this view: what is on
     /// screen is the world at the detail it is meant to have. Sent each time
-    /// that becomes true again, after a new recipe, a leap or a walk.
+    /// that becomes true again, after a new recipe or a walk, and after
+    /// every leap, even to ground already drawn.
     Settled,
     /// The paints a cell can take, in order, as `#rrggbb`. Sent once, first
     /// after [`Event::Ready`].
@@ -184,6 +193,20 @@ pub enum Event {
     /// at a time: taking it rests the one that had it.
     PointerChanged {
         plugin: Option<String>,
+    },
+    /// Where the body is born: the place of this person's home, as the
+    /// first chart after the welcome says it, `None` with no home. Said
+    /// once a link; a front end that asked no place goes there with
+    /// [`Command::GoTo`].
+    Home {
+        place: Option<String>,
+    },
+    /// A visitor's home and favourites, whenever they change: what its
+    /// front end keeps and hands back with [`Command::SetChoices`]. An
+    /// account's are kept by the world, and never said here.
+    Choices {
+        home: Option<u64>,
+        favourites: Vec<u64>,
     },
     /// A command was refused. `message` is for logs, not for end users.
     Rejected {

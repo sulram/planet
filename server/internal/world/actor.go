@@ -128,6 +128,7 @@ func (a *actor) join(s *session) {
 		Avatar:  s.identity.Avatar,
 		Plugins: wirePlugins(spoken(a.plugins)),
 		ClockMs: uint64(time.Now().UnixMilli()),
+		Visitor: s.identity.Visitor(),
 	}}})
 	a.broadcast(&pb.ServerMessage{Message: &pb.ServerMessage_Joined{Joined: &pb.Joined{Peer: s.peer()}}}, s)
 }

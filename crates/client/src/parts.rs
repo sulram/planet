@@ -30,8 +30,12 @@
 //! waits for the name. What others change arrives as events, and the parts
 //! near the body are asked for every second. With no world, a headless
 //! picture or a bench, the parts are held here alone.
+//!
+//! A person's home and favourites in the chart are an account's in a world,
+//! kept by the world and said with each chart; a visitor's, and alone, are
+//! kept here, handed in by the front end and told back to it to keep.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use glam::{DAffine3, DMat3, DVec3};
 use part::{Gap, Part, PartId, Portal, Pose, Shape};
@@ -170,6 +174,10 @@ struct Link {
     /// This client's own session: a part placed under that number is one
     /// it placed.
     me: u32,
+    /// The session is an account's: the world keeps its choices.
+    account: bool,
+    /// The chart asked on arriving is awaited: its answer says the home.
+    homing: bool,
     /// The last number given to an op.
     asked: u32,
     asks: Vec<Ask>,
@@ -220,14 +228,53 @@ pub struct Landmarked {
     pub part: Part,
     /// From the body, metres; infinite from another body.
     pub away_m: f64,
+    /// The asker's home: where its body is born when a page opens with no
+    /// place.
+    pub home: bool,
+    pub favourite: bool,
+}
+
+/// What a person chose of the chart: a home, and favourites, each a
+/// landmark by the name the world gave it, or the name here with no world.
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+pub struct Choices {
+    pub home: Option<u64>,
+    pub favourites: BTreeSet<u64>,
+}
+
+impl Choices {
+    /// Where a landmark stands in the chart: the home first, then the
+    /// favourites, then the rest.
+    fn rank(&self, id: u64) -> u8 {
+        match id {
+            _ if self.home == Some(id) => 0,
+            _ if self.favourites.contains(&id) => 1,
+            _ => 2,
+        }
+    }
+}
+
+/// The chart's answer as it came: the landmarks of the world by their
+/// names in it, and the asker's choices as the world said them.
+struct Charted {
+    landmarks: Vec<(u64, Seat, Part)>,
+    said: Choices,
 }
 
 /// Every part held, by its name, and what draws them.
 #[derive(Default)]
 pub struct Parts {
     held: BTreeMap<PartId, (Seat, Part)>,
-    /// The chart's answer since last taken: the landmarks of the world.
-    charted: Option<Vec<(u64, Seat, Part)>>,
+    /// The chart's answer since last taken.
+    charted: Option<Charted>,
+    /// The choices kept here: a visitor's and alone. An account's in a
+    /// world are the world's.
+    choices: Choices,
+    /// The choices kept here changed since the front end was last told.
+    rechosen: bool,
+    /// The home as the first chart in a world said it, until taken: where
+    /// a body is born. `Some(None)` with no home.
+    home_said: Option<Option<(Seat, Part)>>,
     /// The landmarks of the world as last charted, by name: where a portal
     /// leads when its star is not held here.
     known: BTreeMap<u64, (Seat, Part)>,
@@ -328,16 +375,21 @@ impl Parts {
     }
 
     /// A world keeps the parts from here on: what was held is forgotten,
-    /// and what the world holds near the body is asked for at once.
-    pub(crate) fn link(&mut self, me: u32) {
+    /// and what the world holds near the body is asked for at once, with
+    /// the chart, whose answer says the home. An account's choices are the
+    /// world's from here on.
+    pub(crate) fn link(&mut self, me: u32, account: bool) {
         self.held.clear();
         self.done.clear();
         self.undone.clear();
         self.link = Some(Link {
             me,
+            account,
+            homing: true,
             since_look_s: LOOK_S,
             ..Link::default()
         });
+        self.chart();
     }
 
     /// The world is gone, and what it kept with it.
@@ -412,7 +464,61 @@ impl Parts {
             .map(|(id, seat, part)| (id.0, seat, *part))
             .collect();
         self.know(&landmarks);
-        self.charted = Some(landmarks);
+        self.charted = Some(Charted {
+            landmarks,
+            said: Choices::default(),
+        });
+    }
+
+    /// Whether the world keeps the choices: an account's, in a world.
+    fn world_chooses(&self) -> bool {
+        self.link.as_ref().is_some_and(|link| link.account)
+    }
+
+    /// The choices a front end kept for this person, handed back: a
+    /// visitor's and alone, the ones that stand; an account's in a world
+    /// are the world's, and these are not.
+    pub(crate) fn kept(&mut self, choices: Choices) {
+        self.choices = choices;
+    }
+
+    /// The choices kept here, once each time they change: what the front
+    /// end keeps for a visitor.
+    pub(crate) fn take_rechosen(&mut self) -> Option<Choices> {
+        core::mem::take(&mut self.rechosen).then(|| self.choices.clone())
+    }
+
+    /// Makes a landmark one of the person's favourites, or no longer one:
+    /// asked of the world for an account, kept here otherwise. The next
+    /// chart says it.
+    pub(crate) fn favour(&mut self, id: u64, on: bool) {
+        if let Some(link) = self.link.as_mut().filter(|link| link.account) {
+            link.ask(wire::FAVOUR, &wire::Favour { id, on });
+            return;
+        }
+        let changed = match on {
+            true => self.choices.favourites.insert(id),
+            false => self.choices.favourites.remove(&id),
+        };
+        self.rechosen |= changed;
+    }
+
+    /// Makes a landmark the person's home, in the place of the last, or
+    /// clears it: asked of the world for an account, kept here otherwise.
+    pub(crate) fn home(&mut self, id: Option<u64>) {
+        if let Some(link) = self.link.as_mut().filter(|link| link.account) {
+            let id = id.unwrap_or(0);
+            link.ask(wire::HOME, &wire::Home { id });
+            return;
+        }
+        self.rechosen |= self.choices.home != id;
+        self.choices.home = id;
+    }
+
+    /// The home as the first chart in a world said it, once: `Some(None)`
+    /// with no home, `None` until the chart answers and once taken.
+    pub(crate) fn take_home(&mut self) -> Option<Option<(Seat, Part)>> {
+        self.home_said.take()
     }
 
     /// Asks for the chart for a landmark not held here, at most once every
@@ -493,18 +599,27 @@ impl Parts {
         generator: &Generator,
         body: (Body, DVec3),
     ) -> Option<Vec<Landmarked>> {
-        let mut landmarks: Vec<Landmarked> = self
-            .charted
-            .take()?
+        let Charted { landmarks, said } = self.charted.take()?;
+        let choices = match self.world_chooses() {
+            true => &said,
+            false => &self.choices,
+        };
+        let mut landmarks: Vec<Landmarked> = landmarks
             .into_iter()
             .map(|(id, seat, part)| Landmarked {
                 id,
                 seat,
                 part,
                 away_m: away_m(generator, seat, &part.pose, body),
+                home: choices.home == Some(id),
+                favourite: choices.favourites.contains(&id),
             })
             .collect();
-        landmarks.sort_by(|a, b| a.away_m.total_cmp(&b.away_m).then(a.id.cmp(&b.id)));
+        landmarks.sort_by(|a, b| {
+            (choices.rank(a.id).cmp(&choices.rank(b.id)))
+                .then(a.away_m.total_cmp(&b.away_m))
+                .then(a.id.cmp(&b.id))
+        });
         Some(landmarks)
     }
 
@@ -636,8 +751,22 @@ impl Parts {
                         Some((record.id, seat, part))
                     })
                     .collect();
+                let said = Choices {
+                    home: (charted.home != 0).then_some(charted.home),
+                    favourites: charted.favourites.into_iter().collect(),
+                };
                 self.know(&landmarks);
-                self.charted = Some(landmarks);
+                // The first chart in a world says where a body is born.
+                if let Some(link) = self.link.as_mut().filter(|link| link.homing) {
+                    link.homing = false;
+                    let home = match link.account {
+                        true => said.home,
+                        false => self.choices.home,
+                    };
+                    let star = landmarks.iter().find(|(id, _, _)| Some(*id) == home);
+                    self.home_said = Some(star.map(|&(_, seat, part)| (seat, part)));
+                }
+                self.charted = Some(Charted { landmarks, said });
             }
             _ => {}
         }

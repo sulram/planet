@@ -2,12 +2,14 @@
 	import { onMount, untrack } from 'svelte';
 	import { Alert, Veil } from '$lib/ds';
 	import { t } from '$lib/i18n';
+	import { keep, kept } from '$lib/kept';
 	import { fieldId, type Recipe } from '$lib/world';
 	import type { Link } from '$lib/instance';
 	import { touch } from '$lib/touch.svelte';
 	import {
 		isPluginEvent,
 		loadEngine,
+		parseChoices,
 		type Command,
 		type Effects,
 		type Engine,
@@ -41,7 +43,9 @@
 		 * in the world the page asked for, so a place meant for a world you
 		 * are not yet in waits for it. Where you stand after that is the
 		 * engine's: a place carried over a recipe change by the page lands you
-		 * in the sea every time the coastline moves (DECISIONS 62, 73).
+		 * in the sea every time the coastline moves (DECISIONS 62, 73). With
+		 * none when the engine first stands in a world, the body is born at
+		 * the person's home, once the world says where it is.
 		 */
 		stand?: { place: string } | null;
 		/**
@@ -96,6 +100,13 @@
 	let standing = $state(false);
 	/** That world is drawn whole where you stand: the streamer has nothing left to build. */
 	let settled = $state(false);
+	/**
+	 * The page asked no place when the engine first stood in a world with a
+	 * link: the veil waits for the engine to say where the body is born.
+	 */
+	let homing = $state(false);
+	/** The engine has stood in the world the page asked for: a body is born once. */
+	let born = false;
 	/** The recipe names ground this instance does not serve. */
 	let unshaped = $state(false);
 	/** The engine refused the recipe the page asked for. */
@@ -113,7 +124,7 @@
 					? 'refused'
 					: fetching
 						? 'shaping'
-						: recipe && !(standing && settled)
+						: recipe && !(standing && settled && !homing)
 							? 'entering'
 							: 'running'
 	);
@@ -180,6 +191,10 @@
 			if (wanted) {
 				standing = true;
 				settled = false;
+				if (!born) {
+					born = true;
+					homing = !pending && !!link;
+				}
 				arrive();
 				if (link && !linked) {
 					linked = true;
@@ -190,6 +205,21 @@
 		// The ground is drawn where you stand. Heard for the engine's own world
 		// too, which is not the one awaited.
 		if (event.type === 'settled' && standing) settled = true;
+		// Born at home: the first chart in the world said where it is, and
+		// the body goes there as an address would take it, the veil down
+		// until the ground there is drawn. A link that fails first lets the
+		// body be born where it stands.
+		if (event.type === 'home' && homing) {
+			homing = false;
+			if (event.place) {
+				pending = event.place;
+				settled = false;
+				arrive();
+			}
+		}
+		if (event.type === 'session' && event.status === 'offline') homing = false;
+		// A visitor's home and favourites are this browser's to keep.
+		if (event.type === 'choices') keep('choices', JSON.stringify({ home: event.home, favourites: event.favourites }));
 		// While a world is awaited, its recipe is the only command in flight
 		// that can be refused.
 		if (event.type === 'rejected' && recipe && !standing && !fetching) refused = true;
@@ -321,6 +351,14 @@
 		if (!engine || mode === engineMode) return;
 		engineMode = mode;
 		engine.command({ type: 'set_mode', mode });
+	});
+
+	// What this browser kept of a visitor's home and favourites, handed to
+	// the engine before any world answers. An account's are the world's,
+	// and the engine leaves these be.
+	$effect(() => {
+		const choices = parseChoices(kept('choices'));
+		if (engine && choices) engine.command({ type: 'set_choices', ...choices });
 	});
 </script>
 

@@ -30,6 +30,7 @@ fn welcome(client: &Client) -> Vec<u8> {
         }],
         clock_ms: 0,
         avatar: String::new(),
+        visitor: true,
     }))
 }
 
@@ -61,7 +62,8 @@ fn said(stance: Option<protocol::Stance>) -> Vec<u8> {
     }))
 }
 
-/// What chat sent up since the last call.
+/// What chat sent up since the last call: the core's own parts, such as the
+/// chart a welcome asks, are not chat's.
 fn sent(client: &mut Client) -> Vec<wire::Say> {
     client
         .drain_outbound()
@@ -69,7 +71,9 @@ fn sent(client: &mut Client) -> Vec<wire::Say> {
         .filter_map(|out| match out {
             Outbound::Frame(frame) => {
                 match protocol::ClientMessage::decode(&frame[..]).unwrap().message {
-                    Some(client_message::Message::Envelope(envelope)) => {
+                    Some(client_message::Message::Envelope(envelope))
+                        if envelope.plugin != protocol::parts::OWNER =>
+                    {
                         assert_eq!(
                             (envelope.plugin.as_str(), envelope.kind.as_str()),
                             ("chat", "say")

@@ -10,8 +10,9 @@
 //! set them and holds no part.
 //!
 //! The seam, under `items.`: the commands `edit`, `take`, `pick`, `mode`,
-//! `set`, `remove`, `paint`, `finish`, `edge` and `state`; the events
-//! `hand`, `picked` and `refused`. `take` with a model carries its file:
+//! `set`, `remove`, `paint`, `finish`, `edge`, `state`, `list`, `chart`,
+//! `favour` and `home`; the events `hand`, `picked`, `refused`, `near`,
+//! `landmarks` and `crossed`. `take` with a model carries its file:
 //! `{"type":"items.take","item":"model","asset":"asset://<sha256>.vox"}`,
 //! or `"item":"glb"` with a `.glb`, and the file is asked for at once, so
 //! its size is known when it is placed.
@@ -164,6 +165,15 @@ pub const LIST: &str = "list";
 /// `items.chart`: say the landmarks of the world, wherever they stand, with
 /// `landmarks`, once the world has answered. At any level.
 pub const CHART: &str = "chart";
+/// `items.favour`: make a landmark of the chart, by its name in the world,
+/// one of this person's favourites, `"on":true`, or no longer one; the
+/// chart is said again. An account's are kept by the world, a visitor's by
+/// its front end.
+pub const FAVOUR: &str = "favour";
+/// `items.home`: make a landmark of the chart, by its name in the world,
+/// this person's home, in the place of the last, or clear it with `null`;
+/// the chart is said again. Kept as a favourite is.
+pub const HOME: &str = "home";
 /// `items.hand`: whether the menu is open, the item in hand, `null` when
 /// none, the mode, the paint in hand, and the model's asset when one is in
 /// hand, `null` otherwise.
@@ -176,9 +186,11 @@ pub const REFUSED: &str = "refused";
 /// first: each by its name, what kind of item it is, how far, its paint and
 /// whether it is solid.
 pub const NEAR: &str = "near";
-/// `items.landmarks`: the landmarks of the world, the nearest first: each
-/// by its name in the world, what it is called, its paint, how far it is
-/// and the place code that takes a body to it.
+/// `items.landmarks`: the landmarks of the world, this person's home first,
+/// then their favourites, then the rest, each the nearest first: each by
+/// its name in the world, what it is called, its paint, how far it is, the
+/// place code that takes a body to it, and whether it is the home and a
+/// favourite.
 pub const LANDMARKS: &str = "landmarks";
 /// `items.crossed`: the body walked through a portal: which, the landmark
 /// it leads to, and the place the body now stands, `null` when the portal
@@ -200,6 +212,8 @@ struct LandmarkOne {
     /// Infinite on another body.
     away_m: f64,
     place: String,
+    home: bool,
+    favourite: bool,
 }
 
 #[derive(Serialize)]
@@ -308,6 +322,17 @@ struct Pick {
 #[derive(Deserialize)]
 struct Moded {
     mode: Mode,
+}
+
+#[derive(Deserialize)]
+struct Favoured {
+    id: u64,
+    on: bool,
+}
+
+#[derive(Deserialize)]
+struct Homed {
+    id: Option<u64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -800,8 +825,9 @@ impl Items {
         host.emit(NEAR, &Near { near });
     }
 
-    /// Says the landmarks of the world as the chart answered: the nearest
-    /// first, each with the place code that takes a body to it.
+    /// Says the landmarks of the world as the chart answered: the home,
+    /// the favourites, the rest, each the nearest first, with the place
+    /// code that takes a body to it.
     fn say_landmarks(&self, charted: &[Landmarked], host: &mut Host<'_>) {
         let landmarks = charted
             .iter()
@@ -815,6 +841,8 @@ impl Items {
                     paint: landmark.part.paint,
                     away_m: landmark.away_m,
                     place: host.place_at(landmark.seat, &landmark.part.pose),
+                    home: landmark.home,
+                    favourite: landmark.favourite,
                 })
             })
             .collect();
@@ -1125,6 +1153,18 @@ impl Plugin for Items {
             }
             LIST => self.say_near(host),
             CHART => host.chart(),
+            FAVOUR => {
+                if let Some(Favoured { id, on }) = read(body, host) {
+                    host.favour(id, on);
+                    host.chart();
+                }
+            }
+            HOME => {
+                if let Some(Homed { id }) = read(body, host) {
+                    host.home(id);
+                    host.chart();
+                }
+            }
             _ => host.reject(format!("`{kind}` is no command of items")),
         }
     }
@@ -2035,6 +2075,105 @@ mod tests {
         let said = events(&mut visitor);
         assert!(said.iter().any(|e| e["type"] == "items.landmarks"));
         assert!(said.iter().all(|e| e["type"] != "items.refused"));
+    }
+
+    #[test]
+    fn a_home_and_favourites_climb_the_chart_and_alone_are_told_to_keep() {
+        // Two landmarks, the first placed the further.
+        let landmarks = |client: &mut Client| {
+            for name in ["Far", "Near"] {
+                client.command_json(&format!(
+                    r#"{{"type":"items.take","item":"landmark","name":"{name}","ahead":true}}"#
+                ));
+            }
+            let (id, _, part) = client.parts().all().next().unwrap();
+            let mut far = *part;
+            far.pose.at[0] += 40.0;
+            client.command_json(&format!(r#"{{"type":"items.pick","id":{}}}"#, id.0));
+            client.command_json(&format!(
+                r#"{{"type":"items.set","at":[{},{},{}]}}"#,
+                far.pose.at[0], far.pose.at[1], far.pose.at[2]
+            ));
+            client.drain_events();
+        };
+        // The chart as said, each row its name, home and favourite, and
+        // what the core said for a front end to keep.
+        let chart = |client: &mut Client| {
+            client.command_json(r#"{"type":"items.chart"}"#);
+            client.update(1.0 / 60.0, &mut Input::default());
+            let said = client.drain_events();
+            let kept: Vec<(Option<u64>, Vec<u64>)> = said
+                .iter()
+                .filter_map(|event| match event {
+                    Event::Choices { home, favourites } => Some((*home, favourites.clone())),
+                    _ => None,
+                })
+                .collect();
+            let landmarks = said
+                .into_iter()
+                .rev()
+                .find_map(|event| match event {
+                    Event::Plugin(event) if event["type"] == "items.landmarks" => Some(event),
+                    _ => None,
+                })
+                .expect("the chart is answered in the turn");
+            let rows: Vec<(u64, String, bool, bool)> = landmarks["landmarks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| {
+                    (
+                        row["id"].as_u64().unwrap(),
+                        row["name"].as_str().unwrap().to_owned(),
+                        row["home"].as_bool().unwrap(),
+                        row["favourite"].as_bool().unwrap(),
+                    )
+                })
+                .collect();
+            (rows, kept)
+        };
+        let mut client = client();
+        landmarks(&mut client);
+        let (rows, kept) = chart(&mut client);
+        let names: Vec<&str> = rows.iter().map(|row| row.1.as_str()).collect();
+        assert_eq!(names, ["Near", "Far"], "nearest first, with nothing chosen");
+        assert!(kept.is_empty(), "nothing changed, nothing to keep");
+        let (near, far) = (rows[0].0, rows[1].0);
+
+        // Far a favourite climbs over Near; Near the home climbs over it.
+        client.command_json(&format!(
+            r#"{{"type":"items.favour","id":{far},"on":true}}"#
+        ));
+        let (rows, kept) = chart(&mut client);
+        assert_eq!(rows[0], (far, "Far".into(), false, true));
+        assert_eq!(kept, [(None, vec![far])], "alone, the front end keeps it");
+        client.command_json(&format!(r#"{{"type":"items.home","id":{near}}}"#));
+        let (rows, kept) = chart(&mut client);
+        assert_eq!(rows[0], (near, "Near".into(), true, false));
+        assert_eq!(rows[1], (far, "Far".into(), false, true));
+        assert_eq!(kept, [(Some(near), vec![far])]);
+
+        // What a front end kept, handed to a new client, stands there.
+        let mut again = super::tests::client();
+        landmarks(&mut again);
+        again.command_json(&format!(
+            r#"{{"type":"set_choices","home":{near},"favourites":[{far}]}}"#
+        ));
+        let (rows, kept) = chart(&mut again);
+        assert_eq!(rows[0], (near, "Near".into(), true, false));
+        assert_eq!(rows[1], (far, "Far".into(), false, true));
+        assert!(kept.is_empty(), "handed back is not told again");
+
+        // The home cleared and the favourite let go, the chart is nearest
+        // first again.
+        again.command_json(r#"{"type":"items.home","id":null}"#);
+        again.command_json(&format!(
+            r#"{{"type":"items.favour","id":{far},"on":false}}"#
+        ));
+        let (rows, kept) = chart(&mut again);
+        assert_eq!(rows[0], (near, "Near".into(), false, false));
+        assert_eq!(rows[1], (far, "Far".into(), false, false));
+        assert_eq!(kept, [(None, vec![])]);
     }
 
     /// Walks the body forward until the plugin says it crossed, or gives up.

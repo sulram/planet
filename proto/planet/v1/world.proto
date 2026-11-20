@@ -170,6 +170,9 @@ message Welcome {
   // The account's avatar, as mundos signed it with the entry: the VRM's URL.
   // Empty when the account has none, and for a visitor. The client wears it.
   string avatar = 7;
+  // A visitor, with no account: the world keeps nothing of its own for it,
+  // so its client keeps its home and favourites.
+  bool visitor = 8;
 }
 
 // The plugins that are on, said again whenever the admin switches one.

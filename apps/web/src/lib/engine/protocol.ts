@@ -58,7 +58,9 @@ export type Command =
 	/** What to be called: in Hello and, while online, at once. Empty is a name too. */
 	| { type: 'set_name'; name: string }
 	/** The plugin with the pointer puts it down, with what it had in hand: a panel of the page opened. */
-	| { type: 'put_down' };
+	| { type: 'put_down' }
+	/** A visitor's home and favourites in the chart, as this browser kept them from `choices`: landmarks by their names in the world. An account's are the world's, and these are not. */
+	| { type: 'set_choices'; home: number | null; favourites: number[] };
 
 /**
  * A plugin's command: its `type` is the plugin's name and the command's,
@@ -130,6 +132,10 @@ export type EngineEvent =
 	| { type: 'recipe_changed'; recipe: Recipe }
 	/** A command was refused. The message is for logs, not for people. */
 	| { type: 'rejected'; message: string }
+	/** Where the body is born: the place of this person's home as the first chart after the welcome says it, null with none. Once a link: a page that asked no place goes there. */
+	| { type: 'home'; place: string | null }
+	/** A visitor's home and favourites, whenever they change: keep them in this browser and hand them back with `set_choices`. */
+	| { type: 'choices'; home: number | null; favourites: number[] }
 	/** Nothing is left to build for this view: the world is drawn whole. Again after a leap or a new recipe. */
 	| { type: 'settled' }
 	| { type: 'mode_changed'; mode: Mode }
@@ -178,8 +184,26 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EngineEvent['type']>([
 	'statement',
 	'anchors',
 	'labels',
-	'palette'
+	'palette',
+	'home',
+	'choices'
 ]);
+
+/** A visitor's home and favourites, as `choices` says them and `set_choices` hands them back. */
+export type Choices = Omit<Extract<EngineEvent, { type: 'choices' }>, 'type'>;
+
+/** Reads choices a browser kept as JSON. Null for nothing kept, or for what is no choices. */
+export function parseChoices(text: string | null): Choices | null {
+	try {
+		const { home, favourites } = JSON.parse(text ?? 'null') ?? {};
+		const id = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
+		if (home !== null && !id(home)) return null;
+		if (!Array.isArray(favourites) || !favourites.every(id)) return null;
+		return { home, favourites };
+	} catch {
+		return null;
+	}
+}
 
 /** Whether an event is a plugin's: its `type` has the plugin's name and a dot before the event's. */
 export function isPluginEvent(event: EngineEvent | PluginEvent): event is PluginEvent {

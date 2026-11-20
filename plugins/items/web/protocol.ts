@@ -1,8 +1,9 @@
 /**
  * Items' own part of the seam: the commands `items.edit`, `items.take`,
  * `items.pick`, `items.mode`, `items.set`, `items.remove`, `items.paint`,
- * `items.finish`, `items.edge`, `items.state`, `items.list` and
- * `items.chart`, and the events `items.hand`, `items.picked`,
+ * `items.finish`, `items.edge`, `items.state`, `items.list`,
+ * `items.chart`, `items.favour` and `items.home`, and the events
+ * `items.hand`, `items.picked`,
  * `items.refused`, `items.near`, `items.landmarks` and `items.crossed`,
  * as the plugin's crate writes them. Pure: no WASM, no DOM.
  */
@@ -124,25 +125,28 @@ export function parsePicked(event: Record<string, unknown>): Picked | null {
 	return picked;
 }
 
-/** `items.landmarks`: one landmark of the world: its name in the world, what it is called, its paint, how far in metres, null on another body, and the place code that takes a body to it. */
+/** `items.landmarks`: one landmark of the world: its name in the world, what it is called, its paint, how far in metres, null on another body, the place code that takes a body to it, and whether it is this person's home and a favourite. */
 export interface LandmarkOne {
 	id: number;
 	name: string;
 	paint: number;
 	away_m: number | null;
 	place: string;
+	/** Where this person is born when the page opens with no place. */
+	home: boolean;
+	favourite: boolean;
 }
 
-/** Reads a `landmarks` event: the landmarks of the world, nearest first. Null for one that is no chart. */
+/** Reads a `landmarks` event: the landmarks of the world, the home first, then the favourites, then the rest, each nearest first. Null for one that is no chart. */
 export function parseLandmarks(event: Record<string, unknown>): LandmarkOne[] | null {
 	const { landmarks } = event;
 	if (!Array.isArray(landmarks)) return null;
 	const rows: LandmarkOne[] = [];
 	for (const row of landmarks) {
 		if (typeof row !== 'object' || row === null) return null;
-		const { id, name, paint, away_m, place } = row as Record<string, unknown>;
+		const { id, name, paint, away_m, place, home, favourite } = row as Record<string, unknown>;
 		if (typeof id !== 'number' || typeof name !== 'string' || typeof paint !== 'number' || typeof place !== 'string') return null;
-		rows.push({ id, name, paint, away_m: typeof away_m === 'number' ? away_m : null, place });
+		rows.push({ id, name, paint, away_m: typeof away_m === 'number' ? away_m : null, place, home: home === true, favourite: favourite === true });
 	}
 	return rows;
 }

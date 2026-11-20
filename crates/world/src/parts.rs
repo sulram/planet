@@ -2,10 +2,13 @@
 //! system of the core, an owner as a plugin is. It names a part a session
 //! places, keeps it in its store, sets and removes it, tells whoever is
 //! near, shows a client that looks the parts near it that it lacks, and
-//! charts the landmarks of the world for whoever asks.
+//! charts the landmarks of the world for whoever asks, the asker's home and
+//! favourites first.
 //!
-//! A part is one row: its record under its name. What is held in memory is
-//! read again by a new instance: every record, and the next name to give.
+//! A part is one row: its record under its name. An account's home and
+//! favourites are one row too, under its id: a visitor's are its client's
+//! to keep. What is held in memory is read again by a new instance: every
+//! record, and the next name to give.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -38,6 +41,31 @@ fn record_key(id: u64) -> Vec<u8> {
 /// The key the next name to give is kept under.
 const NEXT_KEY: &[u8] = b"next";
 
+/// The key an account's choices are kept under: a tag and its id.
+fn choices_key(user: &str) -> Vec<u8> {
+    let mut key = vec![b'a'];
+    key.extend(user.as_bytes());
+    key
+}
+
+/// What an account chose of the chart, as kept: nothing chosen when
+/// nothing is kept.
+fn choices(room: &mut dyn Room, user: &str) -> wire::Choices {
+    room.get(&choices_key(user))
+        .and_then(|bytes| wire::Choices::decode(bytes.as_slice()).ok())
+        .unwrap_or_default()
+}
+
+/// Where a landmark stands in a chart: the home first, then the
+/// favourites, then the rest.
+fn rank(choices: &wire::Choices, id: u64) -> u8 {
+    match id {
+        _ if id == choices.home => 0,
+        _ if choices.favourites.contains(&id) => 1,
+        _ => 2,
+    }
+}
+
 /// A part as the world keeps it.
 #[derive(Clone, PartialEq, Debug)]
 struct Kept {
@@ -53,6 +81,10 @@ impl Kept {
             part: Some(seat::part_wire(self.seat, &self.part)),
             version: self.version,
         }
+    }
+
+    fn landmark(&self) -> bool {
+        matches!(self.part.shape, part::Shape::Landmark(_))
     }
 
     fn from_record(record: &wire::Record) -> Option<Kept> {
@@ -352,31 +384,101 @@ impl Parts {
     }
 
     /// Answers the asker with the landmarks of the world, wherever they
-    /// stand, the nearest first and those on another body last: what a
-    /// list to travel by shows. Always answered, empty with none.
+    /// stand: its home, then its favourites, then the rest, each the
+    /// nearest first and those on another body last: what a list to travel
+    /// by shows. The home and the favourites come before the cut, so a far
+    /// one is never cut. Always answered, empty with none.
     fn chart(&mut self, who: &Who, room: &mut dyn Room) {
         let measure = room.measure();
         let from = who
             .stance
             .as_ref()
             .and_then(|stance| place(&measure, stance));
+        let choices = match who.user.is_empty() {
+            true => wire::Choices::default(),
+            false => choices(room, &who.user),
+        };
         let index = self.index(room);
-        let mut found: Vec<(f64, u64, wire::Record)> = index
+        let mut found: Vec<(u8, f64, u64, wire::Record)> = index
             .iter()
-            .filter(|(_, kept)| matches!(kept.part.shape, part::Shape::Landmark(_)))
+            .filter(|(_, kept)| kept.landmark())
             .map(|(&id, kept)| {
                 let away_m = from
                     .and_then(|from| away_m(&measure, kept.seat, &kept.part, from))
                     .unwrap_or(f64::INFINITY);
-                (away_m, id, kept.record(id))
+                (rank(&choices, id), away_m, id, kept.record(id))
             })
             .collect();
-        found.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        found.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)).then(a.2.cmp(&b.2)));
         found.truncate(CHART_RECORDS);
+        let ids = || found.iter().map(|(_, _, id, _)| *id);
+        let home = ids().find(|id| *id == choices.home).unwrap_or(0);
+        let favourites = ids().filter(|id| choices.favourites.contains(id)).collect();
         let charted = wire::Charted {
-            records: found.into_iter().map(|(_, _, record)| record).collect(),
+            records: found.into_iter().map(|(_, _, _, record)| record).collect(),
+            home,
+            favourites,
         };
         room.tell(wire::CHARTED, charted.encode_to_vec(), &[who.session]);
+    }
+
+    /// Whether a part of that name is a landmark standing in the world.
+    fn landmark(&mut self, room: &mut dyn Room, id: u64) -> bool {
+        self.index(room).get(&id).is_some_and(Kept::landmark)
+    }
+
+    /// Keeps an account's choices, with the favourites that stand no more
+    /// let go: what is kept is as long as the chart at most.
+    fn keep_choices(&mut self, room: &mut dyn Room, user: &str, mut choices: wire::Choices) {
+        let index = self.index(room);
+        choices
+            .favourites
+            .retain(|id| index.get(id).is_some_and(Kept::landmark));
+        choices.favourites.sort_unstable();
+        choices.favourites.dedup();
+        match choices == wire::Choices::default() {
+            true => room.forget(&choices_key(user)),
+            false => room.keep(&choices_key(user), choices.encode_to_vec()),
+        }
+    }
+
+    /// Makes a landmark one of the asker's favourites, or no longer one.
+    /// An account's alone: a visitor's are its client's to keep.
+    fn favour(&mut self, payload: &[u8], who: &Who, room: &mut dyn Room) {
+        let Ok(favour) = wire::Favour::decode(payload) else {
+            return room.refuse("message");
+        };
+        if who.user.is_empty() {
+            return room.refuse("visitor");
+        }
+        if favour.on && !self.landmark(room, favour.id) {
+            return room.refuse("gone");
+        }
+        let mut chosen = choices(room, &who.user);
+        chosen.favourites.retain(|id| *id != favour.id);
+        if favour.on {
+            chosen.favourites.push(favour.id);
+        }
+        self.keep_choices(room, &who.user, chosen);
+    }
+
+    /// Makes a landmark the asker's home, in the place of the last, or
+    /// clears it with 0. An account's alone.
+    fn home(&mut self, payload: &[u8], who: &Who, room: &mut dyn Room) {
+        let Ok(home) = wire::Home::decode(payload) else {
+            return room.refuse("message");
+        };
+        if who.user.is_empty() {
+            return room.refuse("visitor");
+        }
+        if home.id != 0 && !self.landmark(room, home.id) {
+            return room.refuse("gone");
+        }
+        let chosen = wire::Choices {
+            home: home.id,
+            ..choices(room, &who.user)
+        };
+        self.keep_choices(room, &who.user, chosen);
     }
 }
 
@@ -429,7 +531,8 @@ impl Plugin for Parts {
     }
 
     /// Placing, setting and removing a part is a builder's and an admin's,
-    /// and taking that back. Anyone looks, and anyone asks for the chart.
+    /// and taking that back. Anyone looks, and anyone asks for the chart;
+    /// an account chooses its home and its favourites in it.
     fn ops(&self) -> Vec<Op> {
         let builder = [
             wire::PLACE,
@@ -451,6 +554,12 @@ impl Plugin for Parts {
                 level: Level::Anonymous,
             });
         }
+        for kind in [wire::FAVOUR, wire::HOME] {
+            ops.push(Op {
+                kind,
+                level: Level::SignedIn,
+            });
+        }
         ops
     }
 
@@ -466,6 +575,8 @@ impl Plugin for Parts {
             }
             wire::LOOK => self.look(payload, who, room),
             wire::CHART => self.chart(who, room),
+            wire::FAVOUR => self.favour(payload, who, room),
+            wire::HOME => self.home(payload, who, room),
             _ => {}
         }
     }

@@ -35,6 +35,7 @@ fn welcome(client: &Client, level: protocol::Level) -> Vec<u8> {
         plugins: build_on(),
         clock_ms: 0,
         avatar: String::new(),
+        visitor: level == protocol::Level::Anonymous,
     }))
 }
 

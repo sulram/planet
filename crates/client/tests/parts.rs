@@ -16,6 +16,11 @@ fn server(message: server_message::Message) -> Vec<u8> {
 }
 
 fn welcomed() -> Client {
+    welcomed_as(false)
+}
+
+/// A client a world welcomed: an account's, or a visitor's.
+fn welcomed_as(visitor: bool) -> Client {
     let mut client = Client::new(Recipe::new(1)).unwrap();
     let recipe = client.recipe();
     client.receive(&server(server_message::Message::Welcome(
@@ -31,6 +36,7 @@ fn welcomed() -> Client {
             plugins: vec![],
             clock_ms: 0,
             avatar: String::new(),
+            visitor,
         },
     )));
     client.drain_events();
@@ -367,6 +373,7 @@ fn a_landmark_another_placed_is_a_lit_star_with_its_name_over_it() {
     assert!(asked(&mut client).iter().any(|ask| ask.kind == wire::CHART));
     let charted = wire::Charted {
         records: vec![record(9, 0, seat, &part)],
+        ..Default::default()
     };
     client.receive(&said(wire::CHARTED, charted.encode_to_vec()));
     let charted = client.host("test").take_charted().unwrap();
@@ -647,4 +654,150 @@ fn a_portal_seen_through_looks_at_the_cells_by_its_star() {
         (f64::from(eye.v) - star_at[1]).abs() < 2.0 && (f64::from(eye.u) - star_at[0]).abs() < 2.0,
         "the eye stands by the star: {eye:?}"
     );
+}
+
+/// A star named as the world names it, beside the body.
+fn star(client: &mut Client, along: f64) -> (Seat, Part) {
+    let (seat, mut part) = cube(client, along);
+    part.shape = Shape::Landmark(Name::new("Casa").unwrap());
+    part.solid = false;
+    (seat, part)
+}
+
+/// What a client said in a turn of where its body is born, and of a
+/// visitor's choices to keep.
+#[derive(Debug, Default)]
+struct Told {
+    homes: Vec<Option<String>>,
+    kept: Vec<(Option<u64>, Vec<u64>)>,
+}
+
+fn told(client: &mut Client) -> Told {
+    client.update(1.0 / 60.0, &mut client::Input::default());
+    let mut told = Told::default();
+    for event in client.drain_events() {
+        match event {
+            Event::Home { place } => told.homes.push(place),
+            Event::Choices { home, favourites } => told.kept.push((home, favourites)),
+            _ => {}
+        }
+    }
+    told
+}
+
+/// An account's home is the world's: the chart asked on the welcome says
+/// it, the client says once where the body is born, and a favourite or a
+/// home chosen goes to the world as an op.
+#[test]
+fn an_account_is_born_at_the_home_the_world_charts() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    let recipe = client.recipe();
+    client.receive(&server(server_message::Message::Welcome(
+        protocol::Welcome {
+            session: 1,
+            recipe: Some(protocol::Recipe {
+                seed: worldgen::format_seed(recipe.seed),
+                generator_version: recipe.generator_version,
+                params_json: serde_json::to_string(&recipe.params).unwrap(),
+            }),
+            level: protocol::Level::SignedIn.into(),
+            ..Default::default()
+        },
+    )));
+    assert!(
+        asked(&mut client).iter().any(|ask| ask.kind == wire::CHART),
+        "the welcome asks the chart"
+    );
+    let (seat, part) = star(&mut client, 9.0);
+    let charted = wire::Charted {
+        records: vec![record(7, 0, seat, &part)],
+        home: 7,
+        favourites: vec![7],
+    };
+    client.receive(&said(wire::CHARTED, charted.encode_to_vec()));
+    let first = told(&mut client);
+    let [Some(place)] = first.homes.as_slice() else {
+        panic!("the home is said once: {first:?}");
+    };
+    assert!(
+        first.kept.is_empty(),
+        "an account's choices are never the front end's"
+    );
+    assert!(client.go_to(place).is_ok(), "{place} takes a body there");
+    let landmarks = client.host("test").take_charted().unwrap();
+    assert!(landmarks[0].home && landmarks[0].favourite);
+    // A chart asked later says no home again.
+    client.host("test").chart();
+    client.receive(&said(wire::CHARTED, charted.encode_to_vec()));
+    assert_eq!(told(&mut client).homes, Vec::<Option<String>>::new());
+    // Chosen, they are asked of the world.
+    client.host("test").favour(7, false);
+    client.host("test").home(None);
+    let ops = asked(&mut client);
+    let favour = ops.iter().find(|ask| ask.kind == wire::FAVOUR).unwrap();
+    assert_eq!(
+        wire::Favour::decode(&favour.payload[..]).unwrap(),
+        wire::Favour { id: 7, on: false }
+    );
+    let home = ops.iter().find(|ask| ask.kind == wire::HOME).unwrap();
+    assert_eq!(
+        wire::Home::decode(&home.payload[..]).unwrap(),
+        wire::Home { id: 0 }
+    );
+}
+
+/// A visitor's home is its front end's: handed in, it is where the body
+/// is born once the chart says where that star stands; chosen, it is told
+/// back to keep, and nothing goes to the world.
+#[test]
+fn a_visitor_is_born_at_the_home_its_front_end_kept() {
+    let mut client = Client::new(Recipe::new(1)).unwrap();
+    client.command_json(r#"{"type":"set_choices","home":7,"favourites":[]}"#);
+    let mut client = {
+        let recipe = client.recipe();
+        client.receive(&server(server_message::Message::Welcome(
+            protocol::Welcome {
+                session: 1,
+                recipe: Some(protocol::Recipe {
+                    seed: worldgen::format_seed(recipe.seed),
+                    generator_version: recipe.generator_version,
+                    params_json: serde_json::to_string(&recipe.params).unwrap(),
+                }),
+                visitor: true,
+                ..Default::default()
+            },
+        )));
+        client
+    };
+    asked(&mut client);
+    let (seat, part) = star(&mut client, 9.0);
+    let charted = wire::Charted {
+        records: vec![record(5, 0, seat, &part), record(7, 0, seat, &part)],
+        ..Default::default()
+    };
+    client.receive(&said(wire::CHARTED, charted.encode_to_vec()));
+    let first = told(&mut client);
+    assert!(matches!(first.homes.as_slice(), [Some(_)]), "{first:?}");
+    assert!(first.kept.is_empty());
+    let landmarks = client.host("test").take_charted().unwrap();
+    assert_eq!((landmarks[0].id, landmarks[0].home), (7, true));
+    client.host("test").favour(5, true);
+    let ops = asked(&mut client);
+    assert!(
+        ops.iter()
+            .all(|ask| ask.kind != wire::FAVOUR && ask.kind != wire::HOME),
+        "a visitor asks the world nothing of its choices"
+    );
+    assert_eq!(told(&mut client).kept, [(Some(7), vec![5])]);
+}
+
+/// With no home, the first chart says so: the body stays where it stands.
+#[test]
+fn with_no_home_the_first_chart_says_none() {
+    let mut client = welcomed_as(true);
+    client.receive(&said(
+        wire::CHARTED,
+        wire::Charted::default().encode_to_vec(),
+    ));
+    assert_eq!(told(&mut client).homes, [None]);
 }

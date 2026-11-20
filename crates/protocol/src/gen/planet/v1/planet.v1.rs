@@ -181,6 +181,10 @@ pub struct Welcome {
     /// Empty when the account has none, and for a visitor. The client wears it.
     #[prost(string, tag="7")]
     pub avatar: ::prost::alloc::string::String,
+    /// A visitor, with no account: the world keeps nothing of its own for it,
+    /// so its client keeps its home and favourites.
+    #[prost(bool, tag="8")]
+    pub visitor: bool,
 }
 /// The plugins that are on, said again whenever the admin switches one.
 #[derive(Clone, PartialEq, ::prost::Message)]

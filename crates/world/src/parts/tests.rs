@@ -413,3 +413,141 @@ fn a_chart_says_every_landmark_nearest_first_to_whoever_asks() {
     let charted = told::<wire::Charted>(&mut bare, wire::CHARTED);
     assert!(charted[0].0.records.is_empty());
 }
+
+#[test]
+fn an_account_charts_its_home_and_favourites_first_and_a_visitor_keeps_none() {
+    let (mut stage, point) = stage();
+    let mut parts = Parts::default();
+    let builder = stage.here[0].clone();
+    // Three landmarks along the sector, the nearest first.
+    for (along, name) in [(10.0, "Near"), (500.0, "Mid"), (4000.0, "Far")] {
+        let at = SurfacePoint::new(point.sector, point.u + along, point.v);
+        let place = wire::Place {
+            part: Some(landmark(at, name)),
+        };
+        parts.op(wire::PLACE, &place.encode_to_vec(), &builder, &mut stage);
+    }
+    let id = |name: &str, stage: &Stage| {
+        stage
+            .store
+            .values()
+            .filter_map(|value| wire::Record::decode(value.as_slice()).ok())
+            .find(|record| {
+                record.part.as_ref().and_then(|part| part.shape.as_ref()).is_some_and(|shape| {
+                    matches!(&shape.shape, Some(wire::shape::Shape::Landmark(l)) if l.name == name)
+                })
+            })
+            .map(|record| record.id)
+            .unwrap()
+    };
+    let (near, mid, far) = (id("Near", &stage), id("Mid", &stage), id("Far", &stage));
+    let ada = Who {
+        user: "ada".into(),
+        level: Level::SignedIn,
+        ..builder.clone()
+    };
+    let chart = |parts: &mut Parts, stage: &mut Stage, who: &Who| {
+        stage.told.clear();
+        parts.op(wire::CHART, &wire::Chart {}.encode_to_vec(), who, stage);
+        let charted = told::<wire::Charted>(stage, wire::CHARTED).remove(0).0;
+        let ids: Vec<u64> = charted.records.iter().map(|record| record.id).collect();
+        (ids, charted.home, charted.favourites)
+    };
+    let op = |parts: &mut Parts, stage: &mut Stage, who: &Who, kind: &str, payload: Vec<u8>| {
+        stage.refused = None;
+        parts.op(kind, &payload, who, stage);
+        stage.refused.take()
+    };
+    assert_eq!(
+        chart(&mut parts, &mut stage, &ada),
+        (vec![near, mid, far], 0, vec![])
+    );
+
+    // Far a favourite, Mid the home: the home first, then the favourites.
+    let favour = |id, on| wire::Favour { id, on }.encode_to_vec();
+    assert_eq!(
+        op(
+            &mut parts,
+            &mut stage,
+            &ada,
+            wire::FAVOUR,
+            favour(far, true)
+        ),
+        None
+    );
+    let home = |id| wire::Home { id }.encode_to_vec();
+    assert_eq!(
+        op(&mut parts, &mut stage, &ada, wire::HOME, home(mid)),
+        None
+    );
+    assert_eq!(
+        chart(&mut parts, &mut stage, &ada),
+        (vec![mid, far, near], mid, vec![far])
+    );
+
+    // Another account, and a visitor, chart as before: the choices are
+    // Ada's alone, and a visitor may make none.
+    let bea = Who {
+        user: "bea".into(),
+        ..ada.clone()
+    };
+    assert_eq!(
+        chart(&mut parts, &mut stage, &bea),
+        (vec![near, mid, far], 0, vec![])
+    );
+    assert_eq!(
+        chart(&mut parts, &mut stage, &builder),
+        (vec![near, mid, far], 0, vec![])
+    );
+    let refused = op(&mut parts, &mut stage, &builder, wire::HOME, home(near));
+    assert_eq!(refused.as_deref(), Some("visitor"));
+
+    // A new home takes the place of the last; what is no landmark is none.
+    assert_eq!(
+        op(&mut parts, &mut stage, &ada, wire::HOME, home(near)),
+        None
+    );
+    assert_eq!(
+        chart(&mut parts, &mut stage, &ada),
+        (vec![near, far, mid], near, vec![far])
+    );
+    let refused = op(
+        &mut parts,
+        &mut stage,
+        &ada,
+        wire::FAVOUR,
+        favour(999, true),
+    );
+    assert_eq!(refused.as_deref(), Some("gone"));
+
+    // A new instance reads them again from the store.
+    let mut again = Parts::default();
+    assert_eq!(
+        chart(&mut again, &mut stage, &ada),
+        (vec![near, far, mid], near, vec![far])
+    );
+
+    // Unfavoured and the home cleared, nothing is kept for the account.
+    assert_eq!(
+        op(
+            &mut parts,
+            &mut stage,
+            &ada,
+            wire::FAVOUR,
+            favour(far, false)
+        ),
+        None
+    );
+    assert_eq!(op(&mut parts, &mut stage, &ada, wire::HOME, home(0)), None);
+    assert_eq!(
+        chart(&mut parts, &mut stage, &ada),
+        (vec![near, mid, far], 0, vec![])
+    );
+    assert!(stage.store.keys().all(|key| key[0] != b'a'));
+
+    // Signing in is the least level that chooses.
+    let ops = parts.ops();
+    let level = |kind| ops.iter().find(|op| op.kind == kind).unwrap().level;
+    assert_eq!(level(wire::FAVOUR), Level::SignedIn);
+    assert_eq!(level(wire::HOME), Level::SignedIn);
+}
