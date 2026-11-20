@@ -84,6 +84,8 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out <!-- card:88 -->
 - The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
 - A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
+- A world past 256 landmarks: the chart answers the nearest 256 and the search filters those, so a far star is not found by name; the search moves to the parts owner, asked with the typed text (home-and-favourites)
+- `bun run dev` gives the dev identity an account id beside `PLANET_DEV_LEVEL` (`PLANET_DEV_USER`), so an account's home and favourites run without mundos's door; today every dev session is a visitor
 
 ### The cells (58, 75 to 86, 106)
 
