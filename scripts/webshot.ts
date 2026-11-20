@@ -8,6 +8,7 @@
 //   bun run webshot --port 9334   (a second Chrome beside the first: two people in one world)
 //   bun run webshot --eval "..." --after 6   (seconds between the script and the picture)
 //   bun run webshot --lang pt-BR   (the page in the language a browser of that locale asks for)
+//   bun run webshot --profile out/ada   (a browser kept between runs: what a page kept is there on the next)
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -26,6 +27,9 @@ const script = option('eval', '');
 const afterMs = Number(option('after', '1')) * 1000;
 const PORT = Number(option('port', '9333'));
 const lang = option('lang', '');
+// A fresh browser each run, unless one is named to keep.
+const profile = args.includes('--profile') ? resolve(ROOT, option('profile', '')) : mkdtempSync(join(tmpdir(), 'planet-webshot-'));
+mkdirSync(profile, { recursive: true });
 
 const binary =
 	process.env.CHROME ??
@@ -38,7 +42,7 @@ const chrome = Bun.spawn(
 		'--headless=new',
 		`--remote-debugging-port=${PORT}`,
 		'--enable-unsafe-webgpu',
-		`--user-data-dir=${mkdtempSync(join(tmpdir(), 'planet-webshot-'))}`,
+		`--user-data-dir=${profile}`,
 		'--window-size=1280,720',
 		...(lang ? [`--lang=${lang}`, `--accept-lang=${lang}`] : []),
 		'about:blank'
@@ -96,5 +100,14 @@ mkdirSync(dirname(out), { recursive: true });
 await Bun.write(out, Buffer.from(shot.data, 'base64'));
 console.log(`${url} -> ${out}`);
 socket.close();
+// A kept browser is closed as a person closes it, so what the page kept is
+// written down before it goes; a signal loses it.
+if (args.includes('--profile')) {
+	const { webSocketDebuggerUrl } = (await fetch(`http://localhost:${PORT}/json/version`).then((response) => response.json())) as { webSocketDebuggerUrl: string };
+	const browser = new WebSocket(webSocketDebuggerUrl);
+	await new Promise((open) => (browser.onopen = open));
+	browser.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+	await Promise.race([chrome.exited, Bun.sleep(5000)]);
+}
 chrome.kill();
 process.exit(0);

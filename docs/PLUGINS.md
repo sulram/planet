@@ -81,10 +81,8 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
 ## The core's words
 
 - Two plugins meet in three words of the core, and neither names the other.
-- **Who**: the account, as mundos signs it, and its level. A person or an
-  agent.
-- **Where**: the address. A box of it, or a plot, which is the address less
-  six bits (77).
+- **Who**: the account mundos signs and its level, a person's or an agent's.
+- **Where**: the address, a box of it or a plot: the address less six bits (77).
 - **What**: the name of the action, the plugin's before it: `build.create`.
 - A volume is the unit the cells and land share (95): cells are kept by
   volume, permission is given by volume, and a rollback restores a volume.
@@ -96,7 +94,9 @@ shape as decided. The why is in DECISIONS 88, 91, 93, 94, 98 to 102, 104, 106,
   world under the name it gives, one row a part: seat, pose, shape, paint,
   solid; placed, set and removed as ops under the owner `parts`, told to
   whoever is near, shown to a client that looks, charted for whoever asks
-  (116). Items is the hand: the menu, one gizmo and panel for every kind.
+  (116): the asker's **home** first, then its **favourites**, an account's
+  kept by the world, a visitor's by its browser (home-and-favourites). Items
+  is the hand: the menu, one gizmo and panel for every kind.
 
 ## Where a plugin lives
 

@@ -52,7 +52,7 @@ plugins, cut by the plugins that need it: the order of work is in [BRIEF.md](./B
 - Generator as WASM inside Go (wazero), when the server has to read the ground (09, 97)
 - Hydraulic erosion and rivers for the generated source: a coarse bake in `Generator::new`, dendritic valleys under the noise
 - Climate as a field of its own: latitude bands and rain shadow, so deserts and rainforests land where they belong
-- More planets between the planet and the moon, each a body walked, built on and lit by the one sun (113): a sketch of the recipe's list of bodies and their orbits first, then the first body pulls the code
+- More planets between the planet and the moon, each a body walked, built on and lit by the one sun (113), at the moon's toy scale, never the real one: flight reaches the near bodies, a portal the far. Three cuts: a sketch of the recipe's list of bodies, how an orbit is told on the clock and what each body's generator is (a kind or a field, card 81); then "the moon" becomes the list of bodies with the moon its only item (`Body` an id, a letter a body in the place code, one streamer and one seat a body, the sky's shadow and light a loop over the nearest two), no new behaviour, goldens and bench unchanged; then the third body, its far coarse patches measured on the Pi before it lands <!-- card:140 -->
 
 ### What an admin picks when a world is founded
 
@@ -82,9 +82,10 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 ### Where you are
 
 - Minimap: the ground around the avatar off the coarse quadtree, north up, coast and seam drawn; a click reads a place out <!-- card:88 -->
-- A person picks the landmark they are born at: every account chooses its starting landmark from the chart, once, and changes it when it likes (Fabio Ema) <!-- card:103 -->
 - The engine starts with no world until the page's arrives: `Engine::create` builds and streams seed 1 behind the veil for the length of the field download (73)
 - A field arrives coarse first: the pyramid written coarsest level first and parsed as it streams, so the veil lifts on a rough Earth within a second and the ground sharpens underfoot
+- A world past 256 landmarks: the chart answers the nearest 256 and the search filters those, so a far star is not found by name; the search moves to the parts owner, asked with the typed text (home-and-favourites)
+- `bun run dev` gives the dev identity an account id beside `PLANET_DEV_LEVEL` (`PLANET_DEV_USER`), so an account's home and favourites run without mundos's door; today every dev session is a visitor
 
 ### The cells (58, 75 to 86, 106)
 

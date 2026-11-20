@@ -252,16 +252,16 @@ func TestAKeyNamesAPerson(t *testing.T) {
 
 	hub := NewHub(founded(recipe(t)), nil, nil)
 	a := connectAs(t, hub, who, hello())
-	if welcome := a.hear().GetWelcome(); welcome == nil || welcome.Level != pb.Level_LEVEL_BUILDER || welcome.Avatar != vrm {
-		t.Fatalf("a person is welcome, and told their level and their avatar: %v", welcome)
+	if welcome := a.hear().GetWelcome(); welcome == nil || welcome.Level != pb.Level_LEVEL_BUILDER || welcome.Avatar != vrm || welcome.Visitor {
+		t.Fatalf("a person is welcome, and told their level, their avatar and that they are no visitor: %v", welcome)
 	}
 	b := connect(t, hub, hello())
 	welcome := b.hear().GetWelcome()
 	if peer := welcome.Peers[0]; peer.Name != "Ada" || peer.Visitor {
 		t.Fatalf("the key's identity is what others see: %v", peer)
 	}
-	if welcome.Level != pb.Level_LEVEL_ANONYMOUS {
-		t.Fatalf("a visitor is told it is anonymous: %v", welcome.Level)
+	if welcome.Level != pb.Level_LEVEL_ANONYMOUS || !welcome.Visitor {
+		t.Fatalf("a visitor is told it is anonymous and a visitor: %v %v", welcome.Level, welcome.Visitor)
 	}
 	a.leave()
 	b.leave()

@@ -79,6 +79,8 @@ pub mod parts {
     pub const PUT_BACK: &str = "put_back";
     pub const LOOK: &str = "look";
     pub const CHART: &str = "chart";
+    pub const FAVOUR: &str = "favour";
+    pub const HOME: &str = "home";
     /// The events the world says of them.
     pub const PLACED: &str = "placed";
     pub const CHANGED: &str = "changed";

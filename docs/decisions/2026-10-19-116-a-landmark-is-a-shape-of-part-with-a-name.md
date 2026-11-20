@@ -13,6 +13,8 @@ lives_in:
   - /proto/planet/parts/v1/parts.proto
   - /plugins/items
   - /apps/web/src/lib/engine/Labels.svelte
+amended_by:
+  - 2026-11-20-home-and-favourites
 ---
 
 # A landmark is a shape of part with a name, and the world charts them

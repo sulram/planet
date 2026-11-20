@@ -383,7 +383,12 @@ impl Client {
             moon,
             &mut self.events,
             text,
-        )
+        )?;
+        // A leap is a new place: it is said settled again once drawn there,
+        // even where nothing was left to stream, so a front end that veils
+        // a leap lifts it.
+        self.settled = false;
+        Ok(())
     }
 
     /// Flies to `gap_m` metres under the moon, on the side that faces the
@@ -431,6 +436,10 @@ impl Client {
                 let (plugins, lent) = self.lend();
                 plugins.put_down(lent);
             }
+            Command::SetChoices { home, favourites } => self.parts.kept(parts::Choices {
+                home,
+                favourites: favourites.into_iter().collect(),
+            }),
         }
     }
 
@@ -875,7 +884,7 @@ impl Client {
                 self.level = Some(Level::from_wire(welcome.level));
                 // The world keeps the cells from here on.
                 self.cells.link(welcome.session);
-                self.parts.link(welcome.session);
+                self.parts.link(welcome.session, !welcome.visitor);
                 self.history.clear();
                 for peer in &welcome.peers {
                     self.peers.add(peer, &self.generator);
@@ -1205,6 +1214,7 @@ impl Client {
         // and kept in step with what the world holds near the body.
         let (plugins, lent) = self.lend();
         plugins.turn(&eye, input, (taken.interrupted, taken.inspected), lent);
+        self.say_choices();
         self.cells.update(eye.position);
         let through = self.through(&camera);
         // The cells near the star a portal leads to are looked at too, so
@@ -1228,6 +1238,23 @@ impl Client {
         self.settled = settled;
         let pictures = self.pictures_drawn(&camera);
         self.frame(camera, patches, pictures, through.zip(seen))
+    }
+
+    /// Says where the body is born once the first chart in a world answers,
+    /// and a visitor's choices whenever they change, for its front end to
+    /// keep.
+    fn say_choices(&mut self) {
+        if let Some(home) = self.parts.take_home() {
+            let place = home
+                .map(|(seat, part)| self.host(protocol::parts::OWNER).place_at(seat, &part.pose));
+            self.events.push(Event::Home { place });
+        }
+        if let Some(choices) = self.parts.take_rechosen() {
+            self.events.push(Event::Choices {
+                home: choices.home,
+                favourites: choices.favourites.into_iter().collect(),
+            });
+        }
     }
 
     /// Where every head in view lands on the screen, own body first unless

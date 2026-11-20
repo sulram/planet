@@ -36,7 +36,9 @@
 		| 'chevrons-up'
 		| 'chevrons-down'
 		| 'plane'
-		| 'eye';
+		| 'eye'
+		| 'house'
+		| 'search';
 
 	interface Props {
 		name: IconName;
@@ -82,6 +84,9 @@
 		// Lucide's circle-help, the circle spelled as two arcs.
 		'circle-help': 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01',
 		'chevrons-up': 'm17 11-5-5-5 5M17 18l-5-5-5 5',
+		house: 'M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+		// Lucide draws the lens as a circle; spelled as two arcs here.
+		search: 'm21 21-4.34-4.34M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0',
 		'chevrons-down': 'm7 6 5 5 5-5M7 13l5 5 5-5',
 		// Lucide's eye, the circle in it spelled as two arcs.
 		eye: 'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0',

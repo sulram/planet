@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { Alert, Button, Checkbox, Icon, IconButton, Palette, Panel, RenameField, Segmented, Slider, Spinner, VectorInput, type IconName } from '$lib/ds';
+	import { Alert, Button, Checkbox, Icon, IconButton, Input, Palette, Panel, RenameField, Segmented, Slider, Spinner, VectorInput, type IconName } from '$lib/ds';
 	import { t as core } from '$lib/i18n';
 	import type { Seam } from '$lib/plugins/plugin';
 	import { budget } from './budget';
+	import { search } from './chart';
 	import { kinds } from './kinds';
 	import { edges, finishes, modes, type Edge, type Finish, type Item, type LandmarkOne, type Mode, type NearOne, type Picked, type Refusal } from './protocol';
 	import { t } from './words';
@@ -15,7 +16,9 @@
 	// way to remove it. Then the material, the palette as building shows
 	// it, which paints what is placed next and the item picked alike. The
 	// foot says what to do. For anyone: the chart, the landmarks of the
-	// world, a line a place to travel to.
+	// world, a line a place to travel to, under a search by name. The home
+	// heads it under a house, then the favourites, then the rest; a line's
+	// star and house choose them.
 	interface Props {
 		/** Whether this session builds: the kinds, the lists of what is near and the picked item are a builder's. */
 		builder: boolean;
@@ -39,13 +42,20 @@
 		/** Whether the list of what is near is open, and what it says. */
 		listing: boolean;
 		near: NearOne[];
-		/** Whether the chart, the landmarks of the world, is open, and what it says. */
+		/** Whether the chart, the landmarks of the world, is open, what it says, and what its search holds. */
 		charting: boolean;
 		landmarks: LandmarkOne[];
+		typed: string;
 		onlist: (on: boolean) => void;
 		onchart: (on: boolean) => void;
 		/** Travel to a place code. */
 		ongo: (place: string) => void;
+		onsearch: (typed: string) => void;
+		/** The search has the keys: the world lets them go. */
+		onrelease: () => void;
+		onfavour: (id: number, on: boolean) => void;
+		/** Make a landmark the home, or none. */
+		onhome: (id: number | null) => void;
 		/** Place the item in hand in front of the body, with no click. */
 		onadd: () => void;
 		onclose: () => void;
@@ -77,9 +87,14 @@
 		near,
 		charting,
 		landmarks,
+		typed,
 		onlist,
 		onchart,
 		ongo,
+		onsearch,
+		onrelease,
+		onfavour,
+		onhome,
 		onadd,
 		onclose,
 		onpick,
@@ -123,6 +138,7 @@
 	/** What the material section paints: the kind in hand, else the kind picked. A cube takes a finish and an edge; a landmark and a portal their colour alone. */
 	const material = $derived(item ?? picked?.item ?? null);
 	const showMaterial = $derived(material === 'cube' || material === 'landmark' || material === 'portal');
+	const found = $derived(search(landmarks, typed));
 	/** How far a landmark is, said short. */
 	function away(m: number | null): string {
 		if (m === null) return t('landmarks.elsewhere');
@@ -147,18 +163,38 @@
 				{#if landmarks.length === 0}
 					<p class="muted">{builder ? t('landmarks.empty') : t('landmarks.none')}</p>
 				{:else}
-					<ul class="near">
-						{#each landmarks as one (one.id)}
-							<li>
-								<button type="button" class="one" title={t('landmarks.go', { name: one.name })} onclick={() => ongo(one.place)}>
-									<Icon name="star" />
-									<span class="swatch" style:--paint={palette[one.paint % 16] ?? 'transparent'}></span>
-									<span class="what">{one.name}</span>
-									<span class="away">{away(one.away_m)}</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
+					<Input
+						type="search"
+						value={typed}
+						placeholder={t('landmarks.search')}
+						aria-label={t('landmarks.search')}
+						autocomplete="off"
+						enterkeyhint="search"
+						oninput={(event) => onsearch(event.currentTarget.value)}
+						onfocus={onrelease}
+					/>
+					{#if found.length === 0}
+						<p class="muted">{t('landmarks.unfound')}</p>
+					{:else}
+						<ul class="near">
+							{#each found as one (one.id)}
+								<li class="landmark">
+									<button type="button" class="one" title={t('landmarks.go', { name: one.name })} onclick={() => ongo(one.place)}>
+										<Icon name={one.home ? 'house' : 'star'} />
+										<span class="swatch" style:--paint={palette[one.paint % 16] ?? 'transparent'}></span>
+										<span class="what">{one.name}</span>
+										<span class="away">{away(one.away_m)}</span>
+									</button>
+									<button type="button" class="choose" aria-pressed={one.favourite} aria-label={t('landmarks.favourite')} title={t('landmarks.favourite')} onclick={() => onfavour(one.id, !one.favourite)}>
+										<Icon name="star" />
+									</button>
+									<button type="button" class="choose" aria-pressed={one.home} aria-label={t('landmarks.home')} title={t('landmarks.home.hint')} onclick={() => onhome(one.home ? null : one.id)}>
+										<Icon name="house" />
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				{/if}
 			</section>
 		{/if}
@@ -388,6 +424,33 @@
 	}
 	.one[aria-pressed='true'] .away {
 		color: var(--action-text);
+	}
+	/* A landmark's line: the line that travels, then its star and its house. */
+	.landmark {
+		display: grid;
+		grid-template-columns: 1fr auto auto;
+		align-items: center;
+	}
+	.choose {
+		display: inline-grid;
+		place-items: center;
+		width: var(--control-h);
+		height: var(--control-h);
+		border: var(--bw) solid transparent;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.choose:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+	/* Chosen, the mark is filled. */
+	.choose[aria-pressed='true'] {
+		color: var(--text);
+	}
+	.choose[aria-pressed='true'] :global(svg) {
+		fill: currentColor;
 	}
 	.kinds {
 		display: grid;

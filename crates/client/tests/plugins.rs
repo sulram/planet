@@ -75,6 +75,7 @@ fn welcome(client: &Client, plugins: Vec<protocol::Plugin>) -> Vec<u8> {
         plugins,
         clock_ms: 0,
         avatar: String::new(),
+        visitor: true,
     }))
 }
 
@@ -94,6 +95,8 @@ fn heard(plugin: &str, kind: &str, text: &str) -> Vec<u8> {
     }))
 }
 
+/// The envelopes a plugin sent: the core's own parts, such as the chart a
+/// welcome asks, are not these tests'.
 fn envelopes(client: &mut Client) -> Vec<protocol::Envelope> {
     client
         .drain_outbound()
@@ -101,7 +104,11 @@ fn envelopes(client: &mut Client) -> Vec<protocol::Envelope> {
         .filter_map(|out| match out {
             Outbound::Frame(frame) => {
                 match protocol::ClientMessage::decode(&frame[..]).unwrap().message {
-                    Some(client_message::Message::Envelope(envelope)) => Some(envelope),
+                    Some(client_message::Message::Envelope(envelope))
+                        if envelope.plugin != protocol::parts::OWNER =>
+                    {
+                        Some(envelope)
+                    }
                     _ => None,
                 }
             }

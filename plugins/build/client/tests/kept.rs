@@ -85,6 +85,7 @@ impl World {
                 }],
                 clock_ms: 0,
                 avatar: String::new(),
+                visitor: false,
             },
         )));
         self.here.push(Here {

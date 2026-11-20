@@ -248,13 +248,49 @@ pub struct Seen {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Chart {
 }
-/// `charted`: the landmarks of the world as they stand, the nearest the
-/// asker first, at most 256. The answer to `chart`, always given, empty when
-/// the world has none.
+/// `charted`: the landmarks of the world as they stand, at most 256: the
+/// asker's home first, then its favourites, then the rest, each the nearest
+/// the asker first. The answer to `chart`, always given, empty when the
+/// world has none.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Charted {
     #[prost(message, repeated, tag="1")]
     pub records: ::prost::alloc::vec::Vec<Record>,
+    /// Of the records, the asker's home, by its name in the world; 0 when it
+    /// has none among them. A visitor's is never the world's to say.
+    #[prost(uint64, tag="2")]
+    pub home: u64,
+    /// Of the records, the asker's favourites, by their names in the world.
+    #[prost(uint64, repeated, tag="3")]
+    pub favourites: ::prost::alloc::vec::Vec<u64>,
+}
+/// `favour`: makes a landmark one of the asker's favourites, or no longer
+/// one. An account's alone, kept by the world under its id.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Favour {
+    #[prost(uint64, tag="1")]
+    pub id: u64,
+    #[prost(bool, tag="2")]
+    pub on: bool,
+}
+/// `home`: makes a landmark the asker's home, where its body is born when a
+/// page opens with no place; 0 clears it. One home at a time: a new one
+/// takes the place of the last. An account's alone, kept by the world under
+/// its id.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Home {
+    #[prost(uint64, tag="1")]
+    pub id: u64,
+}
+/// What an account chose of the chart, as the world keeps it under the
+/// account's id: its home, 0 for none, and its favourites, each a landmark
+/// by its name in the world. Kept, never sent.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Choices {
+    #[prost(uint64, tag="1")]
+    pub home: u64,
+    #[prost(uint64, repeated, tag="2")]
+    pub favourites: ::prost::alloc::vec::Vec<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

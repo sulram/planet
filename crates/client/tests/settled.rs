@@ -32,4 +32,14 @@ fn a_view_settles_once_and_a_leap_unsettles_it() {
         settled_within(&mut client, &mut input, 30.0).is_some(),
         "the view settles again after a leap"
     );
+    // A leap to where the body stands, the ground there drawn already, is
+    // said settled again all the same: a front end veils every leap.
+    let grid = client.generator().sphere().blocks();
+    let here = client.here().text(grid);
+    assert_eq!(settled_within(&mut client, &mut input, 1.0), None);
+    client.command(Command::GoTo { place: here });
+    assert!(
+        settled_within(&mut client, &mut input, 2.0).is_some(),
+        "a leap in place settles again"
+    );
 }

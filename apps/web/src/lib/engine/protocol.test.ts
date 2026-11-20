@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isPluginEvent, parseEvent, type Effects } from './protocol';
+import { isPluginEvent, parseChoices, parseEvent, type Effects } from './protocol';
 
 describe('parseEvent', () => {
 	test('parses the known events', () => {
@@ -11,6 +11,8 @@ describe('parseEvent', () => {
 			stick: { center: [100, 600], at: [100, 576], reach: 48 }
 		});
 		expect(parseEvent('{"type":"stick","stick":null}')).toEqual({ type: 'stick', stick: null });
+		expect(parseEvent('{"type":"home","place":"4-K7M42Q"}')).toEqual({ type: 'home', place: '4-K7M42Q' });
+		expect(parseEvent('{"type":"choices","home":7,"favourites":[5]}')).toEqual({ type: 'choices', home: 7, favourites: [5] });
 		const effects: Effects = {
 			shadows: true,
 			grass: true,
@@ -68,5 +70,20 @@ describe('parseEvent', () => {
 		expect(parseEvent('{"no_type":true}')).toBeNull();
 		expect(parseEvent('null')).toBeNull();
 		expect(parseEvent('not json')).toBeNull();
+	});
+});
+
+describe('parseChoices', () => {
+	test('reads what a browser kept of a visitor\'s choices', () => {
+		expect(parseChoices('{"home":7,"favourites":[5,9]}')).toEqual({ home: 7, favourites: [5, 9] });
+		expect(parseChoices('{"home":null,"favourites":[]}')).toEqual({ home: null, favourites: [] });
+	});
+
+	test('nothing kept, or what is no choices, is null', () => {
+		expect(parseChoices(null)).toBeNull();
+		expect(parseChoices('not json')).toBeNull();
+		expect(parseChoices('{"home":"7","favourites":[]}')).toBeNull();
+		expect(parseChoices('{"home":null,"favourites":[0]}')).toBeNull();
+		expect(parseChoices('{"home":null}')).toBeNull();
 	});
 });

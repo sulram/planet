@@ -44,10 +44,15 @@ func TestTheModuleSaysWhatItCarries(t *testing.T) {
 	if cells.Plugin.Name() != "cells" || !cells.Core || !cells.On || len(cells.Plugin.Ops()) != 6 {
 		t.Fatalf("the core's cells are carried as an owner: %v %v", cells, cells.Plugin.Ops())
 	}
-	// Then the parts, the second system of the core: placed things.
+	// Then the parts, the second system of the core: placed things, and
+	// the chart's home and favourites, an account's.
 	parts := carried[1]
-	if parts.Plugin.Name() != "parts" || !parts.Core || !parts.On || len(parts.Plugin.Ops()) != 7 {
-		t.Fatalf("the core's parts are carried as an owner: %v %v", parts, parts.Plugin.Ops())
+	ops := parts.Plugin.Ops()
+	if parts.Plugin.Name() != "parts" || !parts.Core || !parts.On || len(ops) != 9 {
+		t.Fatalf("the core's parts are carried as an owner: %v %v", parts, ops)
+	}
+	if mine := ops[7:]; mine[0] != (world.Op{Kind: "favour", Level: world.LevelSignedIn}) || mine[1] != (world.Op{Kind: "home", Level: world.LevelSignedIn}) {
+		t.Fatalf("a home and a favourite are an account's: %v", mine)
 	}
 	plugins := carried[2:]
 	if len(plugins) != 3 || plugins[0].Plugin.Name() != "chat" || plugins[0].Plugin.Version() != 1 || !plugins[0].On || plugins[0].Core {

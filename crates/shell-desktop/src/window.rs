@@ -193,6 +193,8 @@ impl Stage {
                 | Event::Anchors { .. }
                 | Event::Labels { .. }
                 | Event::Palette { .. }
+                | Event::Home { .. }
+                | Event::Choices { .. }
                 | Event::Settled => {}
                 Event::Rejected { message } => log::warn!("command rejected: {message}"),
             }

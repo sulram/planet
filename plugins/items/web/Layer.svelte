@@ -10,7 +10,9 @@
 	// drag moves is the plugin's crate's. The menu is open while the plugin
 	// says it is editing, from its button or from a key. The chart, the
 	// landmarks of the world, is anyone's: a line travels there through the
-	// engine's own `go_to`, as a shared link does.
+	// engine's own `go_to`, as a shared link does; a star on a line makes
+	// it a favourite and a house makes it the home, the world's to keep for
+	// an account and the engine's to hand this browser for a visitor.
 	let { seam, builds: builder, palette }: LayerProps = $props();
 
 	let editing = $state(false);
@@ -26,9 +28,12 @@
 	/** Whether the list of what is near is open, and what it says. */
 	let listing = $state(false);
 	let near = $state<NearOne[]>([]);
-	/** Whether the chart is open, and what it says. */
+	/** Whether the chart is open, what it says, and what its search holds. */
 	let charting = $state(false);
 	let landmarks = $state<LandmarkOne[]>([]);
+	let typed = $state('');
+	/** The search took the keys and the pointer from the world: closing the chart hands them back. */
+	let released = false;
 
 	// Open, the chart is asked for at once and then every two seconds:
 	// others place, and the body moves.
@@ -70,6 +75,14 @@
 		refused = null;
 		seam.command(kind, body);
 	}
+
+	function chart(on: boolean) {
+		charting = on;
+		if (on) return;
+		typed = '';
+		if (released) seam.take();
+		released = false;
+	}
 </script>
 
 {#if builder}
@@ -92,18 +105,26 @@
 	{near}
 	{charting}
 	{landmarks}
+	{typed}
 	onlist={(on) => {
 		listing = on;
 		if (on && !editing) ask('edit', { on: true });
 	}}
-	onchart={(on) => (charting = on)}
+	onchart={chart}
 	ongo={(place) => {
-		charting = false;
+		chart(false);
 		seam.core({ type: 'go_to', place });
 	}}
+	onsearch={(next) => (typed = next)}
+	onrelease={() => {
+		released = true;
+		seam.release();
+	}}
+	onfavour={(id, on) => seam.command('favour', { id, on })}
+	onhome={(id) => seam.command('home', { id })}
 	onadd={() => item && ask('take', { item, ahead: true })}
 	onclose={() => {
-		charting = false;
+		chart(false);
 		listing = false;
 		if (editing) ask('edit', { on: false });
 	}}

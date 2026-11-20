@@ -71,6 +71,7 @@ fn welcome_at(
         plugins: vec![],
         clock_ms,
         avatar: String::new(),
+        visitor: level == protocol::Level::Anonymous,
     }))
 }
 
@@ -238,6 +239,7 @@ fn another_recipe_is_another_world() {
             plugins: vec![],
             clock_ms: 0,
             avatar: String::new(),
+            visitor: false,
         },
     )));
     assert!(client.drain_outbound().contains(&Outbound::Close));
