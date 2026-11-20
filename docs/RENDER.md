@@ -192,8 +192,8 @@ its pane is, in PORTALS.md.
   carries only the tiers that can reach it before it splits, farthest first;
   the renderer draws the prefix in reach, near patches first, capped.
 - `Frame::interaction` is one capsule (the avatar) that bends tufts. Visual
-  only. `scene::Effects` turns shadows, grass and clouds off and tunes the clouds
-  and exposure (Clients and UI).
+  only. `scene::Effects` turns shadows, grass and clouds off, tunes the clouds and
+  exposure, draws the world at a share of the view's pixels (`resolution`, sampled up by the output stage); `Effects::light` is a phone's or a Pi's picture.
 - Three separate things hold an avatar. Its **site**: the body it is stored
   relative to, changed at the moon's sphere of influence (4 radii), so it
   rides the orbit. **Gravity**: turns continuously from planet to moon with

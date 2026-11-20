@@ -21,6 +21,8 @@ export interface Effects {
 	shadows: boolean;
 	grass: boolean;
 	clouds: boolean;
+	/** The share of the view's pixels the world is drawn at, each way, 0.25 to 1. */
+	resolution: number;
 	cloud_cover: number;
 	cloud_density: number;
 	wind_m_s: number;
@@ -37,6 +39,12 @@ export interface Effects {
 	/** How far a model, cube, landmark or portal is drawn, metres a block of its longest side. */
 	model_reach_m: number;
 	tone_map: ToneMap;
+}
+
+/** The two pictures offered whole: `light` for a phone or a Pi, `full` what the engine starts with. */
+export interface Presets {
+	light: Effects;
+	full: Effects;
 }
 
 export type Command =

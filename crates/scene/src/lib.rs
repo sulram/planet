@@ -133,6 +133,10 @@ pub struct Effects {
     pub shadows: bool,
     pub grass: bool,
     pub clouds: bool,
+    /// What share of the view's pixels the world is drawn at, each way: 1
+    /// is every pixel, a retina's included; 0.5 a quarter of the work, the
+    /// picture sampled up to the view by the last stage.
+    pub resolution: f32,
     /// How much of the sky the weather may fill, 0 to 1.
     pub cloud_cover: f32,
     /// How thick a cloud is to light: 1 is a storm deck, the default a soft
@@ -164,12 +168,14 @@ pub struct Effects {
     pub tone_map: ToneMap,
 }
 
+/// The full picture: every effect on, at the distances a desktop draws.
 impl Default for Effects {
     fn default() -> Self {
         Self {
             shadows: true,
             grass: true,
             clouds: true,
+            resolution: 1.0,
             cloud_cover: 0.5,
             cloud_density: 0.1,
             wind_m_s: 14.0,
@@ -183,6 +189,28 @@ impl Default for Effects {
             picture_reach_m: 256.0,
             model_reach_m: 128.0,
             tone_map: ToneMap::Aces,
+        }
+    }
+}
+
+impl Effects {
+    /// The light picture, for a screen that pays several times more for a
+    /// frame: a phone, a Pi. Shadows, grass, clouds and bloom off, the world
+    /// drawn at half the pixels each way, pictures and models drawn half as
+    /// far, videos playing half as far. A UI offers it beside
+    /// [`Effects::default`] as the two presets, and starts a touch screen on it.
+    pub fn light() -> Self {
+        let full = Self::default();
+        Self {
+            shadows: false,
+            grass: false,
+            clouds: false,
+            resolution: 0.5,
+            bloom: 0.0,
+            video_play_m: full.video_play_m / 2.0,
+            picture_reach_m: full.picture_reach_m / 2.0,
+            model_reach_m: full.model_reach_m / 2.0,
+            ..full
         }
     }
 }

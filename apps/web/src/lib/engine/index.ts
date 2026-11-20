@@ -4,7 +4,7 @@
  * The web UI is only a front-end: it sends commands and renders events. What
  * a command does lives in Rust.
  */
-import { parseEvent, type Command, type EngineEvent, type PluginCommand, type PluginEvent } from './protocol';
+import { parseEvent, type Command, type EngineEvent, type PluginCommand, type PluginEvent, type Presets } from './protocol';
 
 export * from './protocol';
 
@@ -29,6 +29,8 @@ export interface EngineModule {
 	create(canvas: HTMLCanvasElement, onevent: (event: EngineEvent | PluginEvent) => void): Promise<Engine>;
 	/** Why a 3D model's file is over what a world draws of one, or `''` within it. */
 	weigh(bytes: Uint8Array): string;
+	/** The light and the full picture, as the engine defines them. */
+	presets(): Presets;
 }
 
 /** The shape `wasm-bindgen --target web` emits for `shell-web`. */
@@ -45,6 +47,7 @@ interface RawModule {
 	default(): Promise<unknown>;
 	Engine: { create(canvas: HTMLCanvasElement, onEvent: (json: string) => void): Promise<RawEngine> };
 	weigh_glb(bytes: Uint8Array): string;
+	presets(): string;
 }
 
 // A glob resolves to nothing when the package was never built, so the app
@@ -74,7 +77,8 @@ async function load(): Promise<EngineModule | null> {
 				free: () => engine.free()
 			};
 		},
-		weigh: (bytes) => raw.weigh_glb(bytes)
+		weigh: (bytes) => raw.weigh_glb(bytes),
+		presets: () => JSON.parse(raw.presets()) as Presets
 	};
 }
 

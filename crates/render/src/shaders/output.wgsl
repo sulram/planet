@@ -68,9 +68,13 @@ fn tone_map(x: vec3<f32>) -> vec3<f32> {
     return clamp(mapped, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// The one stage whose target is not the scene's size: the view's, which
+// the world may be drawn under (`Effects::resolution`), so it samples by
+// place on the screen, not by pixel. At full resolution the two agree.
 @fragment
 fn fs(in: Screen) -> @location(0) vec4<f32> {
-    let linear = textureLoad(stage_color, stage_pixel(in), 0).rgb;
+    let uv = vec2<f32>(in.ndc.x, -in.ndc.y) * 0.5 + 0.5;
+    let linear = textureSampleLevel(stage_color, stage_sampler, uv, 0.0).rgb;
     let c = tone_map(linear * view.post.x);
     // x: 1 when the target is not sRGB and the shader must encode.
     if view.flags.x < 0.5 {

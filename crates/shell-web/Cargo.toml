@@ -16,6 +16,8 @@ render.workspace = true
 scene.workspace = true
 glam.workspace = true
 log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wgpu = { workspace = true, features = ["webgl"] }

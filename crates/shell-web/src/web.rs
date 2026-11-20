@@ -25,6 +25,25 @@ pub fn weigh_glb(bytes: &[u8]) -> String {
         .map_or_else(String::new, |why| why.code().to_owned())
 }
 
+/// The two pictures a UI offers whole: `light`, what a phone or a Pi pays
+/// for, and `full`, what the engine starts with. The knobs between them are
+/// the UI's advanced setting. Written as `effects_changed` writes its
+/// effects, so a UI can tell one in force from a preset field by field.
+#[derive(serde::Serialize)]
+struct Presets {
+    light: client::Effects,
+    full: client::Effects,
+}
+
+#[wasm_bindgen]
+pub fn presets() -> String {
+    serde_json::to_string(&Presets {
+        light: client::Effects::light(),
+        full: client::Effects::default(),
+    })
+    .expect("effects are plain data")
+}
+
 /// The engine on one canvas. It owns its animation loop and its input
 /// listeners; dropping it (`free()` in JS) stops both.
 #[wasm_bindgen]

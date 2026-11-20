@@ -275,6 +275,7 @@ impl Client {
         };
         let usual = Effects::default();
         self.effects = Effects {
+            resolution: sane(effects.resolution, 0.25, 1.0, usual.resolution),
             cloud_cover: sane(effects.cloud_cover, 0.0, 1.0, usual.cloud_cover),
             cloud_density: sane(effects.cloud_density, 0.1, 3.0, usual.cloud_density),
             wind_m_s: sane(effects.wind_m_s, 0.0, 80.0, usual.wind_m_s),

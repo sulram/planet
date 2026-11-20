@@ -30,6 +30,7 @@
 		type PeerInfo,
 		type PluginEvent,
 		type PluginOn,
+		type Presets,
 		type SessionStatus,
 		type Stick
 	} from './index';
@@ -225,12 +226,15 @@
 
 	// How the picture is made belongs to the machine, not to the account: a
 	// phone and a desktop want different answers. It stays in this browser.
+	// Until a choice is stored, a touch screen is asked the light picture
+	// each visit, and any other screen what the engine starts with.
 	const EFFECTS_KEY = 'planet.effects';
 	/** What is asked of the engine: the stored choice, then the panel. */
 	let wanted = $state<Effects>();
-	/** What the engine says is in force, and what it started with. */
+	/** What the engine says is in force. */
 	let effects = $state<Effects>();
-	let defaults = $state<Effects>();
+	/** The light and the full picture, as the engine defines them. */
+	let presets = $state<Presets>();
 
 	onMount(() => {
 		try {
@@ -239,6 +243,10 @@
 		} catch {
 			// unreadable or blocked storage: the engine's defaults stand
 		}
+		loadEngine().then((engine) => {
+			presets = engine?.presets();
+			if (!wanted && touch.current && presets) wanted = presets.light;
+		});
 	});
 
 	function choose(next: Effects) {
@@ -280,10 +288,7 @@
 		else if (event.type === 'labels') labels = event.labels;
 		else if (event.type === 'stick') stick = event.stick;
 		else if (event.type === 'palette') palette = event.colors;
-		else if (event.type === 'effects_changed') {
-			defaults ??= event.effects;
-			effects = event.effects;
-		}
+		else if (event.type === 'effects_changed') effects = event.effects;
 		else if (event.type === 'avatar_changed') {
 			fetching = event.path !== null && !event.worn;
 			if (event.path && event.path !== avatar && !ownAvatar) remember(event.path);
@@ -424,7 +429,7 @@
 			{/each}
 		</Panel>
 	{:else if opened === 'settings'}
-		<Settings {effects} {defaults} onchange={choose} fps={stats?.fps} onclose={() => show(null)} />
+		<Settings {effects} {presets} onchange={choose} fps={stats?.fps} onclose={() => show(null)} />
 	{:else if opened === 'help'}
 		<Help touch browse={!ownAvatar} onclose={() => show(null)} />
 	{/if}

@@ -216,6 +216,7 @@ fn layout(root: &mut egui::Ui, open: &mut bool, effects: &mut Effects, fps: f32)
             ui.checkbox(&mut effects.shadows, "Shadows");
             ui.checkbox(&mut effects.grass, "Grass");
             ui.checkbox(&mut effects.clouds, "Clouds");
+            ui.add(egui::Slider::new(&mut effects.resolution, 0.25..=1.0).text("Resolution"));
             ui.add_enabled_ui(effects.clouds, |ui| {
                 ui.add(egui::Slider::new(&mut effects.cloud_cover, 0.0..=1.0).text("Cover"));
                 ui.add(egui::Slider::new(&mut effects.cloud_density, 0.1..=3.0).text("Density"));

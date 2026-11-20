@@ -322,6 +322,12 @@ impl Renderer {
         // into them.
         let mut slots = core::mem::take(&mut self.views);
         let mut through_slot = self.through.take();
+        // The world is drawn at a share of the view's pixels (`Effects::resolution`);
+        // the output stage samples it up to the target. A portal's picture is
+        // a share of that.
+        let drawn =
+            |size: [u32; 2], share: f32| size.map(|n| ((n as f32 * share).ceil() as u32).max(1));
+        let resolution = frame.effects.resolution;
         let through = frame
             .through
             .as_ref()
@@ -330,9 +336,7 @@ impl Renderer {
                 let resources = through_slot.get_or_insert_with(|| self.view_resources());
                 let sight = Sight {
                     camera: through.camera,
-                    size: view
-                        .size
-                        .map(|n| ((f32::from(n as u16) * through.size).ceil() as u32).max(1)),
+                    size: drawn(view.size, resolution * through.size),
                     patches: &through.patches,
                     whole: false,
                 };
@@ -344,7 +348,7 @@ impl Renderer {
         for (index, view) in views.iter().enumerate() {
             let sight = Sight {
                 camera: view.camera,
-                size: view.size,
+                size: drawn(view.size, resolution),
                 patches: &frame.patches,
                 whole: true,
             };

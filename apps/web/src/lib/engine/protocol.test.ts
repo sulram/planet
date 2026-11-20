@@ -17,6 +17,7 @@ describe('parseEvent', () => {
 			shadows: true,
 			grass: true,
 			clouds: false,
+			resolution: 1,
 			cloud_cover: 0.5,
 			cloud_density: 1,
 			wind_m_s: 14,

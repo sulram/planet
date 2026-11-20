@@ -192,7 +192,7 @@ Each of these is in the address, previewed before it is kept, and frozen with th
 - Flattened grass trails with timed recovery
 - Softer shadows: over the tent of 83, a penumbra that widens with distance from the caster
 - Shadow cascades fitted to the view, or a fourth between the first two: a cube 35 m from the eye is smaller than a texel of the cascade that holds it (80)
-- More of the compositor as knobs: cloud layer height, shadow quality in levels with off the lowest (84), a reduced preset for the Pi
+- More of the compositor as knobs: cloud layer height, shadow quality in levels with off the lowest (84), the Pi starting on `Effects::light` as a touch screen does
 - World snapshots anchored in Bitcoin; genesis inscription of the recipe
 - Cinema mode: cloud render with neural rendering, streamed over WebRTC
 - Curvature knob: morph flat <-> sphere in the vertex shader
